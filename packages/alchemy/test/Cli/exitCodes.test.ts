@@ -38,7 +38,62 @@ const exitCodeOf = (
     return yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
+/** Like {@link exitCodeOf}, but from an empty project directory with stderr captured. */
+const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-exit-codes-",
+    });
+    const project = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-empty-project-",
+    });
+    const handle = yield* ChildProcess.make(runtime, [CLI, ...args], {
+      cwd: project,
+      env: { ALCHEMY_HOME: home },
+      extendEnv: true,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+      killSignal: "SIGTERM",
+      forceKillAfter: "1 second",
+    });
+    const [stderr, exitCode] = yield* Effect.all(
+      [handle.stderr.pipe(Stream.decodeText, Stream.mkString), handle.exitCode],
+      { concurrency: 2 },
+    );
+    return { stderr, exitCode };
+  }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
 describe("CLI exit codes", () => {
+  it.live("dev without a stack entrypoint reports it and exits 1", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain(
+        "Stack entrypoint 'alchemy.run.ts' does not exist",
+      );
+      expect(stderr).not.toContain("PlatformError");
+      expect(stderr).not.toContain("at Effect.fn");
+    }),
+  );
+
+  it.live.skipIf(!nodeSupportsDevMode)(
+    "dev without a stack entrypoint reports it and exits 1 under node",
+    () =>
+      Effect.gen(function* () {
+        const { stderr, exitCode } = yield* runInEmptyProject(
+          ["dev"],
+          nodePath!,
+        );
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain(
+          "Stack entrypoint 'alchemy.run.ts' does not exist",
+        );
+        expect(stderr).not.toContain("PlatformError");
+      }),
+  );
+
   it.live("bare `profile` without a terminal prints help and exits 1", () =>
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["profile"])).toBe(1);

@@ -16,6 +16,7 @@ vi.mock("../dev-server.ts", () => ({
   createDefaultContext: async () => ({}),
   startServer: async () => ({
     address: runtimeAddress,
+    proxySharedSecret: "dev-secret",
     close: async () => {},
   }),
 }));

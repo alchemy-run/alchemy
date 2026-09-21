@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
  * mounted for the whole session and screens replace each other in place:
@@ -18,14 +18,17 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import {
   Alert,
   Box,
   CycleList,
+  Gutter,
   InlineConfirm,
   KeyBar,
   LiveStore,
+  Pointer,
   PromptFrame,
   Spinner,
   Stack,
@@ -34,7 +37,6 @@ import {
   Text,
   TextField,
   Toast,
-  useBorderStyle,
   useCycleNavigation,
   useGlyphs,
   useKeyGlyphs,
@@ -54,7 +56,6 @@ import {
   ProviderBlock,
   providerBlockHeight,
   providerColumnWidths,
-  providerPaneWidth,
   type ProfileProviderDisplay,
 } from "./Profile.tsx";
 
@@ -207,7 +208,6 @@ function DetailsPane({
   refreshingProvider,
   focusedIndex,
 }: DetailsPaneProps): JSX.Element {
-  const { columns } = useTerminalSize();
   if (details.state === "loading") {
     return <Spinner label="resolving credentials…" />;
   }
@@ -227,17 +227,8 @@ function DetailsPane({
   // leaves the pane: the list shrinks to fit (see the root layout in
   // `Dashboard`) and scrolls just enough to keep the focused provider in view.
   // The profile-level slot (no focused provider) shows the list from the top.
-  // The pane is as wide as the whole table, so the separators keep the width
-  // they have in `profile show` instead of stretching across the terminal.
   return (
-    <Box
-      flexDirection="column"
-      minHeight={0}
-      width={Math.min(
-        columns,
-        providerPaneWidth(providers, { showFocusRail: true, reauthHint }),
-      )}
-    >
+    <Box flexDirection="column" minHeight={0}>
       <VirtualList
         items={providers}
         getKey={(provider) => provider.name}
@@ -254,7 +245,7 @@ function DetailsPane({
             reauthHint={reauthHint}
             refreshingProvider={refreshingProvider}
             focusedProvider={focusedProvider}
-            showFocusRail
+            focusColumn
           />
         )}
       />
@@ -461,7 +452,6 @@ export function Dashboard({
 }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
-  const borderStyle = useBorderStyle();
   const { rows } = useTerminalSize();
   const [selected, setSelected] = useState(initialSelected);
   // -1 is the profile-level slot: no provider is focused and profile actions
@@ -667,23 +657,27 @@ export function Dashboard({
           <Text tone="muted">No profiles yet — press n to create one.</Text>
         ) : (
           <>
-            <Box
-              flexDirection="row"
-              flexShrink={0}
-              paddingLeft={provider === undefined ? 0 : 1}
-              borderStyle={borderStyle}
-              borderLeft={provider === undefined}
-              borderRight={false}
-              borderTop={false}
-              borderBottom={false}
-              borderColor={theme.color.brand}
-            >
-              <Text bold color={theme.color.accent}>
-                {entry.name}
-              </Text>
-              {annotation === "" ? null : (
-                <Text tone="muted"> · {annotation}</Text>
-              )}
+            {/* The profile row is the first focus slot. It sits in the same
+                gutter as the provider rows and shares their cursor column, so
+                the pointer moves in a straight line as focus travels. */}
+            <Box flexShrink={0}>
+              <Gutter>
+                <Box flexDirection="row">
+                  <Pointer focused={provider === undefined} />
+                  <Text> </Text>
+                  <Text
+                    bold
+                    color={
+                      provider === undefined ? theme.paint.focus : undefined
+                    }
+                  >
+                    {entry.name}
+                  </Text>
+                  {annotation === "" ? null : (
+                    <Text tone="muted"> · {annotation}</Text>
+                  )}
+                </Box>
+              </Gutter>
             </Box>
             <Box flexDirection="column" minHeight={0}>
               <DetailsPane
@@ -697,8 +691,9 @@ export function Dashboard({
           </>
         )}
       </Stack>
-      {/* Keep one stable status row so notices do not push the controls around. */}
-      <Box minHeight={1} flexShrink={0}>
+      {/* Keep one stable status row so notices do not push the controls around.
+          It shares the gutter with the profile/provider rows above it. */}
+      <Box minHeight={1} flexShrink={0} paddingLeft={theme.space.indent}>
         {busy && flow === undefined ? (
           <Spinner label="working…" />
         ) : notice !== undefined ? (

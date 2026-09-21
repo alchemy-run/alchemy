@@ -465,7 +465,7 @@ test.provider(
           Effect.provideService(
             ConfigProvider.ConfigProvider,
             ConfigProvider.orElse(
-              ConfigProvider.fromUnknown({ HEAD_SAMPLING_RATE: 0.01 }),
+              ConfigProvider.fromUnknown({ HEAD_SAMPLING_RATE: 0.5 }),
               currentConfig,
             ),
           ),
@@ -476,18 +476,26 @@ test.provider(
         scriptName: worker.workerName,
       });
       expect(settings.observability?.traces?.enabled).toBe(true);
-      expect(settings.observability?.traces?.headSamplingRate).toBe(0.01);
+      expect(settings.observability?.traces?.headSamplingRate).toBe(0.5);
 
       // The runtime reports every invocation as traced (`span.isTraced` does
       // not carry the head-sampling decision — a rate of 0 behaves the same),
       // so Effect's `sampled` flag stays true and consistent parent → child.
       // Sampling is applied when Cloudflare ingests: of N invocations, only
-      // ~1% persist.
-      yield* expectUrlContains(`${worker.url}/sampled`, "native-did-sample", {
-        timeout: "180 seconds",
-      });
+      // ~half persist.
+      //
+      // A 50% rate (rather than a few percent) keeps this test fast and
+      // two-sided: some request of the batch is always persisted, so the
+      // ingestion wait ends as soon as rows land instead of at its ceiling,
+      // and the count can be bounded from below as well as above.
+      const runId = yield* Effect.sync(() => globalThis.crypto.randomUUID());
+      yield* expectUrlContains(
+        `${worker.url}/sampled?id=warmup-${runId}`,
+        "native-did-sample",
+        { timeout: "180 seconds" },
+      );
       const client = yield* HttpClient.HttpClient;
-      const probe = client.get(`${worker.url}/sampled`).pipe(
+      const probe = client.get(`${worker.url}/sampled?id=${runId}`).pipe(
         Effect.flatMap((res) => res.json),
         Effect.map((body) => body as { operation: boolean; child: boolean }),
         Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
@@ -499,19 +507,34 @@ test.provider(
       );
       expect(seen.filter((b) => b.child !== b.operation)).toEqual([]);
 
-      // Wait for ingestion to have caught up (the request's own `operation`
-      // rows, or the platform's request spans, whichever lands first), then
-      // bound the persisted count well under N. P(more than 15 of 100 at 1%)
-      // is negligible.
-      const persisted = yield* querySpans(accountId, worker.workerName).pipe(
+      // One `operation` root per persisted request, keyed by this run's id
+      // so earlier runs inside the 15-minute query window don't count.
+      // Rows land in batches, so wait until two consecutive reads agree
+      // (and enough exist to prove tracing is on) before bounding the count.
+      // Binomial(100, 0.5) is within [20, 80] with P(miss) ≈ 1e-9; a few
+      // retried probes add at most a handful of extra traces.
+      const persistedCount = querySpans(accountId, worker.workerName).pipe(
+        Effect.map(
+          (spans) =>
+            spans.filter(
+              (s) => s.spanName === "operation" && s.requestId === runId,
+            ).length,
+        ),
+      );
+      let previous = -1;
+      const persisted = yield* persistedCount.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
-          until: (spans) => spans.length > 0,
+          until: (count) => {
+            const settled = count >= 20 && count === previous;
+            previous = count;
+            return settled;
+          },
           times: 36,
         }),
       );
-      const sampled = persisted.filter((s) => s.spanName === "sampled.child");
-      expect(sampled.length).toBeLessThanOrEqual(15);
+      expect(persisted).toBeGreaterThanOrEqual(20);
+      expect(persisted).toBeLessThanOrEqual(80);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);

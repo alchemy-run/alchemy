@@ -813,7 +813,7 @@ Engine semantics (never re-implement these per provider):
 
 ## `LocalProvider.make` — long-running local providers
 
-A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, serverEntryUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
+A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, providersUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
 
 - **`resolveConfig(ctx)`** — the restart surface. Plain, canonically-hashable data only (no closures or runtime objects: derive plain *descriptors* here and materialize `BindingHook`s etc. inside `start` — see the descriptor/hook split in [LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)). Must be cheap and side-effect-free — it runs inside `diff` on every plan. Its canonical hash decides noop-vs-restart AND the same value is handed to `start`, so "what changed?" and "what starts?" can never drift. Deliberately EXCLUDE runtime wiring observed at start time (e.g. queue consumers read from `LocalRuntimeState`) — sibling reconciles drive those via restart hooks, not config.
 - **`start(ctx)`** — boot ONE instance in the ambient `Scope` and return Attributes at *readiness*; the process keeps running until the runner closes the scope on restart/delete. For processes that can die on their own, fork `ctx.invalidate` after the exit so the next plan reports `update`.

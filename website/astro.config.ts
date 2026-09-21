@@ -35,9 +35,11 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "ACME", link: "/acme" },
     ],
   };
 }
@@ -71,6 +73,49 @@ function providerResourcesEntry(...providers: string[]) {
           items: entryItems(provider),
         }));
   return { label: "Resources", collapsed: false, items };
+}
+
+function sortFrontendItems(items: readonly { label: string; link: string }[]) {
+  return items.toSorted((a, b) => {
+    const overviewOrder =
+      Number(b.label === "Overview") - Number(a.label === "Overview");
+    return (
+      overviewOrder ||
+      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
+    );
+  });
+}
+
+type ReferenceItem =
+  | { label: string; link: string }
+  | { label: string; items: readonly ReferenceItem[] };
+
+function providerApiReferenceEntry(...providers: string[]) {
+  const flatten = (
+    items: readonly ReferenceItem[],
+    prefix: readonly string[],
+  ): { label: string; link: string }[] =>
+    items.flatMap((item) => {
+      if ("items" in item) {
+        // Generated category and service groups can share a name.
+        return flatten(
+          item.items,
+          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
+        );
+      }
+      return [{ label: [...prefix, item.label].join("."), link: item.link }];
+    });
+
+  return {
+    label: "API Reference",
+    collapsed: false,
+    items: providers.flatMap((provider) =>
+      flatten(
+        providersSidebar.find((group) => group.label === provider)?.items ?? [],
+        providers.length > 1 ? [provider] : [],
+      ),
+    ),
+  };
 }
 
 /**
@@ -142,9 +187,13 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
+    "/better-auth/database-layers": "/better-auth/databases",
+    "/better-auth/migrations": "/better-auth/guides/migrations",
+    "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
   trailingSlash: "ignore",
@@ -241,10 +290,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
@@ -474,7 +519,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/cloudflare/frontend/frontends",
@@ -510,9 +555,10 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "Vinext", link: "/cloudflare/frontend/vinext" },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -536,6 +582,7 @@ export default defineConfig({
                 { label: "R2", link: "/cloudflare/data/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
                 {
                   label: "Shared database",
@@ -661,7 +708,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/aws/frontend/websites",
@@ -673,6 +720,7 @@ export default defineConfig({
                   link: "/aws/frontend/full-stack-tanstack-rpc-drizzle",
                 },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "Vinext", link: "/aws/frontend/vinext" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
                 { label: "Octane", link: "/aws/frontend/octane" },
                 {
@@ -699,7 +747,7 @@ export default defineConfig({
                 { label: "Vite", link: "/aws/frontend/vite" },
                 { label: "Vue", link: "/aws/frontend/vue" },
                 { label: "Waku", link: "/aws/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -722,6 +770,8 @@ export default defineConfig({
                 { label: "DynamoDB", link: "/aws/data/dynamodb" },
                 { label: "S3", link: "/aws/data/s3" },
                 { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
               ],
             },
             {
@@ -796,7 +846,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/hetzner/frontend/websites",
@@ -804,6 +854,7 @@ export default defineConfig({
                 { label: "Astro", link: "/hetzner/frontend/astro" },
                 { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
                 { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "Vinext", link: "/hetzner/frontend/vinext" },
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
@@ -829,7 +880,7 @@ export default defineConfig({
                 { label: "Vite", link: "/hetzner/frontend/vite" },
                 { label: "Vocs", link: "/hetzner/frontend/vocs" },
                 { label: "Waku", link: "/hetzner/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -840,7 +891,13 @@ export default defineConfig({
             },
             {
               label: "Data",
-              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+              items: [
+                { label: "Volumes", link: "/hetzner/data/volumes" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/hetzner/data/drizzle-postgres",
+                },
+              ],
             },
             {
               label: "Networking",
@@ -863,7 +920,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/fly/frontend/websites",
@@ -871,6 +928,7 @@ export default defineConfig({
                 { label: "Astro", link: "/fly/frontend/astro" },
                 { label: "Foldkit", link: "/fly/frontend/foldkit" },
                 { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "Vinext", link: "/fly/frontend/vinext" },
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
@@ -896,7 +954,7 @@ export default defineConfig({
                 { label: "Vite", link: "/fly/frontend/vite" },
                 { label: "Vocs", link: "/fly/frontend/vocs" },
                 { label: "Waku", link: "/fly/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -904,6 +962,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
                 { label: "Sprites", link: "/fly/compute/sprites" },
                 { label: "Regions", link: "/fly/compute/regions" },
               ],
@@ -913,6 +975,10 @@ export default defineConfig({
               items: [
                 { label: "Volumes", link: "/fly/data/volumes" },
                 { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
                 { label: "Redis", link: "/fly/data/redis" },
                 { label: "Tigris", link: "/fly/data/tigris" },
                 { label: "Secrets", link: "/fly/data/secrets" },
@@ -936,7 +1002,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/railway/frontend/websites",
@@ -944,6 +1010,7 @@ export default defineConfig({
                 { label: "Astro", link: "/railway/frontend/astro" },
                 { label: "Foldkit", link: "/railway/frontend/foldkit" },
                 { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "Vinext", link: "/railway/frontend/vinext" },
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {
@@ -969,7 +1036,7 @@ export default defineConfig({
                 { label: "Vite", link: "/railway/frontend/vite" },
                 { label: "Vocs", link: "/railway/frontend/vocs" },
                 { label: "Waku", link: "/railway/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -993,6 +1060,14 @@ export default defineConfig({
                 { label: "Volumes", link: "/railway/data/volumes" },
                 { label: "Postgres", link: "/railway/data/postgres" },
                 { label: "MySQL", link: "/railway/data/mysql" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/railway/data/drizzle-postgres",
+                },
+                {
+                  label: "Drizzle + MySQL",
+                  link: "/railway/data/drizzle-mysql",
+                },
                 { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
                 { label: "Variables", link: "/railway/data/variables" },
@@ -1047,6 +1122,38 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/neon" },
             { label: "Setup", link: "/neon/setup" },
+            { label: "Organization governance", link: "/neon/governance" },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Vite", link: "/neon/frontend/vite" },
+                { label: "Astro", link: "/neon/frontend/astro" },
+                { label: "Next.js", link: "/neon/frontend/nextjs" },
+                { label: "Nuxt", link: "/neon/frontend/nuxt" },
+                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
+                { label: "React Router", link: "/neon/frontend/react-router" },
+                { label: "SolidStart", link: "/neon/frontend/solidstart" },
+                {
+                  label: "TanStack Start",
+                  link: "/neon/frontend/tanstack-start",
+                },
+                { label: "Waku", link: "/neon/frontend/waku" },
+                { label: "Octane", link: "/neon/frontend/octane" },
+                { label: "Foldkit", link: "/neon/frontend/foldkit" },
+                { label: "Vocs", link: "/neon/frontend/vocs" },
+                { label: "Static Site", link: "/neon/frontend/static-site" },
+              ],
+            },
+            {
+              label: "Upload tutorial",
+              items: [
+                { label: "Overview", link: "/neon/tutorial" },
+                { label: "Backend", link: "/neon/tutorial/backend" },
+                { label: "Functions", link: "/neon/tutorial/functions" },
+                { label: "Browser", link: "/neon/tutorial/frontend" },
+                { label: "Preview branches", link: "/neon/tutorial/previews" },
+              ],
+            },
             {
               label: "Data",
               items: [
@@ -1062,6 +1169,23 @@ export default defineConfig({
                   label: "Preview branches per PR",
                   link: "/neon/guides/preview-branches",
                 },
+                { label: "AI Gateway setup", link: "/neon/guides/ai-gateway" },
+                {
+                  label: "Production Auth",
+                  link: "/neon/guides/production-auth",
+                },
+                {
+                  label: "Private networking",
+                  link: "/neon/guides/private-networking",
+                },
+                {
+                  label: "Custom domains",
+                  link: "/neon/guides/custom-domains",
+                },
+                {
+                  label: "State and recovery",
+                  link: "/neon/guides/state-recovery",
+                },
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
               ],
             },
@@ -1074,13 +1198,8 @@ export default defineConfig({
             { label: "Overview", link: "/prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
-              label: "Data",
-              items: [
-                { label: "Postgres", link: "/prisma/data/postgres" },
-                { label: "Branches", link: "/prisma/data/branches" },
-                { label: "Connections", link: "/prisma/data/connections" },
-                { label: "Buckets", link: "/prisma/data/buckets" },
-              ],
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "prisma/tutorial" } }],
             },
             {
               label: "Compute",
@@ -1088,6 +1207,45 @@ export default defineConfig({
                 { label: "Apps", link: "/prisma/compute/apps" },
                 { label: "Deployments", link: "/prisma/compute/deployments" },
               ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/prisma/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/prisma/data/drizzle-postgres",
+                },
+                { label: "Branches", link: "/prisma/data/branches" },
+                { label: "Connections", link: "/prisma/data/connections" },
+                { label: "Buckets", link: "/prisma/data/buckets" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/prisma/frontend/websites" },
+                { label: "Astro", link: "/prisma/frontend/astro" },
+                { label: "Foldkit", link: "/prisma/frontend/foldkit" },
+                { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "Vinext", link: "/prisma/frontend/vinext" },
+                { label: "Nuxt", link: "/prisma/frontend/nuxt" },
+                { label: "Octane", link: "/prisma/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/prisma/frontend/react-router",
+                },
+                { label: "SolidStart", link: "/prisma/frontend/solidstart" },
+                { label: "Static sites", link: "/prisma/frontend/static-site" },
+                { label: "SvelteKit", link: "/prisma/frontend/sveltekit" },
+                {
+                  label: "TanStack Start",
+                  link: "/prisma/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/prisma/frontend/vite" },
+                { label: "Vocs", link: "/prisma/frontend/vocs" },
+                { label: "Waku", link: "/prisma/frontend/waku" },
+              ]),
             },
             {
               label: "Guides",
@@ -1098,7 +1256,32 @@ export default defineConfig({
                 },
               ],
             },
-            providerResourcesEntry("Prisma"),
+            providerApiReferenceEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
+                },
+                {
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
+                  link: "/stripe/guides/webhooks",
+                },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
           ],
         },
         {
@@ -1113,9 +1296,46 @@ export default defineConfig({
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
-            { label: "Database layers", link: "/better-auth/database-layers" },
-            { label: "Migrations", link: "/better-auth/migrations" },
-            providerResourcesEntry("BetterAuth"),
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "better-auth/tutorial" } }],
+            },
+            {
+              label: "Sign-in providers",
+              items: [
+                {
+                  autogenerate: { directory: "better-auth/sign-in-providers" },
+                },
+              ],
+            },
+            {
+              label: "Databases",
+              items: [{ autogenerate: { directory: "better-auth/databases" } }],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Config and secrets",
+                  link: "/better-auth/guides/configuration",
+                },
+                {
+                  label: "HTTP API middleware",
+                  link: "/better-auth/guides/http-api-middleware",
+                },
+                {
+                  label: "Secondary storage",
+                  link: "/better-auth/guides/secondary-storage",
+                },
+                { label: "Migrations", link: "/better-auth/guides/migrations" },
+                {
+                  label: "Upgrading from 1.6 to 1.7.5",
+                  link: "/better-auth/upgrades/from-1-6-to-1-7",
+                },
+              ],
+            },
+            { ...providerResourcesEntry("BetterAuth"), label: "Reference" },
           ],
         },
         {
@@ -1155,6 +1375,83 @@ export default defineConfig({
           ],
         },
         {
+          label: "Git",
+          items: [
+            { label: "Overview", link: "/git" },
+            { label: "Getting Started", link: "/git/getting-started" },
+            {
+              label: "Tutorial",
+              items: [
+                {
+                  label: "Part 1: Push your first repository",
+                  link: "/git/tutorial/part-1",
+                },
+                {
+                  label: "Part 2: Control access",
+                  link: "/git/tutorial/part-2",
+                },
+                {
+                  label: "Part 3: Publish a repository",
+                  link: "/git/tutorial/part-3",
+                },
+                {
+                  label: "Part 4: Give users their own credentials",
+                  link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
+                },
+              ],
+            },
+            {
+              label: "Using your host",
+              items: [
+                { label: "Cloning & pushing", link: "/git/clone-and-push" },
+                { label: "Repositories", link: "/git/repositories" },
+                { label: "Pull requests", link: "/git/pull-requests" },
+                {
+                  label: "GitHub API compatibility",
+                  link: "/git/github-api",
+                },
+              ],
+            },
+            {
+              label: "Building blocks",
+              items: [
+                { label: "Overview", link: "/git/blocks" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
+                { label: "Repository", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob Store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Recipes",
+              items: [
+                { label: "Overview", link: "/git/recipes" },
+                { label: "Scaling", link: "/git/recipes/scaling" },
+                { label: "All on Cloudflare", link: "/git/recipes/cloudflare" },
+                {
+                  label: "Bytes in S3, hashing on Lambda",
+                  link: "/git/recipes/cloudflare-aws",
+                },
+                {
+                  label: "Bring your own store",
+                  link: "/git/recipes/your-own-store",
+                },
+              ],
+            },
+          ],
+        },
+        {
           label: "Docker",
           items: [
             { label: "Overview", link: "/docker" },
@@ -1168,6 +1465,7 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "Databases", link: "/sql/databases" },
             {
               label: "Effect SQL",
               items: [
@@ -1190,7 +1488,15 @@ export default defineConfig({
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
-            providerResourcesEntry("SQL", "Drizzle"),
+            {
+              label: "Prisma ORM",
+              items: [
+                { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Contracts", link: "/sql/prisma/contracts" },
+                { label: "Migrations", link: "/sql/prisma/migrations" },
+              ],
+            },
+            providerApiReferenceEntry("SQL", "Drizzle"),
           ],
         },
         {
@@ -1203,6 +1509,23 @@ export default defineConfig({
             },
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
+          ],
+        },
+        {
+          label: "ACME",
+          items: [
+            { label: "Overview", link: "/acme" },
+            { label: "Getting started", link: "/acme/getting-started" },
+            {
+              label: "Certificate authorities",
+              link: "/acme/certificate-authorities",
+            },
+            { label: "DNS validation", link: "/acme/dns-validation" },
+            { label: "Renewal & revocation", link: "/acme/renewal" },
+            { label: "Runtime issuance", link: "/acme/runtime" },
+            { label: "Using certificates", link: "/acme/using-certificates" },
+            { label: "Troubleshooting", link: "/acme/troubleshooting" },
+            providerResourcesEntry("ACME"),
           ],
         },
         providersSidebarEntry(),

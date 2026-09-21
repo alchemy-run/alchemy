@@ -112,7 +112,7 @@ export default class Api extends Hetzner.Service<Api>()(
     env: { GREETING: "hello" },
   },
   Effect.gen(function* () {
-    const greeting = yield* Config.string("GREETING");
+    const greeting = yield* Config.String("GREETING");
     // ...
   }),
 ) {}

@@ -17,18 +17,18 @@ import {
 } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const logsLimit = Flag.integer("limit").pipe(
+const logsLimit = Flag.Int("limit").pipe(
   Flag.withDescription("Number of log entries to fetch (default: 100)"),
   Flag.withDefault(100),
 );
 
-const tail = Flag.boolean("tail").pipe(
+const tail = Flag.Boolean("tail").pipe(
   Flag.withAlias("t"),
   Flag.withDescription("Continue streaming new log entries"),
   Flag.withDefault(false),
 );
 
-const resources = Flag.string("resource").pipe(
+const resources = Flag.String("resource").pipe(
   Flag.withAlias("r"),
   Flag.withDescription(
     "Comma-separated logical resource IDs to include (for example Worker,Api)",
@@ -37,7 +37,7 @@ const resources = Flag.string("resource").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
-const logsSince = Flag.string("since").pipe(
+const logsSince = Flag.String("since").pipe(
   Flag.withDescription(
     "Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')",
   ),

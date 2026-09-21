@@ -267,7 +267,8 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
  * a per-id semaphore so restarts never interleave.
  *
  * @param cls - the resource class (or Platform) this provider serves.
- * @param serverEntryUrl - sidecar entry module (see {@link RpcProvider.effect}).
+ * @param providersUrl - the provider group module this provider is registered
+ *   in (see {@link RpcProvider.effect}).
  * @param spec - Effect constructing the {@link LocalProviderSpec}; resolve
  *   the services your callbacks need here and close over them.
  */
@@ -278,12 +279,12 @@ export const make = <
   Req = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
-  serverEntryUrl: string,
+  providersUrl: string,
   spec: Effect.Effect<LocalProviderSpec<R, Config, StartR>, never, Req>,
 ) =>
   RpcProvider.effect(
     cls,
-    serverEntryUrl,
+    providersUrl,
     Effect.gen(function* () {
       const {
         resolveConfig = defaultResolveConfig<R, Config>,

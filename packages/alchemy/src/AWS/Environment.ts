@@ -15,15 +15,15 @@ import {
   type AwsResolvedCredentials,
 } from "./AuthProvider.ts";
 
-export const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
+export const AWS_PROFILE = Config.String("AWS_PROFILE").pipe(
   Config.withDefault("default"),
 );
 
-export const AWS_REGION = Config.string("AWS_REGION");
-export const AWS_ACCOUNT_ID = Config.string("AWS_ACCOUNT_ID");
-export const AWS_ACCESS_KEY_ID = Config.string("AWS_ACCESS_KEY_ID");
-export const AWS_SECRET_ACCESS_KEY = Config.redacted("AWS_SECRET_ACCESS_KEY");
-export const AWS_SESSION_TOKEN = Config.redacted("AWS_SESSION_TOKEN");
+export const AWS_REGION = Config.String("AWS_REGION");
+export const AWS_ACCOUNT_ID = Config.String("AWS_ACCOUNT_ID");
+export const AWS_ACCESS_KEY_ID = Config.String("AWS_ACCESS_KEY_ID");
+export const AWS_SECRET_ACCESS_KEY = Config.Redacted("AWS_SECRET_ACCESS_KEY");
+export const AWS_SESSION_TOKEN = Config.Redacted("AWS_SESSION_TOKEN");
 
 export type AccountID = string;
 export type RegionID = string;

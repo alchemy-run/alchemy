@@ -88,4 +88,48 @@ describe("trackBunImports", () => {
       await tracker.close();
     }
   });
+
+  it("leaves dependencies in the root's own node_modules alone", async () => {
+    const temporaryDirectory = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "alchemy-import-bun-nm-")),
+    );
+    temporaryDirectories.push(temporaryDirectory);
+    const packageDirectory = path.join(
+      temporaryDirectory,
+      "node_modules",
+      "cjs-dep",
+    );
+    mkdirSync(packageDirectory, { recursive: true });
+    const dependency = path.join(packageDirectory, "index.js");
+    writeFileSync(
+      path.join(packageDirectory, "package.json"),
+      '{"name":"cjs-dep","version":"1.0.0","main":"index.js"}\n',
+    );
+    // CommonJS: Bun cannot hand this back through `onLoad` without losing its
+    // exports (oven-sh/bun#19279), so intercepting it breaks the import.
+    writeFileSync(
+      dependency,
+      'function hi() { return "hi"; }\nmodule.exports = hi;\n',
+    );
+    const entry = path.join(temporaryDirectory, "entry.ts");
+    writeFileSync(
+      entry,
+      [
+        'import hi from "cjs-dep";',
+        "export const greeting: string = hi();",
+      ].join("\n"),
+    );
+
+    const tracker = trackBunImports({
+      root: temporaryDirectory,
+      debounceMs: 10,
+    });
+    try {
+      const module = (await import(entry)) as { greeting: string };
+      expect(module.greeting).toBe("hi");
+      expect(tracker.dependencies).toEqual(new Set([entry]));
+    } finally {
+      await tracker.close();
+    }
+  });
 });

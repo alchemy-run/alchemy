@@ -39,7 +39,6 @@ import {
 } from "./PrivateNetwork.ts";
 import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
-import { RailwayRetryPolicy } from "./RetryPolicy.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
@@ -49,6 +48,10 @@ import {
   ServerProvider as WebsiteServerProvider,
 } from "../Website/Server.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
+import {
+  SandboxCheckpoint,
+  SandboxCheckpointProvider,
+} from "./SandboxCheckpoint.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
@@ -112,6 +115,7 @@ export const providers = () =>
       Bucket,
       CloudAgent,
       Sandbox,
+      SandboxCheckpoint,
       Random,
       WebsiteServer,
     ]),
@@ -140,6 +144,7 @@ export const providers = () =>
         BucketProvider(),
         CloudAgentProvider(),
         SandboxProvider(),
+        SandboxCheckpointProvider(),
         RandomProvider(),
         WebsiteServerProvider(),
       ),
@@ -161,7 +166,6 @@ export const providers = () =>
         ExecHttp,
       ),
     ),
-    Layer.provide(RailwayRetryPolicy),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),

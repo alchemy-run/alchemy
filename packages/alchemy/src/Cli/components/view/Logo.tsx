@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * The yantra logo, rasterized at runtime. Geometry mirrors
  * website/src/brand/yantra.ts (the brand's source of truth): a downward
@@ -7,7 +7,8 @@
  * it scales to any column width.
  */
 import { Box, Text } from "../ui/index.ts";
-import { useMemo, type JSX } from "react";
+import { useMemo } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import { theme } from "../../CliKit/index.ts";
 
 const CENTER = 12;

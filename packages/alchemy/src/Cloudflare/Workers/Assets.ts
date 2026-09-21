@@ -1,6 +1,6 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { Retry } from "@distilled.cloud/cloudflare";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

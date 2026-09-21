@@ -4,7 +4,7 @@ import {
   useTitle,
   type DOMElement,
 } from "@alchemy.run/sigil";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
 import { useTerminalSize } from "../ui/index.ts";
 import type { PlanTree, PlanTreeState } from "./PlanTree.ts";
 

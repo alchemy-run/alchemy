@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type { Result as NukeResult, Target } from "../../../Nuke.ts";

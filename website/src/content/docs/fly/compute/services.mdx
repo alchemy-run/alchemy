@@ -34,7 +34,7 @@ Service.
 
 `main: import.meta.url` is the bundle entrypoint. Alchemy bundles
 this file with Rolldown, builds a Docker image (default
-`oven/bun:1`), and pushes it to
+`node:26-slim`), and pushes it to
 `registry.fly.io/{app}:{id}-{hash}`.
 
 ## Serve HTTP with `fetch`
@@ -144,11 +144,17 @@ Effect.gen(function* () {
 
 ## Scale with `count`
 
-`count` is how many Machines to keep running. Default `1`. They all
-publish the same proxy service, so they all sit behind
-`{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
-replica gets its own Volume from every [`MountVolume`](/fly/data/volumes)
-binding.
+`count` is how many Machines to provision. Default `1`. They all
+publish the same proxy service behind `{app}.fly.dev`. Fly's proxy
+picks an available Machine per request. With `autostop: "stop"` or
+`"suspend"`, some provisioned replicas can be idle; `count` is not a
+promise that every process is continuously running. Use `autostart`
+and `minMachinesRunning` for Fly's wake-up and minimum-capacity behavior.
+See [idle capacity during replacement](/fly/compute/deployments#keep-idle-capacity-with-stop-or-suspend).
+
+Each replica gets its own Volume from every
+[`MountVolume`](/fly/data/volumes) binding. Volume-backed Services use
+rolling updates; blue/green does not clone or share those volumes.
 
 ```diff lang="typescript"
 export default class Api extends Fly.Service<Api>()(
@@ -163,19 +169,35 @@ Docker must be running.
 
 Alchemy bundles `main` with Rolldown. If the hash matches the last
 deploy, it skips build and push. Otherwise it builds `linux/amd64`
-from `image` (default `oven/bun:1`) and pushes to
-`registry.fly.io/{app}:{id}-{hash}`. Then it creates or updates
-`count` Machines and waits until they are `started`.
+from `image` (default `node:26-slim`) and pushes to
+`registry.fly.io/{app}:{id}-{hash}`. With the default rolling policy,
+it creates or updates replicas sequentially. For each Machine it starts,
+reconcile waits for configured readiness checks before proceeding.
 
-Changed code is a new image and an in-place Machine update.
-Unchanged code is a no-op.
+By default, changed code produces a new image and an in-place Machine update.
+Unchanged desired inputs are a no-op. Opt into `deploy: { strategy: "bluegreen" }` to
+[prepare healthy replacements before retiring the old generation](/fly/compute/deployments).
+Keep one Service declaration. Alchemy manages both generations and uses the
+old Machine's shutdown policy when retiring it. The guide explains readiness,
+traffic overlap, Effect finalizers, idle capacity, and recovery. Raw images and
+external servers must handle their own shutdown.
 
-Override the base image with `image` (must still run bun). Pass
+Override the base image with `image` (must still run Node). Pass
 `services: []` for a process that should not be published.
 
-:::note[Deploy waits for `started`, not `/health`]
-Alchemy waits until the Machine is `started`. It does not poll
-`/health`. Omitting that route does not fail the deploy.
+:::note[Deploy waits for Fly service checks]
+If a Machine has service checks (the default TCP check, or your HTTP
+checks), reconcile waits until Fly reports them `passing` before it
+moves on to the next replica. `started` only means the VM booted.
+The default readiness budget is 60 seconds; set `deploy.healthTimeout`
+for a longer bounded wait. If checks do not pass, deployment fails with
+`Fly.ReplicaChecksNotPassing`, including the last observed check
+results, and later replicas remain unchanged. Earlier updates are
+not automatically rolled back.
+
+Omitting `/health` does not fail the deploy unless you configured an
+HTTP check on that path. A single replica still updates in place and
+can be unavailable during deployment; this is not blue/green deployment.
 :::
 
 ## Config
@@ -192,7 +214,7 @@ export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("API_KEY");
+    const apiKey = yield* Config.Redacted("API_KEY");
 
     return {
       fetch: Effect.gen(function* () {
@@ -204,41 +226,57 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-`Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+`Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
 `Redacted.value` only where you need the raw string.
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
 For a secret Fly should own and inject into every Machine on the
 App, use [`Fly.Secret`](/fly/data/secrets).
 
+Service-bound secret preparation establishes a required version floor for
+replacement Machines, not a snapshot of the App vault. Standalone secrets,
+other Services, and runtime writers are not serialized by Machine leases.
+An out-of-band secret update alone does not guarantee a new rollout; use
+an explicit desired-input change when rotation requires replacement.
+See [rotating secrets with your application](/fly/compute/deployments#rotate-secrets-with-your-application).
+
 ## Background services
 
-Omit `port` and `fetch`. Pass `services: []` so Fly does not
-publish a proxy. Use `ServerHost.run` for a long-running loop:
+Omit `fetch` and pass `services: []` so Fly does not publish a proxy.
+Return a `run` Effect for a long-running loop:
 
 ```typescript
 // src/worker.ts
 import * as Fly from "alchemy/Fly";
-import { ServerHost } from "alchemy/Server";
 import * as Effect from "effect/Effect";
 import { Site } from "./app.ts";
 
 export default class Worker extends Fly.Service<Worker>()(
   "Worker",
   { app: Site, main: import.meta.url, region: "iad", services: [] },
-  Effect.gen(function* () {
-    const host = yield* ServerHost;
-
-    yield* host.run(
-      Effect.gen(function* () {
-        return yield* Effect.never;
-      }).pipe(Effect.orDie),
-    );
-  }),
+  Effect.succeed({ run: Effect.never }),
 ) {}
 ```
 
-If the process exits, Fly restarts it.
+`Effect.never` above only keeps the example alive. Acquire queue connections
+and start real consumers inside `run`, not during the outer initialization
+Effect that also participates in planning. You can return both `fetch` and
+`run` for mixed HTTP and background work.
+
+For blue/green, a private worker also needs a named readiness check and a real
+server to answer it. A `run`-only program does not create a readiness endpoint.
+Cordoning controls proxy traffic, not job acquisition; both generations can
+consume work before promotion.
+
+With blue/green or explicit `shutdown`, the managed bootstrap initiates runtime
+cleanup on SIGTERM/SIGINT while HTTP requests and shared dependencies remain
+alive. The application owns its stop-acquisition barrier and bounded job drain.
+Use ordinary finalizers and a separately owned work scope for jobs that must
+survive worker-loop interruption; no new public shutdown hook is required.
+See the [queue worker cleanup example](/fly/compute/deployments#close-your-queue-worker-on-shutdown).
+
+Fly's restart policy controls what happens when the process exits. Suspension
+is not ordinary process shutdown, so it is not a promise that finalizers run.
 
 ## Multiple Services, one App
 
@@ -277,5 +315,5 @@ hibernate — no parent App, no Docker image.
 [Postgres](/fly/data/postgres) binds with `ConnectPostgres`.
 [Redis](/fly/data/redis) binds with `ReadWriteRedis`.
 [Tigris](/fly/data/tigris) binds with `PutObject` / `GetObject`.
-[Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
+[Secrets](/fly/data/secrets) covers `Config.Redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.

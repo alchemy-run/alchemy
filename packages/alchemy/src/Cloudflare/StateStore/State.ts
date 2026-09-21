@@ -13,7 +13,6 @@ import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
 import * as Option from "effect/Option";
-import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
@@ -36,6 +35,7 @@ import {
   State,
   isResourceState,
   type StateService,
+  type StateStoreError,
 } from "../../State/State.ts";
 import {
   recordStateStoreInit,
@@ -58,7 +58,7 @@ import {
   TokenValue,
 } from "./Token.ts";
 
-const CI = Config.boolean("CI").pipe(Config.withDefault(false));
+const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
 export const state = () =>
   Layer.effect(
@@ -850,18 +850,14 @@ const deployWithLocalState = ({
  *
  * @internal exported for unit testing.
  */
-export const isTransientBootstrapWriteError = (error: {
-  cause?: unknown;
-}): boolean => {
-  const cause = error.cause;
-  if (cause == null) return false;
-  const tag = (cause as { _tag?: unknown })._tag;
-  if (typeof tag === "string" && tag.startsWith("Unauthorized")) return true;
-  if (isHttpClientError(cause)) {
-    const status = cause.response?.status;
-    return status === undefined || status === 404 || status >= 500;
-  }
-  return false;
+export const isTransientBootstrapWriteError = (
+  error: Pick<StateStoreError, "http">,
+): boolean => {
+  if (error.http === undefined) return false;
+  const { status } = error.http;
+  return (
+    status === undefined || status === 401 || status === 404 || status >= 500
+  );
 };
 
 /** True when a local bootstrap stack exists for `stage` (keyed by profile). */
@@ -1587,7 +1583,7 @@ const annotateAccountHash = (noTrack?: boolean) =>
   Effect.gen(function* () {
     if (noTrack === true) return;
     if (noTrack === undefined) {
-      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
+      const fromEnv = yield* Config.Boolean("NO_TRACK").pipe(
         Config.withDefault(false),
       );
       if (fromEnv) return;

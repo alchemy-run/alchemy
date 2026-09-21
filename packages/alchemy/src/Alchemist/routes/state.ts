@@ -8,7 +8,7 @@ import * as AwsState from "../../AWS/StateStore/State.ts";
 import * as CloudflareState from "../../Cloudflare/StateStore/State.ts";
 import * as State from "../../State/index.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { open, type Target } from "../Session.ts";
+import { open, StackEntrypointError, type Target } from "../Session.ts";
 
 /** Which store a state request addresses. */
 export type StateSource =
@@ -68,7 +68,20 @@ export const store = Effect.fn("Alchemist.state.store")(function* (
       Effect.provide(config),
     );
   }
-  const session = yield* open(source);
+  // The configured store lives in the stack entrypoint; this is the one
+  // command that can also work without one.
+  const session = yield* open(source).pipe(
+    Effect.catchIf(
+      (error): error is StackEntrypointError =>
+        error instanceof StackEntrypointError,
+      (error) =>
+        Effect.fail(
+          new StackEntrypointError({
+            message: `${error.message} For config-less state access use --backend aws or --backend cloudflare.`,
+          }),
+        ),
+    ),
+  );
   return yield* Effect.provide(Effect.flatten(State.State), session.context);
 });
 

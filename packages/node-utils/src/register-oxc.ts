@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import * as NodeModule from "node:module";
 import {
   registerHooks,
   type LoadFnOutput,
@@ -7,10 +7,6 @@ import {
   type ResolveHookContext,
 } from "node:module";
 import { pathToFileURL } from "node:url";
-import type {
-  ImportLoader,
-  ImportLoaderRegistrationOptions,
-} from "./import-loader.ts";
 import {
   filePathOfUrl,
   isFileLikeSpecifier,
@@ -20,25 +16,68 @@ import {
 } from "./resolve-specifier.ts";
 import { SourceTransformer } from "./transform-source.ts";
 
-export type {
-  ImportLoader as RegisteredOxcImporter,
-  ImportLoaderRegistrationOptions as RegisterOxcOptions,
-  SourceTransform,
-  SourceTransformResult,
-  TransformContext,
-} from "./import-loader.ts";
+export interface OxcLoaderOptions {
+  /**
+   * Additional package export conditions used during module resolution.
+   * They are made available alongside Node's ambient conditions to both the
+   * TypeScript-aware resolver and Node's package exports resolver.
+   */
+  readonly conditions?: ReadonlyArray<string> | undefined;
+  /**
+   * Honour `tsconfig.json` discovered upward from each file: compiler
+   * options for the transform, `paths`/`baseUrl` aliases for resolution.
+   * @default true
+   */
+  readonly tsconfig?: boolean | undefined;
+  /** Controls which file URLs belong to the fresh import graph. */
+  readonly shouldInvalidate?:
+    | ((url: string, parentURL: string | undefined) => boolean)
+    | undefined;
+  /**
+   * Limits transformation to matching absolute file paths; everything else
+   * loads through Node untouched. Lets a published install transpile only
+   * the user's own TypeScript while alchemy and its dependencies run their
+   * built JavaScript.
+   */
+  readonly filter?: ((path: string) => boolean) | undefined;
+  /**
+   * On-disk cache of Oxc output shared by every process on the machine, so
+   * the CLI, its dev exec child and the local-provider sidecars transpile
+   * each source file once between them rather than once each. `false`
+   * disables it, a string names the directory.
+   * @default `$ALCHEMY_TRANSFORM_CACHE` (`0` disables), else a per-user
+   * directory under the OS temp directory
+   */
+  readonly cache?: boolean | string | undefined;
+}
 
-const protocol = "alchemy-import:";
+export interface RegisterOxcOptions extends OxcLoaderOptions {
+  /**
+   * Isolates one import graph in the runtime's module cache: every file
+   * URL the graph resolves carries this namespace as a query parameter, so
+   * the same files import again as fresh modules under a new namespace.
+   * This is how `alchemy dev` reloads the user's stack (see
+   * `watch-import.ts`); an un-namespaced registration is the process-wide
+   * TypeScript loader.
+   */
+  readonly namespace?: string | undefined;
+  /** Called once the runtime loads a file in this registration's graph. */
+  readonly onImport?: ((url: string) => void) | undefined;
+}
+
+export interface OxcLoader {
+  /**
+   * Imports a file under this registration's namespace. `specifier` is a
+   * file URL, an absolute path, or a path relative to `parentURL`.
+   */
+  import<T = unknown>(specifier: string, parentURL: string): Promise<T>;
+  unregister(): void;
+}
+
 const namespaceParameter = "alchemy-import-namespace";
 const globalRegistrationKey = Symbol.for(
   "@alchemy.run/node-utils/register-oxc",
 );
-
-interface ImportRequest {
-  readonly namespace?: string | undefined;
-  readonly parentURL: string;
-  readonly specifier: string;
-}
 
 type NextResolve = (
   specifier: string,
@@ -63,44 +102,33 @@ const withNamespace = (url: string, namespace: string) => {
   return parsed.href;
 };
 
-const parseRequest = (specifier: string): ImportRequest | undefined => {
-  if (!specifier.startsWith(protocol)) return undefined;
-  return JSON.parse(decodeURIComponent(specifier.slice(protocol.length)));
-};
+/**
+ * Node's module compile cache (`module.enableCompileCache`) keeps V8 code
+ * cache for compiled modules — transformed TypeScript included, since it is
+ * keyed by the compiled source — but Node only persists it once after the
+ * entry module evaluated and again on a clean exit. Alchemy processes load
+ * most of their graph lazily after that point (commands, the user's stack,
+ * provider layers) and usually stop on a signal, so without an explicit
+ * flush that code never reaches the cache. Flush once module loading has
+ * gone quiet; a no-op when the cache is off or this Node predates it.
+ */
+const scheduleCompileCacheFlush = (() => {
+  let timer: NodeJS.Timeout | undefined;
+  return () => {
+    if (NodeModule.getCompileCacheDir?.() === undefined) return;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      NodeModule.flushCompileCache?.();
+    }, 1000);
+    timer.unref();
+  };
+})();
 
 /** Specifiers Node owns outright: builtins, data URLs, remote schemes. */
 const isForeignSpecifier = (specifier: string) =>
   /^(?:node:|data:|[a-z][a-z\d+.-]*:\/\/)/i.test(specifier) &&
   !specifier.startsWith("file:");
-
-const notFoundCodes = new Set([
-  "ERR_MODULE_NOT_FOUND",
-  "MODULE_NOT_FOUND",
-  "ERR_UNSUPPORTED_DIR_IMPORT",
-  "ERR_PACKAGE_PATH_NOT_EXPORTED",
-]);
-
-const isNotFound = (error: unknown): error is Error & { url?: string } =>
-  error instanceof Error &&
-  notFoundCodes.has((error as { code?: string }).code ?? "");
-
-/**
- * The file Node could not find, from the error it raised. Node names the
- * resolved target (`url` on ESM errors, the message on CommonJS ones) —
- * for a package `exports` entry pointing at emitted JavaScript that was
- * never built, that is the `.js` path whose `.ts` source we can substitute.
- */
-const missingPathOf = (error: Error & { url?: string }) => {
-  if (error.url !== undefined) return filePathOfUrl(error.url);
-  const match = error.message.match(/^Cannot find module '([^']+)'/);
-  if (match === null) return undefined;
-  const [, target] = match;
-  if (target === undefined) return undefined;
-  if (target.startsWith("file:")) return filePathOfUrl(target);
-  return target.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(target)
-    ? target
-    : undefined;
-};
 
 /** A `require()` reaching the hooks: Node's CommonJS resolver wants paths, not URLs. */
 const isRequireContext = (context: ResolveHookContext) =>
@@ -156,27 +184,7 @@ const resolveSpecifier = (
     }
   }
 
-  try {
-    return nextResolve(specifier, context);
-  } catch (error) {
-    if (!isNotFound(error)) throw error;
-    // A package `exports`/`main` target naming emitted JavaScript that only
-    // exists as TypeScript source (workspace packages in a checkout).
-    const missing = missingPathOf(error);
-    if (missing !== undefined && isFileLikeSpecifier(missing)) {
-      const candidate = resolver.resolveMissing(missing, conditions);
-      if (candidate !== undefined && candidate !== missing) {
-        const resolved = resolveWithCandidate(
-          candidate,
-          metadata,
-          context,
-          nextResolve,
-        );
-        if (resolved !== undefined) return resolved;
-      }
-    }
-    throw error;
-  }
+  return nextResolve(specifier, context);
 };
 
 /**
@@ -200,16 +208,14 @@ const withJsonAttribute = (url: string, context: LoadHookContext) => {
  * does. A namespaced registration also provides a scoped import whose
  * namespace propagates through the complete ESM graph.
  */
-export const registerOxc = (
-  options: ImportLoaderRegistrationOptions = {},
-): ImportLoader => {
+export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
   // One global (un-namespaced) registration per process. Alchemy starts every
   // Node process with `--import` of a file that calls this, and in-process
   // callers (the dev exec child, tests) may call it again; a second copy of
   // the hooks would only re-run the resolve chain. The marker lives on
   // globalThis because a checkout can load this module twice (src/ and lib/).
   const globalRegistration = globalThis as typeof globalThis & {
-    [globalRegistrationKey]?: ImportLoader;
+    [globalRegistrationKey]?: OxcLoader;
   };
   if (options.namespace === undefined) {
     const existing = globalRegistration[globalRegistrationKey];
@@ -221,19 +227,20 @@ export const registerOxc = (
   });
   const shouldInvalidate = options.shouldInvalidate ?? (() => true);
 
-  // Transformed sources carry inline source maps; Node only applies them to
-  // stack traces once source-map support is on.
+  // Transformed sources reference their source maps (see transform-source);
+  // Node only reads and applies them to stack traces once source-map support
+  // is on.
   const sourceMapsWereEnabled = process.sourceMapsEnabled;
   process.setSourceMapsEnabled(true);
 
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
-      const request = parseRequest(specifier);
-      const inheritedNamespace = namespaceOf(context.parentURL);
+      // A graph's entry carries the namespace itself (see `import` below);
+      // everything it imports inherits it from the importing module's URL.
       const namespace =
         options.namespace === undefined
           ? undefined
-          : (request?.namespace ?? inheritedNamespace);
+          : (namespaceOf(specifier) ?? namespaceOf(context.parentURL));
 
       if (options.namespace !== undefined && namespace !== options.namespace) {
         return nextResolve(specifier, context);
@@ -248,14 +255,12 @@ export const registerOxc = (
                 ...new Set([...options.conditions, ...context.conditions]),
               ],
             };
-      const resolved = request
-        ? resolveSpecifier(
-            resolver,
-            request.specifier,
-            { ...resolutionContext, parentURL: request.parentURL },
-            nextResolve,
-          )
-        : resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
+      const resolved = resolveSpecifier(
+        resolver,
+        specifier,
+        resolutionContext,
+        nextResolve,
+      );
       if (
         namespace !== undefined &&
         resolved.url.startsWith("file:") &&
@@ -271,6 +276,7 @@ export const registerOxc = (
       return resolved;
     },
     load(url, context, nextLoad): LoadFnOutput {
+      scheduleCompileCacheFlush();
       const namespace = namespaceOf(url);
       if (options.namespace !== undefined && namespace !== options.namespace) {
         return nextLoad(url, context);
@@ -284,11 +290,7 @@ export const registerOxc = (
       if (options.filter !== undefined && !options.filter(filePath)) {
         return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
       }
-      const transformed = transformer.transform(
-        filePath,
-        cleanUrl,
-        context.format,
-      );
+      const transformed = transformer.transform(filePath, context.format);
       if (transformed === undefined) {
         return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
       }
@@ -296,17 +298,28 @@ export const registerOxc = (
     },
   });
 
-  const loader: ImportLoader = {
+  const loader: OxcLoader = {
     import<T>(specifier: string, parentURL: string) {
-      const request: ImportRequest = {
-        namespace: options.namespace,
-        parentURL: parentURL.startsWith("file:")
-          ? parentURL
-          : pathToFileURL(parentURL).href,
-        specifier,
-      };
+      if (!isFileLikeSpecifier(specifier)) {
+        throw new Error(
+          `Cannot import '${specifier}': expected a file URL or path.`,
+        );
+      }
+      const base = parentURL.startsWith("file:")
+        ? parentURL
+        : pathToFileURL(parentURL).href;
+      const url = specifier.startsWith("file:")
+        ? specifier
+        : new URL(
+            specifier.startsWith(".")
+              ? specifier
+              : pathToFileURL(specifier).href,
+            base,
+          ).href;
       return import(
-        `${protocol}${encodeURIComponent(JSON.stringify(request))}`
+        options.namespace === undefined
+          ? url
+          : withNamespace(url, options.namespace)
       ) as Promise<T>;
     },
     unregister() {
@@ -321,22 +334,4 @@ export const registerOxc = (
     globalRegistration[globalRegistrationKey] = loader;
   }
   return loader;
-};
-
-/**
- * One-shot TypeScript import that leaves the rest of the runtime untouched:
- * a private namespace is registered for the call, so nothing is shared with
- * other imports of the same files. Mirrors tsx's `tsImport`.
- */
-export const tsImport = async <T = unknown>(
-  specifier: string,
-  parentURL: string,
-  options: Omit<ImportLoaderRegistrationOptions, "namespace"> = {},
-): Promise<T> => {
-  const loader = registerOxc({ ...options, namespace: randomUUID() });
-  try {
-    return await loader.import<T>(specifier, parentURL);
-  } finally {
-    await loader.unregister();
-  }
 };

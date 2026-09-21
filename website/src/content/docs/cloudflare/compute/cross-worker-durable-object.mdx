@@ -80,7 +80,7 @@ export class Counter extends Cloudflare.DurableObject<
 :::note
 The `state` *reference* is resolved in the outer (Construction) Effect, but
 `state.storage` is
-[colored with `RuntimeContext`](/infrastructure-as-effects/layers#runtime-as-a-colored-function)
+[colored with `RuntimeContext`](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
 — so the storage reads/writes stay in the inner (runtime) Effect.
 :::
 

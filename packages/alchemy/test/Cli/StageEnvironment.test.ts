@@ -1,5 +1,5 @@
 import { UserInputError } from "@/Cli/commands/errors.ts";
-import { resolveStage, stage } from "@/Cli/commands/flags.ts";
+import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -177,5 +177,11 @@ describe("default stages", () => {
         );
       }).pipe(provideStageTest),
     { exclusive: true },
+  );
+
+  test.effect("userStage('test') is test_${USER}", () =>
+    Effect.gen(function* () {
+      expect(yield* userStage("test")).toBe("test_sam");
+    }).pipe(Effect.provide(TestEnv)),
   );
 });

@@ -1,6 +1,6 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import type { ReactNode } from "react";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "@alchemy.run/sigil/react";
 import { useGlyphs } from "./Environment.tsx";
 import { SpinnerGlyph } from "./Feedback.tsx";
 import { ProgressBar } from "./ProgressBar.tsx";

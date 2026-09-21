@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { AnsiText } from "@alchemy.run/sigil";
 import { inspect } from "node:util";
 import type { ReactNode } from "react";

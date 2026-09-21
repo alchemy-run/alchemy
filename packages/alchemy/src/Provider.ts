@@ -666,7 +666,7 @@ export const describeDataPlane = (resource: {
   readonly Mode?: ProviderMode | undefined;
 }): Effect.Effect<DataPlaneResolution> =>
   Effect.gen(function* () {
-    const found = yield* tryFindProviderByType(resource.Type);
+    const found = yield* tryFindProviderRegistrationByType(resource.Type);
     if (Option.isNone(found)) return { kind: "unregistered" as const };
     const provider = found.value;
     if (provider.modes === undefined) return { kind: "agnostic" as const };
@@ -712,6 +712,7 @@ export const findProviderByType: {
   )) as any;
 
 /**
+ * Resolve the concrete provider for the requested or current run mode.
  * Typed provider lookup by resource class (or {@link Platform}) value. Infers
  * `R` from the class so `provider.list()` / `provider.read(...)` return the
  * resource's `Attributes` shape — prefer this over {@link findProviderByType},
@@ -761,17 +762,25 @@ export const missingProviderError = (
     fqn,
   });
 
-export const tryFindProviderByType: {
-  <R extends ResourceLike>(
-    resourceType: R["Type"],
-    mode?: ProviderMode,
-  ): Effect.Effect<Option.Option<ProviderService<R>>>;
-} = Effect.fn(function* <R extends ResourceLike>(
+/** Resolve a concrete provider, using the current run's mode when omitted. */
+export const tryFindProviderByType = <R extends ResourceLike>(
   resourceType: R["Type"],
   mode?: ProviderMode,
-) {
-  // When a mode is requested, resolve the found service to that mode's
-  // variant (building it lazily if needed) before returning.
+): Effect.Effect<Option.Option<ProviderService<R>>> =>
+  Effect.gen(function* () {
+    const found = yield* tryFindProviderRegistrationByType<R>(resourceType);
+    if (Option.isNone(found)) return found;
+    return Option.some(
+      yield* providerForMode(found.value, mode ?? (yield* defaultProviderMode)),
+    );
+  });
+
+/** Inspect registration metadata without constructing either provider variant. */
+export const tryFindProviderRegistrationByType: {
+  <R extends ResourceLike>(
+    resourceType: R["Type"],
+  ): Effect.Effect<Option.Option<ProviderService<R>>>;
+} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
   const found = yield* Effect.gen(function* () {
     const Tag = Provider<R>(resourceType) as unknown as Context.Service<
       Provider<R>,
@@ -812,10 +821,5 @@ export const tryFindProviderByType: {
     }
     return Option.none();
   });
-  if (Option.isNone(found)) {
-    return found;
-  }
-  return Option.some(
-    yield* providerForMode(found.value as ProviderService<R>, mode),
-  );
+  return found;
 }) as any;

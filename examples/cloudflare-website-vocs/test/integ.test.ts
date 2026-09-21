@@ -11,7 +11,6 @@ const { getWhenReady } = Test;
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {

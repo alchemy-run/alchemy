@@ -675,6 +675,13 @@ export const InstanceProvider = () =>
             }
           }
           if (!isResolved(news)) return;
+          const reusesFixedPrivateIp =
+            news.privateIpAddress !== undefined &&
+            (output?.privateIpAddress ?? olds.privateIpAddress) ===
+              news.privateIpAddress &&
+            (news.subnetId === undefined ||
+              (output?.subnetId ?? olds.subnetId) === news.subnetId);
+
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
             hostModeChanged ||
@@ -687,7 +694,11 @@ export const InstanceProvider = () =>
             olds.privateIpAddress !== news.privateIpAddress ||
             olds.availabilityZone !== news.availabilityZone
           ) {
-            return { action: "replace" } as const;
+            // A primary private IP cannot belong to two instances in the
+            // same subnet. An omitted subnet may still resolve to that subnet.
+            return reusesFixedPrivateIp
+              ? ({ action: "replace", deleteFirst: true } as const)
+              : ({ action: "replace" } as const);
           }
 
           if (

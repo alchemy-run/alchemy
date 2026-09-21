@@ -149,7 +149,7 @@ export const presentEnvironment = (
     for (const variable of environment) {
       let found: string | undefined;
       for (const name of [variable.name, ...(variable.alternatives ?? [])]) {
-        const value = yield* Config.option(Config.string(name));
+        const value = yield* Config.option(Config.String(name));
         if (Option.isSome(value) && value.value !== "") {
           found = name;
           break;

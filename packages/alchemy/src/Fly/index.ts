@@ -3,6 +3,12 @@ export * from "./AuthProvider.ts";
 export * from "./Bucket.ts";
 export * from "./Catalog.ts";
 export * from "./DeleteObject.ts";
+export type {
+  MachineDeploy,
+  MachineShutdown,
+  MachineCheck,
+} from "./Deployment.ts";
+export { InvalidDeployment } from "./Deployment.ts";
 export * from "./DeleteObjectHttp.ts";
 export * from "./Certificate.ts";
 export * from "./Checkpoint.ts";
@@ -53,5 +59,7 @@ export * from "./Verify.ts";
 export * from "./VerifyHttp.ts";
 export * from "./VolumeSnapshot.ts";
 export * as Website from "./Website/index.ts";
+export * from "./WriteCertificates.ts";
+export * from "./WriteCertificatesHttp.ts";
 export * from "./WriteSecret.ts";
 export * from "./WriteSecretHttp.ts";

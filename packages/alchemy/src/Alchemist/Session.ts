@@ -30,20 +30,20 @@ import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
 import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
-import { UserFacingError } from "../UserFacingError.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { fileLogger } from "../Util/FileLogger.ts";
 
-export class StackEntrypointError extends Data.TaggedError(
-  "StackEntrypointError",
-)<{ readonly message: string }> {
-  readonly [UserFacingError] = true;
-}
+import {
+  DEFAULT_ENTRYPOINT,
+  resolveStackEntrypoint,
+  StackEntrypointError,
+} from "./Entrypoint.ts";
 
-export const DEFAULT_ENTRYPOINT = "alchemy.run.ts";
+export { DEFAULT_ENTRYPOINT, resolveStackEntrypoint, StackEntrypointError };
 
 /** Stage used by routes that inspect a project without addressing a deployment. */
 export const PLACEHOLDER_STAGE = "placeholder";
@@ -70,16 +70,7 @@ export const StackModuleLoader = Context.Reference<StackModuleLoader>(
 );
 
 export const importStack = Effect.fn(function* (main: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const absolutePath = path.resolve(main);
-  if (!(yield* fs.exists(absolutePath))) {
-    return yield* Effect.fail(
-      new StackEntrypointError({
-        message: `Stack entrypoint '${main}' does not exist in '${path.dirname(absolutePath)}'. Run this command from an Alchemy project, pass --config <path>, or use --backend aws / --backend cloudflare for config-less state access.`,
-      }),
-    );
-  }
+  const absolutePath = yield* resolveStackEntrypoint(main);
   const loader = yield* StackModuleLoader;
   const module = yield* Effect.promise(() =>
     loader.import(pathToFileURL(absolutePath).href),
@@ -378,6 +369,7 @@ const builtinAuth = Layer.mergeAll(
   PlanetscaleAuth,
   PrismaAuth,
   RailwayAuth,
+  StripeAuth,
 );
 
 const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(

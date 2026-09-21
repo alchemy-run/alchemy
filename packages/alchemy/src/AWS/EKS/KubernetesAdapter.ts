@@ -24,7 +24,7 @@ import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as eks from "@distilled.cloud/aws/eks";
-import { AwsClient } from "aws4fetch";
+import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -130,34 +130,18 @@ type EksAdapterDeps =
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
   const credentials = yield* yield* Credentials;
 
-  const client = new AwsClient({
+  const presigned = yield* SigV4.sign({
+    method: "GET",
+    url: `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
+    headers: { "x-k8s-aws-id": clusterName },
     accessKeyId: Redacted.value(credentials.accessKeyId),
-    secretAccessKey: Redacted.value(credentials.secretAccessKey),
-    sessionToken: credentials.sessionToken
-      ? Redacted.value(credentials.sessionToken)
-      : undefined,
+    secretAccessKey: credentials.secretAccessKey,
+    sessionToken: credentials.sessionToken,
     service: "sts",
     region,
+    signQuery: true,
+    allHeaders: true,
   });
-
-  const presigned = yield* Effect.tryPromise(() =>
-    client.sign(
-      new Request(
-        `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
-        {
-          headers: {
-            "x-k8s-aws-id": clusterName,
-          },
-        },
-      ),
-      {
-        aws: {
-          signQuery: true,
-          allHeaders: true,
-        },
-      },
-    ),
-  );
 
   return `k8s-aws-v1.${Buffer.from(presigned.url).toString("base64url")}`;
 });
@@ -303,8 +287,8 @@ const program = tag.pipe(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,
       Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
+        Config.String("ALCHEMY_STACK_NAME"),
+        Config.String("ALCHEMY_STAGE")
       ]).pipe(
         Effect.map(([name, stage]) => ({
           name,
@@ -388,8 +372,8 @@ const program = tag.pipe(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,
       Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
+        Config.String("ALCHEMY_STACK_NAME"),
+        Config.String("ALCHEMY_STAGE")
       ]).pipe(
         Effect.map(([name, stage]) => ({
           name,

@@ -232,7 +232,7 @@ test.provider(
         scriptPath,
         [
           "trap 'printf stopped > dev-stopped.txt; exit 0' TERM INT",
-          'printf \'{"port":"%s","greeting":"%s"}\' "$PORT" "$GREETING" > dev-output.json',
+          'printf \'{"port":"%s","greeting":"%s","nodeEnv":"%s"}\' "$PORT" "$GREETING" "$NODE_ENV" > dev-output.json',
           "while true; do sleep 1; done",
           "",
         ].join("\n"),
@@ -272,6 +272,7 @@ test.provider(
       expect(JSON.parse(output)).toEqual({
         port: "8789",
         greeting: "hello-dev",
+        nodeEnv: "development",
       });
 
       yield* stack.destroy();

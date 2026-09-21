@@ -180,7 +180,7 @@ journal in the output) if it never does. Add the route:
 +        const request = yield* HttpServerRequest;
 +        const url = new URL(request.url, "http://service");
 +        if (url.pathname === "/health") {
-+          return HttpServerResponse.json({ ok: true });
++          return yield* HttpServerResponse.json({ ok: true });
 +        }
 +        return HttpServerResponse.text("Hello from Hetzner!");
 +      }),

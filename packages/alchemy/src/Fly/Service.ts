@@ -15,10 +15,18 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
+import type { Input } from "../Input.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App } from "./App.ts";
+import {
+  deploymentPolicy,
+  validateDeployment,
+  type MachineDeploy,
+  type MachineShutdown,
+  type MachineCheck,
+} from "./Deployment.ts";
 import type {
   MachineGuest,
   MachineImageRef,
@@ -51,6 +59,7 @@ import {
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
+  sameServices,
   toFlyService,
   volumeIdsOf,
   type Replica,
@@ -69,6 +78,12 @@ const DEFAULT_CPUS = 1;
 const DEFAULT_MEMORY_MB = 256;
 
 export interface ServiceProps extends PlatformProps {
+  /** Deployment strategy and readiness deadline. Defaults to in-place rolling updates. */
+  deploy?: MachineDeploy;
+  /** Graceful process shutdown. Defaults to SIGTERM / 30 seconds when blue/green is enabled. */
+  shutdown?: MachineShutdown;
+  /** Named readiness checks for workers without public services. */
+  checks?: Record<string, MachineCheck>;
   /**
    * Parent Fly App. Accepts a `Fly.App` or an Effect that produces one
    * (module-scope `const Site = Fly.App("Site")` is valid). Changing the
@@ -78,7 +93,7 @@ export interface ServiceProps extends PlatformProps {
   /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
-   * A content-hash change updates the Machine in place.
+   * A content-hash change updates the workload using the selected deployment strategy.
    */
   main: string;
   /**
@@ -89,9 +104,11 @@ export interface ServiceProps extends PlatformProps {
    */
   region?: string;
   /**
-   * Number of Machines to keep running. Fly's proxy load-balances
-   * `{app}.fly.dev` across them. Each replica gets its own Volume
-   * from every `MountVolume` binding.
+   * Number of Machines to provision, including stopped/suspended idle capacity.
+   * Fly's proxy load-balances `{app}.fly.dev` across available replicas.
+   * Blue/green checks a representative and the required running floor while
+   * preserving idle nonrepresentatives. Each replica gets its own Volume
+   * from every `MountVolume` binding; attached volumes require rolling updates.
    *
    * @default 1
    */
@@ -139,6 +156,7 @@ export interface ServiceProps extends PlatformProps {
   /**
    * Machine name. Unique per App. If omitted, a unique name is generated
    * from the stack, stage and logical ID. Changing it replaces the Service.
+   * In blue/green mode this is a base for generation-qualified physical names.
    */
   name?: string;
   /**
@@ -173,13 +191,17 @@ export type Service = Resource<
   "Fly.Service",
   ServiceProps,
   {
+    /** Whether recovery must finish an interrupted deployment. */
+    rolloutPending?: boolean;
     /** Parent Fly App name. */
     appName: string;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
     machineIds: string[];
-    /** Machine name of replica 0 (unique per App). */
+    /** Logical base for generation-qualified Machine names. */
+    baseName?: string;
+    /** Machine name of replica 0 (unique per App). Changes during blue/green deployment. */
     name: string;
     /** Region the Machines are running in. */
     region: string;
@@ -363,6 +385,13 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Configure routing health checks
  * The generated service includes a TCP check on `port`. To customize
  * it, provide `services` and configure each service's `checks` property.
+ * With rolling updates, reconcile waits for each started replica's checks
+ * before updating the next replica. Missing or non-passing results are
+ * polled within `deploy.healthTimeout` (60 seconds by default), then fail
+ * deployment with `Fly.ReplicaChecksNotPassing`. Later replicas remain
+ * unchanged; earlier updates are not rolled back. A single rolling replica
+ * can be unavailable. Blue/green checks replacements before retiring the
+ * old set, with representative/floor readiness for idle capacity.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -425,10 +454,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * ### Scale with count
- * `count` is how many Machines to keep running. Default is `1`. They
- * all publish the same proxy service, so they all sit behind
- * `{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
- * replica gets its own Volume from every {@link MountVolume} binding.
+ * `count` is how many Machines to provision, including idle capacity.
+ * Default is `1`. Replicas publish the same proxy service behind
+ * `{app}.fly.dev`; Fly's proxy picks an available Machine per request.
+ * Each replica gets its own Volume from every {@link MountVolume} binding;
+ * attached volumes require rolling updates.
  *
  * **Example:** Three replicas
  * ```typescript
@@ -448,14 +478,14 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * whoever deploys and writes it onto the Machine. Do not pass
  * `env: { ... }` on a Service.
  *
- * `Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+ * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
  *
  * Alchemy also injects `PORT` (when `port` is set) and stack metadata.
  * For a secret Fly should own and inject into every Machine on the
  * App, use {@link Secret}.
  *
- * **Example:** Config.redacted
+ * **Example:** Config.Redacted
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
@@ -464,7 +494,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     const apiKey = yield* Config.redacted("API_KEY");
+ *     const apiKey = yield* Config.Redacted("API_KEY");
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -698,6 +728,46 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * ### Blue/green deployments
+ * Opt into healthy replacement Machines instead of in-place updates.
+ * The default TCP service check proves the server is listening; supply
+ * service HTTP checks when readiness also depends on application state.
+ *
+ * **Example:** Single-replica HTTP replacement
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     deploy: { strategy: "bluegreen" },
+ *     shutdown: { timeout: "30 seconds" },
+ *   },
+ *   Effect.succeed({ fetch: Effect.succeed(HttpServerResponse.text("ready")) }),
+ * ) {}
+ * ```
+ *
+ * Keep one Service declaration. The old process retains its own shutdown
+ * signal and deadline when the replacement's policy changes. Managed
+ * SIGTERM/SIGINT shutdown drains HTTP while runtime resource finalizers run;
+ * shared dependencies remain alive until both settle or the deadline expires.
+ * Applications own stop-acquisition barriers, separately scoped jobs, and
+ * bounded drain or checkpoint logic using ordinary finalizers, not a new
+ * shutdown hook. External servers own their signal handling. An old bootstrap
+ * cannot gain handlers retroactively. Volumes are incompatible with blue/green;
+ * physical IDs and names change. Service-bound secret versions are floors,
+ * not vault snapshots, and native Machine leases are not deployment-wide locks.
+ * Leases do not serialize vault writers or every simultaneous first deployment;
+ * serialize CI invocations for the same resource.
+ *
+ * Stop and suspend autostop policies preserve idle nonrepresentatives while
+ * a representative and the required running floor pass readiness. Requested
+ * idle policy is restored before old retirement; a new instance needs fresh
+ * checks. Suspension is not SIGTERM shutdown and does not run ordinary
+ * shutdown finalizers. Replacements do not inherit suspended process memory.
+ * See the [deployment guide](/fly/compute/deployments) for recovery,
+ * idle capacity, application responsibilities, and verification limits.
+ *
  * @resource
  */
 export const Service: Platform<
@@ -857,11 +927,6 @@ const sameEnv = (
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
 
-const sameServices = (
-  observed: FlyMachineService[] | undefined,
-  desired: FlyMachineService[],
-) => deepEqual(observed ?? [], desired, { stripNullish: true });
-
 const sameMounts = (
   observed: FlyMachineMount[] | undefined,
   desired: FlyMachineMount[],
@@ -891,7 +956,18 @@ const metadataChanged = (
 const sameStatics = (
   observed: FlyStatic[] | undefined,
   desired: FlyStatic[] | undefined,
-) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+) => {
+  const normalize = (statics: FlyStatic[] | undefined) =>
+    (statics ?? []).map((entry) => ({
+      ...entry,
+      // Empty and omitted index documents both disable directory indexes.
+      index_document:
+        entry.index_document === "" ? undefined : entry.index_document,
+    }));
+  return deepEqual(normalize(observed), normalize(desired), {
+    stripNullish: true,
+  });
+};
 
 const configDrifted = (
   machine: FlyMachine,
@@ -919,9 +995,11 @@ const configDrifted = (
 
 const toAttrs = (set: ReplicaSet, codeHash: string): Service["Attributes"] => ({
   appName: set.appName,
+  rolloutPending: set.rolloutPending,
   machineId: set.machineId,
   machineIds: set.machineIds,
   name: set.name,
+  baseName: set.baseName,
   region: set.region,
   state: set.state,
   url: set.url,
@@ -955,11 +1033,60 @@ export const ServiceProvider = () =>
       });
 
       return Service.Provider.of({
-        stables: ["machineId", "name", "region", "appName"],
+        stables: ["region", "appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
         diff: Effect.fn(function* ({ id, news, output }) {
-          if (news === undefined || output === undefined) return undefined;
+          if (news === undefined) return;
+          if ("app" in news) {
+            const settings: Input<
+              Pick<
+                ServiceProps,
+                | "deploy"
+                | "shutdown"
+                | "checks"
+                | "services"
+                | "port"
+                | "isExternal"
+              >
+            > = {
+              deploy: news.deploy,
+              shutdown: news.shutdown,
+              services: news.services,
+              checks: news.checks,
+              port: news.port,
+              isExternal: news.isExternal,
+            };
+            if (
+              isResolved<
+                Pick<
+                  ServiceProps,
+                  | "deploy"
+                  | "shutdown"
+                  | "checks"
+                  | "services"
+                  | "port"
+                  | "isExternal"
+                >
+              >(settings)
+            ) {
+              yield* validateDeployment(
+                yield* deploymentPolicy(
+                  settings.deploy,
+                  settings.shutdown,
+                  !settings.isExternal,
+                ),
+                {
+                  services:
+                    settings.services?.map(toFlyService) ??
+                    defaultHttpServices(settings.port ?? DEFAULT_PORT),
+                  checks: settings.checks,
+                },
+                false,
+              );
+            }
+          }
+          if (output === undefined) return;
           if (isResolved(news)) {
             const desiredAppName = appNameOf(news.app);
             const appChanged =
@@ -967,8 +1094,9 @@ export const ServiceProvider = () =>
             const desiredName =
               news.name !== undefined
                 ? sanitizeFlyAppName(news.name)
-                : output.name;
-            const nameChanged = desiredName !== output.name;
+                : (output.baseName ?? output.name);
+            const nameChanged =
+              desiredName !== (output.baseName ?? output.name);
             const desiredRegion = news.region ?? DEFAULT_REGION;
             const regionChanged = desiredRegion !== output.region;
             if (appChanged || nameChanged || regionChanged) {
@@ -1007,16 +1135,24 @@ export const ServiceProvider = () =>
               return { action: "update" as const };
             }
           }
-          return undefined;
+          return output.rolloutPending
+            ? { action: "update" as const }
+            : undefined;
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
           const appName = appNameOf(olds?.app) ?? output?.appName;
-          const name = yield* resolveMachineName(id, olds?.name, output?.name);
+          const name = yield* resolveMachineName(
+            id,
+            olds?.name,
+            output?.baseName ?? output?.name,
+          );
           const found = yield* observeReplicaSet({
             appName,
             id,
             type: "Fly.Service",
+            fqn,
+            resourceInstanceId: instanceId,
             machineIds: machineIdsOf(output),
             baseName: name,
           });
@@ -1031,40 +1167,62 @@ export const ServiceProvider = () =>
 
         reconcile: Effect.fn(function* ({
           id,
+          fqn,
+          instanceId,
           news,
           output,
           bindings,
           session,
         }) {
           const props = news;
+          const policy = yield* deploymentPolicy(
+            props.deploy,
+            props.shutdown,
+            !props.isExternal,
+          );
           const appName = appNameOf(props.app) ?? output?.appName;
           if (appName === undefined) {
             return yield* new ServiceAppNotResolved({
               message: "Fly.Service requires a resolved App with appName.",
             });
           }
-          const name = yield* resolveMachineName(id, props.name, output?.name);
+          const name = yield* resolveMachineName(
+            id,
+            props.name,
+            output?.baseName ?? output?.name,
+          );
           const region = props.region ?? output?.region ?? DEFAULT_REGION;
           const count = resolveCount(props.count);
           const port = props.port ?? DEFAULT_PORT;
           const bound = collectBindingState(bindings ?? []);
-          yield* attachRedisSecrets(appName, bound.redis);
-          yield* attachBucketSecrets(appName, bound.buckets, {
-            ...bound.env,
-            ...toEnv(props.env),
-          });
-          let minSecretsVersion: number | undefined;
+          const secretVersions: number[] = [];
+          const redisVersion = yield* attachRedisSecrets(appName, bound.redis);
+          if (redisVersion !== undefined) secretVersions.push(redisVersion);
+          const bucketVersion = yield* attachBucketSecrets(
+            appName,
+            bound.buckets,
+            {
+              ...bound.env,
+              ...toEnv(props.env),
+            },
+          );
+          if (bucketVersion !== undefined) secretVersions.push(bucketVersion);
           for (const pg of bound.postgres) {
             const version = yield* attachPostgresSecrets(
               appName,
               pg.clusterId,
               pg.variableName,
             );
-            if (version !== undefined) {
-              minSecretsVersion = Math.max(minSecretsVersion ?? 0, version);
-            }
+            if (version !== undefined) secretVersions.push(version);
           }
+          const minSecretsVersion =
+            secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
+          if (policy.shutdown && !props.isExternal) {
+            env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(
+              policy.shutdown.timeoutMs,
+            );
+          }
           const guest = toFlyGuest(props.guest);
           const services =
             props.services !== undefined
@@ -1083,6 +1241,10 @@ export const ServiceProvider = () =>
           const set = yield* reconcileReplicas({
             id,
             type: "Fly.Service",
+            fqn,
+            resourceInstanceId: instanceId,
+            policy,
+            checks: props.checks,
             appName,
             baseName: name,
             region,
@@ -1126,11 +1288,25 @@ export const ServiceProvider = () =>
           return toAttrs(set, codeHash);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({
+          id,
+          fqn,
+          instanceId,
+          olds,
+          output,
+          force,
+        }) {
+          const appName = output.appName ?? appNameOf(olds.app);
+          if (appName === undefined) return;
           yield* deleteReplicaSet({
-            appName: output.appName,
+            appName,
+            id,
+            type: "Fly.Service",
+            fqn,
+            resourceInstanceId: instanceId,
             machineIds: machineIdsOf(output),
             volumeIds: volumeIdsOf(output),
+            force,
           });
         }),
       });

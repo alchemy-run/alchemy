@@ -13,6 +13,7 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
+import { buildCommand as nativeBuildCommand } from "./fixtures/nextjs-app/open-next.native.config.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -39,7 +40,6 @@ const nextjsProps = (rootDir: string) => ({
       "tsconfig.json",
       "middleware.ts",
       "next.config.mjs",
-      "open-next.config.ts",
     ],
   },
 });
@@ -89,7 +89,6 @@ describe.concurrent("Nextjs", () => {
             "package.json",
             "tsconfig.json",
             "next.config.mjs",
-            "open-next.config.ts",
             "middleware.ts",
             "app",
             "pages",
@@ -97,15 +96,22 @@ describe.concurrent("Nextjs", () => {
           ],
         });
         yield* prepareNextjsFixture(rootDir);
+        const nextConfigPath = path.join(rootDir, "next.config.mjs");
+        const nextConfig = yield* fs.readFileString(nextConfigPath);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
 
         const bindingMarker = "nextjs-binding-marker";
 
-        const deploy = () =>
+        const deploy = (buildCommand?: string) =>
           stack.deploy(
             Effect.gen(function* () {
               const kv = yield* Cloudflare.KV.Namespace("NextjsFixtureKv");
               return yield* Cloudflare.Website.Nextjs("NextjsSite", {
                 ...nextjsProps(rootDir),
+                openNext:
+                  buildCommand === undefined ? undefined : { buildCommand },
                 env: {
                   TEST_TEXT: bindingMarker,
                   FIXTURE_KV: kv,
@@ -115,6 +121,10 @@ describe.concurrent("Nextjs", () => {
           );
 
         const site1 = yield* deploy();
+        expect(yield* fs.readFileString(nextConfigPath)).toBe(nextConfig);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
 
         expect(site1.url).toBeDefined();
         expect(site1.hash?.input).toBeDefined();
@@ -129,11 +139,9 @@ describe.concurrent("Nextjs", () => {
         // API route handler — the middleware matcher covers /api/*, so the
         // pass-through header also proves middleware executes on deploy.
         const client = yield* HttpClient.HttpClient;
-        const helloRes = yield* client
-          .get(`${site1.url!}/api/hello`)
-          .pipe(
-            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
-          );
+        const helloRes = yield* Test.getWhenReady(`${site1.url!}/api/hello`, {
+          times: 6,
+        });
         expect(helloRes.status).toBe(200);
         expect(helloRes.headers["x-fixture-middleware"]).toBe("passed");
         const hello = (yield* helloRes.json) as { hello: string };
@@ -154,10 +162,11 @@ describe.concurrent("Nextjs", () => {
         // KV round-trip through a real resource binding: PUT then GET.
         const kvKey = `nextjs-live-${site1.hash?.input?.slice(0, 8)}`;
         const kvValue = `kv-value-${bindingMarker}`;
-        const putRes = yield* client.execute(
+        const putRes = yield* Test.executeWhenReady(
           HttpClientRequest.put(`${site1.url!}/api/kv`).pipe(
             HttpClientRequest.bodyJsonUnsafe({ key: kvKey, value: kvValue }),
           ),
+          { times: 6 },
         );
         expect(putRes.status).toBe(200);
         const kvRead = yield* fetchJsonReady<{ value: string | null }>(
@@ -207,10 +216,11 @@ describe.concurrent("Nextjs", () => {
         // Streaming SSR through the real edge: the shell (with the Suspense
         // fallback) flushes before the slow segment resolves. identity
         // encoding keeps intermediate proxies from buffering the stream.
-        const streamRes = yield* client.execute(
+        const streamRes = yield* Test.executeWhenReady(
           HttpClientRequest.get(`${site1.url!}/streaming`).pipe(
             HttpClientRequest.setHeader("accept-encoding", "identity"),
           ),
+          { times: 6 },
         );
         expect(streamRes.status).toBe(200);
         const streamBody = yield* streamRes.text;
@@ -258,7 +268,9 @@ describe.concurrent("Nextjs", () => {
           `${site1.url!}/rewritten-hello`,
         );
         expect(rewritten2.hello).toBe("world");
-        const headered = yield* client.get(`${site1.url!}/api/hello`);
+        const headered = yield* Test.getWhenReady(`${site1.url!}/api/hello`, {
+          times: 6,
+        });
         expect(headered.headers["x-fixture-config-header"]).toBe(
           "from-next-config",
         );
@@ -270,7 +282,9 @@ describe.concurrent("Nextjs", () => {
           timeout: "60 seconds",
           label: "nextjs next/image page",
         });
-        const pixel = yield* client.get(`${site1.url!}/pixel.png`);
+        const pixel = yield* Test.getWhenReady(`${site1.url!}/pixel.png`, {
+          times: 6,
+        });
         expect(pixel.status).toBe(200);
         expect(pixel.headers["content-type"]).toContain("image/png");
 
@@ -314,6 +328,101 @@ describe.concurrent("Nextjs", () => {
           timeout: "120 seconds",
           label: "nextjs SSR page after edit",
         });
+
+        const configRoute = () =>
+          client.get(`${site1.url!}/api/config`).pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(
+                Effect.as(response.headers["x-config-priority"]),
+              ),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 30,
+              until: (priority) => priority === "handler",
+            }),
+          );
+        const nativeConfigPath = path.join(rootDir, "open-next.config.ts");
+        const nativeConfig = yield* fs.readFileString(
+          path.join(fixtureDir, "open-next.native.config.ts"),
+        );
+        const nativeApp = path.join(rootDir, "native-output");
+        yield* fs.makeDirectory(nativeApp, { recursive: true });
+        for (const entry of [
+          "package.json",
+          "tsconfig.json",
+          "next.config.mjs",
+          "middleware.ts",
+          "app",
+          "pages",
+          "public",
+        ]) {
+          yield* fs.copy(
+            path.join(rootDir, entry),
+            path.join(nativeApp, entry),
+          );
+        }
+        yield* fs.writeFileString(nativeConfigPath, nativeConfig);
+        const site4 = yield* deploy();
+        expect(site4.hash?.input).not.toEqual(site3.hash?.input);
+        expect(yield* fs.readFileString(nativeConfigPath)).toBe(nativeConfig);
+        expect(
+          yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
+        ).toBe("native");
+        expect(
+          yield* fs.exists(
+            path.join(rootDir, "native-output", ".open-next", "worker.js"),
+          ),
+        ).toBe(true);
+        expect(yield* configRoute()).toBe("handler");
+        yield* expectUrlContains(`${site4.url!}/`, "NEXTJS_SSR_MARKER_V2");
+        yield* expectUrlContains(
+          `${site4.url!}/static.txt`,
+          "NEXTJS_STATIC_ASSET_MARKER",
+        );
+        expect((yield* deploy()).hash?.input).toEqual(site4.hash?.input);
+
+        const editedConfig = nativeConfig.replace(
+          '["/api/config"]',
+          '["/other"]',
+        );
+        yield* fs.writeFileString(nativeConfigPath, editedConfig);
+        const site5 = yield* deploy();
+        expect(site5.hash?.input).not.toEqual(site4.hash?.input);
+        expect(yield* fs.readFileString(nativeConfigPath)).toBe(editedConfig);
+        expect(
+          yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
+        ).toBe("native");
+        const middlewarePriority = yield* client
+          .get(`${site5.url!}/api/config`)
+          .pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(
+                Effect.as(response.headers["x-config-priority"]),
+              ),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 30,
+              until: (priority) => priority === "middleware",
+            }),
+          );
+        expect(middlewarePriority).toBe("middleware");
+
+        const overrideSite = yield* deploy(
+          nativeBuildCommand.replace("'native'", "'resource'"),
+        );
+        expect(overrideSite.hash?.input).not.toEqual(site5.hash?.input);
+        expect(
+          yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
+        ).toBe("resource");
+        expect(yield* fs.readFileString(nativeConfigPath)).toBe(editedConfig);
+
+        yield* fs.remove(nativeConfigPath);
+        const site6 = yield* deploy();
+        expect(site6.hash?.input).toEqual(site3.hash?.input);
+        expect(yield* fs.exists(nativeConfigPath)).toBe(false);
+        yield* expectUrlContains(`${site6.url!}/`, "NEXTJS_SSR_MARKER_V2");
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site1.workerName, accountId);

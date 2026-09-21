@@ -184,18 +184,6 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // Create the bucket first so Tigris credentials are persisted on
-      // attributes. Same-plan Service reconcile otherwise runs before
-      // Data is ready and GraphQL list omits `environment`.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* BucketSite;
-          const bucket = yield* Data;
-          const ip = yield* BucketIp;
-          return { app, bucket, ip };
-        }),
-      );
-
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* BucketSite;

@@ -19,7 +19,7 @@ import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
-// drag the terminal helpers (node:tty, string-width) into every unbundled
+// drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
 // child process that loads Stack.ts.
 import type { Interaction } from "./Interaction.ts";
 import type { Input, InputProps } from "./Input.ts";
@@ -27,6 +27,7 @@ import * as Output from "./Output.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import { StackContext } from "./StackContext.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -96,6 +97,14 @@ export interface StackProps<Req> {
   state: Layer.Layer<State, never, StackServices>;
 }
 
+/**
+ * Runtime fields the Stack factory attaches to a configured stack effect.
+ * Class-reference forms expose only `stackName` until `.make(...)`.
+ */
+export type ConfiguredStackMeta<Req = never> = {
+  readonly stackName: string;
+} & StackProps<Req>;
+
 export const Stack: Context.ServiceClass<
   Stack,
   "Stack",
@@ -118,6 +127,7 @@ export const Stack: Context.ServiceClass<
       eff: Effect.Effect<A, ConfigError, Req>,
     ): Effect.Effect<Self, ConfigError> & {
       new (_: never): A extends object ? A : {};
+      readonly stackName: string;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -126,10 +136,12 @@ export const Stack: Context.ServiceClass<
   <Self, Shape>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
+      readonly stackName: string;
       make: <A, Req>(
         options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError>;
+      ) => Effect.Effect<CompiledStack<A>, ConfigError> &
+        ConfiguredStackMeta<NoInfer<Req>>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -139,10 +151,11 @@ export const Stack: Context.ServiceClass<
     stackName: string,
     options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError> &
+    ConfiguredStackMeta<NoInfer<Req>>;
 } = Object.assign(
   taggedFunction(
-    Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
+    StackContext,
     <A, Req>(
       stackName?: string,
       options?: StackProps<NoInfer<Req>>,

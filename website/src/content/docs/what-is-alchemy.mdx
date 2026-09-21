@@ -5,8 +5,8 @@ prev:
   link: /getting-started
   label: Getting started
 next:
-  link: /infrastructure-as-effects
-  label: Infrastructure as Effects
+  link: /infrastructure-as-effects/runtime
+  label: Runtime
 ---
 
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
@@ -56,9 +56,12 @@ Infrastructure as Effects adds on top.
 ## Infrastructure as Code
 
 The core of Alchemy is Infrastructure as Code, in the same family as
-Terraform, Pulumi, CloudFormation, and the CDK. A **Stack** is the
-unit you deploy, an Effect that yields resources and returns the
-outputs you want printed:
+Terraform, Pulumi, CloudFormation, and the CDK.
+
+#### Stack
+
+A **Stack** is the unit you deploy, an Effect that yields resources
+and returns the outputs you want printed:
 
 ```typescript
 // alchemy.run.ts
@@ -98,18 +101,19 @@ Stack with a Bucket, a KV Namespace, and a Worker bound to both:
 
 <DeployTerminal client:visible />
 
-`state` is where the result persists between runs, so the next deploy
-only touches what changed. [Stacks](/infrastructure-as-code/stack)
-covers stages, outputs, and state.
+**State** is where the result persists between runs, so the next
+deploy only touches what changed — the `state` option above picks
+where it's stored.
+
+#### Resource
 
 A **Resource** is a cloud entity in a Stack managed by Alchemy: a
-bucket, a database, a queue, a Worker, a DNS record. Declare it, then
-yield it in the Stack to add it to the plan:
+bucket, a database, a queue, a Worker, a DNS record. Yield it in the
+Stack to add it to the plan:
 
 ```typescript
-export const Uploads = Cloudflare.R2.Bucket("Uploads");
-
-const bucket = yield* Uploads; // bucket.bucketName is an Output
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+// bucket.bucketName is an Output
 ```
 
 Each Resource has a logical id, `"Uploads"` here, that Alchemy uses to
@@ -118,7 +122,7 @@ into other Resources. Here the physical bucket name Alchemy generated
 becomes an environment variable on a Worker:
 
 ```typescript
-const bucket = yield* Uploads;
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
 
 yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
@@ -126,10 +130,7 @@ yield* Cloudflare.Worker("Api", {
 });
 ```
 
-:::note
-[Resources](/infrastructure-as-code/resource) covers props, outputs,
-and references between Resources.
-:::
+#### Provider
 
 A **Provider** teaches Alchemy how to read, diff, create, update, and
 delete one resource type. Each cloud ships its providers as an Effect
@@ -197,11 +198,15 @@ dependency graph, which most IaC tools reject. See
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects is what Alchemy adds on top of
-Infrastructure as Code.
-A **Runtime** is a Resource that carries the code it runs: a Worker, Lambda Function, Container, or Server.
-That code is always written the same way, as an **Effectful
-Constructor**. Bind what you need, then return what you expose:
+Infrastructure as Effects adds two new concepts to Infrastructure as
+Code: Runtimes and Bindings.
+
+#### Runtime
+
+A **Runtime** is a Resource that carries the code it runs: a Worker,
+Lambda Function, Container, or Server. That code is always written
+the same way, as an **Effectful Constructor**. Bind what you need,
+then return what you expose:
 
 ```typescript
 Effect.gen(function* () {
@@ -213,23 +218,24 @@ Effect.gen(function* () {
 });
 ```
 
-The outer Effect is the Construction phase. It runs at deploy time,
-where the bindings are recorded, and again at cold start, where they
-become live clients. What it returns is the Runtime phase, the handlers
-that run per request. A Worker returns `fetch`, a Durable Object
+The outer Effect runs both at deploy time and at cold start; what it
+returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, a Workflow returns its run function, and
 every Runtime in Alchemy is a variation on that one shape.
 
-:::note
-[Runtime](/infrastructure-as-effects/runtime) covers the shape, the
-`fetch` and RPC interface, and the three ways to declare one.
-:::
+#### Binding
 
-`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a **Binding**. It
-hands back a typed client and generates whatever that client needs to
-work. On Cloudflare that is a native Worker binding. On AWS it is an
-IAM statement scoped to one resource, plus the resource's name in the
-Function's environment:
+A **Binding** connects a Resource to the Runtime that uses it:
+
+```typescript
+const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+// bucket.get / bucket.put / bucket.list, typed end to end
+```
+
+It hands back a typed client and generates whatever that client needs
+to work. On Cloudflare that is a native Worker binding. On AWS it is
+an IAM statement scoped to one resource, plus the resource's name in
+the Function's environment:
 
 ```typescript
 const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
@@ -240,46 +246,63 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 There is no `env.Uploads` to reach for and no hand-written policy. The
 binding is the SDK.
 
-:::note
-[Bindings](/infrastructure-as-effects/binding) follows one binding
-through the permissions, configuration, and client it generates.
-:::
+#### Layers
 
-A Binding is a contract plus a **Layer** that implements it, which is
-why `ReadWriteBucketBinding` can be swapped for `ReadWriteBucketHttp`
-without touching the handler. The same split works for services of
-your own. Put resources and bindings behind a service, and the handler
-depends on the service alone:
+Every Binding is a contract paired with a **Layer** that fulfills it:
+the handler is written against the contract, and the Layer decides
+how — swap the Layer and the handler doesn't change:
 
-```typescript
-Effect.gen(function* () {
-  const jobs = yield* JobService;
-
-  return {
-    fetch: Effect.gen(function* () {
-      return HttpServerResponse.json(yield* jobs.getJob("job-1"));
-    }),
-  };
-}).pipe(Effect.provide(JobServiceKV))
+```diff lang="typescript"
+ Effect.gen(function* () {
+   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+   // ...
+-}).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)); // native Worker binding
++}).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp));    // HTTP with a scoped token
 ```
 
-Provide `JobServiceKV` and a KV Namespace is created and bound.
-Provide a DynamoDB-backed Layer and a Table is instead. The handler
-doesn't change.
+The same split works for services of your own. A Layer can own
+Resources and Bindings outright:
 
-:::note
-[Layers](/infrastructure-as-effects/layers) builds one from scratch,
-and the [Infrastructure as Effects](/infrastructure-as-effects)
-overview puts the three ideas together.
-:::
+```typescript
+export const JobServiceKV = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    const Jobs = yield* Cloudflare.KV.Namespace("Jobs");      // a Resource, owned by the Layer
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Jobs); // and its Binding
+    return { getJob: (id: string) => kv.get<Job>(id, "json") };
+  }),
+);
+```
+
+Business logic is implemented against the `JobService` contract. The
+Layer decides the infrastructure behind it, so swapping KV for
+DynamoDB is one line:
+
+```diff lang="typescript"
+ Effect.gen(function* () {
+   const jobs = yield* JobService;
+   // ...
+-}).pipe(Effect.provide(JobServiceKV));     // a KV Namespace, created and bound
++}).pipe(Effect.provide(JobServiceDynamo)); // now a DynamoDB Table instead
+```
+
+The Infrastructure as Effects section goes deeper from here:
+[Event Sources](/infrastructure-as-effects/event-sources) and
+[Sinks](/infrastructure-as-effects/sinks) turn resources into Effect
+`Stream`s, [Phases](/infrastructure-as-effects/phases) pins down
+exactly what runs when,
+[Circular Bindings](/infrastructure-as-effects/circular-bindings)
+lets two Workers call each other, and
+[Telemetry](/infrastructure-as-effects/telemetry) exports every
+request's traces and logs.
 
 ## Where next
 
 <div class="next-steps">
 
-<a href="/infrastructure-as-effects" class="next-card next-card--recommended">
-  <strong>Infrastructure as Effects</strong>
-  <span>The model the rest of the docs build on: Runtimes, Bindings, Layers, and the Construction and Runtime phases.</span>
+<a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
+  <strong>Runtime</strong>
+  <span>The Effectful Constructor in depth: the fetch and RPC interface, and the three ways to declare a Runtime.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">

@@ -111,6 +111,22 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "repos · secrets · events",
   },
   {
+    label: "Git",
+    href: "/git",
+    prefixes: ["/git", "/providers/git"],
+    slot: "more",
+    category: "Source & CI",
+    hint: "self-hosted git · clone · push · pull requests",
+  },
+  {
+    label: "Stripe",
+    href: "/stripe",
+    prefixes: ["/stripe", "/providers/stripe"],
+    slot: "more",
+    category: "Payments",
+    hint: "products · prices · webhooks",
+  },
+  {
     label: "Docker",
     href: "/docker",
     prefixes: ["/docker", "/providers/docker"],
@@ -133,6 +149,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "more",
     category: "Toolchain",
     hint: "build · dev · exec",
+  },
+  {
+    label: "ACME",
+    href: "/acme",
+    prefixes: ["/acme", "/providers/acme"],
+    slot: "more",
+    category: "Certificates",
+    hint: "accounts · DNS-01 · certificate issuance",
   },
   // A provider's reference pages belong to its hub tab (the prefixes
   // above claim /providers/{provider} first) — the Reference tab owns

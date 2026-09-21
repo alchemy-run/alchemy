@@ -51,7 +51,7 @@ export const formatCreatedCloudflareToken = (
     ),
   ].join("\n");
 
-const cloudflareForce = Flag.boolean("force").pipe(
+const cloudflareForce = Flag.Boolean("force").pipe(
   Flag.withDescription(
     "Force a full redeploy even if the state-store worker already exists. " +
       "Without this flag, an existing worker is adopted and only its credentials are refreshed.",
@@ -59,7 +59,7 @@ const cloudflareForce = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-const cloudflareWorkerName = Flag.string("worker-name").pipe(
+const cloudflareWorkerName = Flag.String("worker-name").pipe(
   Flag.withDescription(
     "Override the default state-store worker name (advanced; only needed for multiple state stores per account).",
   ),
@@ -136,7 +136,7 @@ const teardownCommand = Command.make(
   Command.withDescription("Tear down the Cloudflare state store"),
   Command.unlisted,
 );
-const allPermissionsFlag = Flag.boolean("all-permissions").pipe(
+const allPermissionsFlag = Flag.Boolean("all-permissions").pipe(
   Flag.withDescription(
     "Grant the token EVERY Cloudflare permission group (a 'god token'). " +
       "Use with care — it has full access to your account.",
@@ -144,7 +144,7 @@ const allPermissionsFlag = Flag.boolean("all-permissions").pipe(
   Flag.withDefault(false),
 );
 
-const tokenNameFlag = Flag.string("name").pipe(
+const tokenNameFlag = Flag.String("name").pipe(
   Flag.withDescription(
     "Name for the API token. Defaults to 'alchemy' (or 'alchemy-all-permissions').",
   ),
@@ -152,7 +152,7 @@ const tokenNameFlag = Flag.string("name").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
-const tokenAccountIdFlag = Flag.string("account-id").pipe(
+const tokenAccountIdFlag = Flag.String("account-id").pipe(
   Flag.withDescription(
     "Cloudflare account ID(s) to scope the token to (comma-separated for " +
       "multiple). If omitted, you'll be prompted to select from your accounts.",
@@ -221,7 +221,7 @@ const createTokenCommand = Command.make(
         );
       const apiKey =
         (yield* read(
-          Config.string("CLOUDFLARE_API_KEY").pipe(Config.option),
+          Config.String("CLOUDFLARE_API_KEY").pipe(Config.option),
         )) ??
         (yield* prompt.prompt.password({
           message:
@@ -230,7 +230,7 @@ const createTokenCommand = Command.make(
             value.trim().length === 0 ? "Required" : undefined,
         }));
       const email =
-        (yield* read(Config.string("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
+        (yield* read(Config.String("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
         (yield* prompt.prompt.text({
           message: "Cloudflare account email",
           validate: (value) =>
@@ -311,7 +311,7 @@ const createTokenCommand = Command.make(
   ),
 ).pipe(Command.withDescription("Create a scoped Cloudflare API token"));
 
-const tailFlag = Flag.boolean("tail").pipe(
+const tailFlag = Flag.Boolean("tail").pipe(
   Flag.withAlias("t"),
   Flag.withDescription(
     "Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries.",
@@ -319,12 +319,12 @@ const tailFlag = Flag.boolean("tail").pipe(
   Flag.withDefault(false),
 );
 
-const limitFlag = Flag.integer("limit").pipe(
+const limitFlag = Flag.Int("limit").pipe(
   Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
   Flag.withDefault(100),
 );
 
-const sinceFlag = Flag.string("since").pipe(
+const sinceFlag = Flag.String("since").pipe(
   Flag.withDescription(
     "Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')",
   ),
@@ -393,23 +393,23 @@ const stateLogsCommand = Command.make(
   Command.withDescription("Stream or fetch logs from the state-store worker"),
 );
 
-const secretsBackupFile = Argument.file("file").pipe(
+const secretsBackupFile = Argument.File("file").pipe(
   Argument.withDescription(
     "File to write the bearer token and encryption key to (mode 0600). " +
       "Store the file in a password manager. If the encryption key is lost, no stack state can be read.",
   ),
 );
 
-const secretsBackupOverwrite = Flag.boolean("force").pipe(
+const secretsBackupOverwrite = Flag.Boolean("force").pipe(
   Flag.withDescription("Overwrite the file if it exists."),
   Flag.withDefault(false),
 );
 
-const secretsRestoreFile = Argument.file("file", { mustExist: true }).pipe(
+const secretsRestoreFile = Argument.File("file", { mustExist: true }).pipe(
   Argument.withDescription("Backup file written by 'secrets backup'."),
 );
 
-const CI = Config.boolean("CI").pipe(Config.withDefault(false));
+const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
 const StateStoreSecretsBackup = Schema.fromJsonString(
   Schema.Struct({

@@ -57,6 +57,17 @@ const services = Effect.fn(function* (target: StateTarget) {
     CloudflareAuth,
     Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"]),
   );
+  // `provideMerge` (not `mergeAll`) so `fromProfile` / `fromAuthProvider`
+  // actually *see* `--profile`. Sibling-merging ConfigProvider left those
+  // layers requiring it from the outer CLI `fromEnv()` — which is how
+  // `alchemy provider cloudflare bootstrap --profile <name>` ignored the
+  // flag and resolved the default profile (#252).
+  const config = ConfigProvider.layer(
+    withProfileOverride(
+      yield* loadConfigProvider(Option.fromNullishOr(target.envFile)),
+      target.profile,
+    ),
+  );
   return Layer.mergeAll(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -65,19 +76,18 @@ const services = Effect.fn(function* (target: StateTarget) {
         CloudflareAccess.AccessLive,
       ),
       auth,
-    ),
-    ConfigProvider.layer(
-      withProfileOverride(
-        yield* loadConfigProvider(Option.fromNullishOr(target.envFile)),
-        target.profile,
-      ),
-    ),
+    ).pipe(Layer.provideMerge(config)),
     Logger.layer([fileLogger("cloudflare.txt")], { mergeWithExisting: true }),
   );
 });
 
-/** Resolve the account + worker name every state-store route is scoped to. */
-const scope = Effect.fn(function* (target: StateTarget) {
+/**
+ * Resolve the profile, Cloudflare account, and provider layer every
+ * state-store route (`bootstrap`, `teardown`, logs) is scoped to.
+ */
+export const resolveStateStoreScope = Effect.fn(function* (
+  target: StateTarget,
+) {
   const profile = yield* resolveProfileName(
     Option.fromNullishOr(target.envFile),
     target.profile,
@@ -98,7 +108,8 @@ const scope = Effect.fn(function* (target: StateTarget) {
 /** Provision (or adopt) the Cloudflare-hosted state-store worker. */
 export const bootstrap = Effect.fn("Alchemist.provider.cloudflare.bootstrap")(
   function* (input: BootstrapInput) {
-    const { layer, accountId, workerName, profile } = yield* scope(input);
+    const { layer, accountId, workerName, profile } =
+      yield* resolveStateStoreScope(input);
     return yield* Effect.gen(function* () {
       const existed = yield* workers
         .getScriptSetting({ accountId, scriptName: workerName })
@@ -132,7 +143,8 @@ export const bootstrap = Effect.fn("Alchemist.provider.cloudflare.bootstrap")(
 /** Tear down the Cloudflare-hosted state store. */
 export const teardown = Effect.fn("Alchemist.provider.cloudflare.teardown")(
   function* (input: StateTarget) {
-    const { layer, accountId, workerName, profile } = yield* scope(input);
+    const { layer, accountId, workerName, profile } =
+      yield* resolveStateStoreScope(input);
     yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
     return { accountId, workerName, deleted: [workerName] };
   },
@@ -141,7 +153,8 @@ export const teardown = Effect.fn("Alchemist.provider.cloudflare.teardown")(
 /** Query past log entries from the state-store worker, oldest first. */
 export const stateLogs = Effect.fn("Alchemist.provider.cloudflare.stateLogs")(
   function* (input: StateLogsInput) {
-    const { layer, accountId, workerName } = yield* scope(input);
+    const { layer, accountId, workerName } =
+      yield* resolveStateStoreScope(input);
     const lines = yield* Effect.gen(function* () {
       const telemetry = yield* CloudflareLogs;
       return yield* telemetry.queryLogs({
@@ -167,7 +180,8 @@ export const stateLogs = Effect.fn("Alchemist.provider.cloudflare.stateLogs")(
 export const tailStateLogs = (input: StateTarget) =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const { layer, accountId, workerName } = yield* scope(input);
+      const { layer, accountId, workerName } =
+        yield* resolveStateStoreScope(input);
       const telemetry = yield* Effect.provide(CloudflareLogs, layer);
       return telemetry.tailScript({ accountId, scriptName: workerName }).pipe(
         Stream.provide(layer),
@@ -184,7 +198,7 @@ export const tailStateLogs = (input: StateTarget) =>
 export const readStateSecrets = Effect.fn(
   "Alchemist.provider.cloudflare.readStateSecrets",
 )(function* (input: StateTarget) {
-  const { layer } = yield* scope(input);
+  const { layer } = yield* resolveStateStoreScope(input);
   return yield* Effect.provide(readStateStoreSecrets(), layer);
 });
 
@@ -199,7 +213,7 @@ export interface RestoreStateSecretsInput extends StateTarget {
 export const restoreStateSecrets = Effect.fn(
   "Alchemist.provider.cloudflare.restoreStateSecrets",
 )(function* (input: RestoreStateSecretsInput) {
-  const { layer, accountId } = yield* scope(input);
+  const { layer, accountId } = yield* resolveStateStoreScope(input);
   yield* Effect.provide(restoreStateStoreSecrets(input.backup), layer);
   return { accountId, storeId: input.backup.storeId, url: input.backup.url };
 });

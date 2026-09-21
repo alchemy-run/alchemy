@@ -20,6 +20,7 @@ import {
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -41,9 +42,7 @@ export interface ViteChildHandle {
 // we are guaranteed to be in Node/bun.
 const resolveRunner = (basename: string) =>
   fileURLToPath(
-    import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? `./${basename}.ts` : `./${basename}.js`,
-    ),
+    import.meta.resolve(`./${basename}${moduleExtension(import.meta.url)}`),
   );
 
 export const startViteChild = (

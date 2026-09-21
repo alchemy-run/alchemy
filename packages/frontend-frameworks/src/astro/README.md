@@ -131,7 +131,7 @@ export default Options.make({
   framework: "@alchemy.run/frontend-frameworks/astro",
 });
 
-// e2e.config.ts — typed target value (recommended; see fixtures/astro)
+// e2e.config.ts — typed target value (recommended; see packages/frontend-frameworks/fixtures/astro)
 framework: (options) =>
   Astro.make({
     target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
@@ -255,7 +255,7 @@ generated `_redirects` and `_headers` files). No `wrangler.json`, no
   `base !== "/"` handling, `injectTypes`, the unsupported-option guard, env
   feeding; `test/decoupling.test.ts`: the framework half's cloudflare-free
   guarantee and runtime purity).
-- `fixtures/astro` — the playwright e2e suite driving a real app through the
+- `packages/frontend-frameworks/fixtures/astro` — the playwright e2e suite driving a real app through the
   harness in both `dev` (workerd module runner) and `live` (miniflare over the
   built output) modes: SSR + bindings, middleware locals/headers, config
   redirects (served from the generated `_redirects` in live mode),

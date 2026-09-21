@@ -310,7 +310,7 @@ through the platform proxy, while literal `props.env` values (strings;
 - `bun run test` — unit tests (adapter output generation, shim generation,
   harness-option mapping, target contract, and the import-boundary
   enforcement test).
-- `fixtures/sveltekit` — the end-to-end fixture (Playwright against both the
+- `packages/frontend-frameworks/fixtures/sveltekit` — the end-to-end fixture (Playwright against both the
   miniflare-served production build and the kit dev server); see its README
   for the covered kit surface (form actions, cookies, binary endpoints, route
   groups, prerender + SSR mix, `platform.env` with a real KV binding and

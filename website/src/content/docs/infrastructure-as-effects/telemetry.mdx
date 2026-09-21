@@ -85,7 +85,7 @@ The `Config` read binds the value at deploy time, and because it is
 ```typescript
 const Honeycomb = Layer.unwrap(
   Effect.gen(function* () {
-    const key = yield* Config.redacted("HONEYCOMB_API_KEY");
+    const key = yield* Config.Redacted("HONEYCOMB_API_KEY");
     return Alchemy.Telemetry.layerOtlp({
       url: "https://api.honeycomb.io",
       headers: { "x-honeycomb-team": key },

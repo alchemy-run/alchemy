@@ -8,7 +8,7 @@ import {
   type PlatformServices,
 } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/index.ts";
+import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
@@ -108,7 +108,8 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
-   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * {@link memoryMib}/{@link disk} is set. (`"dev"` is wrangler's deprecated
+   * alias for `"lite"`.)
    * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
@@ -132,6 +133,12 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Memory allocation override for each deployment.
    */
   memory?: string;
+  /**
+   * Memory allocation override for each deployment, in MiB.
+   * Custom sizing requires at least 1 {@link vcpu} and 3072 MiB of memory
+   * per vCPU for the first 4 vCPUs.
+   */
+  memoryMib?: number;
   /**
    * Disk allocation override for each deployment.
    */
@@ -185,6 +192,68 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * @default "registry.cloudflare.com"
    */
   registryId?: string;
+  /**
+   * Image publication configuration. Builds are cached by default in a
+   * repository named after the application's physical name. Generated names
+   * include the stage and resource instance, so updates within that stage can
+   * reuse images. Replacement or destroy/recreate can select a new repository.
+   * Set `repository` to share finished images and build layers across stages.
+   *
+   * @example
+   * ```typescript
+   * // Default: cached in this application's generated repository.
+   * const app = yield* Cloudflare.Container("Web", { context: "./web" }).Application;
+   * // Repository: registry.cloudflare.com/<account-id>/<app.applicationName>
+   * ```
+   */
+  publish?: {
+    /**
+     * Destination repository name within the current Cloudflare account's
+     * container registry, for example `"web"`. This is not a source image,
+     * registry hostname, account ID, tag, or fully qualified image reference.
+     * Alchemy lowercases the name and adds the registry host and account ID:
+     * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
+     * The container application's name is independent of this repository name.
+     * Omitting `publish` uses the application's physical name instead and still
+     * enables caching. Generated names are scoped to the stage and resource
+     * instance; an explicit repository allows cross-stage reuse.
+     *
+     * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
+     * tag and an inline layer-cache tag, then deploys an immutable manifest
+     * digest. The build hash and manifest digest are different identifiers.
+     * Builds targeting this repository import reusable layers from its shared
+     * `:buildcache` tag, even when their full input hashes differ. The tag points
+     * to the latest exported inline cache, not an aggregate of all historical
+     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
+     *
+     * Applications and stages in the same account can share `"web"`. Matching
+     * build inputs reuse the published image; changed inputs produce another
+     * hash tag in the same repository. Finished-image cache reuse applies to
+     * builds, not to re-publishing remote images. Pin base images and downloaded
+     * dependencies: changes outside the build context cannot invalidate its
+     * content hash.
+     *
+     * External remote images are re-published into this repository without
+     * building them. Images already in the target registry keep their existing
+     * repository; setting this option does not copy them into another one.
+     *
+     * @example
+     * ```typescript
+     * const app = yield* Cloudflare.Container("WebProduction", {
+     *   context: "./web",
+     *   publish: { repository: "web" },
+     * }).Application;
+     *
+     * // Published build:
+     * // registry.cloudflare.com/<account-id>/web:<build-hash>
+     * // Shared build-layer cache:
+     * // registry.cloudflare.com/<account-id>/web:buildcache
+     * // Deployed image (app.configuration.image):
+     * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+     * ```
+     */
+    repository: string;
+  };
   /**
    * Environment variables passed to the container runtime.
    */
@@ -344,7 +413,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
 export type ContainerServices =
   | ContainerApplication
   | PlatformServices
-  | Server.ProcessServices;
+  | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 

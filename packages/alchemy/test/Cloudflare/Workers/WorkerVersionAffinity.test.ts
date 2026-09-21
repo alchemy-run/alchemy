@@ -4,11 +4,16 @@ import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -92,34 +97,54 @@ class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
   hostname: string;
 }> {}
 
-/**
- * Wait until `hostname` resolves, querying over DNS-over-HTTPS. The system
- * resolver must not be asked before the record exists — an early lookup
- * negative-caches NXDOMAIN for the zone's SOA minimum TTL, poisoning every
- * later fetch in the test. Public DoH resolvers negative-cache too, so
- * each attempt alternates between two independent resolvers — a cached
- * pre-propagation NODATA answer on one can't stall the whole loop.
- */
-const waitForDns = Effect.fn(function* (hostname: string) {
-  const resolvers = ["1.1.1.1", "dns.google"];
+const DnsResponse = Schema.Struct({
+  Status: Schema.Number,
+  Answer: Schema.optional(
+    Schema.Array(Schema.Struct({ type: Schema.Number, data: Schema.String })),
+  ),
+});
+
+// Use public DNS answers for the socket lookup too: the OS can retain a
+// negative answer from an earlier delete even after public DNS has converged.
+const domainClient = Effect.fn(function* (hostname: string) {
+  const resolvers = ["https://1.1.1.1/dns-query", "https://dns.google/resolve"];
   let attempt = 0;
-  yield* Effect.tryPromise({
-    try: async (signal) => {
-      const resolver = resolvers[attempt++ % resolvers.length];
-      const res = await fetch(
-        `https://${resolver}/dns-query?name=${hostname}&type=AAAA`,
-        { headers: { accept: "application/dns-json" }, signal },
-      );
-      const body = (await res.json()) as { Answer?: unknown[] };
-      if (!body.Answer?.length) throw new Error("no answer");
-    },
-    catch: () => new DnsNotReady({ hostname }),
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "DnsNotReady",
-      schedule: Schedule.spaced("5 seconds"),
-      times: 60,
+  const addresses = yield* Effect.suspend(() =>
+    HttpClient.get(resolvers[attempt++ % resolvers.length], {
+      headers: { accept: "application/dns-json" },
+      urlParams: { name: hostname, type: "A" },
     }),
+  ).pipe(
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(DnsResponse)),
+    Effect.flatMap((response) => {
+      const addresses = (response.Answer ?? [])
+        .filter((answer) => answer.type === 1)
+        .map((answer) => ({ address: answer.data, family: 4 }));
+      return response.Status === 0 && addresses.length > 0
+        ? Effect.succeed(addresses)
+        : Effect.fail(new DnsNotReady({ hostname }));
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "DnsNotReady",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 10,
+    }),
+    Effect.timeout("60 seconds"),
+  );
+  const agent = yield* NodeHttpClient.makeAgent({
+    lookup: (requestedHost, options, callback) => {
+      if (requestedHost !== hostname) {
+        callback(new Error(`Unexpected domain lookup: ${requestedHost}`), "");
+      } else if (options.all) {
+        callback(null, addresses);
+      } else {
+        callback(null, addresses[0].address, 4);
+      }
+    },
+  });
+  // Keep the hostname in the URL so TLS certificate and SNI checks stay intact.
+  return yield* NodeHttpClient.makeNodeHttp.pipe(
+    Effect.provideService(NodeHttpClient.HttpAgent, agent),
   );
 });
 
@@ -138,32 +163,37 @@ class BodyMismatch extends Data.TaggedError("BodyMismatch")<{
  * on a freshly attached custom domain.
  */
 const expectBody = Effect.fn(function* (
+  client: HttpClient.HttpClient,
   url: string,
   headers: Record<string, string>,
   check: (body: string) => boolean,
-  options?: { times?: number },
+  retryDelay: Duration.Input = "1 second",
 ) {
-  yield* Effect.tryPromise({
-    try: async (signal) => {
-      const res = await fetch(url, { headers, signal });
-      return await res.text();
-    },
-    catch: (cause) => new BodyMismatch({ url, body: String(cause) }),
-  }).pipe(
-    Effect.flatMap((body) =>
-      check(body) ? Effect.void : Effect.fail(new BodyMismatch({ url, body })),
+  yield* client.get(url, { headers }).pipe(
+    Effect.flatMap((response) =>
+      response.text.pipe(
+        Effect.flatMap((body) =>
+          response.status === 200 && check(body)
+            ? Effect.void
+            : Effect.fail(
+                new BodyMismatch({ url, body: `${response.status}: ${body}` }),
+              ),
+        ),
+      ),
     ),
+    Effect.timeout("5 seconds"),
     Effect.retry({
-      while: (e) => e._tag === "BodyMismatch",
-      schedule: Schedule.spaced("5 seconds"),
-      times: options?.times ?? 36,
+      schedule: Schedule.spaced(retryDelay),
+      times: 10,
     }),
+    Effect.timeout("60 seconds"),
   );
 });
 
+// These lifecycle tests mutate the same zone-level transform ruleset.
 describe
   .skipIf(!!process.env.FAST)
-  .concurrent("Cloudflare.Worker version affinity", () => {
+  .sequential("Cloudflare.Worker version affinity", () => {
     test.provider(
       "affinity rules converge across sources and clean up on destroy",
       (stack) =>
@@ -211,16 +241,16 @@ describe
           // The rule rewrites live zone traffic: the worker echoes the
           // version-key header, so a request carrying the cookie echoes the
           // cookie value and a bare request echoes the client IP.
-          yield* waitForDns(host);
-          // First fetch pays DNS + edge-certificate propagation on the fresh
-          // custom domain — give it a longer budget than the follow-ups.
+          const client = yield* domainClient(host);
           yield* expectBody(
+            client,
             `https://${host}`,
             { cookie: "session_id=alchemy-test-key" },
             (body) => body === "alchemy-test-key",
-            { times: 60 },
+            "5 seconds",
           );
           yield* expectBody(
+            client,
             `https://${host}`,
             {},
             (body) => body !== "no-key" && /^[0-9a-fA-F.:]+$/.test(body),

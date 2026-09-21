@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState } from "@alchemy.run/sigil/react";
 import { useTerminalInput } from "../ui/index.ts";
 import { stackOutputLineCount } from "./StackOutputs.tsx";
 import {

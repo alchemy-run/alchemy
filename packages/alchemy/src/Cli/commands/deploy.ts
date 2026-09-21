@@ -51,7 +51,7 @@ const stackSpanAttrs = (args: StackCommandOptions) => ({
   "alchemy.detect_drift": !!args.detectDrift,
 });
 
-const adopt = Flag.boolean("adopt").pipe(
+const adopt = Flag.Boolean("adopt").pipe(
   Flag.withDescription(
     "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
       "Useful for re-importing infrastructure into a fresh state store.",
@@ -59,12 +59,12 @@ const adopt = Flag.boolean("adopt").pipe(
   Flag.withDefault(false),
 );
 
-const detailed = Flag.boolean("detailed").pipe(
+const detailed = Flag.Boolean("detailed").pipe(
   Flag.withDescription("Show declared resource properties as YAML"),
   Flag.withDefault(false),
 );
 
-const detectDrift = Flag.boolean("detect-drift").pipe(
+const detectDrift = Flag.Boolean("detect-drift").pipe(
   Flag.withDescription(
     "Detect infrastructure drift and offer to repair it before deploying",
   ),

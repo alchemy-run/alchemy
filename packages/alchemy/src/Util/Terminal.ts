@@ -6,10 +6,10 @@ import {
 import {
   setClipboard,
   setTerminalProgress,
+  stringWidth,
   tmuxPassthrough,
   type TerminalProgressState,
 } from "@alchemy.run/sigil/ansi";
-import stringWidth from "string-width";
 
 export const ANSI_RESET = "\u001B[0m";
 export const ANSI_BOLD = "\u001B[1m";

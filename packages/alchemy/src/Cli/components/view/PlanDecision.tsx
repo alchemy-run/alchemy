@@ -1,5 +1,6 @@
-/** @jsxImportSource react */
-import { useMemo, useState, type JSX } from "react";
+/** @jsxImportSource @alchemy.run/sigil */
+import { useMemo, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import type { Plan } from "../../../Plan.ts";
 import {
   PromptFrame,

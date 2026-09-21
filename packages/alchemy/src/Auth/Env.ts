@@ -5,7 +5,7 @@ import * as Interaction from "../Interaction.ts";
 import { AuthError } from "./AuthProvider.ts";
 
 export const getEnv = (key: string) =>
-  Config.option(Config.string(key)).pipe(
+  Config.option(Config.String(key)).pipe(
     Effect.map(Option.getOrUndefined),
     Effect.mapError(
       (cause) =>
@@ -17,7 +17,7 @@ export const getEnv = (key: string) =>
   );
 
 export const getEnvRequired = (key: string) =>
-  Config.string(key).pipe(
+  Config.String(key).pipe(
     Effect.mapError(
       (cause) =>
         new AuthError({ message: `Missing required env: ${key}`, cause }),
@@ -25,7 +25,7 @@ export const getEnvRequired = (key: string) =>
   );
 
 export const getEnvRedacted = (key: string) =>
-  Config.option(Config.redacted(key)).pipe(
+  Config.option(Config.Redacted(key)).pipe(
     Effect.map(Option.getOrUndefined),
     Effect.mapError(
       (cause) =>
@@ -37,7 +37,7 @@ export const getEnvRedacted = (key: string) =>
   );
 
 export const getEnvRedactedRequired = (key: string) =>
-  Config.redacted(key).pipe(
+  Config.Redacted(key).pipe(
     Effect.mapError(
       (cause) =>
         new AuthError({ message: `Missing required env: ${key}`, cause }),

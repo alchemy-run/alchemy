@@ -280,7 +280,7 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
       yield* Effect.serviceOption(ProfileStore),
     );
     if (registry === undefined || profile === undefined) return;
-    const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+    const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
     // CI credentials come exclusively from the environment. Do not require
     // or inspect a local profile first: CI runners intentionally have no
     // profile manifest, and doing so would also risk consulting a developer's

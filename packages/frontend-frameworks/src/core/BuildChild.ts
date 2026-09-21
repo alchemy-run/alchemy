@@ -73,6 +73,8 @@ const transformTypesFlags = (): Array<string> => {
 };
 
 export interface BuildChildOptions {
+  /** Use Node from PATH for toolchains that cannot build under Bun. Requires native TypeScript support when running source modules. */
+  readonly runtime?: "node" | undefined;
   /**
    * File URL of the module exporting `buildInChild` — pass
    * `import.meta.url`. The shared runner entry (resolved as a sibling of
@@ -145,7 +147,9 @@ export const runBuildChild = (
         ),
       );
       const isBun =
+        options.runtime !== "node" &&
         typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+      const executable = options.runtime === "node" ? "node" : process.execPath;
       const payload: BuildChildPayload = {
         module: options.module,
         config: options.config,
@@ -154,7 +158,7 @@ export const runBuildChild = (
       const args = [
         ...(isBun
           ? ["run"]
-          : entry.endsWith(".ts")
+          : entry.endsWith(".ts") && options.runtime !== "node"
             ? transformTypesFlags()
             : []),
         entry,
@@ -171,7 +175,7 @@ export const runBuildChild = (
       );
 
       const exitCode = yield* Effect.gen(function* () {
-        const child = yield* ChildProcess.make(process.execPath, args, {
+        const child = yield* ChildProcess.make(executable, args, {
           cwd: options.rootDir,
           stdin: "ignore",
           stdout: "pipe",
@@ -182,7 +186,7 @@ export const runBuildChild = (
         }).pipe(
           Effect.mapError(
             fail(
-              `Failed to spawn the ${options.framework} build child (${process.execPath})`,
+              `Failed to spawn the ${options.framework} build child (${executable})`,
             ),
           ),
         );

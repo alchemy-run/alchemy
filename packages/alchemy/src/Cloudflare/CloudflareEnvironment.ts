@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -10,14 +9,11 @@ import {
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthConfig.ts";
 
-export class CloudflareEnvironment extends Context.Service<
-  CloudflareEnvironment,
-  Effect.Effect<CloudflareResolvedCredentials>
->()("Cloudflare::CloudflareEnvironment") {
-  readonly kind = "Environment" as const;
-}
+import { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
 
-const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
+export { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
+
+const CLOUDFLARE_ACCOUNT_ID = Config.String("CLOUDFLARE_ACCOUNT_ID");
 
 export const fromEnv = () =>
   Layer.effect(
