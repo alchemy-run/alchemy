@@ -22,6 +22,32 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
           url.searchParams.get("do") ?? "default",
         );
 
+        if (url.pathname === "/drizzle-interrupt") {
+          return yield* object
+            .drizzleInterrupt(url.searchParams.get("nested") === "true")
+            .pipe(
+              Effect.flatMap(HttpServerResponse.json),
+              Effect.catchCause((cause) =>
+                Effect.succeed(
+                  HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+                ),
+              ),
+            );
+        }
+
+        if (url.pathname === "/drizzle-transaction") {
+          return yield* object
+            .drizzleTransaction(url.searchParams.get("case") ?? "commit")
+            .pipe(
+              Effect.flatMap(HttpServerResponse.json),
+              Effect.catchCause((cause) =>
+                Effect.succeed(
+                  HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+                ),
+              ),
+            );
+        }
+
         if (url.pathname === "/sqlite-clock") {
           return yield* Effect.gen(function* () {
             if (url.searchParams.get("direct") === "true") {
@@ -43,7 +69,10 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
 
         if (url.pathname === "/sqlite-gate") {
           return yield* object
-            .sqliteGate(url.searchParams.get("view") === "true")
+            .sqliteGate(
+              url.searchParams.get("view") === "true",
+              url.searchParams.get("public") === "true",
+            )
             .pipe(
               Effect.flatMap((result) => HttpServerResponse.json(result)),
               Effect.catchCause((cause) =>

@@ -224,7 +224,9 @@ export const Octane: {
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff)
+            ? (propsEff as Effect.Effect<any, never, any>)
+            : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             // Octane's server bundle externalizes `node:` modules for

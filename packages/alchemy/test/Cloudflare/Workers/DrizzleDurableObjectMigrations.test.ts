@@ -133,6 +133,66 @@ for (const dev of [true, false]) {
         );
       });
 
+    for (const scenario of [
+      "commit",
+      "failure",
+      "defect",
+      "rollback",
+      "nested",
+      "nested-failure",
+      "nested-outer-failure",
+      "async-commit",
+      "async-failure",
+      "async-defect",
+      "async-rollback",
+      "nested-async",
+      "nested-async-failure",
+      "nested-async-rollback",
+      "nested-async-outer-failure",
+    ] as const) {
+      test(
+        `${mode}: db.transaction ${scenario} preserves atomicity and caller context`,
+        Effect.gen(function* () {
+          const result = yield* requestRegression(
+            `drizzle-transaction?case=${scenario}`,
+          );
+          const success = [
+            "commit",
+            "async-commit",
+            "nested",
+            "nested-failure",
+            "nested-async",
+            "nested-async-failure",
+            "nested-async-rollback",
+          ].includes(scenario);
+          expect(result, JSON.stringify(result)).toMatchObject({
+            success,
+            typedFailure: [
+              "failure",
+              "async-failure",
+              "nested-outer-failure",
+              "nested-async-outer-failure",
+            ].includes(scenario),
+            defect: scenario === "defect" || scenario === "async-defect",
+            rows: success
+              ? (scenario === "nested" || scenario === "nested-async"
+                  ? ["before", "inner", "after"]
+                  : ["before", "after"]
+                ).map((name) => ({ name }))
+              : [],
+            continued: scenario.startsWith("async-"),
+            finalizers: ["caller"],
+            distinctTransaction: true,
+            callerScopePreserved: true,
+          });
+          if (success) expect(result.value).toBe("committed");
+          if (scenario === "rollback" || scenario === "async-rollback")
+            expect(result.error).toContain("EffectTransactionRollbackError");
+        }),
+        { timeout: 120_000 },
+      );
+    }
+
     test(
       `${mode}: SQLite clock RPC works independently of transaction input gates`,
       Effect.gen(function* () {
@@ -189,6 +249,43 @@ for (const dev of [true, false]) {
             );
           }
         }
+      }),
+      { timeout: 120_000 },
+    );
+
+    for (const nested of [false, true]) {
+      test(
+        `${mode}: db.transaction interruption rolls back and releases the permit (nested=${nested})`,
+        Effect.gen(function* () {
+          const result = yield* requestRegression(
+            `drizzle-interrupt?nested=${nested}`,
+          );
+          expect(result).toEqual({
+            interrupted: true,
+            rows: [],
+            finalRows: [{ name: "committed" }],
+            finalized: nested ? ["inner", "outer"] : ["outer"],
+            continued: false,
+            waitingForPermit: true,
+            callerScopePreserved: true,
+          });
+        }),
+        { timeout: 120_000 },
+      );
+    }
+
+    test(
+      `${mode}: db.transaction yields inside a native input gate`,
+      Effect.gen(function* () {
+        const result = yield* requestRegression("sqlite-gate?public=true");
+        expect(result).toEqual({
+          enteredAfterOuter: false,
+          sameTransaction: true,
+          samePermit: true,
+          sameTransactionContext: true,
+          restoredScheduler: true,
+          finishedBeforeClear: true,
+        });
       }),
       { timeout: 120_000 },
     );
