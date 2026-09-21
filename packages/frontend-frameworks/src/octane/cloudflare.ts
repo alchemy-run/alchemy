@@ -58,6 +58,7 @@ export const makeCloudflareTarget = (
     },
     adapterName: ADAPTER_NAME,
     adapterPackage: ADAPTER_PACKAGE,
+    requiresAdapter: true,
     serverEntryFileName: SERVER_ENTRY_FILE_NAME,
   });
 
