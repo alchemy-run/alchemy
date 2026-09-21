@@ -1203,13 +1203,8 @@ export default defineConfig({
                   link: "/better-auth/guides/secondary-storage",
                 },
                 { label: "Migrations", link: "/better-auth/guides/migrations" },
-              ],
-            },
-            {
-              label: "Upgrades",
-              items: [
                 {
-                  label: "From 1.6 to 1.7.5",
+                  label: "Upgrading from 1.6 to 1.7.5",
                   link: "/better-auth/upgrades/from-1-6-to-1-7",
                 },
               ],
