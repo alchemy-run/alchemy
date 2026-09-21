@@ -32,6 +32,7 @@ export default defineConfig([
         "src/astro/runtime/entrypoints/server.ts",
       "astro/runtime/entrypoints/image-passthrough-endpoint":
         "src/astro/runtime/entrypoints/image-passthrough-endpoint.ts",
+      "foldkit/source": "src/foldkit/source.ts",
       "nextjs/index": "src/nextjs/index.ts",
       "nextjs/aws": "src/nextjs/aws.ts",
       "nextjs/node": "src/nextjs/node.ts",
@@ -77,7 +78,6 @@ export default defineConfig([
       "sveltekit/aws": "src/sveltekit/aws.ts",
       "sveltekit/node": "src/sveltekit/node.ts",
       "sveltekit/cloudflare": "src/sveltekit/cloudflare.ts",
-      "foldkit/source": "src/foldkit/source.ts",
       "sveltekit/source": "src/sveltekit/source.ts",
       "waku/index": "src/waku/index.ts",
       "waku/adapter": "src/waku/adapter.ts",
