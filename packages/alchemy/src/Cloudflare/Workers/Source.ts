@@ -18,9 +18,8 @@ import type * as Stream from "effect/Stream";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
-import type { DurableObjectExport } from "./DurableObject.ts";
+import type { WorkerExport } from "./WorkerRuntimeContext.ts";
 import { getToolingCompatibility } from "./Compatibility.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
@@ -94,7 +93,7 @@ export interface SourceContext {
     | { readonly kind: "external" }
     | {
         readonly kind: "effect";
-        readonly exports: Record<string, DurableObjectExport | WorkflowExport>;
+        readonly exports: Record<string, WorkerExport>;
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**

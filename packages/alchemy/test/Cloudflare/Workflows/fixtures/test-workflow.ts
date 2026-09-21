@@ -31,13 +31,15 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
 
     return Effect.fn(function* (input: {
       value: string;
+      ready?: boolean;
       rollback?: boolean;
       scenario?: (typeof failureScenarios)[number];
     }) {
+      if (input.ready) return { ready: true };
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const triggerRollback = Cloudflare.Workflows.task(
         "fail-after-reservation",
-        Effect.die(new Error("rollback requested")),
+        Effect.fail(new Error("rollback requested")),
         { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" },
       );
 
@@ -72,7 +74,7 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
             yield* results
               .put(`${event.instanceId}/attempts`, JSON.stringify({ attempt }))
               .pipe(Effect.orDie);
-            return yield* Effect.die(new Error("retry budget exhausted"));
+            return yield* Effect.fail(new Error("retry budget exhausted"));
           }),
           { retries: { limit: 1, delay: "1 second", backoff: "constant" } },
         );
@@ -98,10 +100,10 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
                   key,
                   JSON.stringify({ attempt: previous.attempt + 1 }),
                 );
-                return yield* Effect.die(
+                return yield* Effect.fail(
                   new Error("rollback budget exhausted"),
                 );
-              }).pipe(Effect.orDie),
+              }),
           },
         );
         yield* triggerRollback;
@@ -137,7 +139,7 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
         Effect.gen(function* () {
           const { attempt, config } =
             yield* Cloudflare.Workflows.WorkflowStepContext;
-          if (attempt === 1) return yield* Effect.die(new Error("retry once"));
+          if (attempt === 1) return yield* Effect.fail(new Error("retry once"));
           return { attempt, config };
         }),
         { retries: { limit: 2, delay: "1 second", backoff: "constant" } },
