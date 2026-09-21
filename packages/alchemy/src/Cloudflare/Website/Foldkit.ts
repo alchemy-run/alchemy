@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -7,6 +6,7 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
+  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
@@ -53,17 +53,10 @@ export interface FoldkitProps<
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file under `rootDir` is hashed, plus the
    * nearest package-manager lockfile. Provide explicit globs to narrow the
-   * scope.
+   * scope; `workspaces` adds sibling workspace directories (see
+   * {@link ViteOptions.memo}).
    */
-  memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash (relative to `rootDir`).
-     * By default (`"auto"`), workspaces are auto-detected from the build's
-     * module graph; an explicit array pins them.
-     * @default "auto"
-     */
-    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
-  };
+  memo?: ViteOptions["memo"];
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.

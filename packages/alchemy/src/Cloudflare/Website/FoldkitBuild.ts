@@ -27,6 +27,10 @@ export type FoldkitBuildManifest = typeof FoldkitBuildManifest.Type;
 
 export const FOLDKIT_BUILD_MANIFEST = "foldkit.build.json";
 
+const decodeManifest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(FoldkitBuildManifest),
+);
+
 /**
  * Reads the manifest a Foldkit build left in its server output directory.
  * A build with no server output, or one made by a Foldkit plugin that
@@ -48,14 +52,10 @@ export const readFoldkitBuildManifest = Effect.fn(function* (
     return undefined;
   }
   const raw = yield* fs.readFileString(file);
-  // Neither failure below is one the deployment can recover from: the
-  // manifest exists, so the build meant to describe itself, and a
-  // description this cannot read must not become a guessed routing.
-  const parsed = yield* Effect.try({
-    try: () => JSON.parse(raw) as unknown,
-    catch: (cause) => new Error(`${file} is not valid JSON`, { cause }),
-  }).pipe(Effect.catch((error) => Effect.die(error)));
-  return yield* Schema.decodeUnknownEffect(FoldkitBuildManifest)(parsed).pipe(
+  // Not a failure the deployment can recover from: the manifest exists, so
+  // the build meant to describe itself, and a description this cannot read
+  // must not become a guessed routing.
+  return yield* decodeManifest(raw).pipe(
     Effect.catch((error) =>
       Effect.die(
         new Error(
