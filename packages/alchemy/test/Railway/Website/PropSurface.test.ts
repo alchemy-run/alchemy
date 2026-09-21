@@ -4,6 +4,15 @@ import { describe, expect, it } from "alchemy-test";
 describe("Railway.Website prop surfaces", () => {
   const _pins = [
     () =>
+      Railway.Website.Vinext("Vinext", {
+        rootDir: "./app",
+        env: { GREETING: "Hello" },
+        memo: { lockfile: true },
+        assets: { notFoundHandling: "404-page" },
+        dev: {},
+        domain: "app.example.com",
+      }),
+    () =>
       Railway.Website.Vite("V", {
         assets: { notFoundHandling: "single-page-application" },
         vite: { outDir: "build" },

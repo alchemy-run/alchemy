@@ -1,6 +1,6 @@
 ---
 title: Websites
-description: Deploy Vite, Astro, Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Hetzner with first-class Website resources.
+description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Hetzner with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -33,6 +33,9 @@ Service. `domain` requires an existing Hetzner DNS
 - [`Nextjs`](/hetzner/frontend/nextjs) — Next.js as a long-running
   Node process (`next build`, then `next({ dev: false })`). Not
   OpenNext.
+- [`Vinext`](/hetzner/frontend/vinext) — vinext (Next.js API on Vite)
+  as a long-running Node process (`vinext build`, then
+  `startProdServer`). Not the Cloudflare Worker path.
 - [`Nuxt`](/hetzner/frontend/nuxt) — Nuxt apps through nitro's
   Node server; your `nuxt.config.ts` loads natively. Do not set
   `nitro.preset`.
@@ -75,6 +78,7 @@ files — an unchanged project skips the build.
 | SolidStart | `SolidStart` | [SolidStart](/hetzner/frontend/solidstart) |
 | Astro | `Astro` | [Astro](/hetzner/frontend/astro) |
 | Next.js | `Nextjs` | [Next.js](/hetzner/frontend/nextjs) |
+| vinext | `Vinext` | [vinext](/hetzner/frontend/vinext) |
 | Nuxt | `Nuxt` | [Nuxt](/hetzner/frontend/nuxt) |
 | SvelteKit | `SvelteKit` | [SvelteKit](/hetzner/frontend/sveltekit) |
 | Waku | `Waku` | [Waku](/hetzner/frontend/waku) |
