@@ -586,7 +586,10 @@ export const DockerLive = Layer.effect(
           return systemError({
             _tag: "Unknown",
             args,
-            description: `Command exited with code ${result.exitCode}: ${stderr}`,
+            description: `Command exited with code ${result.exitCode}: ${failureOutput(
+              stderr,
+              result.stdout,
+            )}`,
           });
         }),
         Effect.scoped,
@@ -1049,6 +1052,19 @@ export const dockerPhysicalName = (
         maxLength,
         lowercase: true,
       });
+
+/**
+ * A failing `docker` command splits its diagnosis over both streams: the
+ * builder writes the step log to one and the reason it stopped to the other,
+ * and which carries which depends on the builder, the progress mode and
+ * whether the output is a terminal. A build that fails inside a `RUN` step
+ * therefore reports nothing but its exit code when only `stderr` is kept.
+ * Keep both, the reason first, so the error says why the build failed.
+ */
+const failureOutput = (stderr: string, stdout: string) => {
+  const output = [stderr, stdout].filter((text) => text.length > 0);
+  return output.length > 0 ? output.join("\n") : "the command wrote no output.";
+};
 
 /** Constructs a PlatformError from a command execution result. */
 const systemError = (input: {
