@@ -1,3 +1,7 @@
+import type {
+  ResourceSelection,
+  SelectionOutput,
+} from "../ResourceSelection.ts";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 import * as Floci from "@alchemy.run/floci";
@@ -458,24 +462,98 @@ export const withProviders = <A, E, R, ROut>(
  * soon as `deploy` resolves. The test harness uses this to keep workerd
  * alive across `beforeAll` → tests → `afterAll`.
  */
-export const deploy = <A>(
+export interface DeployCallOptions extends Plan.MakePlanOptions {
+  stage?: string;
+  scope?: Scope.Scope;
+}
+
+export type DeployResult<A> = Effect.Effect<
+  Input.Resolve<A>,
+  Effect.Error<ReturnType<typeof deployStack<A>>>,
+  Effect.Services<ReturnType<typeof deployStack<A>>>
+>;
+
+export interface FilteredDeployCallOptions
+  extends Omit<DeployCallOptions, keyof ResourceSelection>, ResourceSelection {}
+
+type FullDeployCall = [options?: DeployCallOptions];
+
+/**
+ * Filtered deploys return void; the whole declaration still evaluates.
+ * With an explicit output type, filtering also requires the Call tuple type.
+ */
+export interface Deploy {
+  <A, Call extends [options?: FilteredDeployCallOptions] = FullDeployCall>(
+    stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+    ...call: Call
+  ): DeployResult<SelectionOutput<A, Call[0]>>;
+}
+
+export function deploy<
+  A,
+  Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
+>(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
-  callOptions?: { stage?: string; scope?: Scope.Scope },
+  ...call: Call
+): DeployResult<SelectionOutput<A, Call[0]>>;
+export function deploy<A>(
+  options: MakeOptions,
+  stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+  callOptions?: FilteredDeployCallOptions,
+) {
+  return deployStack(options, stack, callOptions);
+}
+
+const deployStack = <A>(
+  options: MakeOptions,
+  stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+  callOptions?: FilteredDeployCallOptions,
 ) =>
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,
+    force: callOptions?.force,
+    include: callOptions?.include,
+    exclude: callOptions?.exclude,
   }).pipe(Effect.provide(TelemetryLive));
+
+/** Bind test-file options and the shared runtime scope without erasing output types. */
+export const makeDeploy = (
+  options: MakeOptions,
+  scope: Scope.Scope,
+): Deploy => {
+  function run<
+    A,
+    Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
+  >(
+    stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+    ...call: Call
+  ): DeployResult<SelectionOutput<A, Call[0]>>;
+  function run<A>(
+    stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+    callOptions?: FilteredDeployCallOptions,
+  ) {
+    return deployStack(options, stack, { ...callOptions, scope });
+  }
+  return run;
+};
 
 export const destroy = (
   options: MakeOptions,
   stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
-  callOptions?: { stage?: string; scope?: Scope.Scope },
+  callOptions?: {
+    stage?: string;
+    scope?: Scope.Scope;
+    include?: never;
+    exclude?: never;
+  },
 ) =>
   _destroy({
+    include: callOptions?.include,
+    exclude: callOptions?.exclude,
     stack: stack as Effect.Effect<CompiledStack, never, any>,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
@@ -507,9 +585,15 @@ export interface ScratchStack<ROut = any> {
   readonly stage: string;
   /** The shared in-memory state Layer for this scratch. @internal */
   readonly state: Layer.Layer<State.State, never, never>;
-  deploy<A, E, R>(
+  /** Filters leave other rows and stack outputs untouched; declaration still runs. */
+  deploy<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<Input.Resolve<A>, any, Exclude<R, ROut | StackServices>>;
+    ...call: Call
+  ): Effect.Effect<
+    SelectionOutput<Input.Resolve<A>, Call[0]>,
+    any,
+    Exclude<R, ROut | StackServices>
+  >;
   /**
    * Build a plan against the scratch's shared state WITHOUT applying it.
    *
@@ -518,10 +602,18 @@ export interface ScratchStack<ROut = any> {
    * changes) without mutating the cloud. Plans run against whatever state
    * prior `deploy(...)` calls persisted.
    */
-  plan<A, E, R>(
+  plan<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<Plan.Plan<A>, any, Exclude<R, ROut | StackServices>>;
-  destroy(): Effect.Effect<void, any, never>;
+    ...call: Call
+  ): Effect.Effect<
+    Plan.Plan<SelectionOutput<A, Call[0]>>,
+    any,
+    Exclude<R, ROut | StackServices>
+  >;
+  destroy(options?: {
+    include?: never;
+    exclude?: never;
+  }): Effect.Effect<void, any, never>;
 }
 
 const sanitizeStackName = (name: string) =>
@@ -576,7 +668,10 @@ export const scratchStack = <ROut>(
       ? (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
       : effect;
 
-  const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
+  const buildAndApply = (
+    effect: Effect.Effect<any, any, any>,
+    planOptions?: Plan.FilteredPlanOptions,
+  ) =>
     (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
@@ -584,7 +679,7 @@ export const scratchStack = <ROut>(
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(
+        Plan.make(compiled, planOptions ?? {}).pipe(
           Effect.flatMap(apply),
           pinToFloci,
           Effect.provide(compiled.services),
@@ -594,7 +689,10 @@ export const scratchStack = <ROut>(
       provideFreshArtifactStore,
     );
 
-  const buildPlan = (effect: Effect.Effect<any, any, any>) =>
+  const buildPlan = (
+    effect: Effect.Effect<any, any, any>,
+    planOptions?: Plan.FilteredPlanOptions,
+  ) =>
     (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
@@ -602,7 +700,9 @@ export const scratchStack = <ROut>(
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        pinToFloci(Plan.make(compiled)).pipe(Effect.provide(compiled.services)),
+        pinToFloci(Plan.make(compiled, planOptions ?? {})).pipe(
+          Effect.provide(compiled.services),
+        ),
       ),
       Effect.provide(Layer.succeed(Stage, stage)),
       provideFreshArtifactStore,
@@ -612,32 +712,42 @@ export const scratchStack = <ROut>(
     name: stackName,
     stage,
     state: stateLayer,
-    deploy: ((effect: Effect.Effect<any, any, any>) =>
-      buildAndApply(effect)) as ScratchStack<ROut>["deploy"],
-    plan: ((effect: Effect.Effect<any, any, any>) =>
-      buildPlan(effect)) as ScratchStack<ROut>["plan"],
-    destroy: () =>
-      Plan.destroy({ name: stackName, stage }).pipe(
-        Effect.flatMap(apply),
-        Effect.asVoid,
-        Effect.provide(
-          stateLayer.pipe(
-            Layer.provideMerge(
-              options.providers as Layer.Layer<any, never, any>,
+    deploy: ((
+      effect: Effect.Effect<any, any, any>,
+      planOptions?: Plan.FilteredPlanOptions,
+    ) => buildAndApply(effect, planOptions)) as ScratchStack<ROut>["deploy"],
+    plan: ((
+      effect: Effect.Effect<any, any, any>,
+      planOptions?: Plan.FilteredPlanOptions,
+    ) => buildPlan(effect, planOptions)) as ScratchStack<ROut>["plan"],
+    destroy: (callOptions) =>
+      callOptions?.include !== undefined || callOptions?.exclude !== undefined
+        ? Effect.die(
+            new Plan.InvalidResourceSelection({
+              message: "Filtered destroy is not supported.",
+            }),
+          )
+        : (Plan.destroy({ name: stackName, stage }).pipe(
+            Effect.flatMap(apply),
+            Effect.asVoid,
+            Effect.provide(
+              stateLayer.pipe(
+                Layer.provideMerge(
+                  options.providers as Layer.Layer<any, never, any>,
+                ),
+                Layer.provideMerge(
+                  Layer.succeed(Stack, {
+                    name: stackName,
+                    stage,
+                    resources: {},
+                    bindings: {},
+                    actions: {},
+                  }),
+                ),
+                Layer.provideMerge(Layer.succeed(Stage, stage)),
+              ),
             ),
-            Layer.provideMerge(
-              Layer.succeed(Stack, {
-                name: stackName,
-                stage,
-                resources: {},
-                bindings: {},
-                actions: {},
-              }),
-            ),
-            Layer.provideMerge(Layer.succeed(Stage, stage)),
-          ),
-        ),
-        provideFreshArtifactStore,
-      ) as Effect.Effect<void, any, never>,
+            provideFreshArtifactStore,
+          ) as Effect.Effect<void, any, never>),
   };
 };
