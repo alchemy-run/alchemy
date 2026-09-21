@@ -135,7 +135,6 @@ catalog:
   drizzle-kit: "1.0.0-rc.5-ab785fc"
   drizzle-orm: "1.0.0-rc.5-ab785fc"
   effect: ">=4.0.0-rc.116 || >=4.0.0"
-  "@effect/platform-browser": 4.0.0-rc.116
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.10.1"
