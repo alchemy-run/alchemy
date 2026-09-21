@@ -162,9 +162,10 @@ export const resolveSidecar = (options: MakeOptions): boolean =>
 export const defaultStage = (): string =>
   process.env.ALCHEMY_TEST_STAGE || Effect.runSync(userStage("test"));
 
-/** File-level stage: `options.stage` if set, otherwise {@link defaultStage}. */
+/** File-level stage: a string override, otherwise {@link defaultStage}. */
 export const resolveStage = (options: { stage?: string }): string =>
-  options.stage ?? defaultStage();
+  // Configured stacks carry a cross-stack reference proxy, not a stage override.
+  typeof options.stage === "string" ? options.stage : defaultStage();
 
 /**
  * The sidecar runtime handed to each adapter's `make(...)`.

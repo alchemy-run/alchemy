@@ -97,6 +97,14 @@ export interface StackProps<Req> {
   state: Layer.Layer<State, never, StackServices>;
 }
 
+/**
+ * Runtime fields the Stack factory attaches to a configured stack effect.
+ * Class-reference forms expose only `stackName` until `.make(...)`.
+ */
+export type ConfiguredStackMeta<Req = never> = {
+  readonly stackName: string;
+} & StackProps<Req>;
+
 export const Stack: Context.ServiceClass<
   Stack,
   "Stack",
@@ -119,6 +127,7 @@ export const Stack: Context.ServiceClass<
       eff: Effect.Effect<A, ConfigError, Req>,
     ): Effect.Effect<Self, ConfigError> & {
       new (_: never): A extends object ? A : {};
+      readonly stackName: string;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -127,10 +136,12 @@ export const Stack: Context.ServiceClass<
   <Self, Shape>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
+      readonly stackName: string;
       make: <A, Req>(
         options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError>;
+      ) => Effect.Effect<CompiledStack<A>, ConfigError> &
+        ConfiguredStackMeta<NoInfer<Req>>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -140,7 +151,8 @@ export const Stack: Context.ServiceClass<
     stackName: string,
     options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError> &
+    ConfiguredStackMeta<NoInfer<Req>>;
 } = Object.assign(
   taggedFunction(
     StackContext,
