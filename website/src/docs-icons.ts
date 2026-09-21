@@ -46,6 +46,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   "Better Auth": l("key-round"),
   GitHub: b("github"),
   Git: c("git"),
+  Stripe: b("stripe"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
@@ -83,6 +84,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Networking: l("globe"),
   Guides: l("map"),
   Resources: l("boxes"),
+  "API Reference": l("book-open"),
   Concepts: l("book-text"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
@@ -99,6 +101,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
+  "Prisma ORM": b("prisma"),
   SQL: l("database"),
   "Effect SQL": l("database-zap"),
   Migrations: l("list-ordered"),

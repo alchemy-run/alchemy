@@ -1,5 +1,6 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
 import * as Neon from "@/Neon";
 import { Stack } from "@/Stack.ts";
@@ -48,10 +49,11 @@ it.live(
               ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
             }),
           ),
+          Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
           FetchHttpClient.layer,
+          CliKit.layer({ input: false }),
         ),
       ),
-      Effect.provide(CliKit.layer({ input: false })),
     ),
 );

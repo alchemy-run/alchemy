@@ -73,6 +73,7 @@ import {
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
+  type StateStoreError,
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
@@ -148,6 +149,8 @@ export interface ApplyNodeBase<
    * FQN, then delete every former row.
    */
   renamedFrom?: string[] | undefined;
+  /** Preserve the FQN-reuse exclusion across generations and state transitions. */
+  adoptionBlocked?: "migrated-fqn";
 }
 
 export interface Create<
@@ -156,6 +159,8 @@ export interface Create<
   action: "create";
   props: R["Props"];
   state: CreatingResourceState | undefined;
+  /** Ownership probe deferred until upstream identities resolve during apply. */
+  deferredAdoption?: { adopt: boolean };
 }
 
 export interface Update<
@@ -698,13 +703,11 @@ export const make = <A>(
 
     const resolveResource = (
       resourceExpr: Output.ResourceExpr<any, any>,
-    ): Effect.Effect<any> =>
+    ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
-        // Tasks share the ResourceExpr machinery but have no provider /
-        // stable-properties story at plan time. Leave the expression
-        // unsubstituted — Apply resolves it from the tracker at run time.
-        if (isAction(resourceExpr.src as any)) {
-          return resourceExpr;
+        if (isAction(resourceExpr.src)) {
+          const node = yield* diffAction(resourceExpr.src);
+          return node.action === "noop" ? node.state.output : resourceExpr;
         }
         // @ts-expect-error
         return yield* (resolvedResources[resourceExpr.src.FQN] ??=
@@ -743,8 +746,11 @@ export const make = <A>(
               // diffs that hash/compare the arrays never churn on
               // registration-order flips (or on legacy unsorted state).
               const oldBindings = dedupeBindings(oldState.bindings ?? []);
+              const bindings = stack.bindings[resource.FQN] ?? [];
               const newBindings = dedupeBindings(
-                stack.bindings[resource.FQN] ?? [],
+                combinedCycleMembers.has(resource.FQN)
+                  ? bindings
+                  : yield* resolveInput(bindings),
               );
 
               const diff = yield* provider.diff
@@ -780,7 +786,13 @@ export const make = <A>(
                     resourceExpr;
 
               if (diff == null) {
-                if (havePropsChanged(oldProps, props)) {
+                if (
+                  havePropsChanged(oldProps, props) ||
+                  (!combinedCycleMembers.has(resource.FQN) &&
+                    diffBindings(oldBindings, newBindings).some(
+                      (binding) => binding.action !== "noop",
+                    ))
+                ) {
                   // the props have changed but the provider did not provide any hints as to what is stable
                   // so we must assume everything has changed
                   return withStables(oldState?.attr);
@@ -836,7 +848,7 @@ export const make = <A>(
       // a shared visited-set) keeps legitimately-shared diamond references
       // intact and is race-free under `concurrency: "unbounded"` (#1082).
       ancestors: ReadonlySet<object> = new Set(),
-    ): Effect.Effect<any, Config.ConfigError> =>
+    ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
@@ -934,7 +946,9 @@ export const make = <A>(
       );
     };
 
-    const resolveOutput = (expr: Output.Expr<any>): Effect.Effect<any> =>
+    const resolveOutput = (
+      expr: Output.Expr<any>,
+    ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
         if (Output.isResourceExpr(expr)) {
           return yield* resolveResource(expr);
@@ -1102,6 +1116,15 @@ export const make = <A>(
     // edges are considered. Used below to decide whether an acyclic
     // binding edge should also become a downstream edge.
     const combinedCycleMembers = findCycleMembers(allUpstreamDependencies);
+    const inputCycleMembers = findCycleMembers({
+      ...newUpstreamDependencies,
+      ...Object.fromEntries(
+        actions.map((action) => [
+          action.FQN,
+          Object.values(Output.upstreamAny(action.Input)).map((r) => r.FQN),
+        ]),
+      ),
+    });
 
     // Map FQN -> list of downstream FQNs (resources/actions that depend on
     // this one).
@@ -1162,6 +1185,57 @@ export const make = <A>(
         (action) => [action.FQN, computeDownstream(action.FQN)] as const,
       ),
     ]);
+
+    const actionPlans: Record<
+      string,
+      Effect.Effect<
+        ActionRun | ActionNoop,
+        Config.ConfigError | StateStoreError
+      >
+    > = {};
+    const diffAction = Effect.fn("plan.diff.action")(function* (
+      action: ActionLike,
+    ) {
+      return yield* (actionPlans[action.FQN] ??= yield* cachedInScope(
+        memoScope,
+      )(
+        Effect.gen(function* () {
+          const fqn = action.FQN;
+          const downstream = newDownstreamDependencies[fqn] ?? [];
+          const oldState = yield* state.get({ stack: stackName, stage, fqn });
+          const prior = isActionState(oldState) ? oldState : undefined;
+          const resolvedInput = inputCycleMembers.has(fqn)
+            ? action.Input
+            : yield* resolveInput(action.Input);
+          // Actions are pure in their inputs. Only a completed, unforced run
+          // with fully known, identical inputs has a reusable output.
+          if (
+            prior?.status === "ran" &&
+            !options.force &&
+            !inputCycleMembers.has(fqn) &&
+            isResolved(resolvedInput) &&
+            prior.inputHash === (yield* hashInput(resolvedInput))
+          ) {
+            return {
+              kind: "action",
+              action: "noop",
+              def: action,
+              state: prior,
+              downstream,
+            } satisfies ActionNoop;
+          }
+          return {
+            kind: "action",
+            action: "run",
+            def: action,
+            input: action.Input,
+            state: prior,
+            downstream,
+            forced: !!options.force,
+          } satisfies ActionRun;
+        }),
+      ));
+    });
 
     const plannedCount = yield* Ref.make(0);
     const resourcePlanned = (node: CRUD) =>
@@ -1280,16 +1354,25 @@ export const make = <A>(
       // unresolved upstream Outputs (e.g. a `streamArn` referencing
       // a stream being created in the same plan). Calling `read` with
       // an unresolved value would surface as `ParseError` from the
-      // SDK protocol layer. Resources whose props depend on
-      // not-yet-created upstreams cannot themselves be pre-existing
-      // — there's nothing to adopt.
+      // SDK protocol layer. Upstream creation can produce existing children
+      // (e.g. a cloned branch's Auth integration), so Apply must perform the
+      // deferred ownership probe once those identities resolve.
       // A resource declared at a former FQN whose row just migrated
       // away is genuinely NEW by declaration — skip the probe. Its
       // predecessor's physical resource still carries tags branded
       // with THIS logical id (the migrated row's reconcile hasn't
       // re-branded them yet), so a tag-based `read` would find it
       // and silently adopt the very resource that was renamed away.
-      const reusesMigratedFqn = migratedRowFqns.has(fqn);
+      const claimant = formerFqnClaims.get(fqn);
+      const claimantRow =
+        claimant === undefined ? undefined : persistedRows.get(claimant);
+      const reusesMigratedFqn =
+        migratedRowFqns.has(fqn) ||
+        oldState?.adoptionBlocked === "migrated-fqn" ||
+        // Migration can commit before the fresh create records its exclusion.
+        (oldState === undefined &&
+          claimantRow !== undefined &&
+          !isActionState(claimantRow));
       let forceUpdateAfterAdoption = false;
       if (
         oldState === undefined &&
@@ -1375,6 +1458,7 @@ export const make = <A>(
       // `deleteOldGenerations` / `collectGarbage`).
       const modeSwitched = hasModeSwitched(mode, oldState);
 
+      const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
       const Node = <T extends Apply>(
         node: Omit<
           T,
@@ -1389,6 +1473,15 @@ export const make = <A>(
           downstream,
           mode,
           renamedFrom,
+          adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
+          deferredAdoption:
+            node.action === "create" &&
+            provider.read &&
+            !reusesMigratedFqn &&
+            ((oldState === undefined && !isResolved(news)) ||
+              (oldState?.status === "creating" && oldState.attr === undefined))
+              ? { adopt: adoptThis }
+              : undefined,
         }) as any as T;
 
       // Plan against the persisted state we have, not the ideal final state we
@@ -1409,14 +1502,14 @@ export const make = <A>(
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.
         //
-        // `creating` state persists the RAW plan-time props, which may
+        // Early `creating` checkpoints contain raw plan-time props, which may
         // still contain unresolved Output expressions (e.g. a name
         // referencing an upstream created in the same failed deploy).
         // `read` implementations derive identity from `olds` when
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && isResolved(oldState.props)) {
+        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
           const attr = yield* provider
             .read({
               id,
@@ -1742,74 +1835,13 @@ export const make = <A>(
         ),
       );
 
-    const diffAction = Effect.fn("plan.diff.action")(function* (
-      action: ActionLike,
-    ) {
-      const fqn = action.FQN;
-      const downstream = newDownstreamDependencies[fqn] ?? [];
-      // The node carries the RAW input expression (evaluated at apply);
-      // the drift hash uses the diff-facing view so stable upstream
-      // attributes hash as their known values.
-      const resolvedInput = materializeStableRefs(
-        yield* resolveInput(action.Input),
-      );
-      const inputHash = yield* hashInput(resolvedInput);
-      const oldState = yield* state.get({
-        stack: stackName,
-        stage,
-        fqn,
-      });
-
-      if (oldState && !isActionState(oldState)) {
-        // FQN collision with a resource — surface as a fatal error so
-        // the user resolves it before we touch anything.
-        return [
-          fqn,
-          {
-            kind: "action",
-            action: "run",
-            def: action,
-            input: action.Input,
-            state: undefined,
-            downstream,
-            forced: false,
-          } satisfies ActionRun,
-        ] as const;
-      }
-
-      const prior = oldState as ActionState | undefined;
-      const sameInput =
-        prior?.status === "ran" && prior.inputHash === inputHash;
-      if (sameInput && !options.force) {
-        return [
-          fqn,
-          {
-            kind: "action",
-            action: "noop",
-            def: action,
-            state: prior as RanActionState,
-            downstream,
-          } satisfies ActionNoop,
-        ] as const;
-      }
-      return [
-        fqn,
-        {
-          kind: "action",
-          action: "run",
-          def: action,
-          input: action.Input,
-          state: prior,
-          downstream,
-          forced: !!options.force,
-        } satisfies ActionRun,
-      ] as const;
-    });
-
     const actionGraph = Object.fromEntries(
       (yield* Effect.all(
         actions.map((action) =>
-          diffAction(action).pipe(Effect.tap(actionPlanned)),
+          diffAction(action).pipe(
+            Effect.map((node) => [action.FQN, node] as const),
+            Effect.tap(actionPlanned),
+          ),
         ),
         { concurrency: "unbounded" },
       )) as ReadonlyArray<readonly [string, ActionApply]>,

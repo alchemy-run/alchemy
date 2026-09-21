@@ -72,5 +72,6 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(Effect.provide(RuntimeContext.phantom)),
-  { timeout: 120_000 },
+  // Includes provisioning a fresh PlanetScale database.
+  { timeout: 240_000 },
 );

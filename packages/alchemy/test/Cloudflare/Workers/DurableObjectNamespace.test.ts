@@ -229,7 +229,7 @@ const fetchJsonReady = <T>(url: string) =>
           ? Effect.flatMap(r.text, (body) =>
               Effect.fail(
                 new Error(
-                  `Worker not ready: ${r.status} ${body.slice(0, 500)}`,
+                  `Worker not ready at ${url}: ${r.status} ${body.slice(0, 500)}`,
                 ),
               ),
             )
@@ -544,6 +544,7 @@ export default { async fetch() { return new Response("v4"); } };
         const body = yield* fetchJsonReady<{ namespaceId: string }>(
           deployed.consumer.url!,
         );
+
         expect(body.namespaceId).toBe(finalNamespaceId);
 
         yield* scratch.destroy();

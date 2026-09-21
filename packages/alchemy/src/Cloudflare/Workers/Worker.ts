@@ -17,6 +17,7 @@ import {
   type Main,
   type MainRpc,
   type MakeShape,
+  type PlatformIdentity,
   type PlatformProps,
   type PlatformServices,
 } from "../../Platform.ts";
@@ -2474,7 +2475,8 @@ export const Worker: ResourceClassLike<Worker> &
         never,
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (
             _: never,
           ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
@@ -2517,7 +2519,8 @@ export const Worker: ResourceClassLike<Worker> &
         never,
         Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
         };
       /**
@@ -2550,7 +2553,8 @@ export const Worker: ResourceClassLike<Worker> &
         never,
         Req | Providers
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (): Named<Id> &
             Tag<WorkerTypeId> & {
               /** @internal phantom */
@@ -2565,8 +2569,9 @@ export const Worker: ResourceClassLike<Worker> &
       const Bindings extends WorkerBindingProps = {},
       const Assets extends WorkerAssetsConfig | undefined = undefined,
       Req = never,
+      const Id extends string = string,
     >(
-      id: string,
+      id: Id,
       props:
         | InputProps<WorkerProps<Bindings, Assets>>
         | Effect.Effect<
@@ -2583,7 +2588,8 @@ export const Worker: ResourceClassLike<Worker> &
         Rpc<{}>,
       never,
       Req | Providers
-    >;
+    > &
+      PlatformIdentity<Id>;
     <
       const Id extends string,
       Shape extends WorkerShape,
@@ -2592,7 +2598,7 @@ export const Worker: ResourceClassLike<Worker> &
         | Container.Application<any>
         | PlatformServices,
     >(
-      id: string,
+      id: Id,
       props: InputProps<WorkerProps>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
@@ -2600,7 +2606,8 @@ export const Worker: ResourceClassLike<Worker> &
       never,
       Extract<Req, Container.Application<any>> | Providers
     > &
-      Named<Id>;
+      Named<Id> &
+      PlatformIdentity<Id>;
     /**
      * The Worker's own public URL, injected as a binding on that same Worker.
      * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or

@@ -1,9 +1,11 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -15,6 +17,13 @@ import {
 } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { Model } from "../AI/Model.ts";
+import type { Variant } from "../Images/Variant.ts";
+import type { Namespace } from "../KV/Namespace.ts";
+import type { Bucket } from "../R2/Bucket.ts";
+import type { SuperSlurperJob } from "../R2/SuperSlurperJob.ts";
+import type { Index } from "../Vectorize/VectorizeIndex.ts";
+import type { Worker } from "../Workers/Worker.ts";
 import type {
   WorkflowBinding,
   WorkflowResource,
@@ -78,13 +87,21 @@ export type SubscriptionProps = {
   name?: string;
   /**
    * The event source to subscribe to (e.g. `{ type: "r2" }` for R2 bucket
-   * events). The constructor also accepts a Workflow binding, WorkflowResource,
-   * or `yield* Cloudflare.Workflow.ref(...)`, normalized to its deferred physical
-   * workflow name. References read persisted state without owning the Workflow.
+   * events). The constructor also accepts Workflow bindings and supported
+   * Cloudflare resources or yielded `.ref(...)` references. Images variants,
+   * KV namespaces, R2 buckets, Super Slurper jobs, and Vectorize indexes select
+   * all events of that product in the account, not just the supplied resource.
+   * Models, Workers, and Workflows select their deferred physical names.
+   * References read persisted state without owning their sources.
    * Fixed at creation — changing it triggers a replacement. Cloudflare
    * allows at most one subscription per source per account.
    */
   source: SubscriptionSource;
+  /**
+   * Account of a resource source, captured by the constructor. Resource sources
+   * must belong to the subscription's ambient Cloudflare account.
+   */
+  sourceAccountId?: string;
   /**
    * Event types to deliver, scoped to the source (e.g. `bucket.created`
    * and `bucket.deleted` for the `r2` source, `namespace.created` for
@@ -150,16 +167,27 @@ export type Subscription = Resource<
   Providers
 >;
 
-/** Constructor inputs; Workflow sources are normalized before registration. */
+/** Resources whose product events can be delivered to a Queue. */
+export type SubscriptionResourceSource =
+  | WorkflowResource
+  | Variant
+  | Namespace
+  | Bucket
+  | SuperSlurperJob
+  | Index
+  | Model
+  | Worker;
+
+/** Constructor inputs; resource sources are normalized before registration. */
 export type SubscriptionInput = Omit<
   PropsInput<SubscriptionProps>,
-  "source"
+  "source" | "sourceAccountId"
 > & {
-  /** An explicit source, Workflow binding, Workflow resource, or `Workflow.ref`. */
+  /** An explicit source, Workflow binding, resource, or yielded resource reference. */
   source:
     | PropsInput<SubscriptionProps>["source"]
     | WorkflowBinding
-    | WorkflowResource;
+    | SubscriptionResourceSource;
 };
 
 type SubscriptionConstructor<Req = never> = {
@@ -186,22 +214,100 @@ const SubscriptionResource = Resource<Subscription>(TypeId, {
   aliases: ["Cloudflare.Queue.Subscription"],
 });
 
-const isWorkflowSource = (
+const isSourceResource = <Type extends SubscriptionResourceSource["Type"]>(
   source: SubscriptionInput["source"],
-): source is WorkflowBinding | WorkflowResource =>
-  isResourceOfType(source, "Cloudflare.Workflow") ||
-  (typeof source === "object" &&
-    source !== null &&
-    (source as WorkflowBinding).kind === "Cloudflare.Workflow");
+  type: Type,
+): source is Extract<SubscriptionResourceSource, { Type: Type }> =>
+  isResourceOfType(source, type);
+
+const isWorkflowBinding = (
+  source: SubscriptionInput["source"],
+): source is WorkflowBinding =>
+  typeof source === "object" &&
+  source !== null &&
+  (source as WorkflowBinding).kind === "Cloudflare.Workflow";
 
 const normalizeSubscriptionProps = (
   props: SubscriptionInput,
-): PropsInput<SubscriptionProps> => ({
-  ...props,
-  source: isWorkflowSource(props.source)
-    ? { type: "workflows.workflow", workflowName: props.source.workflowName }
-    : props.source,
-});
+): PropsInput<SubscriptionProps> => {
+  const source = props.source;
+  // Resource references are Output proxies; inspect their type before binding fields.
+  if (isSourceResource(source, "Cloudflare.Workflow")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "workflows.workflow", workflowName: source.workflowName },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.Worker")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "workersBuilds.worker", workerName: source.workerName },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.AI.Model")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "workersAi.model", modelName: source.modelName },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.Images.Variant")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "images" },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.KV.Namespace")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "kv" },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.R2.Bucket")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "r2" },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.R2.SuperSlurperJob")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "superSlurper" },
+    };
+  }
+  if (isSourceResource(source, "Cloudflare.VectorizeIndex")) {
+    return {
+      ...props,
+      sourceAccountId: source.accountId,
+      source: { type: "vectorize" },
+    };
+  }
+  if (isWorkflowBinding(source)) {
+    return {
+      ...props,
+      source: { type: "workflows.workflow", workflowName: source.workflowName },
+    };
+  }
+  return { ...props, source };
+};
+
+/** A resource source cannot select events in a different Cloudflare account. */
+export class SubscriptionSourceAccountMismatch extends Data.TaggedError(
+  "SubscriptionSourceAccountMismatch",
+)<{ readonly accountId: string; readonly sourceAccountId: string }> {}
+
+const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
+  sourceAccountId !== undefined && sourceAccountId !== accountId
+    ? Effect.fail(
+        new SubscriptionSourceAccountMismatch({ accountId, sourceAccountId }),
+      )
+    : Effect.void;
 
 /**
  * A Cloudflare Queues event subscription — delivers platform events
@@ -285,6 +391,102 @@ const normalizeSubscriptionProps = (
  * });
  * ```
  *
+ * ### Resource and Reference Sources
+ * **Example:** Account-wide KV events from a namespace
+ * ```typescript
+ * const namespace = yield* Cloudflare.KV.Namespace("Cache");
+ * yield* Cloudflare.Queues.Subscription("NamespaceEvents", {
+ *   source: namespace,
+ *   events: ["namespace.created", "namespace.deleted"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * KV, R2, Images, Vectorize, and Super Slurper sources are account-wide.
+ * Passing a resource retains its account and deployment dependency, but does
+ * not filter events to that resource. The subscription can miss the source's
+ * initial creation or final deletion because it depends on that source.
+ * Use an explicit product descriptor when the subscription must exist first.
+ *
+ * **Example:** R2 bucket reference from another stack
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("BucketEvents", {
+ *   source: yield* Cloudflare.R2.Bucket.ref("Uploads", {
+ *     stack: "storage",
+ *     stage: "production",
+ *   }),
+ *   events: ["bucket.created", "bucket.deleted"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * All resource forms accept yielded `.ref` references with optional stack
+ * and stage selectors. The referenced resource must already be deployed in
+ * the same Cloudflare account. Removing a subscription does not remove its
+ * referenced resource.
+ *
+ * **Example:** Images upload events from a variant reference
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("ImageEvents", {
+ *   source: yield* Cloudflare.Images.Variant.ref("Thumbnail"),
+ *   events: ["image.uploaded"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * The variant selects its Images account; uploads are not filtered by variant.
+ *
+ * **Example:** Vectorize index events
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("IndexEvents", {
+ *   source: yield* Cloudflare.Vectorize.Index.ref("Search"),
+ *   events: ["index.created", "index.deleted"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Super Slurper migration events
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("MigrationEvents", {
+ *   source: yield* Cloudflare.R2.SuperSlurperJob.ref("Migration"),
+ *   events: ["job.completed", "job.aborted"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * This selects all migration jobs in the account, not one job's objects.
+ *
+ * **Example:** Workers AI batch events
+ * ```typescript
+ * const model = yield* Cloudflare.AI.Model("Embeddings", {
+ *   modelName: "@cf/baai/bge-m3",
+ * });
+ * yield* Cloudflare.Queues.Subscription("BatchEvents", {
+ *   source: model,
+ *   events: ["batch.queued", "batch.succeeded", "batch.failed"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * The model is a non-owning catalog handle. These events require asynchronous
+ * batch inference; ordinary synchronous inference does not emit them.
+ *
+ * **Example:** Workers Builds events from a Worker reference
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("BuildEvents", {
+ *   source: yield* Cloudflare.Worker.ref("Website"),
+ *   events: ["build.started", "build.succeeded", "build.failed"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * The Worker must have a Workers Builds integration to emit build events.
+ * An ordinary Alchemy Worker upload is not a Workers Builds run.
+ *
+ * Event delivery can lag subscription creation or replacement even after the
+ * destination Queue accepts messages. Deployment confirms configuration, not
+ * delivery readiness; verify delivery before emitting events that must be observed.
+ * During Vectorize subscription replacement or a destination Queue update,
+ * Cloudflare can still route new events to the previous Queue. Replacement events
+ * can carry the deleted subscription's ID; updates retain the same subscription ID.
+ * A single early event does not prove that routing has fully propagated. Keep the
+ * previous destination available during the transition and verify the receiving
+ * Queue, `metadata.eventSubscriptionId`, and the event's resource identity.
+ *
  * ### Pausing delivery
  * **Example:** Disable a subscription without deleting it
  * ```typescript
@@ -344,6 +546,9 @@ export const SubscriptionProvider = () =>
     stables: ["subscriptionId", "accountId", "source", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      if (isResolved(news)) {
+        yield* validateSourceAccount(accountId, news.sourceAccountId);
+      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -361,6 +566,9 @@ export const SubscriptionProvider = () =>
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output) {
+        yield* validateSourceAccount(accountId, olds?.sourceAccountId);
+      }
       const acct = output?.accountId ?? accountId;
 
       if (output?.subscriptionId) {
@@ -375,10 +583,13 @@ export const SubscriptionProvider = () =>
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createSubscriptionName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match ? toAttributes(match, acct) : undefined;
+      if (!match) return undefined;
+      const attributes = toAttributes(match, acct);
+      return olds?.name !== undefined ? Unowned(attributes) : attributes;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* validateSourceAccount(accountId, news.sourceAccountId);
       const acct = output?.accountId ?? accountId;
       const name = yield* createSubscriptionName(id, news.name);
 
@@ -388,29 +599,16 @@ export const SubscriptionProvider = () =>
         ? yield* getSubscriptionOrUndefined(acct, output.subscriptionId)
         : undefined;
 
-      // Ensure — create if missing. Cloudflare allows a single
-      // subscription per source per account; tolerate the
-      // already-exists race by adopting the subscription on the same
-      // source and converging it in the sync step below.
+      // A source collision does not establish ownership of the existing subscription.
       if (!observed) {
-        observed = yield* queues
-          .createSubscription({
-            accountId: acct,
-            name,
-            enabled: news.enabled ?? true,
-            events: news.events,
-            source: news.source,
-            destination: { type: "queues.queue", queueId: news.queueId },
-          })
-          .pipe(
-            Effect.catchTag("SubscriptionAlreadyExists", (error) =>
-              findBySource(acct, news.source).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
-              ),
-            ),
-          );
+        observed = yield* queues.createSubscription({
+          accountId: acct,
+          name,
+          enabled: news.enabled ?? true,
+          events: news.events,
+          source: news.source,
+          destination: { type: "queues.queue", queueId: news.queueId },
+        });
       }
 
       // Sync — diff observed cloud state against desired and patch only
@@ -490,18 +688,6 @@ const getSubscriptionOrUndefined = (
 const findByName = (accountId: string, name: string) =>
   queues.listSubscriptions.items({ accountId }).pipe(
     Stream.filter((s) => s.name === name),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-  );
-
-/**
- * Find the subscription attached to a given source. Cloudflare enforces
- * at most one subscription per source per account, so the first match is
- * the only one.
- */
-const findBySource = (accountId: string, source: SubscriptionSource) =>
-  queues.listSubscriptions.items({ accountId }).pipe(
-    Stream.filter((s) => sameSource(toSource(s.source), source)),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );

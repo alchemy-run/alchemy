@@ -75,6 +75,7 @@
     "./ACME": "./src/ACME/index.ts",
     "./Railway": "./src/Railway/index.ts",
     "./Prisma": "./src/Prisma/index.ts",
+    "./Prisma/ORM": "./src/Prisma/ORM/index.ts",
     "./Prisma/ComputeApp": null,
     "./Prisma/ComputeService": null,
     "./Prisma/ComputeVersion": null,
@@ -286,6 +287,11 @@
         "bun": "./src/Prisma/index.ts",
         "default": "./lib/Prisma/index.js"
       },
+      "./Prisma/ORM": {
+        "types": "./lib/Prisma/ORM/index.d.ts",
+        "bun": "./src/Prisma/ORM/index.ts",
+        "default": "./lib/Prisma/ORM/index.js"
+      },
       "./Prisma/ComputeApp": null,
       "./Prisma/ComputeService": null,
       "./Prisma/ComputeVersion": null,
@@ -376,6 +382,7 @@
     "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
+    "@neon/functions": "catalog:",
     "@octokit/rest": "catalog:",
     "@octokit/webhooks": "catalog:",
     "@prisma/dev": "catalog:",
@@ -407,6 +414,8 @@
     "@opennextjs/aws": "catalog:",
     "@opennextjs/cloudflare": "catalog:",
     "@oxc-project/types": "catalog:",
+    "@prisma/orm-family-sql": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "@react-router/dev": "catalog:",
     "@react-router/node": "catalog:",
     "@solidjs/router": "catalog:",
@@ -427,7 +436,9 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
     "alchemy-test": "workspace:*",
+    "arktype": "catalog:",
     "astro": "catalog:",
+    "aws4fetch": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
@@ -440,6 +451,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "prisma": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
@@ -459,6 +471,7 @@
     "ws": "catalog:"
   },
   "peerDependencies": {
+    "@prisma/orm-postgres": "catalog:",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@effect/platform-bun": "catalog:",
@@ -472,10 +485,17 @@
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "prisma": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@prisma/orm-postgres": {
+      "optional": true
+    },
+    "prisma": {
+      "optional": true
+    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },
