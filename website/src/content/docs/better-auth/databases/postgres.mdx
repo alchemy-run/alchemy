@@ -8,7 +8,7 @@ This example serves Better Auth through a Lambda Function URL using an existing 
 ## Install
 
 ```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
+bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
 ```
 
 Configure AWS through an [Alchemy profile](/environments/profiles) and set `DATABASE_URL` in the deploying environment. The connection layer does not create the database, credentials, or network access.

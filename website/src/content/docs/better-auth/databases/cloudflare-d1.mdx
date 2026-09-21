@@ -8,7 +8,7 @@ This example creates a D1 database and a Worker serving Better Auth at `/api/aut
 ## Install
 
 ```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely
+bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely
 ```
 
 `kysely` is the SQL adapter peer; D1 needs no separate database driver. Configure Cloudflare credentials through an [Alchemy profile](/environments/profiles) before deployment.

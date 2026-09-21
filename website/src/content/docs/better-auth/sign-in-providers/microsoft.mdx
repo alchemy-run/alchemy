@@ -3,14 +3,10 @@ title: Microsoft sign-in
 description: Register an Entra web application and run Microsoft sign-in on a standalone Worker with D1.
 ---
 
-## Create the project
+## Install dependencies
 
 ```sh
-mkdir microsoft-auth
-cd microsoft-auth
-bun init -y
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
-mkdir -p src public
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). The complete application below uses Better Auth 1.7.5's built-in `microsoft` provider, including for Microsoft Entra ID.

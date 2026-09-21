@@ -7,21 +7,12 @@ sidebar:
 
 Build one application with email/password authentication, an Effect HTTP API, and GitHub sign-in. This tutorial uses Bun and Cloudflare D1; [other databases](/better-auth/databases) use the same Auth service.
 
-## Create the project
-
-```sh
-mkdir auth-app
-cd auth-app
-bun init -y
-mkdir -p src
-```
-
-Use [Bun](https://bun.sh) and a [configured Cloudflare profile](/cloudflare/setup). The examples use Effect 4 and Better Auth 1.7.5.
+Use your existing Alchemy project with [Bun](https://bun.sh) and a [configured Cloudflare profile](/cloudflare/setup). The examples use Effect 4 and Better Auth 1.7.5.
 
 ## Install the module
 
 ```sh
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use matching Alchemy and Better Auth integration releases. D1 uses Kysely internally; application code does not need to construct a Kysely client.

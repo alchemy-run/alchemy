@@ -8,7 +8,7 @@ This example provisions Neon and serves Better Auth from a Cloudflare Worker. Th
 ## Install
 
 ```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless
+bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless
 ```
 
 Configure Cloudflare and Neon through [Alchemy profiles](/environments/profiles), or supply `NEON_API_KEY` for Neon. You provide account credentials; the project resource creates the database, not the API key.

@@ -3,14 +3,10 @@ title: Custom OAuth and OIDC
 description: Run a standalone Worker with D1 and a Keycloak OIDC client using Better Auth 1.7.5 genericOAuth.
 ---
 
-## Create the project
+## Install dependencies
 
 ```sh
-mkdir company-auth
-cd company-auth
-bun init -y
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
-mkdir -p src public
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). Better Auth 1.7.5 registers `genericOAuth` providers as social providers, using `signIn.social` and `/api/auth/callback/company`, not the older `signIn.oauth2` flow.

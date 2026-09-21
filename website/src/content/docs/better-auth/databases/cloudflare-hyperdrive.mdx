@@ -8,7 +8,7 @@ This example provisions a Neon Postgres database, a Hyperdrive connection, and a
 ## Install
 
 ```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
+bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
 ```
 
 Configure Cloudflare and Neon through [Alchemy profiles](/environments/profiles), or supply `NEON_API_KEY` for Neon. If you only need direct Neon access, the [Neon serverless layer](/better-auth/databases/neon) avoids Hyperdrive and `pg`.

@@ -3,14 +3,10 @@ title: Google sign-in
 description: Configure Google consent and a web OAuth client for a standalone Worker with D1.
 ---
 
-## Create the project
+## Install dependencies
 
 ```sh
-mkdir google-auth
-cd google-auth
-bun init -y
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
-mkdir -p src public
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). This complete application uses Google's server-side authorization-code flow, not the Google browser SDK.

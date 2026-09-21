@@ -3,14 +3,10 @@ title: GitHub sign-in
 description: Register a GitHub OAuth App and run a standalone Worker with D1-backed sign-in.
 ---
 
-## Create the project
+## Install dependencies
 
 ```sh
-mkdir github-auth
-cd github-auth
-bun init -y
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
-mkdir -p src public
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). This page defines the entire application; no tutorial files are required.

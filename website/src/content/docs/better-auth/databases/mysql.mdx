@@ -8,7 +8,7 @@ This example connects a Better Auth Lambda to an existing MySQL database over TC
 ## Install
 
 ```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely mysql2
+bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely mysql2
 ```
 
 Configure AWS through an [Alchemy profile](/environments/profiles) and set `DATABASE_URL` in the deploying environment. Both the deployer and Lambda must be able to reach that URL.

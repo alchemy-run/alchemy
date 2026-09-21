@@ -2,17 +2,14 @@
 title: Sign-in providers
 description: Run a standalone Auth service and choose email/password, GitHub, Google, Microsoft, or custom OAuth sign-in.
 sidebar:
+  label: Overview
   order: 0
 ---
 
-## Run a minimal local application
+## Install dependencies
 
 ```sh
-mkdir auth-providers
-cd auth-providers
-bun init -y
-bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
-mkdir -p src public
+bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
 ```
 
 Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). This page defines a complete local email/password example; every linked provider page also includes its own complete application.
