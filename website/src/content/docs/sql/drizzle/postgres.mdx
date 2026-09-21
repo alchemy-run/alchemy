@@ -1,14 +1,16 @@
 ---
 title: Postgres
-description: Drizzle on Postgres — declare the schema, generate and apply migrations on deploy, and query with Drizzle.Postgres.
+description: Provider-neutral Postgres schemas, Effect-native Drizzle queries, and connections for Workers, Lambda, and servers.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const deps = `drizzle-orm @effect/sql-pg pg`;
-export const devDeps = `drizzle-kit`;
+export const deps = `drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg`;
+export const devDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
 
-Install the optional Postgres dependencies:
+`Drizzle.Postgres` provides typed, Effect-native queries for any compatible Postgres connection, whether your application runs on Workers, Lambda, or a server. Choose a database in [SQL databases](/sql/databases) and supply its connection through your runtime's binding or configuration.
+
+Install the optional dependencies:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -57,33 +59,35 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 }));
 ```
 
-## Declare the schema resource and database
-
-[Migrations](/sql/drizzle/migrations) · [Database setup](/sql/databases)
-
 ## Connect
 
 ```typescript
+// src/queries.ts
 import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import { relations, Users } from "./schema.ts";
 
-const listUsers = Effect.gen(function* () {
-  const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"), { relations });
-  return yield* db.select().from(Users);
-});
+export const makeQueries = <E, R>(
+  connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
+) =>
+  Effect.gen(function* () {
+    const db = yield* Drizzle.Postgres(connectionString, { relations });
+    return {
+      listUsers: () => db.select().from(Users),
+    };
+  });
 ```
 
-Pass a connection URL Effect from configuration or a runtime binding. [Connection lifecycle](/sql/effect-sql/lifecycle).
+Pass an Effect that resolves a redacted URL, such as `Config.Redacted("DATABASE_URL")` or a runtime binding's `connectionString`; wrap an already resolved redacted URL with `Effect.succeed(url)`. Call `listUsers()` inside a request or an explicit `Effect.scoped` block so the pool follows the [connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Connect in a Worker
 
-[Cloudflare integration](/cloudflare/data/drizzle)
+The [Cloudflare walkthrough](/cloudflare/data/drizzle) supplies the URL through Hyperdrive and configures `nodejs_compat`. Database-specific setup stays in [Neon](/neon/guides/drizzle) and [PlanetScale](/planetscale/guides/drizzle).
 
 ## Connect in a Fly Service
 
-[Fly integration](/fly/data/postgres)
+The [Fly deployment guide](/fly/data/drizzle-postgres) covers deployment and `ConnectPostgres`; its `connectionString` works with the same client above.
 
 ## Queries are Effects
 
@@ -114,10 +118,28 @@ const user = yield* db.query.Users.findFirst({
 });
 ```
 
-## Deploy this client
+## Generate and review migrations
 
-[AWS](/sql/providers/aws) · [Cloudflare](/sql/providers/cloudflare) · [Fly](/sql/providers/fly) · [Railway](/sql/providers/railway) · [All providers](/sql#find-your-provider)
+```typescript
+// drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  schema: "./src/schema.ts",
+  out: "./migrations",
+  dialect: "postgresql",
+});
+```
+
+```sh
+bunx drizzle-kit generate
+git add src/schema.ts drizzle.config.ts migrations
+git diff --cached
+git commit -m "Add database migration"
+```
+
+Generate on each schema change, stage and review the schema, SQL, and snapshots, then commit them before application. Apply the committed migrations with your existing runner before deploying code that needs the new schema. [Migrations](/sql/drizzle/migrations) covers application ownership: [`Drizzle.Schema`](/providers/drizzle/schema) is optional, and `alchemy deploy` does not replace an existing `drizzle-kit migrate` workflow.
 
 ## Where next
 
-[Migrations](/sql/drizzle/migrations) · [Effect SQL](/sql/effect-sql/postgres) · [Examples](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md)
+Choose a database and deployment guide in [SQL databases](/sql/databases). For tagged-template queries without an ORM, use [Effect SQL: Postgres](/sql/effect-sql/postgres).

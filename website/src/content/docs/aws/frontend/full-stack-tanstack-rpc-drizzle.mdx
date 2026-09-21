@@ -94,11 +94,15 @@ Copy `database.ts`, `bootstrap.ts`, and `client.ts` from the [DSQL example](http
 
 ## 3. The table
 
-Copy the example's [`schema.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/schema.ts) into `src/backend/`.
+Copy the example's [`schema.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/schema.ts) into `src/backend/`. It targets `app.todos` with application-generated UUIDs, matching the bootstrap and role grants. Check [DSQL compatibility](/aws/data/drizzle-dsql#define-the-table) before extending it.
+
+:::note
+`AWS.DSQL.Cluster` has no `migrations` prop. The Action in step 5 bootstraps the database without an HTTP `/setup` route; it is not a versioned migrator. Whenever the schema changes, explicitly generate migration files using the [DSQL migration workflow](/aws/data/drizzle-dsql#evolve-the-schema), with schema path `./src/backend/schema.ts`. Stage the schema, config, SQL, and snapshots, review with `git diff --cached`, and commit before release. The migration step consumes committed SQL, not SQL generated during deployment.
+:::
 
 ## 4. The backend RPC Lambda
 
-`connectDatabase` uses the non-admin `app_user` role with verified TLS.
+`connectDatabase` uses the non-admin `app_user` role with verified TLS. `DSQL.Connect` grants cluster-scoped `dsql:DbConnect` and signs IAM tokens locally; Drizzle opens the connection lazily and closes its pool with the invocation scope.
 
 ```typescript
 // src/backend/api.ts

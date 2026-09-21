@@ -1,14 +1,19 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Unowned } from "../../AdoptPolicy.ts";
+import { AdoptPolicy, OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { isResolved } from "../../Diff.ts";
+import { isOutput } from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
@@ -23,6 +28,7 @@ export type QueueUrl = string;
 export type QueueProps = {
   /**
    * Name of the queue. Must be a literal value, available before precreation.
+   * The reserved `.fifo` suffix is added for FIFO queues and removed for standard queues.
    * @default ${app}-${stage}-${id}?.fifo
    */
   queueName?: string;
@@ -177,7 +183,9 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *
  * `Queue` owns the lifecycle of a standard or FIFO SQS queue. A queue name
  * is auto-generated from the app, stage, and logical ID unless you provide
- * one explicitly. FIFO queues automatically append the `.fifo` suffix.
+ * one explicitly. The `.fifo` suffix follows the `fifo` setting, including
+ * for explicit names. Changing queue mode replaces the physical queue and
+ * updates downstream references; existing messages are not migrated.
  *
  * `queueName` and `fifo` must be known before the queue is precreated; unresolved
  * resource outputs in these identity properties fail with `UnresolvedQueueIdentity`.
@@ -208,6 +216,21 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *   receiveMessageWaitTime: "20 seconds",
  * });
  * ```
+ *
+ * ### Adopting an Existing Queue
+ * **Example:** Adopt a queue with output-valued settings
+ * ```typescript
+ * import * as Alchemy from "alchemy";
+ * import * as SQS from "alchemy/AWS/SQS";
+ *
+ * const audit = yield* SQS.Queue("Audit");
+ * const orders = yield* SQS.Queue("Orders", {
+ *   queueName: "existing-orders",
+ *   tags: { auditQueue: audit.queueArn },
+ * }).pipe(Alchemy.adopt(true));
+ * ```
+ * Explicit adoption preserves the queue identity and messages while reconciling
+ * settings, policies, and tags, even when mutable properties depend on other resources.
  *
  * ### Dead-Letter Queues
  * **Example:** Route failures to a dead-letter queue
@@ -321,7 +344,10 @@ export const QueueProvider = () =>
         },
       ) {
         if (props.queueName) {
-          return props.queueName;
+          const baseName = props.queueName.endsWith(".fifo")
+            ? props.queueName.slice(0, -".fifo".length)
+            : props.queueName;
+          return props.fifo ? `${baseName}.fifo` : baseName;
         }
         const baseName = yield* createPhysicalName({
           id,
@@ -468,7 +494,8 @@ export const QueueProvider = () =>
                     error.message?.includes(
                       "Dead letter target does not exist",
                     ) === true),
-                schedule: Schedule.spaced("5 seconds"),
+                // Allow propagation beyond SQS's 60-second name reuse cooldown.
+                schedule: Schedule.spaced("7 seconds"),
                 times: 10,
               }),
               Effect.map((r) => r.QueueUrl!),
@@ -546,23 +573,37 @@ export const QueueProvider = () =>
           };
           return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
-          if (!isResolved(news)) return undefined;
-          yield* validateEncryption(news);
+        diff: Effect.fn(function* ({ id, news = {}, olds = {}, output }) {
+          if (isOutput(news) || Effect.isEffect(news) || Config.isConfig(news))
+            return undefined;
+          const identity = { queueName: news.queueName, fifo: news.fifo };
+          if (!isResolved<Pick<QueueProps, "queueName" | "fifo">>(identity))
+            return undefined;
+          const encryption = {
+            kmsMasterKeyId: news.kmsMasterKeyId,
+            sqsManagedSseEnabled: news.sqsManagedSseEnabled,
+          };
+          if (
+            isResolved<
+              Pick<QueueProps, "kmsMasterKeyId" | "sqsManagedSseEnabled">
+            >(encryption)
+          )
+            yield* validateEncryption(encryption);
           const oldFifo = olds.fifo ?? false;
-          const newFifo = news.fifo ?? false;
+          const newFifo = identity.fifo ?? false;
           if (oldFifo !== newFifo) {
             return { action: "replace" } as const;
           }
-          const oldQueueName = yield* createQueueName(id, olds);
-          const newQueueName = yield* createQueueName(id, news);
+          const oldQueueName =
+            output?.queueName ?? (yield* createQueueName(id, olds));
+          const newQueueName = yield* createQueueName(id, identity);
           if (oldQueueName !== newQueueName) {
             return { action: "replace" } as const;
           }
           // Return undefined to allow update function to be called for other attribute changes
         }),
         // Mutable properties and bindings may reference identities that do not exist yet.
-        precreate: Effect.fn(function* ({ id, news = {} }) {
+        precreate: Effect.fn(function* ({ id, fqn, news = {} }) {
           const identity = { queueName: news.queueName, fifo: news.fifo };
           if (!isResolved(identity)) {
             return yield* Effect.fail(
@@ -580,10 +621,33 @@ export const QueueProvider = () =>
           ) {
             yield* validateEncryption(news);
           }
-          return yield* ensureQueueExists({
-            id,
-            news: { queueName: news.queueName, fifo: news.fifo },
-          });
+          const output = yield* ensureQueueExists({ id, news: identity });
+          // Unresolved mutable props can defer the engine's ownership probe.
+          const tags = yield* sqs
+            .listQueueTags({ QueueUrl: output.queueUrl })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "QueueDoesNotExist",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
+          if (!(yield* hasAlchemyTags(id, tags.Tags ?? {}))) {
+            const stack = yield* Stack;
+            const adopt =
+              stack.resources[fqn]?.Adopt ??
+              Option.getOrUndefined(yield* Effect.serviceOption(AdoptPolicy)) ??
+              (yield* AlchemyContext).adopt;
+            if (!adopt) {
+              return yield* new OwnedBySomeoneElse({
+                message: `Cannot adopt SQS queue '${output.queueName}' without explicit adoption.`,
+                resourceType: Queue.Type,
+                logicalId: id,
+                physicalName: output.queueName,
+              });
+            }
+          }
+          return output;
         }),
         reconcile: Effect.fn(function* ({
           id,
@@ -772,7 +836,7 @@ export const QueueProvider = () =>
           }).pipe(
             Effect.retry({
               while: (error) => error._tag === "QueueStillExists",
-              schedule: Schedule.spaced("5 seconds"),
+              schedule: Schedule.spaced("6 seconds"),
               times: 10,
             }),
           );

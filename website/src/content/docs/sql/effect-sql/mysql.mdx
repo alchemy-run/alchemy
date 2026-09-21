@@ -1,11 +1,13 @@
 ---
 title: MySQL
-description: SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — tagged-template queries with typed errors, one pool per execution.
+description: SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — portable tagged-template queries with typed errors and one pool per execution.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const deps = `@effect/sql-mysql2 mysql2`;
+
+`SQL.MySQL` provides tagged-template queries over a MySQL connection. Queries are Effects with typed `SqlError` failures, interruption, and tracing.
 
 Install the optional MySQL driver:
 
@@ -28,34 +30,49 @@ Install the optional MySQL driver:
 
 ```typescript
 import * as SQL from "alchemy/SQL/MySQL";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 
-const listUsers = Effect.gen(function* () {
-  const sql = yield* SQL.MySQL({ url: Config.Redacted("DATABASE_URL") });
-  return yield* sql<{ id: number; name: string }>`SELECT id, name FROM users`;
-});
+export const makeQueries = <E, R>(
+  connectionString:
+    | Redacted.Redacted<string>
+    | Effect.Effect<Redacted.Redacted<string>, E, R>,
+) =>
+  Effect.gen(function* () {
+    const sql = yield* SQL.MySQL({ url: connectionString });
+    return {
+      listUsers: () => sql<{ id: number; name: string }>`SELECT id, name FROM users`,
+    };
+  });
 ```
 
-Pass a redacted URL or a connection Effect. [Connection lifecycle](/sql/effect-sql/lifecycle).
-
-## Connection options
-
-```typescript
-const sql = yield* SQL.MySQL({
-  url: Config.Redacted("DATABASE_URL"),
-  poolConfig: { ssl: { rejectUnauthorized: true } },
-});
-```
-
-`SQL.MySQL` parses URL fields and query parameters into the driver configuration,
-including `poolConfig`. Explicit configuration overrides detected defaults.
+`url` accepts a redacted URL or an Effect resolving one, such as `Config.Redacted("DATABASE_URL")` or a runtime binding's `connectionString`. Other `@effect/sql-mysql2` options pass through. Call queries within a request or an explicit `Effect.scoped` block: the pool opens lazily and closes with that [scope](/sql/effect-sql/lifecycle).
 
 ## Workers defaults
 
-The [Hyperdrive guide](/cloudflare/data/hyperdrive#workers-defaults) documents
-workerd's text-protocol and eval-free parser defaults. Direct connections from
-Node or Bun retain prepared statements and mysql2's normal parsers by default.
+```typescript
+// Applied by default only when workerd is detected:
+const workersDefaults = {
+  disablePreparedStatements: true,
+  poolConfig: { disableEval: true },
+};
+```
+
+These defaults avoid Hyperdrive's unsupported prepared-statement protocol and Workers' prohibition on eval-based row parsers. Direct connections from Node or Bun retain prepared statements and mysql2's normal parsers by default. See [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) for Worker connection setup.
+
+## Override driver options
+
+`SQL.MySQL` parses URL fields and query parameters into driver configuration, including `poolConfig`. Explicit options override parsed values and detected defaults:
+
+```typescript
+const sql = yield* SQL.MySQL({
+  url: connectionString,
+  // For a proxy that lacks COM_STMT_PREPARE.
+  disablePreparedStatements: true,
+  // For a direct TLS connection.
+  poolConfig: { ssl: { rejectUnauthorized: true } },
+});
+```
 
 ## Queries
 
@@ -71,7 +88,9 @@ const rows = yield* sql`
 `;
 ```
 
-Rows are plain objects; supply a row type with `sql<Row>`. [Effect SQL](https://effect.website).
+Rows are plain objects; supply a row type with `sql<Row>`. The
+[`effect/unstable/sql/Statement`](https://effect.website) API also provides
+fragments, `sql.csv`, `sql.and`, and identifier escaping (backticks on MySQL).
 
 ## Errors
 
@@ -101,7 +120,7 @@ yield* sql.withTransaction(
 
 ## Provide as a service
 
-Depend on `SqlClient`, then provide the database layer:
+Depend on the generic `SqlClient` tag, then provide the database layer:
 
 ```typescript
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -114,16 +133,16 @@ const makeUsers = Effect.gen(function* () {
 });
 
 const users = yield* makeUsers.pipe(
-  Effect.provide(SQL.MySQLLayer({ url: Config.Redacted("DATABASE_URL") })),
+  Effect.provide(SQL.MySQLLayer({ url: connectionString })),
 );
 ```
 
-The layer provides `SqlClient` and the driver-specific client. Changing databases still requires compatible SQL.
+The layer provides `SqlClient.SqlClient` and `@effect/sql-mysql2`'s `MysqlClient` from one per-execution pool. Other drivers can satisfy the generic service, but changing engines still requires compatible SQL and transaction semantics.
 
-## Deploy this client
+## Provider setup
 
-[Choose a database](/sql/databases) · [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) · [All providers](/sql#find-your-provider)
+Choose a MySQL-compatible database and deployment guide in [SQL databases](/sql/databases); the client above only needs a connection URL.
 
 ## Where next
 
-[Migrations](/sql/effect-sql/migrations) · [Connection lifecycle](/sql/effect-sql/lifecycle) · [Drizzle](/sql/drizzle/mysql)
+Read [Migrations](/sql/effect-sql/migrations) to apply committed SQL files, or [Drizzle on MySQL](/sql/drizzle/mysql) for typed schemas over the same driver. [Connection lifecycle](/sql/effect-sql/lifecycle) covers per-request cleanup.

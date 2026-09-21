@@ -7,6 +7,8 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const deps = `@effect/sql-pg pg`;
 
+`SQL.Postgres` provides tagged-template queries over a Postgres connection. Queries are Effects with typed `SqlError` failures, interruption, and tracing.
+
 Install the optional Postgres driver:
 
 <Tabs syncKey="pkgManager">
@@ -28,16 +30,23 @@ Install the optional Postgres driver:
 
 ```typescript
 import * as SQL from "alchemy/SQL/Postgres";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 
-const listUsers = Effect.gen(function* () {
-  const sql = yield* SQL.Postgres({ url: Config.Redacted("DATABASE_URL") });
-  return yield* sql<{ id: number; name: string }>`SELECT id, name FROM users`;
-});
+export const makeQueries = <E, R>(
+  connectionString:
+    | Redacted.Redacted<string>
+    | Effect.Effect<Redacted.Redacted<string>, E, R>,
+) =>
+  Effect.gen(function* () {
+    const sql = yield* SQL.Postgres({ url: connectionString });
+    return {
+      listUsers: () => sql<{ id: number; name: string }>`SELECT id, name FROM users`,
+    };
+  });
 ```
 
-Pass a redacted URL or a connection Effect. [Connection lifecycle](/sql/effect-sql/lifecycle).
+`url` accepts a redacted URL or an Effect resolving one, such as `Config.Redacted("DATABASE_URL")` or a runtime binding's `connectionString`. Other `@effect/sql-pg` pool options pass through. Call queries within a request or an explicit `Effect.scoped` block: the pool opens lazily and closes with that [scope](/sql/effect-sql/lifecycle).
 
 ## Queries
 
@@ -53,7 +62,9 @@ const rows = yield* sql`
 `;
 ```
 
-Rows are plain objects; supply a row type with `sql<Row>`. [Effect SQL](https://effect.website).
+Rows are plain objects; supply a row type with `sql<Row>`. The
+[`effect/unstable/sql/Statement`](https://effect.website) API also provides
+fragments, `sql.csv`, `sql.and`, and identifier escaping.
 
 ## Errors
 
@@ -83,7 +94,7 @@ yield* sql.withTransaction(
 
 ## Provide as a service
 
-Depend on `SqlClient`, then provide the database layer:
+Depend on the generic `SqlClient` tag, then provide the database layer:
 
 ```typescript
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -96,16 +107,16 @@ const makeUsers = Effect.gen(function* () {
 });
 
 const users = yield* makeUsers.pipe(
-  Effect.provide(SQL.PostgresLayer({ url: Config.Redacted("DATABASE_URL") })),
+  Effect.provide(SQL.PostgresLayer({ url: connectionString })),
 );
 ```
 
-The layer provides `SqlClient` and the driver-specific client. Changing databases still requires compatible SQL.
+The layer provides `SqlClient.SqlClient` and `@effect/sql-pg`'s `PgClient` from one per-execution pool. Other drivers can satisfy the generic service, but changing engines still requires compatible SQL and transaction semantics.
 
-## Deploy this client
+## Provider setup
 
-[Choose a database](/sql/databases) · [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) · [All providers](/sql#find-your-provider)
+Choose a database and deployment guide in [SQL databases](/sql/databases); the client above only needs a connection URL. [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) and [Fly Managed Postgres](/fly/data/postgres) cover runtime-specific bindings.
 
 ## Where next
 
-[Migrations](/sql/effect-sql/migrations) · [Connection lifecycle](/sql/effect-sql/lifecycle) · [Drizzle](/sql/drizzle/postgres)
+Read [Migrations](/sql/effect-sql/migrations) to apply committed SQL files, or [Drizzle on Postgres](/sql/drizzle/postgres) for typed schemas over the same driver. [Connection lifecycle](/sql/effect-sql/lifecycle) covers per-request cleanup.

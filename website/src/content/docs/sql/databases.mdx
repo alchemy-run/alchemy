@@ -1,37 +1,48 @@
 ---
-title: Choose a database
-description: Database integration guides for Aurora, D1, Fly, Neon, PlanetScale, Prisma, and Railway.
+title: Databases
+description: Compare database engines, connection paths, and deployment guides across Alchemy's SQL providers.
 ---
 
-## Find your database
+Choose the database independently from the application runtime where supported. For example, a Cloudflare Worker or Hetzner application can both use Neon Postgres.
 
-| Database | Guides |
-| --- | --- |
-| Aurora PostgreSQL | [Drizzle + Lambda](/aws/data/drizzle-aurora) · [RDS](/aws/data/rds) |
-| Aurora MySQL / RDS MySQL | [RDS](/aws/data/rds) · [MySQL client](/sql/effect-sql/mysql) |
-| Aurora DSQL | [Drizzle + Lambda](/aws/data/drizzle-dsql) |
-| Cloudflare D1 | [D1](/cloudflare/data/d1) · [Drizzle](/cloudflare/data/d1-drizzle) |
-| Durable Object SQLite | [Cloudflare](/sql/providers/cloudflare#durable-objects) · [Migrations](/sql/effect-sql/migrations#durable-object-migrations) |
-| Fly Managed Postgres | [Fly](/fly/data/postgres) |
-| Neon Postgres | [Neon](/sql/providers/neon) · [Connections](/neon/data/connections) |
-| PlanetScale Postgres | [Postgres](/planetscale/data/postgres) |
-| PlanetScale MySQL/Vitess | [MySQL](/planetscale/data/mysql) |
-| Prisma Postgres | [Database](/prisma/data/postgres) · [Connections](/prisma/data/connections) |
-| Railway | [Postgres](/railway/data/postgres) · [MySQL](/railway/data/mysql) |
-| Existing database | [Connection configuration](/sql#already-have-a-database) |
+## Choose a database
 
-## Match the client to the database
+| Database | Engine | Connection path | Setup |
+| --- | --- | --- | --- |
+| AWS RDS / Aurora | Postgres or MySQL | VPC connection; Data API on supported configurations | [RDS & Aurora](/aws/data/rds) · [Aurora + Drizzle](/aws/data/drizzle-aurora) |
+| Aurora DSQL | Distributed SQL with Postgres wire compatibility | IAM-authenticated connection | [DSQL + Drizzle](/aws/data/drizzle-dsql) |
+| Cloudflare D1 | SQLite | Native Worker binding | [D1 + Drizzle](/cloudflare/data/d1-drizzle) |
+| Durable Object storage | SQLite per named object | Instance storage | [Durable Objects](/cloudflare/compute/durable-objects#sql-migrations) |
+| Fly Managed Postgres | Postgres | Private connection from a Fly Service | [Managed Postgres](/fly/data/postgres) |
+| Neon | Postgres | Direct or pooled URL; Hyperdrive from Workers | [Neon branches](/neon/data/branching) · [Connections](/neon/data/connections) |
+| PlanetScale Postgres | Postgres | Role connection URL; Hyperdrive from Workers | [PlanetScale Postgres](/planetscale/data/postgres) |
+| PlanetScale Vitess | MySQL | Password connection URL; Hyperdrive from Workers | [PlanetScale MySQL](/planetscale/data/mysql) |
+| Prisma Postgres | Postgres | Database connection URL | [Prisma Postgres](/prisma/data/postgres) |
+| Railway Postgres | Postgres | Private service URL or public TCP proxy | [Railway Postgres](/railway/data/postgres) |
+| Railway MySQL | MySQL | Private service URL or public TCP proxy | [Railway MySQL](/railway/data/mysql) |
 
-[Effect SQL](/sql/effect-sql/postgres) · [Drizzle](/sql/drizzle/postgres) · [Prisma ORM](/sql/prisma/contracts)
+[Hyperdrive](/cloudflare/data/hyperdrive) pools connections to a database; it is not a database itself. The [Hetzner guide](/hetzner/data/drizzle-postgres) hosts the application on Hetzner and the database on Neon.
 
-Prisma ORM v8 requires PostgreSQL 17+. Aurora DSQL has [different SQL constraints](/aws/data/drizzle-dsql); its Drizzle integration does not establish Prisma support.
+## Choose a client
 
-## Decide where migrations run
+| Engine | Typed schema queries | Raw SQL |
+| --- | --- | --- |
+| Postgres | [Drizzle.Postgres](/sql/drizzle/postgres) · [Prisma ORM](/sql/prisma/postgres) | [SQL.Postgres](/sql/effect-sql/postgres) |
+| MySQL | [Drizzle.MySQL](/sql/drizzle/mysql) | [SQL.MySQL](/sql/effect-sql/mysql) |
+| D1 | [Drizzle.D1](/sql/drizzle/d1) | [SQL.D1](/sql/effect-sql/d1) |
+| Durable Objects | [Drizzle.DurableObject](/sql/drizzle/migrations#durable-object-migrations) | [Instance SQL](/sql/effect-sql/migrations#durable-object-migrations) |
 
-[SQL files](/sql/effect-sql/migrations) · [Drizzle](/sql/drizzle/migrations) · [Prisma](/sql/prisma/migrations)
+Prisma ORM v8 requires PostgreSQL 17+. Aurora DSQL has its [own authentication and SQL constraints](/aws/data/drizzle-dsql); Postgres wire compatibility does not establish Prisma support or support for every PostgreSQL feature.
 
-Use the selected database's migration path. Private databases may require a runner inside their network.
+## Commit migration files
 
-## Find your runtime
+```sh
+pnpm exec drizzle-kit generate
+git add src/schema.ts drizzle.config.ts drizzle
+git diff --cached
+git commit -m "Add schema migration"
+```
 
-[Browse providers](/sql#find-your-provider)
+This example uses `out: "./drizzle"`; use the output directory configured by your generator and apply committed SQL through the selected database's migration workflow. Private databases require a runner with network access.
+
+[Drizzle migrations](/sql/drizzle/migrations) · [Handwritten SQL](/sql/effect-sql/migrations) · [Prisma contracts](/sql/prisma/migrations) · [Runtime integration guides](/sql#find-an-integration)
