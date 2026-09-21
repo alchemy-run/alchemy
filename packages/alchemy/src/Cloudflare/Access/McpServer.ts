@@ -195,6 +195,9 @@ export type McpServer = Resource<
  * endpoint registered on the account so its tools and prompts can be
  * discovered, governed, and exposed to users through an MCP portal.
  *
+ * Use {@link McpPortal} to create the gateway. Creating a server does not
+ * attach it to a portal; portal membership is managed outside Alchemy.
+ *
  * The product surface is in beta and requires the AI Controls
  * entitlement; accounts without it receive the typed `Forbidden` error
  * on all writes. The upstream `hostname` and `authType` are create-only
