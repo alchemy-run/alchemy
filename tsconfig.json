@@ -119,6 +119,12 @@
       "path": "./examples/aws-rds/tsconfig.json"
     },
     {
+      "path": "./examples/aws-aurora-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-dsql-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-static-site/tsconfig.json"
     },
     {

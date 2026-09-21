@@ -30,7 +30,7 @@ const users = yield* sql`SELECT * FROM users`;
 const posts = yield* sql`SELECT * FROM posts`;
 ```
 
-For each constructed client, queries in the same scope reuse one underlying client; distinct client constructions do not share pools. The first query builds it and scope closure runs its finalizers, so merely constructing a client during plan or deploy does not connect.
+For each constructed client, queries in the same scope reuse one underlying client; distinct client constructions do not share pools. The first query builds it and scope closure runs its finalizers. Merely constructing a client during plan or deploy does not connect; migration resources connect separately when applying migrations.
 
 ## Why not a global pool
 

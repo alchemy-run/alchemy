@@ -46,6 +46,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   "Better Auth": l("key-round"),
   GitHub: b("github"),
   Git: c("git"),
+  Stripe: b("stripe"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
