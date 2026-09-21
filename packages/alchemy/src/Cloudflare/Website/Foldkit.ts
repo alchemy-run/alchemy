@@ -248,7 +248,9 @@ export const Foldkit: {
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff)
+            ? (propsEff as Effect.Effect<any, never, any>)
+            : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             // No `assets` default of its own: the routing is derived from

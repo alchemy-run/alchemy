@@ -2788,7 +2788,7 @@ export const LiveWorkerProvider = () =>
         const subdomain = yield* workers
           .getScriptSubdomain({ accountId, scriptName })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),
@@ -4264,7 +4264,7 @@ export const LiveWorkerProvider = () =>
             scriptName: name,
           })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),

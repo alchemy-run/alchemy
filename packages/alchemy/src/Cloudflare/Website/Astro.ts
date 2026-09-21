@@ -279,7 +279,9 @@ export const Astro: {
         id,
         Effect.gen(function* () {
           const props: any =
-            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+            (Effect.isEffect(propsEff)
+              ? yield* propsEff as Effect.Effect<any, never, any>
+              : propsEff) ?? {};
           const session = props.sessionKVBindingName;
           const sessionBindingName =
             typeof session === "string" ? session : "SESSION";

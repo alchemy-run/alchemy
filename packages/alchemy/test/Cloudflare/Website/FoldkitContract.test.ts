@@ -218,6 +218,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
                   vite,
                   env: { VITE_SELF_URL: Worker.URL },
                   assets: {
+                    directory: "ignored-by-vite",
                     notFoundHandling: "404-page",
                     runWorkerFirst: ["/api/*"],
                   },

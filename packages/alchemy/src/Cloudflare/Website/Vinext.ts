@@ -200,7 +200,9 @@ export const Vinext: {
         id,
         Effect.gen(function* () {
           const props: any =
-            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+            (Effect.isEffect(propsEff)
+              ? yield* propsEff as Effect.Effect<any, never, any>
+              : propsEff) ?? {};
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
           // Do not bind VINEXT_KV_CACHE in user `env`.

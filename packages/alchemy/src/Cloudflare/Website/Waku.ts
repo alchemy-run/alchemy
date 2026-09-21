@@ -261,7 +261,9 @@ export const Waku: {
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff)
+            ? (propsEff as Effect.Effect<any, never, any>)
+            : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             compatibility: {
