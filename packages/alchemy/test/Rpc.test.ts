@@ -3,9 +3,11 @@ import * as Rpc from "@/Rpc";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpEffect from "effect/unstable/http/HttpEffect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -118,6 +120,70 @@ describe("Rpc fetch protocol", () => {
   });
 
   describe("error channel", () => {
+    it.effect("does not decode an empty HTTP 500 as a successful null", () => {
+      let calls = 0;
+      return withRpc(
+        {
+          check: () =>
+            Effect.sync(() => {
+              calls++;
+            }).pipe(Effect.andThen(Effect.die(new Error("exec failed")))),
+        },
+        (stub) =>
+          Effect.gen(function* () {
+            const result = yield* Effect.result(stub.check());
+            expect(Result.isFailure(result)).toBe(true);
+            if (Result.isFailure(result)) {
+              expect(result.failure).toMatchObject({
+                _tag: "RpcCallError",
+                method: "check",
+                status: 500,
+              });
+            }
+            expect(calls).toBe(1);
+          }),
+      );
+    });
+
+    it.effect(
+      "rejects non-success statuses before JSON or stream decoding",
+      () =>
+        Effect.gen(function* () {
+          for (const status of [302, 400, 401, 404, 409, 500, 503]) {
+            for (const streamed of [false, true]) {
+              let calls = 0;
+              const stub = Rpc.makeFetchRpcStub<{
+                check: () => Effect.Effect<unknown, Rpc.RpcCallError>;
+              }>({
+                fetch: (request) =>
+                  Effect.sync(() => {
+                    calls++;
+                    return HttpClientResponse.fromWeb(
+                      request,
+                      new Response("null", {
+                        status,
+                        headers: streamed
+                          ? { [Rpc.RPC_STREAM_HEADER]: "ndjson" }
+                          : { "content-type": "application/json" },
+                      }),
+                    );
+                  }),
+              });
+              const result = yield* Effect.result(stub.check());
+              expect(Result.isFailure(result)).toBe(true);
+              if (Result.isFailure(result)) {
+                expect(result.failure).toMatchObject({
+                  _tag: "RpcCallError",
+                  method: "check",
+                  status,
+                });
+              }
+              expect(calls).toBe(1);
+            }
+          }
+        }),
+    );
+
     it.effect("lifts a remote tagged failure into the error channel", () =>
       withRpc(shape, (stub) =>
         Effect.gen(function* () {

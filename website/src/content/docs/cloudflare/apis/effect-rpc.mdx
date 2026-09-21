@@ -17,9 +17,12 @@ different angle — you define **procedures** instead of HTTP
 endpoints, and you get a fully typed client for free with no URL
 construction or manual serialization.
 
-The transport is still HTTP under the hood, and both patterns
-produce the same `HttpEffect` type, so the wiring story is
-identical to the HTTP API guide:
+The Worker example below uses HTTP and produces the same `HttpEffect` type,
+so its wiring matches the HTTP API guide. Durable Objects also support
+[hibernatable WebSocket RPC](#http-and-websocket-rpc); the shared
+[RoomRpcs example](#build-the-roomrpcs-example) shows streaming and scoped clients.
+
+For the HTTP Worker:
 
 1. **Define schemas outside.** Domain types and tagged errors,
    importable by both server and client.
@@ -672,7 +675,7 @@ it composes Effect's RPC client, socket protocol, WebSocket, and JSON serializer
 Client middleware remains an explicit Layer dependency. Its `socket`, `protocol`,
 and `client` options pass through to Effect; `serialization` defaults to JSON
 and must match the server. See the
-[`RpcWebSocketClient.layer` API reference](/providers/cloudflare/workers/layer).
+[RpcDurableObject API reference](/providers/cloudflare/workers/rpcdurableobject).
 
 The Layer owns the client and connection lifetime, so ordinary calls do not need
 an explicit `Effect.scoped`. It closes the connection when the provided program
@@ -924,3 +927,215 @@ still hit R2. One `TaskRpcs` value, one client, two storage backends.
   interface over real REST endpoints.
 
 The full decision guide lives at [RPC](/apis).
+
+
+## Build the RoomRpcs example
+
+The following schema-backed Room is also used in the
+[Cloudflare](/cloudflare/apis/effect-rpc) and [Rivet](/rivet/apis/effect-rpc) guides.
+It is independent of the Task and Counter examples above.
+
+## Define RoomRpcs
+
+```typescript
+// src/rpcs.ts
+import * as Schema from "effect/Schema";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+
+export class RoomRpcs extends RpcGroup.make(
+  Rpc.make("greet", {
+    payload: { name: Schema.String },
+    success: Schema.String,
+  }),
+) {}
+```
+
+Keep the schema module free of host resources so browsers can import it without
+bundling deployment code. `greet` accepts a validated payload and returns a string.
+
+## Add a streaming procedure
+
+```diff lang="typescript"
+     success: Schema.String,
+   }),
++  Rpc.make("numbers", {
++    payload: { count: Schema.Number },
++    success: Schema.Number,
++    stream: true,
++  }),
+ ) {}
+```
+
+`stream: true` changes the handler and client method to an Effect Stream rather
+than an array-valued response.
+
+## Declare the Room
+
+```typescript
+// src/room.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { RoomRpcs } from "./rpcs.ts";
+
+export class Room extends Cloudflare.RpcDurableObject<Room>()(
+  "Room",
+  { schema: RoomRpcs },
+) {}
+```
+
+This declaration carries the schema; its implementation is a separate Layer
+provided by the hosting Worker.
+
+## Implement the handlers
+
+Append to `src/room.ts`:
+
+```typescript
+export const RoomLive = Room.make(
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return RoomRpcs.toLayer({
+        greet: ({ name }) => Effect.succeed(`Hello, ${name}`),
+        numbers: ({ count }) => Stream.range(1, count).pipe(
+          Stream.schedule(Schedule.spaced("100 millis")),
+        ),
+      });
+    });
+  }),
+);
+```
+
+Return the handler Layer, not a running server acquisition. Each number is
+produced separately, making incremental delivery visible instead of hiding
+buffering behind an immediately available array.
+
+## Host the Room
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Room, RoomLive } from "./room.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.split("?")[0] !== "/rooms/lobby") {
+          return HttpServerResponse.empty({ status: 404 });
+        }
+        return yield* rooms.fetch("lobby", request);
+      }),
+    };
+  }).pipe(Effect.provide(RoomLive)),
+) {}
+```
+
+This public demonstration exposes only the fixed `lobby` object. For private
+rooms, authenticate and authorize the selected name **before** `rooms.fetch`.
+That method forwards an HTTP request or WebSocket upgrade; it is not itself an
+application procedure. Deploy this Worker in your
+[Cloudflare Stack](/cloudflare/setup).
+
+## Define a client service
+
+```typescript
+// src/client.ts
+import * as RpcWebSocketClient from "alchemy/Cloudflare/RpcWebSocketClient";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
+import * as Socket from "effect/unstable/socket/Socket";
+import { RoomRpcs } from "./rpcs.ts";
+
+export class RoomClient extends Context.Service<
+  RoomClient,
+  RpcClient.FromGroup<typeof RoomRpcs, RpcClientError>
+>()("RoomClient") {}
+```
+
+The dedicated client entrypoint is browser-safe. Import it directly rather than
+pulling the provider's deploy-time namespace into browser code.
+
+## Scope the connection
+
+Append to `src/client.ts`:
+
+```typescript
+export const roomClientLayer = (url: string) => RpcWebSocketClient.layer(
+  RoomClient,
+  RoomRpcs,
+  url,
+).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+```
+
+Pass the deployed Worker's `/rooms/lobby` URL with the `wss` scheme. The Layer
+owns the connection; provide it around the whole application or component
+program that shares the socket, not separately around every call.
+
+## Call a procedure
+
+```typescript
+export const greet = (url: string) => Effect.gen(function* () {
+  const room = yield* RoomClient;
+  return yield* room.greet({ name: "Sam" });
+}).pipe(Effect.provide(roomClientLayer(url)));
+```
+
+Running this Effect opens the connection and closes it when the program finishes,
+fails, or is interrupted. A UI with callback-based entrypoints can instead own
+one `ManagedRuntime` and must dispose it on application teardown.
+
+## Consume incremental results
+
+```typescript
+export const printNumbers = (url: string) => Effect.gen(function* () {
+  const room = yield* RoomClient;
+  yield* room.numbers({ count: 5 }).pipe(
+    Stream.runForEach((number) => Effect.log(number)),
+  );
+}).pipe(Effect.provide(roomClientLayer(url)));
+```
+
+`runForEach` observes arrivals without collecting the entire stream. Interrupting
+one stream releases its server-side work without requiring the shared socket to
+close. Queue-mode subscriptions still need their own consumer Scope.
+
+## Runtime behavior
+
+Returning a handler Layer enables HTTP NDJSON and WebSocket JSON transports;
+an incoming upgrade selects WebSocket mode. Idle native sockets can be retained
+through hibernation. The RPC bridge owns protocol metadata and heartbeats;
+application handlers do not implement acknowledgements.
+
+In-flight calls are **not replayed** after activation reset. Recovery with
+unfinished work resets the connection rather than rerunning mutations. Clients
+must handle transport errors and reconnect explicitly; use application-level
+idempotency and resume tokens where needed. A changed recorded serializer can
+reset a socket, but this is not schema compatibility validation.
+
+## Limitations
+
+Shared schemas do not provide authentication or authorization. Do not infer
+resumable streams or exactly-once mutations from connection recovery. Keep
+client/server serialization compatible and coordinate schema changes. Do not
+store application data by overwriting reserved RPC attachment metadata.
+
+## Related guides
+
+- [Durable Objects](/cloudflare/compute/durable-objects)
+- [Hibernatable WebSockets](/cloudflare/compute/hibernatable-websockets)
+- [Celld Effect RPC](/celld/apis/effect-rpc) · [Rivet Effect RPC](/rivet/apis/effect-rpc)
+- [Worker reference](/providers/cloudflare/workers/worker)
+- [DurableObject reference](/providers/cloudflare/workers/durableobject)

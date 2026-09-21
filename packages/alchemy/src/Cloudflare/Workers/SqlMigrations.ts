@@ -1,18 +1,16 @@
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { ALCHEMY_DEFAULT_TABLE } from "../../SQL/Migrations/AlchemyFormat.ts";
 import {
+  captureSqlMigrations,
+  type SqlMigrationsInput,
+} from "../../Workers/SqlMigrations.ts";
+import type {
   MigrationError,
-  type MigrationHistoryConflictError,
+  MigrationHistoryConflictError,
 } from "../../SQL/Migrations/Format.ts";
 import type { DurableObjectState } from "./DurableObjectState.ts";
 import { applySqlMigrations } from "./SqlMigrationsApply.ts";
-import {
-  SqlMigrationsRuntime,
-  type SqlMigrationSnapshot,
-  type SqlMigrationsExport,
-} from "./SqlMigrationsRuntime.ts";
+import type { SqlMigrationSnapshot } from "./SqlMigrationsRuntime.ts";
 import { Worker } from "./Worker.ts";
 
 export type { SqlMigrationSnapshot } from "./SqlMigrationsRuntime.ts";
@@ -32,15 +30,7 @@ export interface SqlMigrations extends SqlMigrationSnapshot {
   >;
 }
 
-/** A migrations directory, optionally with a custom bookkeeping table. */
-export type SqlMigrationsInput =
-  | string
-  | {
-      /** Directory relative to the directory where Alchemy runs. */
-      readonly dir: string;
-      /** Applied-migrations table. Defaults to `__alchemy_migrations`. */
-      readonly table?: string;
-    };
+export type { SqlMigrationsInput } from "../../Workers/SqlMigrations.ts";
 
 /**
  * Read SQL migrations during construction and carry them into a Durable
@@ -106,33 +96,10 @@ export type SqlMigrationsInput =
 export const SqlMigrations = Effect.fn("Cloudflare.SqlMigrations")(function* (
   input: SqlMigrationsInput,
 ) {
-  const { dir, table = ALCHEMY_DEFAULT_TABLE } =
-    typeof input === "string" ? { dir: input } : input;
-  const key = `alchemy:sql-migrations:${JSON.stringify([dir, table])}`;
-  if (!globalThis.__ALCHEMY_RUNTIME__) {
-    const { readMigrationRecords } = yield* Effect.promise(
-      () => import("../../SQL/Migrations/Records.ts"),
-    );
-    const snapshot: SqlMigrationSnapshot = {
-      _tag: "Cloudflare.SqlMigrations",
-      table,
-      records: yield* readMigrationRecords(dir).pipe(Effect.orDie),
-    };
-    yield* (yield* Worker).export(key, {
-      kind: "sqlMigrations",
-      snapshot,
-    } satisfies SqlMigrationsExport);
-    return makeSqlMigrations(snapshot);
-  }
-  const bundles = yield* Effect.serviceOption(SqlMigrationsRuntime);
-  const snapshot = Option.isSome(bundles) ? bundles.value[key] : undefined;
-  if (snapshot === undefined) {
-    return yield* Effect.die(
-      new MigrationError({
-        message: `SQL migrations for ${dir} were not captured during construction. Call SqlMigrations in the outer Durable Object Effect.`,
-      }),
-    );
-  }
+  const snapshot = yield* captureSqlMigrations(
+    input,
+    globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* Worker,
+  );
   return makeSqlMigrations(snapshot);
 });
 

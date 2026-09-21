@@ -167,8 +167,21 @@ export default {
       return Response.json(await object.seed(name === "persisted-object"));
     }
     if (path === "/snapshot") {
-      return Response.json(await object.snapshot());
+      try {
+        return Response.json(await object.snapshot());
+      } catch (error) {
+        return Response.json(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          { status: 500 },
+        );
+      }
     }
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found", {
+      status: 404,
+      headers: { "x-alchemy-upgrade-version": "v1" },
+    });
   },
 };

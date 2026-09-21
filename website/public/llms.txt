@@ -129,6 +129,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Workers for Platforms](https://alchemy.run/cloudflare/compute/workers-for-platforms) — Run your customers' Workers in your own account — create a dispatch namespace, upload user Workers into it, and route requests from a platform Worker with the Get binding.
 - [Containers](https://alchemy.run/cloudflare/compute/containers) — Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
 - [Durable Objects](https://alchemy.run/cloudflare/compute/durable-objects) — Durable Objects are globally-unique stateful instances with transactional storage — define one as an Effect, persist state per key, expose typed RPC methods, and stream values back to the caller.
+- [Durable schedules](https://alchemy.run/cloudflare/compute/durable-schedules) — Register an archive callback, schedule and cancel jobs, and coordinate them with cell storage.
 - [Gradual deployments](https://alchemy.run/cloudflare/compute/gradual-deployments) — Roll out Worker deploys incrementally — upload preview versions, canary a percentage of live traffic, ramp to 100%, pin users to a version during the rollout, and verify which version served each request.
 - [Python Workers](https://alchemy.run/cloudflare/compute/python-workers) — Deploy Cloudflare Python Workers by pointing main at a .py file — alchemy uploads the modules, vendors pyproject.toml dependencies with uv, and serves them locally through workerd's built-in Pyodide.
 - [Workers](https://alchemy.run/cloudflare/compute/workers) — Cloudflare Workers are the compute Runtime of every Alchemy app — declare the Worker and its handler in one file, bind resources with full type safety, and call other Workers over schemaless RPC.
@@ -172,6 +173,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
+- [SQL migrations](https://alchemy.run/cloudflare/data/sql-migrations) — Capture SQL files in the bundle and apply them once per Cloudflare durable instance.
 
 ## Cloudflare — Messaging & events
 
@@ -585,4 +587,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~987 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~1002 KB) — only fetch it when you need to locate a specific resource's reference page.

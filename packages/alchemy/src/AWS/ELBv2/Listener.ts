@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -367,17 +368,36 @@ export const ListenerProvider = () =>
 
       // Ensure — create if missing. The first certificate is the default.
       if (!listener?.ListenerArn) {
-        const created = yield* elbv2.createListener({
-          LoadBalancerArn: loadBalancerArn,
-          Port: news.port,
-          Protocol: desiredProtocol,
-          Certificates:
-            certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
-          SslPolicy: news.sslPolicy,
-          AlpnPolicy: news.alpnPolicy,
-          MutualAuthentication: mutualAuthentication,
-          DefaultActions: defaultActions,
-        });
+        const created = yield* elbv2
+          .createListener({
+            LoadBalancerArn: loadBalancerArn,
+            Port: news.port,
+            Protocol: desiredProtocol,
+            Certificates:
+              certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
+            SslPolicy: news.sslPolicy,
+            AlpnPolicy: news.alpnPolicy,
+            MutualAuthentication: mutualAuthentication,
+            DefaultActions: defaultActions,
+          })
+          .pipe(
+            // A freshly-issued ACM certificate ARN can lag visibility to
+            // ELB by a few seconds — ride that out, bounded (30s). A
+            // certificate that is still PENDING_VALIDATION answers
+            // `UnsupportedCertificate` and is a genuine failure here: gate
+            // the listener on `AWS.ACM.CertificateValidation` (or a
+            // Route 53-validated `AWS.ACM.Certificate`) so it depends on
+            // issuance rather than on the request.
+            Effect.retry({
+              while: (error): boolean =>
+                certs.length > 0 &&
+                error._tag === "CertificateNotFoundException",
+              schedule: Schedule.max([
+                Schedule.spaced("5 seconds"),
+                Schedule.recurs(6),
+              ]),
+            }),
+          );
         listener = created.Listeners?.[0];
         if (!listener?.ListenerArn) {
           return yield* Effect.die(

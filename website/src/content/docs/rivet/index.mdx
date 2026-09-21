@@ -1,0 +1,64 @@
+---
+title: Rivet
+description: Build Effect-native actors on a private Rivet Engine and runner.
+---
+
+Rivet runs named actors behind an Engine and one or more runners. Alchemy's
+`Rivet.DurableObject` owns the actor API; `Rivet.Worker` hosts those actors.
+It is not a Cloudflare Worker and does not serve an application `fetch` handler.
+
+## Start here
+
+[Setup](/rivet/setup) provisions a private Engine and runner with the ECS host.
+[Workers](/rivet/compute/workers) registers actors and explains how application
+callers reach them without exposing the Engine.
+
+## Compute
+
+- [Workers](/rivet/compute/workers) — actor runner composition.
+- [Durable Objects](/rivet/compute/durable-objects) — a persisted Counter per name.
+- [Durable schedules](/rivet/compute/durable-schedules) — archive callbacks and native scheduled wakes.
+- [Hibernatable WebSockets](/rivet/compute/hibernatable-websockets) — accepted native connections and validated Session attachments.
+
+Rivet does **not** expose an Alchemy Workflow service. Use
+[Cloudflare Workflows](/cloudflare/compute/workflows) or
+[Celld Workflows](/celld/compute/workflows) for checkpointed orchestration rather
+than treating an actor schedule as a replayable multi-step workflow.
+
+## APIs
+
+[Effect RPC](/rivet/apis/effect-rpc) uses the same `RoomRpcs` schema as the other
+provider guides. Incremental streams use native WebSockets; buffered action
+calls are not a streaming transport. The Engine stays private. An application
+must provide authenticated WebSocket-capable ingress for browser access.
+
+## Data
+
+[SQL migrations](/rivet/data/sql-migrations) captures Users migrations in the
+runner bundle and applies them through native SQLite transactions. SQL queries
+return row arrays. Actor-state KV, SQL, and native scheduling have separate
+persistence boundaries; no transaction spans all three.
+
+## Runtime behavior
+
+Actors retain identity by name and persist through their configured Engine
+backend. Connections have persistent native connection state, distinct from
+actor KV. Activation memory is disposable, including JavaScript maps and fibers.
+
+## Limitations
+
+RivetKit 2.3.10 keeps actors with open raw WebSockets active instead of putting
+them to sleep automatically. Sockets can recover after explicit native sleep;
+see the [WebSocket lifecycle limitation](/rivet/compute/hibernatable-websockets#limitations).
+
+The default single-node RocksDB configuration uses ephemeral engine-node disk;
+use an external PostgreSQL backend when storage must survive node replacement.
+Do not expose the Engine's data plane: gateway reachability is not application
+authorization. A Lambda Function URL cannot reverse-proxy WebSockets.
+
+## Related guides
+
+- [Setup](/rivet/setup)
+- [Cloudflare overview](/cloudflare) · [Celld overview](/celld)
+- [Cluster reference](/providers/rivet/cluster)
+- [Worker reference](/providers/rivet/worker)

@@ -25,6 +25,8 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
+      { label: "Celld", link: "/celld" },
+      { label: "Rivet", link: "/rivet" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
@@ -505,11 +507,15 @@ export default defineConfig({
                   link: "/cloudflare/compute/durable-objects",
                 },
                 {
+                  label: "Durable schedules",
+                  link: "/cloudflare/compute/durable-schedules",
+                },
+                {
                   label: "Cross-worker DOs",
                   link: "/cloudflare/compute/cross-worker-durable-object",
                 },
                 {
-                  label: "WebSockets",
+                  label: "Hibernatable WebSockets",
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
@@ -576,6 +582,10 @@ export default defineConfig({
             {
               label: "Data",
               items: [
+                {
+                  label: "SQL migrations",
+                  link: "/cloudflare/data/sql-migrations",
+                },
                 { label: "D1", link: "/cloudflare/data/d1" },
                 { label: "KV", link: "/cloudflare/data/kv" },
                 { label: "R2", link: "/cloudflare/data/r2" },
@@ -1517,6 +1527,79 @@ export default defineConfig({
             { label: "Using certificates", link: "/acme/using-certificates" },
             { label: "Troubleshooting", link: "/acme/troubleshooting" },
             providerResourcesEntry("ACME"),
+          ],
+        },
+        {
+          label: "Celld",
+          items: [
+            { label: "Overview", link: "/celld" },
+            { label: "Setup", link: "/celld/setup" },
+            {
+              label: "Compute",
+              items: [
+                { label: "Workers", link: "/celld/compute/workers" },
+                {
+                  label: "Durable Objects",
+                  link: "/celld/compute/durable-objects",
+                },
+                {
+                  label: "Durable schedules",
+                  link: "/celld/compute/durable-schedules",
+                },
+                {
+                  label: "Hibernatable WebSockets",
+                  link: "/celld/compute/hibernatable-websockets",
+                },
+                { label: "Workflows", link: "/celld/compute/workflows" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [{ label: "Effect RPC", link: "/celld/apis/effect-rpc" }],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "SQL migrations", link: "/celld/data/sql-migrations" },
+              ],
+            },
+            providerApiReferenceEntry("Celld"),
+          ],
+        },
+        {
+          label: "Rivet",
+          items: [
+            { label: "Overview", link: "/rivet" },
+            { label: "Setup", link: "/rivet/setup" },
+            {
+              label: "Compute",
+              items: [
+                { label: "Workers", link: "/rivet/compute/workers" },
+                {
+                  label: "Durable Objects",
+                  link: "/rivet/compute/durable-objects",
+                },
+                {
+                  label: "Durable schedules",
+                  link: "/rivet/compute/durable-schedules",
+                },
+                {
+                  label: "Hibernatable WebSockets",
+                  link: "/rivet/compute/hibernatable-websockets",
+                },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [{ label: "Effect RPC", link: "/rivet/apis/effect-rpc" }],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "SQL migrations", link: "/rivet/data/sql-migrations" },
+              ],
+            },
+            providerApiReferenceEntry("Rivet"),
           ],
         },
         providersSidebarEntry(),

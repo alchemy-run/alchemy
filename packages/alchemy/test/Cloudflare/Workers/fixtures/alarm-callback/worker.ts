@@ -132,6 +132,9 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             return yield* HttpServerResponse.json(
               yield* object.prepareReset(url.searchParams.get("value") ?? id),
             );
+          case "release-reset":
+            yield* object.releaseReset();
+            break;
           case "optional":
             return yield* HttpServerResponse.json(yield* object.optional());
           case "release-pending":
@@ -158,7 +161,14 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             return HttpServerResponse.text("Not Found", { status: 404 });
         }
         return yield* HttpServerResponse.json({ ok: true });
-      }).pipe(Effect.orDie),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json(
+            { error: Cause.pretty(cause) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }),
 ) {}

@@ -118,3 +118,23 @@ GitHub Actions setup.
 - [Secrets & env](/cloudflare/security/secrets-env) — wire `.env` values and
   secrets into your Workers (deploy credentials live in your profile;
   app secrets are bindings).
+
+
+## Runtime behavior
+
+Cloudflare hosts the Worker and native bindings. Your Stack deploys its Worker
+resources directly; there is no Celld Fleet/Application or Rivet Engine to
+provision in this setup.
+
+## Limitations
+
+Account credentials authorize deployment, not application requests. Configure
+application authentication separately before publishing private object routes.
+Follow the target provider's setup instead of translating host declarations by
+changing an import.
+
+## Related guides
+
+- [Workers](/cloudflare/compute/workers)
+- [Celld setup](/celld/setup) · [Rivet setup](/rivet/setup)
+- [Worker reference](/providers/cloudflare/workers/worker)

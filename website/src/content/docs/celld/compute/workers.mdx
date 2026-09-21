@@ -1,0 +1,127 @@
+---
+title: Workers
+description: Compose an HTTP Worker and its durable objects, then publish them as a Celld Application.
+---
+
+Start with the Fleet and Stack from [Setup](/celld/setup). A Celld Worker stages
+code and bindings; an Application publishes and activates the selected graph.
+
+## Declare a Worker
+
+```typescript
+// src/worker.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, expose: "public" },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+  }),
+) {}
+```
+
+The outer Effect assembles the handler. It can resolve services and register
+bindings; request I/O belongs in `fetch`, not in construction.
+
+## Register a durable object
+
+Create the [Counter](/celld/compute/durable-objects) first, then add its class to
+the Worker's construction Effect:
+
+```diff lang="typescript"
++import Counter from "./counter.ts";
+
+   Effect.gen(function* () {
++    const counters = yield* Counter;
+     return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+   }),
+```
+
+Yielding the class registers its namespace on this Worker. It does not select
+or activate any particular Counter instance.
+
+## Call a named instance
+
+```diff lang="typescript"
+-    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
++    return {
++      fetch: Effect.gen(function* () {
++        const count = yield* counters.getByName("visits").increment();
++        return HttpServerResponse.text(String(count));
++      }),
++    };
+```
+
+`"visits"` selects one durable identity. Every request to this example increments
+the same counter; a real application should authorize any user-selected name.
+
+## Declare a service Worker
+
+```typescript
+// src/jobs.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Jobs extends Celld.Worker<Jobs>()(
+  "Jobs",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("Jobs ready")) };
+  }),
+) {}
+```
+
+This secondary Worker does not request public ingress. Service and queue-consumer
+Workers are separate graph members even though they share a fleet.
+
+## Publish the Worker graph
+
+Update the Setup stack:
+
+```diff lang="typescript"
++import Jobs from "./src/jobs.ts";
+
+-    const app = yield* Celld.Application("App", { entrypoint: Api });
++    const app = yield* Celld.Application("App", {
++      entrypoint: Api,
++      workers: [Jobs],
++    });
+```
+
+Only the entrypoint may request public ingress. List each Worker exactly once,
+and keep service-binding and queue-consumer Workers in the same fleet. Staging a
+Worker without publishing the Application does not activate a new revision.
+
+## Runtime behavior
+
+Construction is reused by the runtime. Each HTTP event gets its own request
+scope; acquire disposable resources lazily there. Durable Object instance
+initialization is a separate inner Effect, which runs on activation. Provide
+implementation dependencies once with `Effect.provide`; combine independent
+layers with `Layer.mergeAll`.
+
+## Limitations
+
+Celld's Worker surface is provider-owned. Cloudflare-only bindings do not become
+available by changing an import. Public ingress is an application decision;
+management traffic stays on the host's private control path.
+
+Celld v0.5.0 runs cron triggers only on the Application entrypoint and cannot
+safely retire a previous root's persisted cron cell. Once the root has cron
+triggers, Application rejects changing its script identity or removing all
+triggers before native publication writes. Keep the same root script and a
+nonempty schedule; changing cron expressions remains supported. Replacing that
+root or removing its entire schedule requires verified native cron retirement
+support.
+
+## Related guides
+
+- [Durable Objects](/celld/compute/durable-objects)
+- [Effect RPC](/celld/apis/effect-rpc)
+- [Cloudflare Workers](/cloudflare/compute/workers) · [Rivet Workers](/rivet/compute/workers)
+- [Worker reference](/providers/celld/worker)
+- [Application reference](/providers/celld/application)

@@ -280,13 +280,15 @@ export const LaunchTemplateProvider = () =>
         ec2
           .describeLaunchTemplates({
             LaunchTemplateIds: [launchTemplateId],
-          } as any)
+          })
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+            Effect.catchTag(
+              [
+                "InvalidLaunchTemplateId.NotFound",
+                "InvalidLaunchTemplateName.NotFoundException",
+              ],
+              () => Effect.succeed(undefined),
             ),
           );
 
@@ -294,13 +296,15 @@ export const LaunchTemplateProvider = () =>
         ec2
           .describeLaunchTemplates({
             LaunchTemplateNames: [launchTemplateName],
-          } as any)
+          })
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+            Effect.catchTag(
+              [
+                "InvalidLaunchTemplateId.NotFound",
+                "InvalidLaunchTemplateName.NotFoundException",
+              ],
+              () => Effect.succeed(undefined),
             ),
           );
 
@@ -583,12 +587,14 @@ export const LaunchTemplateProvider = () =>
           yield* ec2
             .deleteLaunchTemplate({
               LaunchTemplateId: output.launchTemplateId,
-            } as any)
+            })
             .pipe(
-              Effect.catch((error) =>
-                isLaunchTemplateNotFound(error)
-                  ? Effect.void
-                  : Effect.fail(error),
+              Effect.catchTag(
+                [
+                  "InvalidLaunchTemplateId.NotFound",
+                  "InvalidLaunchTemplateName.NotFoundException",
+                ],
+                () => Effect.void,
               ),
             );
 
@@ -597,21 +603,6 @@ export const LaunchTemplateProvider = () =>
       };
     }),
   );
-
-const isLaunchTemplateNotFound = (error: unknown) => {
-  const tag = (error as { _tag?: string })?._tag;
-  return (
-    tag === "InvalidLaunchTemplateNameNotFoundException" ||
-    tag === "InvalidLaunchTemplateIdNotFoundException" ||
-    tag === "InvalidLaunchTemplateId.Malformed" ||
-    tag === "InvalidLaunchTemplateId.NotFound" ||
-    // Live `describeLaunchTemplates` surfaces the dot-form codes, which the
-    // ec2 SDK leaves untyped — a missing template on the read-before-create
-    // probe otherwise fails the whole plan.
-    tag === "InvalidLaunchTemplateName.NotFoundException" ||
-    tag === "InvalidLaunchTemplateId.NotFoundException"
-  );
-};
 
 const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
   Object.fromEntries(

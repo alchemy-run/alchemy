@@ -118,6 +118,36 @@ Malformed private failure payloads also fail explicitly rather than becoming
 application errors. No public transport wrapper is exposed.
 :::
 
+## Define an application failure
+
+The matching [Celld guide](/celld/compute/workflows) uses this `Busy` error. In a
+workflow module, add the error before the class declaration:
+
+```typescript
+import * as Data from "effect/Data";
+
+class Busy extends Data.TaggedError("Busy")<{ key: string }> {}
+```
+
+The tag and serializable fields, not prototype identity, are the replay contract.
+
+## Handle a replayed application failure
+
+Inside the workflow body, handle the task's failure after its native retries:
+
+```typescript
+const result = yield* Cloudflare.Workflows.task(
+  "process",
+  Effect.fail(new Busy({ key: "job-1" })),
+  { retries: { limit: 2, delay: "1 second", backoff: "linear" } },
+).pipe(
+  Effect.catchTag("Busy", (error) => Effect.succeed({ deferred: error.key })),
+);
+```
+
+This intentionally failing task returns a deferred result after exhausting its
+retry policy. The same tag-based handling applies to a cached rejection on replay.
+
 ## Sleep between steps
 
 `sleep` parks the instance for a duration; `sleepUntil` parks it
@@ -164,8 +194,10 @@ again from the top.
 
 :::caution[Always wrap I/O in `task`]
 Anything that touches the outside world — an HTTP call, a binding
-call like `kv.put` — goes inside a `task` so the side effect runs
-exactly once. Outside a task it runs on every replay.
+call like `kv.put` — goes inside a `task` so completed checkpoints are not
+re-executed on ordinary replay. Still make the operation idempotent: a crash
+after an external write but before its checkpoint can repeat the write.
+Outside a task it runs on every replay.
 :::
 
 ## Use bindings inside tasks
@@ -425,3 +457,22 @@ Related:
 Reference:
 
 - [Workflow API reference](/providers/cloudflare/workflows/workflow)
+
+## Runtime behavior
+
+Completed steps replay their journaled outcomes. Each task and rollback attempt
+owns a fresh callback scope that closes before retry; interruption joins active
+callback cleanup. Construction remains isolate-scoped, not attempt-scoped.
+
+## Limitations
+
+Checkpoints do not make external writes exactly once. Keep step names and
+serialized data compatible across deployments. Cloudflare's rollback, native
+Workflow schedules, and product-event subscriptions are not Celld features, and
+Rivet does not expose an Alchemy Workflow API.
+
+## Related guides
+
+- [Celld Workflows](/celld/compute/workflows)
+- [Durable schedules](/cloudflare/compute/durable-schedules)
+- [Workflow reference](/providers/cloudflare/workflows/workflow)

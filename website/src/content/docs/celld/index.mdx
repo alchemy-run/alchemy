@@ -1,0 +1,59 @@
+---
+title: Celld
+description: Build Effect-native Workers, durable cells, and Workflows on your own Celld fleet.
+---
+
+Celld runs V8 Workers and SQLite-backed durable cells on your infrastructure.
+Alchemy separates the **Fleet** that provides compute and storage from the
+**Application** that publishes and activates a graph of Workers. Deployment is
+API-only; it does not shell out to Wrangler or `celld deploy`.
+
+## Start here
+
+[Setup](/celld/setup) provisions an ECS-hosted fleet and publishes a small HTTP
+Worker. [Workers](/celld/compute/workers) explains construction, binding, and
+publication. Keep Celld's pinned runtime version when following these guides.
+
+## Compute
+
+- [Workers](/celld/compute/workers) — HTTP entrypoints and service composition.
+- [Durable Objects](/celld/compute/durable-objects) — a persisted Counter per name.
+- [Durable schedules](/celld/compute/durable-schedules) — archive callbacks with stable job IDs.
+- [Hibernatable WebSockets](/celld/compute/hibernatable-websockets) — native upgrades and validated Session attachments.
+- [Workflows](/celld/compute/workflows) — checkpointed tasks, typed failures, and attempt lifetimes.
+
+## APIs
+
+[Effect RPC](/celld/apis/effect-rpc) builds the schema-backed `RoomRpcs` API and a
+scoped WebSocket client. Class-method Durable Object RPC is a separate API; use
+schemas when clients cross a trust boundary.
+
+## Data
+
+[SQL migrations](/celld/data/sql-migrations) captures Users migrations during
+construction and applies them per durable instance. Celld also exposes native
+[KV](/providers/celld/kv/namespace), [D1](/providers/celld/d1/database),
+[R2](/providers/celld/r2/bucket), and [Queues](/providers/celld/queues/queue)
+through their own bindings.
+
+## Runtime behavior
+
+A cell's native storage, alarm, and socket lifecycle belong to Celld, not
+Cloudflare. In-memory state is activation-local; use durable storage and socket
+attachments for data needed after a wake. Application publication selects the
+whole Worker graph and reports an activated revision.
+
+## Limitations
+
+The matching [Cloudflare](/cloudflare) and [Rivet](/rivet) guides share teaching
+examples, not a blanket portability guarantee. Celld embeds V8 rather than
+workerd. Workflow rollback, sensitive outputs, Cloudflare product-event
+subscriptions, and Workflow-native cron metadata are not implied by similarly
+named APIs. Host capabilities determine Container and Sandbox availability.
+
+## Related guides
+
+- [Setup](/celld/setup)
+- [Cloudflare overview](/cloudflare) · [Rivet overview](/rivet)
+- [Fleet reference](/providers/celld/fleet)
+- [Application reference](/providers/celld/application)

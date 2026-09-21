@@ -10,7 +10,7 @@ import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
-import { isDurableObjectExport } from "../DurableObject.ts";
+import { isDurableObjectExport } from "../../../Workers/DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
@@ -50,6 +50,11 @@ export interface WorkerBundleOptions {
     | {
         kind: "effect";
         exports: Record<string, WorkerExport>;
+        /** Override the generated entry for provider-native bootstrap modules. */
+        makeVirtualEntry?: (
+          exports: Record<string, WorkerExport>,
+          stack: { name: string; stage: string },
+        ) => (importPath: string) => string;
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
@@ -207,7 +212,10 @@ export const WorkerBundle = Effect.gen(function* () {
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
+                (options.entry.makeVirtualEntry ?? makeEffectVirtualEntry)(
+                  options.entry.exports,
+                  options.stack,
+                ),
               ),
             ]
           : undefined,

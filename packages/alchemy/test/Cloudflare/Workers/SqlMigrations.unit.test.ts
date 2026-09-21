@@ -1,4 +1,8 @@
 import { purePlugin } from "@/Bundle/PurePlugin.ts";
+import { SqlMigrations as CelldSqlMigrations } from "@/Celld/SqlMigrations.ts";
+import type { CelldWorker as CelldWorkerResource } from "@/Celld/Worker.ts";
+import { Resource } from "@/Resource.ts";
+import { makeCelldVirtualEntry } from "@/Celld/FleetEntry.ts";
 import type { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import {
   SqlMigrations,
@@ -104,6 +108,62 @@ const generatedEntry = (exports: Record<string, WorkerExport>) =>
   })("./worker.ts");
 
 layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
+  it.effect(
+    "shares snapshots with Celld and embeds SQL without changing class identities",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* writeMigrations({
+          "0001_users.sql": "CREATE TABLE users (id INTEGER);",
+        });
+        const cloudflare = yield* capture(dir);
+        const host = makeWorkerRuntimeContext("celld-migrations-unit");
+        const Host = Context.Service<CelldWorkerResource, WorkerRuntimeContext>(
+          Resource<CelldWorkerResource>("Celld.Worker").Self.key,
+        );
+        const celld = yield* CelldSqlMigrations(dir).pipe(
+          Effect.provideService(Host, host),
+        );
+        const { default: _default, ...exports } = yield* host.exports;
+        expect(celld.records).toEqual(cloudflare.snapshot.records);
+        expect(celld._tag).toBe("Cloudflare.SqlMigrations");
+        expect(Object.keys(exports)).toEqual(Object.keys(cloudflare.exports));
+        const metadata = {
+          ...exports,
+          Users: { kind: "durableObject", provider: "Celld.Worker" },
+          Reports: { kind: "Celld.WorkflowExport" },
+        };
+        const stack = { name: "sql-migrations", stage: "test" };
+        const first = makeCelldVirtualEntry(metadata, stack)("./worker.ts");
+        expect(first).toContain("withSqlMigrations(entrypoint,");
+        expect(first).toContain("CREATE TABLE users");
+        expect(first).toContain(
+          'export class Users extends fleet.durableObject("Users")',
+        );
+        expect(first).toContain(
+          'export class Reports extends fleet.workflow("Reports")',
+        );
+        expect(first).not.toContain("Records.ts");
+        yield* fs.writeFileString(
+          path.join(dir, "0002_posts.sql"),
+          "CREATE TABLE posts (id INTEGER);",
+        );
+        yield* CelldSqlMigrations(dir).pipe(Effect.provideService(Host, host));
+        const { default: _nextDefault, ...nextExports } = yield* host.exports;
+        const second = makeCelldVirtualEntry(
+          { ...metadata, ...nextExports },
+          stack,
+        )("./worker.ts");
+        expect(second).not.toBe(first);
+        expect(second.match(/export class [^\n]+/g)).toEqual(
+          first.match(/export class [^\n]+/g),
+        );
+        expect(Object.keys(nextExports)).toEqual(Object.keys(exports));
+        expect(host.env).toEqual({});
+      }).pipe(Effect.scoped),
+  );
+
   it.effect("captures ordered flat files and their raw-content hashes", () =>
     Effect.gen(function* () {
       const first = "CREATE TABLE users (id INTEGER PRIMARY KEY);\n";
@@ -447,66 +507,68 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
       }),
   );
 
-  it.effect(
-    "emits the SqlMigrations factory and apply method without filesystem imports",
-    () =>
-      Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const input = yield* path.fromFileUrl(
-          new URL(
-            "../../../src/Cloudflare/Workers/SqlMigrations.ts",
-            import.meta.url,
-          ),
-        );
-        const { rolldown } = yield* Effect.promise(() => import("rolldown"));
-        const output = yield* Effect.acquireUseRelease(
-          Effect.promise(() =>
-            rolldown({
-              input,
-              platform: "neutral",
-              external: (id) => !id.startsWith(".") && !path.isAbsolute(id),
-              transform: {
-                define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
-              },
-              plugins: [purePlugin()],
-            }),
-          ),
-          (bundle) =>
-            Effect.promise(() =>
-              bundle.generate({ format: "esm", minify: "dce-only" }),
+  for (const provider of ["Cloudflare/Workers", "Celld"]) {
+    it.effect(
+      `emits the ${provider} SqlMigrations factory and apply method without filesystem imports`,
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const input = yield* path.fromFileUrl(
+            new URL(
+              `../../../src/${provider}/SqlMigrations.ts`,
+              import.meta.url,
             ),
-          (bundle) => Effect.promise(() => bundle.close()),
-        );
-        const chunks = output.output.filter((item) => item.type === "chunk");
-        const modules = chunks.flatMap((chunk) =>
-          Object.entries(chunk.modules)
-            .filter(([, module]) => module.renderedLength > 0)
-            .map(([id]) => id),
-        );
-        const imports = chunks.flatMap((chunk) => [
-          ...chunk.imports,
-          ...chunk.dynamicImports,
-        ]);
-        const code = chunks.map((chunk) => chunk.code).join("\n");
+          );
+          const { rolldown } = yield* Effect.promise(() => import("rolldown"));
+          const output = yield* Effect.acquireUseRelease(
+            Effect.promise(() =>
+              rolldown({
+                input,
+                platform: "neutral",
+                external: (id) => !id.startsWith(".") && !path.isAbsolute(id),
+                transform: {
+                  define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
+                },
+                plugins: [purePlugin()],
+              }),
+            ),
+            (bundle) =>
+              Effect.promise(() =>
+                bundle.generate({ format: "esm", minify: "dce-only" }),
+              ),
+            (bundle) => Effect.promise(() => bundle.close()),
+          );
+          const chunks = output.output.filter((item) => item.type === "chunk");
+          const modules = chunks.flatMap((chunk) =>
+            Object.entries(chunk.modules)
+              .filter(([, module]) => module.renderedLength > 0)
+              .map(([id]) => id),
+          );
+          const imports = chunks.flatMap((chunk) => [
+            ...chunk.imports,
+            ...chunk.dynamicImports,
+          ]);
+          const code = chunks.map((chunk) => chunk.code).join("\n");
 
-        expect(chunks.flatMap((chunk) => chunk.exports)).toContain(
-          "SqlMigrations",
-        );
-        expect(
-          modules.some((id) => id.endsWith("/Workers/SqlMigrations.ts")),
-        ).toBe(true);
-        expect(
-          modules.some((id) => id.endsWith("/Workers/SqlMigrationsApply.ts")),
-        ).toBe(true);
-        const forbidden =
-          /(?:SQL\/Migrations\/(?:Records|Registry|Detect)\.ts|SQL\/SqlFile\.ts|node:(?:crypto|fs)|effect\/(?:FileSystem|Path)|@effect\/platform-(?:node|bun))/;
-        expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
-        expect(imports.filter((id) => forbidden.test(id))).toEqual([]);
-        expect(code).not.toContain("readMigrationRecords");
-        expect(code).not.toContain("node:fs");
-        expect(code).not.toContain("node:crypto");
-      }),
-  );
+          expect(chunks.flatMap((chunk) => chunk.exports)).toContain(
+            "SqlMigrations",
+          );
+          expect(
+            modules.some((id) => id.endsWith("/Workers/SqlMigrations.ts")),
+          ).toBe(true);
+          expect(
+            modules.some((id) => id.endsWith("/Workers/SqlMigrationsApply.ts")),
+          ).toBe(true);
+          const forbidden =
+            /(?:SQL\/Migrations\/(?:Records|Registry|Detect)\.ts|SQL\/SqlFile\.ts|node:(?:crypto|fs)|effect\/(?:FileSystem|Path)|@effect\/platform-(?:node|bun))/;
+          expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
+          expect(imports.filter((id) => forbidden.test(id))).toEqual([]);
+          expect(code).not.toContain("readMigrationRecords");
+          expect(code).not.toContain("node:fs");
+          expect(code).not.toContain("node:crypto");
+        }),
+    );
+  }
 
   it.effect.skipIf(!nodeSupportsDevMode)(
     "imports a SqlMigrations Durable Object through Node's Oxc loader and captures SQL",

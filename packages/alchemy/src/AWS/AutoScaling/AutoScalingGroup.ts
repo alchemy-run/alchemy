@@ -468,13 +468,18 @@ export const AutoScalingGroupProvider = () =>
                 DefaultCooldown: toSeconds(news.defaultCooldown),
                 TerminationPolicies: news.terminationPolicies,
                 Tags: toTags(autoScalingGroupName, desiredTags),
-              } as any)
+              })
               .pipe(
-                Effect.catch((error: any) =>
-                  error?._tag === "AlreadyExistsFault"
-                    ? Effect.void
-                    : Effect.fail(error),
-                ),
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "ValidationError" &&
+                    error.message?.includes(
+                      "iamInstanceProfile.name is invalid. Invalid IAM Instance Profile name",
+                    ) === true,
+                  schedule: Schedule.spaced("3 seconds"),
+                  times: 8,
+                }),
+                Effect.catchTag("AlreadyExistsFault", () => Effect.void),
               );
 
             existing = yield* describeGroup(autoScalingGroupName).pipe(

@@ -85,6 +85,10 @@
     "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
+    "./Celld": "./src/Celld/index.ts",
+    "./Celld/RpcWebSocketClient": "./src/Celld/RpcWebSocketClient.ts",
+    "./Rivet": "./src/Rivet/index.ts",
+    "./Rivet/RpcWebSocketClient": "./src/Rivet/RpcWebSocketClient.ts",
     "./Planetscale": "./src/Planetscale/index.ts",
     "./Planetscale/*": "./src/Planetscale/*/index.ts",
     "./Stripe": "./src/Stripe/index.ts",
@@ -301,6 +305,26 @@
       "./Prisma/Internal/*": null,
       "./Prisma/PrismaDevDatabase": null,
       "./Prisma/Refs": null,
+      "./Celld": {
+        "types": "./lib/Celld/index.d.ts",
+        "bun": "./src/Celld/index.ts",
+        "default": "./lib/Celld/index.js"
+      },
+      "./Celld/RpcWebSocketClient": {
+        "types": "./lib/Celld/RpcWebSocketClient.d.ts",
+        "bun": "./src/Celld/RpcWebSocketClient.ts",
+        "default": "./lib/Celld/RpcWebSocketClient.js"
+      },
+      "./Rivet": {
+        "types": "./lib/Rivet/index.d.ts",
+        "bun": "./src/Rivet/index.ts",
+        "default": "./lib/Rivet/index.js"
+      },
+      "./Rivet/RpcWebSocketClient": {
+        "types": "./lib/Rivet/RpcWebSocketClient.d.ts",
+        "bun": "./src/Rivet/RpcWebSocketClient.ts",
+        "default": "./lib/Rivet/RpcWebSocketClient.js"
+      },
       "./Planetscale": {
         "types": "./lib/Planetscale/index.d.ts",
         "bun": "./src/Planetscale/index.ts",
@@ -369,6 +393,7 @@
     "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
+    "@distilled.cloud/celld": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
@@ -439,6 +464,7 @@
     "astro": "catalog:",
     "aws4fetch": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
     "iovalkey": "catalog:",
@@ -456,6 +482,7 @@
     "react-dom": "catalog:",
     "react-router": "catalog:",
     "react-server-dom-webpack": "catalog:",
+    "rivetkit": "2.3.10",
     "solid-js": "catalog:",
     "svelte": "catalog:",
     "tsx": "catalog:",
@@ -481,10 +508,12 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
     "prisma": "catalog:",
+    "rivetkit": "^2.3.10",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -522,6 +551,9 @@
     "drizzle-orm": {
       "optional": true
     },
+    "esbuild": {
+      "optional": true
+    },
     "mongodb": {
       "optional": true
     },
@@ -529,6 +561,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "rivetkit": {
       "optional": true
     },
     "vite": {

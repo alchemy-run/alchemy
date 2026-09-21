@@ -1,0 +1,98 @@
+---
+title: Workers
+description: Compose a Rivet actor runner without conflating it with HTTP application ingress.
+---
+
+Start with the private Cluster and Stack from [Setup](/rivet/setup).
+`Rivet.Worker` packages and registers a runner. It hosts Durable Object actors;
+it does not implement `fetch`.
+
+## Declare a Worker
+
+```typescript
+// src/worker.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import { Actors } from "./cluster.ts";
+
+export default class ActorWorker extends Rivet.Worker<ActorWorker>()(
+  "ActorWorker",
+  { cluster: Actors, main: import.meta.url },
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+`cluster` connects the runner to its Engine. Returning `{}` is the complete
+Worker shape; HTTP application handlers belong to a different host.
+
+## Register a durable object
+
+Create the [Counter](/rivet/compute/durable-objects) and yield it during runner
+construction:
+
+```diff lang="typescript"
++import Counter from "./counter.ts";
+
+   Effect.gen(function* () {
++    yield* Counter;
+     return {};
+   }),
+```
+
+The runner publishes this class as an actor type. Named instances are selected
+by callers, not created eagerly while the Worker is constructed.
+
+## Attach a modular implementation
+
+For a schema-backed Room, import the declaration and implementation from
+[Effect RPC](/rivet/apis/effect-rpc):
+
+```diff lang="typescript"
++import { Room, RoomLive } from "./room.ts";
+
+   Effect.gen(function* () {
+     yield* Counter;
++    yield* Room;
+     return {};
+-  }),
++  }).pipe(Effect.provide(RoomLive)),
+```
+
+An implementation Layer belongs on the Worker that hosts the actor, not on
+an unrelated caller. Combine multiple independent implementation Layers using
+`Layer.mergeAll` inside the single `Effect.provide`.
+
+## Deploy the runner
+
+```sh
+bun alchemy deploy
+```
+
+Use the Setup stack, which yields `ActorWorker` with the AWS and Rivet providers
+and ECS host. An updated bundle registers a newer runner version without needing
+a new logical actor name.
+
+## Runtime behavior
+
+Actor initialization runs per activation; method invocations and socket events
+receive current native context and request scope. Do not cache request-owned
+resources in construction. The private gateway routes each actor name to the
+Engine and runner rather than to an application HTTP handler.
+
+## Limitations
+
+Use [network-attached callers](/rivet/compute/durable-objects#call-from-a-network-attached-function)
+for buffered action RPC. Use [Effect RPC](/rivet/apis/effect-rpc) over a scoped
+WebSocket for incremental streams. A Lambda URL cannot transport that WebSocket,
+and opening the Engine publicly is not a workaround. `expose` and `domain` are
+rejected on this Worker.
+
+## Related guides
+
+- [Durable Objects](/rivet/compute/durable-objects)
+- [Effect RPC](/rivet/apis/effect-rpc)
+- [Cloudflare Workers](/cloudflare/compute/workers) · [Celld Workers](/celld/compute/workers)
+- [Worker reference](/providers/rivet/worker)
+- [Cluster reference](/providers/rivet/cluster)

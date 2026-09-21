@@ -14,6 +14,7 @@ import {
   fromRpcStreamEnvelope,
   toRpcStream,
   makeRpcStub,
+  rpcMethodOf,
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@/Cloudflare/Workers/Rpc";
@@ -452,6 +453,27 @@ describe("toRpcStream", () => {
 // ---------------------------------------------------------------------------
 // makeRpcStub
 // ---------------------------------------------------------------------------
+
+describe("rpcMethodOf", () => {
+  it("resolves the method from the pathname", () => {
+    expect(rpcMethodOf({ url: "http://host/__rpc__/get" })).toBe("get");
+    expect(rpcMethodOf({ url: "/__rpc__/put?x=1" })).toBe("put");
+    expect(rpcMethodOf({ url: "http://host/ns/name/__rpc__/tick" })).toBe(
+      "tick",
+    );
+    expect(rpcMethodOf({ url: "http://host/__rpc__/with%20space" })).toBe(
+      "with space",
+    );
+  });
+
+  it("ignores the prefix outside the pathname", () => {
+    expect(rpcMethodOf({ url: "http://host/api?next=/__rpc__/x" })).toBe(
+      undefined,
+    );
+    expect(rpcMethodOf({ url: "http://host/api#/__rpc__/x" })).toBe(undefined);
+    expect(rpcMethodOf({ url: "http://host/api" })).toBe(undefined);
+  });
+});
 
 describe("makeRpcStub", () => {
   it.effect("proxies successful calls", () =>

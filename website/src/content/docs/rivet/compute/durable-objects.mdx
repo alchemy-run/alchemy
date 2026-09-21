@@ -1,0 +1,148 @@
+---
+title: Durable Objects
+description: Persist a Counter in actor state and call it through Rivet's private gateway.
+---
+
+A Rivet Durable Object is a named actor. Start with the private Cluster and
+runner from [Setup](/rivet/setup). The actor API is provider-owned: it is not a
+Cloudflare object with a different deployment target.
+
+## Create the Counter file
+
+```typescript
+// src/counter.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+
+export default class Counter extends Rivet.DurableObject<Counter>()(
+  "Counter",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {};
+    });
+  }),
+) {}
+```
+
+The outer Effect assembles services; the inner Effect initializes the actor's
+activation and returns its methods. Do not perform runtime I/O in construction.
+
+## Resolve the state handle
+
+```diff lang="typescript"
+   Effect.gen(function* () {
++    const state = yield* Rivet.DurableObjectState;
+     return Effect.gen(function* () {
+       return {};
+     });
+   }),
+```
+
+The wrapper resolves native actor context at invocation time rather than asking
+the application to retain a stale native context between calls.
+
+## Persist the count
+
+Replace the inner return value:
+
+```diff lang="typescript"
+-      return {};
++      return {
++        get: () => state.storage.get<number>("count").pipe(
++          Effect.map((count) => count ?? 0),
++        ),
++        increment: () => Effect.gen(function* () {
++          const count = (yield* state.storage.get<number>("count")) ?? 0;
++          yield* state.storage.put("count", count + 1);
++          return count + 1;
++        }),
++      };
+```
+
+This illustrates sequential actor-state reads and writes. It does not create a
+SQL transaction or promise a compare-and-swap under concurrent calls. Use native
+SQL transaction semantics when an invariant needs transactional SQL storage.
+
+## Bind the Counter to the Worker
+
+```diff lang="typescript"
+ // src/worker.ts
++import Counter from "./counter.ts";
+
+   Effect.gen(function* () {
++    yield* Counter;
+     return {};
+   }),
+```
+
+Yielding the class registers it with the runner. The Worker still returns `{}`;
+it is not the HTTP application ingress.
+
+## Call from a network-attached Function
+
+```typescript
+// src/api.ts
+import * as AWS from "alchemy/AWS";
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type Counter from "./counter.ts";
+import ActorWorker from "./worker.ts";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const actors = yield* Rivet.bindWorker(ActorWorker);
+    const counters = actors.durableObject<Counter>("Counter");
+    return {
+      fetch: Effect.gen(function* () {
+        const count = yield* counters.getByName("visits").increment();
+        return HttpServerResponse.text(String(count));
+      }),
+    };
+  }),
+) {}
+```
+
+`bindWorker` supplies gateway configuration and host-specific network attachment.
+This demonstration exposes a fixed Counter through HTTP; authenticate requests
+before using it for private application state. Do not send the Engine's admin
+credentials to a browser.
+
+## Deploy the caller
+
+Add `import Api from "./src/api.ts"` to the Setup stack, then return the caller's URL:
+
+```diff lang="typescript"
+     const worker = yield* ActorWorker;
+-    return { endpoint: worker.endpoint };
++    const api = yield* Api;
++    return { endpoint: worker.endpoint, url: api.functionUrl };
+```
+
+Deploy and invoke the Function URL sequentially. Each call selects `"visits"`
+in the registered `"Counter"` actor type; a different name gets separate state.
+
+## Runtime behavior
+
+Actor state persists through the configured Engine backend. The inner Effect
+runs again on activation, while calls and socket events get fresh invocation
+scope. For production durability, account for the Cluster's backing-store
+lifecycle rather than equating actor sleep with engine-node replacement.
+
+## Limitations
+
+SQL transactions, actor-state KV writes, and native scheduled actions are
+separate boundaries. There is no combined Cloudflare-style storage transaction.
+Buffered action RPC does not provide incremental stream delivery. A Function URL
+cannot proxy WebSocket upgrades; use [Effect RPC](/rivet/apis/effect-rpc) through
+a WebSocket-capable ingress for that transport.
+
+## Related guides
+
+- [Durable schedules](/rivet/compute/durable-schedules)
+- [Hibernatable WebSockets](/rivet/compute/hibernatable-websockets)
+- [SQL migrations](/rivet/data/sql-migrations)
+- [Cloudflare Durable Objects](/cloudflare/compute/durable-objects) · [Celld Durable Objects](/celld/compute/durable-objects)
+- [DurableObject reference](/providers/rivet/durableobject)

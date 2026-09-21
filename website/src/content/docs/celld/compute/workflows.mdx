@@ -1,0 +1,205 @@
+---
+title: Workflows
+description: Run checkpointed Celld tasks with typed failure replay and per-attempt cleanup.
+---
+
+A Workflow is durable multi-step orchestration, not a background fiber. Celld's
+native step engine persists task outcomes and controls replay. Its provider-owned
+API shares task and lifetime concepts with [Cloudflare Workflows](/cloudflare/compute/workflows),
+not every Cloudflare option.
+
+## Define a workflow
+
+```typescript
+// src/workflow.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+
+export default class MyWorkflow extends Celld.Workflow<MyWorkflow>()(
+  "MyWorkflow",
+  Effect.gen(function* () {
+    return Effect.fn(function* (input: { value: string }) {
+      return { received: input.value };
+    });
+  }),
+) {}
+```
+
+The outer Effect resolves dependencies; the returned function is the replayable
+body. Its input and output flow into the typed runtime handle.
+
+## Run steps with task
+
+```diff lang="typescript"
+     return Effect.fn(function* (input: { value: string }) {
+-      return { received: input.value };
++      return yield* Celld.Workflows.task(
++        "greet",
++        Effect.succeed({ received: input.value }),
++      );
+     });
+```
+
+A completed named task returns its recorded result on replay instead of
+executing its callback again. Step names and their occurrence order are durable
+compatibility keys; keep them stable across updates.
+
+## Define an application failure
+
+Add this declaration above the workflow class:
+
+```typescript
+import * as Data from "effect/Data";
+
+class Busy extends Data.TaggedError("Busy")<{ key: string }> {}
+```
+
+The tag and serializable data fields are the contract for handling this failure
+after replay. Do not depend on custom prototype methods or object identity.
+
+## Failures and retries
+
+Replace the body with a task whose failure is handled after native retries:
+
+```typescript
+return Effect.fn(function* (input: { value: string }) {
+  return yield* Celld.Workflows.task(
+    "process",
+    Effect.fail(new Busy({ key: input.value })),
+    { retries: { limit: 2, delay: "1 second", backoff: "linear" } },
+  ).pipe(
+    Effect.catchTag("Busy", (error) =>
+      Effect.succeed({ deferred: error.key }),
+    ),
+  );
+});
+```
+
+This deliberately failing example produces a deferred result after exhausting
+retries. `Effect.fail` follows the native retry policy; `Effect.die` and
+`Effect.orDie` are terminal defects, not values caught by `catchTag`.
+
+## Application errors across replay
+
+The shared failure codec retains supported tags and data when Celld replays a
+cached rejection without invoking the callback. During active execution the
+original Cause can be preserved; replay reconstructs data, not arbitrary class
+prototype identity. Use `catchTag` and fields rather than `instanceof`.
+
+Supported data includes primitives, dense arrays, records, errors with own fields
+and causes, Date, byte buffers, Map, and Set. The encoding is limited to **16 KiB**
+and **64 nesting levels**. Cycles, shared object references, functions, symbols,
+accessors, sparse arrays, and unsupported class instances are rejected as terminal
+serialization defects rather than silently dropping fields. Native control or
+timeout failures remain native defects, not fabricated application tags.
+
+## Sleep between steps
+
+Inside the workflow body, before the task:
+
+```typescript
+yield* Celld.Workflows.sleep("cooldown", "30 seconds");
+```
+
+This is a durable sleep, not a process timer. `sleepUntil` accepts an absolute
+Date or millisecond timestamp when the deadline is already known.
+
+## Wait for external events
+
+Inside the workflow body:
+
+```typescript
+const approval = yield* Celld.Workflows.waitForEvent<{ approved: boolean }>(
+  "approval",
+  { type: "approval", timeout: "1 day" },
+);
+```
+
+The returned native envelope contains `payload`, `timestamp`, and `type`.
+A caller sends the matching event using `instance.sendEvent`.
+
+## Replay semantics
+
+The body can execute from the top many times. Completed tasks return recorded
+outcomes; code outside tasks runs again. Put external I/O inside tasks, but still
+make it idempotent: a crash after an external write and before its checkpoint can
+repeat the write. Checkpointing is not an exactly-once external transaction.
+
+## Run scope
+
+Each run has a body scope. Each task attempt gets a **fresh callback scope**, and
+its resources close before retry. Completed task replay acquires no callback
+resources because the callback does not run. Acquire pools, connections, and
+other disposable resources inside an attempt, not in Workflow construction.
+
+Interrupting the task interrupts and joins the active callback, including its
+cleanup, rather than waiting through native retry delays. A failed attempt must
+not retain request-owned resources for the next attempt. Celld's dynamic retry
+delay callback remains provider-native; `WorkflowStepContext` exposes the current
+one-based attempt and effective policy.
+
+## Trigger from a Worker
+
+```typescript
+// src/worker.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import MyWorkflow from "./workflow.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, expose: "public" },
+  Effect.gen(function* () {
+    const workflow = yield* MyWorkflow;
+    return {
+      fetch: Effect.gen(function* () {
+        const instance = yield* workflow.create({ params: { value: "job-1" } }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ instanceId: instance.id });
+      }),
+    };
+  }),
+) {}
+```
+
+Publish through the [Setup Application](/celld/setup), not a separate Workflow
+CLI. This demonstration starts a new instance per request; authenticate and
+constrain your production trigger. An explicit instance ID is a stable identity,
+not an unconditional overwrite of an existing run.
+
+## Observe an instance
+
+Within a request handler with the `workflow` handle and returned `instanceId`:
+
+```typescript
+const instance = yield* workflow.get(instanceId);
+const status = yield* instance.status();
+```
+
+Celld exposes `pause`, `resume`, `restart`, `terminate`, `sendEvent`, and deletion
+controls. Restart can select a step occurrence. Its statuses include
+`waitingForPause`; do not assume Cloudflare's exact state union or rollback
+fields. Poll with a bounded Effect schedule rather than an unbounded timer loop.
+
+## Runtime behavior
+
+Replay uses the native journal, while failure encoding and callback lifetime
+handling are shared with Cloudflare. A runtime restart does not turn unfinished
+external work into an atomic transaction. Retain stable step names and compatible
+error/result data across deployments.
+
+## Limitations
+
+Celld does not support Workflow rollback or sensitive-output configuration.
+Workflow-native cron metadata and Cloudflare product-event Queue subscriptions
+are not part of this API. Use Celld's supported cron/queue APIs explicitly when
+building triggers. Rivet has no equivalent Alchemy Workflow service; durable
+actor callbacks are not a replacement for a checkpointed workflow journal.
+
+## Related guides
+
+- [Cloudflare Workflows](/cloudflare/compute/workflows)
+- [Durable schedules](/celld/compute/durable-schedules)
+- [Workers](/celld/compute/workers)
+- [Workflow reference](/providers/celld/workflows/workflow)
+- [Task reference](/providers/celld/workflows/task)

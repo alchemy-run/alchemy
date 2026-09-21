@@ -1,0 +1,165 @@
+---
+title: Hibernatable WebSockets
+description: Handle accepted Rivet connections and validate versioned Session data in native connection state.
+---
+
+Rivet delivers an **already-accepted** native connection to its actor bridge.
+There is no `Rivet.upgrade()` and no actor `fetch` handler. Application attachment
+data is encoded into persistent native connection state, not an activation-local
+map. Use the private network and ingress boundary described in
+[Effect RPC](/rivet/apis/effect-rpc#choose-the-connection-boundary).
+
+## Handle an accepted connection
+
+```typescript
+// src/room.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {
+        webSocketMessage: (socket: Rivet.WebSocket, _message: string | ArrayBuffer) =>
+          socket.send("Connected"),
+      };
+    });
+  }),
+) {}
+```
+
+Yield `Room` in the [runner Worker](/rivet/compute/workers) to register the actor.
+The first message handler receives the provider's socket wrapper; it must not
+attempt to accept the socket again.
+
+## Define the session data
+
+Add the schema above the class:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+const Session = Schema.Struct({
+  version: Schema.Literal(1),
+  userId: Schema.String,
+  connectedAt: Schema.DateFromString,
+});
+```
+
+This is the same schema used by Cloudflare and Celld. `DateFromString` produces
+a JSON-compatible encoding suitable for Rivet connection state; a raw Date or
+other structured-clone-only value is not portable here.
+
+## Save session data on a socket
+
+Replace the initial handler with a small demonstration handshake:
+
+```diff lang="typescript"
+-        webSocketMessage: (socket: Rivet.WebSocket, _message: string | ArrayBuffer) =>
+-          socket.send("Connected"),
++        webSocketMessage: (socket: Rivet.WebSocket, message: string | ArrayBuffer) =>
++          Effect.gen(function* () {
++            if (message === "join") {
++              const connectedAt = yield* Effect.sync(() => new Date());
++              yield* socket.setAttachment(Session, {
++                version: 1,
++                userId: "sam",
++                connectedAt,
++              });
++              yield* socket.send("Joined");
++            }
++          }).pipe(
++            Effect.catchTag("WebSocketAttachmentError", () =>
++              socket.close(1008, "Invalid session"),
++            ),
++          ),
+```
+
+The fixed `sam` identity is demonstration data, not authentication. An application
+must authenticate and authorize its ingress before exposing this actor, and
+must derive trusted identity from that boundary rather than a user-controlled
+message. `setAttachment` persists encoded application data on the connection.
+
+## Read the session back
+
+Add a return after the join response, then decode subsequent messages:
+
+```diff lang="typescript"
+               yield* socket.send("Joined");
++              return;
+             }
++            const session = yield* socket.getAttachment(Session);
++            yield* socket.send(`Welcome back, ${session.userId}`);
+```
+
+After joining, send another message on the same socket to read the attachment.
+The handler decodes the native connection state even when the actor has slept
+and a new activation handles that message.
+
+## Validate attachments after hibernation
+
+Add a connection handler alongside `webSocketMessage`:
+
+```typescript
+webSocketOpen: (socket: Rivet.WebSocket) =>
+  socket.getAttachment(Session).pipe(
+    Effect.asVoid,
+    Effect.catchTag("WebSocketAttachmentError", (error) =>
+      error.reason === "missing"
+        ? Effect.void
+        : socket.close(1008, "Invalid session"),
+    ),
+  ),
+```
+
+Rivet delivers this handler on connection and wake, **after** instance
+initialization. Fresh connections have no Session until the join handshake;
+retained connections are validated as the native runtime delivers them. The
+message handler still validates the session before handling application data.
+
+`state.getWebSockets()` enumerates sockets registered in the current activation,
+not every idle retained connection. Rebuild application indexes lazily in
+`webSocketOpen`; constructor-time enumeration cannot restore a complete broadcast
+index. Never serialize socket objects into actor KV.
+
+## Choose an attachment error policy
+
+The handler above closes missing or invalid sessions with `1008`. You can instead
+inspect `WebSocketAttachmentError.reason` to distinguish `missing`, `read`,
+`decode`, `encode`, and `write`. An incompatible version should be rejected or
+explicitly migrated; a successful TypeScript compile does not validate an older
+persisted attachment.
+
+## Runtime behavior
+
+The native connection owns attachment state across actor hibernation. The
+wrapper's schema methods protect application attachments from overwriting
+reserved RPC recovery metadata. Actor-state KV and connection state are separate;
+writing one does not create a transaction with the other.
+
+## Limitations
+
+RivetKit 2.3.10 keeps an actor active while a raw WebSocket is connected,
+even with `canHibernateWebSocket` enabled. Explicit native sleep preserves
+connections and attachments, but automatic idle sleep with an open socket is
+blocked by that runtime version. Alchemy does not force sleep to bypass this
+native lifecycle restriction.
+
+Rivet connection state must be JSON-compatible. Keep it small and obey the
+native platform's limits; Cloudflare's 16,384-byte attachment limit is not a
+Rivet quota. There is no Cloudflare auto-response API on this wrapper. Application
+heartbeats and Effect RPC protocol traffic are different from a promise that
+all heartbeat frames can be answered without waking the actor. Retained idle
+connections do not make unfinished RPC work replayable.
+
+A network-attached WebSocket client or an authenticated WebSocket-capable
+ingress is required. A Lambda Function URL cannot proxy this transport, and
+publishing the Engine publicly is not a supported shortcut.
+
+## Related guides
+
+- [Durable Objects](/rivet/compute/durable-objects)
+- [Effect RPC](/rivet/apis/effect-rpc)
+- [Cloudflare hibernatable WebSockets](/cloudflare/compute/hibernatable-websockets) · [Celld hibernatable WebSockets](/celld/compute/hibernatable-websockets)
+- [DurableObject reference](/providers/rivet/durableobject)

@@ -333,12 +333,26 @@ const adapterKey = (authKind: string) =>
  * layer built with `ClusterAdapter("aws-eks")` is found by any dynamic
  * lookup for that kind.
  */
-export const ClusterAdapter = (
-  authKind: string,
-): Context.Service<ClusterAdapterService, ClusterAdapterService> =>
-  Context.Service<ClusterAdapterService, ClusterAdapterService>()(
+/**
+ * The tag identity for one registered adapter kind — 1:1 with the
+ * constructor: `ClusterAdapter<"aws-eks">` is the type of the tag
+ * `ClusterAdapter("aws-eks")` returns. The phantom pins the kind into
+ * the identity so a layer registered for one kind cannot satisfy a
+ * requirement for another; the service shape stays ClusterAdapterService.
+ */
+export interface ClusterAdapter<
+  Kind extends string = string,
+> extends ClusterAdapterService {
+  /** @internal phantom — never set at runtime. */
+  readonly adapterKind?: Kind;
+}
+
+export const ClusterAdapter = <const Kind extends string>(
+  authKind: Kind,
+): Context.Service<ClusterAdapter<Kind>, ClusterAdapterService> =>
+  Context.Service<ClusterAdapter<Kind>, ClusterAdapterService>()(
     adapterKey(authKind),
-  ) as any;
+  );
 
 /**
  * Resolve the {@link ClusterAdapterService} for a connection's auth kind

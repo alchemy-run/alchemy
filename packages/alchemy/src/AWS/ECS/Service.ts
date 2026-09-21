@@ -1,5 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
@@ -12,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
@@ -21,7 +23,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
+import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { toMillis, toSeconds, toWireSeconds } from "../../Util/Duration.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
@@ -69,6 +71,30 @@ import {
   type TaskBindingContract,
   type TaskDefinitionConfig,
 } from "./Task.ts";
+
+/** Only awsvpc tasks accept service-level network configuration. */
+export const serviceNetworkConfiguration = (
+  networkMode: ecs.NetworkMode,
+  network: { subnets: string[]; assignPublicIp: boolean } | undefined,
+  securityGroups: string[] | undefined,
+): ecs.NetworkConfiguration | undefined =>
+  networkMode !== "awsvpc" || network === undefined
+    ? undefined
+    : {
+        awsvpcConfiguration: {
+          subnets: network.subnets,
+          securityGroups,
+          assignPublicIp: network.assignPublicIp ? "ENABLED" : "DISABLED",
+        },
+      };
+
+/** Host/bridge tasks register an instance and mapped host port; awsvpc tasks register an ENI IP. */
+export const serviceTargetType = (networkMode: ecs.NetworkMode) =>
+  networkMode === "awsvpc" ? ("ip" as const) : ("instance" as const);
+
+export class ServiceTaskNetworkModeRequired extends Data.TaggedError(
+  "ServiceTaskNetworkModeRequired",
+)<{ readonly message: string }> {}
 
 export type ServiceName = string;
 export type ServiceArn =
@@ -800,6 +826,8 @@ export interface TaskReferenceServiceProps extends ServicePropsBase {
      * Registered task definition ARN to deploy.
      */
     taskDefinitionArn: string;
+    /** Network mode used to compose managed ingress. Defaults to awsvpc; checked against the registered definition before deployment. */
+    networkMode?: ecs.NetworkMode;
     /**
      * Container name inside the task definition that should receive traffic.
      */
@@ -1381,6 +1409,14 @@ export const Service: Platform<
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
+/** Task-definition overrides take precedence over the convenience properties. */
+export const declaredServiceNetworkMode = (
+  props: ServiceProps,
+): ecs.NetworkMode =>
+  "task" in props
+    ? (props.task.networkMode ?? "awsvpc")
+    : (props.taskDefinition?.networkMode ?? props.networkMode ?? "awsvpc");
+
 // ───────────────────────────────────────────────────────────────────────────
 // Managed load balancer — composition (the StaticSite pattern)
 // ───────────────────────────────────────────────────────────────────────────
@@ -1664,6 +1700,11 @@ const composeManagedIngress = (
   lbProp: true | Listener | ServiceLoadBalancerConfig,
 ) =>
   Effect.gen(function* () {
+    if (declaredServiceNetworkMode(props) === "none") {
+      return yield* new ServiceTaskNetworkModeRequired({
+        message: `AWS.ECS.Service "${id}": managed ingress requires awsvpc, host, or bridge networking.`,
+      });
+    }
     const config: ServiceLoadBalancerConfig =
       lbProp === true
         ? {}
@@ -2071,7 +2112,7 @@ const composeManagedIngress = (
           vpcId: network.vpcId as string,
           port: spec.port as number,
           protocol: spec.protocol,
-          targetType: "ip",
+          targetType: serviceTargetType(declaredServiceNetworkMode(props)),
           healthCheckPath: isNetworkTg
             ? wantsHttpCheck
               ? (health?.path ?? "/")
@@ -2693,7 +2734,7 @@ const observeServiceConvergence = (input: {
     };
   });
 
-const waitForServiceConvergence = (input: {
+export const waitForServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;
@@ -2770,6 +2811,156 @@ const waitForServiceConvergence = (input: {
     }),
   );
 };
+
+export class ServiceRecoveryIncomplete extends Data.TaggedError(
+  "ServiceRecoveryIncomplete",
+)<{ readonly message: string }> {}
+
+const serviceTaskNames = Effect.fn(function* (
+  id: string,
+  output: Service["Attributes"] | undefined,
+) {
+  return {
+    taskFamily:
+      output?.taskFamily ??
+      (yield* createPhysicalName({
+        id: `${id}-task`,
+        maxLength: 255,
+        lowercase: true,
+      })),
+    taskRoleName:
+      output?.taskRoleName ??
+      (yield* createPhysicalName({ id: `${id}-task-role`, maxLength: 64 })),
+    executionRoleName:
+      output?.executionRoleName ??
+      (yield* createPhysicalName({
+        id: `${id}-execution-role`,
+        maxLength: 64,
+      })),
+    repositoryName:
+      output?.repositoryName ??
+      (yield* createPhysicalName({
+        id: `${id}-repo`,
+        maxLength: 256,
+        lowercase: true,
+      })),
+    logGroupName:
+      output?.logGroupName ??
+      (yield* createPhysicalName({
+        id: `${id}-logs`,
+        maxLength: 512,
+        lowercase: true,
+      })),
+  };
+});
+
+// Recover only deterministic, ownership-tagged children, never arbitrary task-definition references.
+const recoverServiceTask = Effect.fn(function* (
+  id: string,
+  output: Service["Attributes"] | undefined,
+) {
+  const names = yield* serviceTaskNames(id, output);
+  const tags = yield* createInternalTags(id);
+  const requireOwnership = (name: string, owned: boolean) =>
+    owned
+      ? Effect.void
+      : Effect.fail(
+          new ServiceRecoveryIncomplete({
+            message: `Cannot recover ECS service infrastructure '${name}': ownership tags do not match`,
+          }),
+        );
+  const roles = yield* Effect.forEach(
+    [names.taskRoleName, names.executionRoleName],
+    (RoleName) =>
+      iam.getRole({ RoleName }).pipe(
+        Effect.map((response) => response.Role),
+        Effect.catchTag("NoSuchEntityException", () =>
+          Effect.succeed(undefined),
+        ),
+      ),
+  );
+  for (const role of roles) {
+    if (role) yield* requireOwnership(role.RoleName, hasTags(tags, role.Tags));
+  }
+  const logTags = yield* logs
+    .listTagsLogGroup({ logGroupName: names.logGroupName })
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+  if (logTags)
+    yield* requireOwnership(names.logGroupName, hasTags(tags, logTags.tags));
+  const repository = yield* ecr
+    .describeRepositories({ repositoryNames: [names.repositoryName] })
+    .pipe(
+      Effect.map((response) => response.repositories?.[0]),
+      Effect.catchTag("RepositoryNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+  if (repository?.repositoryArn) {
+    const repositoryTags = yield* ecr.listTagsForResource({
+      resourceArn: repository.repositoryArn,
+    });
+    yield* requireOwnership(
+      names.repositoryName,
+      hasTags(
+        tags,
+        (repositoryTags.tags ?? []).map((tag) => ({
+          Key: tag.Key!,
+          Value: tag.Value!,
+        })),
+      ),
+    );
+  }
+  const previousRevision =
+    output?.taskDefinitionArn.split("/").at(-1)?.split(":")[0] ===
+    names.taskFamily
+      ? output.taskDefinitionArn
+      : undefined;
+  const definition = yield* ecs
+    .describeTaskDefinition({
+      taskDefinition: previousRevision ?? names.taskFamily,
+      include: ["TAGS"],
+    })
+    .pipe(
+      Effect.catchTag("ClientException", (error) =>
+        error.message?.includes("Unable to describe task definition")
+          ? Effect.succeed(undefined)
+          : Effect.fail(error),
+      ),
+    );
+  if (definition?.taskDefinition) {
+    yield* requireOwnership(
+      names.taskFamily,
+      hasTags(
+        tags,
+        (definition.tags ?? []).map((tag) => ({
+          Key: tag.key!,
+          Value: tag.value!,
+        })),
+      ),
+    );
+  }
+  return {
+    exists:
+      roles.some((role) => role !== undefined) ||
+      logTags !== undefined ||
+      repository !== undefined ||
+      definition?.taskDefinition !== undefined,
+    attributes: {
+      ...names,
+      taskDefinitionArn:
+        definition?.taskDefinition?.taskDefinitionArn ??
+        previousRevision ??
+        names.taskFamily,
+      taskRoleArn: roles[0]?.Arn,
+      executionRoleArn: roles[1]?.Arn,
+      repositoryUri: repository?.repositoryUri,
+    },
+  };
+});
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -3000,43 +3191,17 @@ export const ServiceProvider = () =>
         tags: Record<string, string>;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
-        const family =
-          output?.taskFamily ??
-          (yield* createPhysicalName({
-            id: `${id}-task`,
-            maxLength: 255,
-            lowercase: true,
-          }));
-        const taskRoleName =
-          output?.taskRoleName ??
-          (yield* createPhysicalName({
-            id: `${id}-task-role`,
-            maxLength: 64,
-          }));
-        const executionRoleName =
-          output?.executionRoleName ??
-          (yield* createPhysicalName({
-            id: `${id}-execution-role`,
-            maxLength: 64,
-          }));
+        const {
+          taskFamily: family,
+          taskRoleName,
+          executionRoleName,
+          repositoryName,
+          logGroupName,
+        } = yield* serviceTaskNames(id, output);
         const taskPolicyName = yield* createPhysicalName({
           id: `${id}-task-policy`,
           maxLength: 128,
         });
-        const repositoryName =
-          output?.repositoryName ??
-          (yield* createPhysicalName({
-            id: `${id}-repo`,
-            maxLength: 256,
-            lowercase: true,
-          }));
-        const logGroupName =
-          output?.logGroupName ??
-          (yield* createPhysicalName({
-            id: `${id}-logs`,
-            maxLength: 512,
-            lowercase: true,
-          }));
 
         const taskRoleArn =
           output?.taskRoleArn ??
@@ -3203,22 +3368,6 @@ export const ServiceProvider = () =>
         };
       });
 
-      const networkConfigurationOf = (
-        network: {
-          subnets: string[];
-          assignPublicIp: boolean;
-        },
-        securityGroups: string[] | undefined,
-      ) => ({
-        awsvpcConfiguration: {
-          subnets: network.subnets,
-          securityGroups,
-          assignPublicIp: (network.assignPublicIp ? "ENABLED" : "DISABLED") as
-            | "ENABLED"
-            | "DISABLED",
-        },
-      });
-
       // load balancers passed to create/update: explicit user-supplied list
       // plus the composed managed-ingress target groups.
       const loadBalancersOf = (
@@ -3239,8 +3388,8 @@ export const ServiceProvider = () =>
       // In-place mutable fields shared by createService and updateService.
       const mutableInput = (
         news: ServiceProps,
-        task: { taskDefinitionArn: string },
-        network: { subnets: string[]; assignPublicIp: boolean },
+        task: { taskDefinitionArn: string; networkMode: ecs.NetworkMode },
+        network: { subnets: string[]; assignPublicIp: boolean } | undefined,
         securityGroups: string[] | undefined,
       ) => ({
         taskDefinition: task.taskDefinitionArn,
@@ -3249,7 +3398,11 @@ export const ServiceProvider = () =>
         healthCheckGracePeriodSeconds: toWireSeconds(
           news.healthCheckGracePeriod,
         ),
-        networkConfiguration: networkConfigurationOf(network, securityGroups),
+        networkConfiguration: serviceNetworkConfiguration(
+          task.networkMode,
+          network,
+          securityGroups,
+        ),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
         placementStrategy: news.placementStrategy,
@@ -3299,6 +3452,7 @@ export const ServiceProvider = () =>
               {
                 // launchType ↔ capacityProviderStrategy switch is immutable.
                 usesStrategy: !!olds.capacityProviderStrategy,
+                networkMode: declaredServiceNetworkMode(olds),
                 schedulingStrategy: olds.schedulingStrategy ?? "REPLICA",
                 deploymentControllerType:
                   olds.deploymentController?.type ?? "ECS",
@@ -3307,6 +3461,7 @@ export const ServiceProvider = () =>
               },
               {
                 usesStrategy: !!news.capacityProviderStrategy,
+                networkMode: declaredServiceNetworkMode(news),
                 schedulingStrategy: news.schedulingStrategy ?? "REPLICA",
                 deploymentControllerType:
                   news.deploymentController?.type ?? "ECS",
@@ -3339,38 +3494,91 @@ export const ServiceProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterArn = output?.clusterArn ?? clusterArnOf(olds?.cluster);
-          if (clusterArn === undefined) {
-            // No attributes and no recoverable cluster from the persisted
-            // props (an Output-valued `cluster` doesn't survive a
-            // `creating`-state round-trip). We can't locate the service, so
-            // report "not found" — the engine re-drives the create and
-            // reconcile converges on any half-created service by name.
-            return undefined;
-          }
           const serviceName =
             output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
-          const described = yield* ecs
-            .describeServices({
-              cluster: clusterArn,
-              services: [serviceName],
-              include: ["TAGS"],
-            })
-            .pipe(
-              Effect.catchTag("ClusterNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+          const tags = yield* createInternalTags(id);
+          const ownsService = (service: ecs.Service) =>
+            hasTags(
+              tags,
+              (service.tags ?? []).map((tag) => ({
+                Key: tag.key!,
+                Value: tag.value!,
+              })),
             );
-          const service = described?.services?.[0];
-          if (!service?.serviceArn) {
-            return undefined;
+          // Interrupted creates can lose Output-valued cluster props before attrs are committed.
+          const clusters =
+            clusterArn !== undefined
+              ? [clusterArn]
+              : yield* ecs.listClusters.items({}).pipe(Stream.runCollect);
+          const matches = yield* Effect.forEach(clusters, (cluster) =>
+            ecs
+              .describeServices({
+                cluster,
+                services: [serviceName],
+                include: ["TAGS"],
+              })
+              .pipe(
+                Effect.map((response) =>
+                  (response.services ?? []).filter(
+                    (service) =>
+                      service.serviceName === serviceName &&
+                      service.serviceArn &&
+                      (clusterArn !== undefined || ownsService(service)),
+                  ),
+                ),
+                Effect.catchTag("ClusterNotFoundException", () =>
+                  Effect.succeed([]),
+                ),
+              ),
+          );
+          const services = matches.flat();
+          if (services.length > 1) {
+            return yield* new ServiceRecoveryIncomplete({
+              message: `Multiple owned ECS services named '${serviceName}' were found`,
+            });
+          }
+          const service = services[0];
+          const serviceAttributes = service?.serviceArn
+            ? {
+                ...output,
+                serviceArn: service.serviceArn as ServiceArn,
+                serviceName,
+                clusterArn: service.clusterArn as ClusterArn,
+                taskDefinitionArn: service.taskDefinition!,
+                status: service.status ?? "ACTIVE",
+              }
+            : undefined;
+          if (serviceAttributes && service && !ownsService(service)) {
+            return Unowned(serviceAttributes);
+          }
+          const ownsTask =
+            output?.taskFamily !== undefined ||
+            (olds !== undefined && !("task" in olds));
+          const recovered = ownsTask
+            ? yield* recoverServiceTask(id, output)
+            : undefined;
+          if (serviceAttributes) {
+            return {
+              ...serviceAttributes,
+              ...recovered?.attributes,
+              taskDefinitionArn: serviceAttributes.taskDefinitionArn,
+            };
+          }
+          if (!recovered?.exists) return undefined;
+          if (clusterArn === undefined) {
+            // Keep the state/dependencies instead of silently forgetting surviving children.
+            return yield* new ServiceRecoveryIncomplete({
+              message: `Owned infrastructure for ECS service '${serviceName}' remains, but its cluster could not be recovered`,
+            });
           }
           return {
-            ...output!,
-            serviceArn: service.serviceArn as ServiceArn,
-            serviceName: service.serviceName!,
-            clusterArn: service.clusterArn as ClusterArn,
-            taskDefinitionArn: service.taskDefinition!,
-            status: service.status ?? "ACTIVE",
+            ...output,
+            ...recovered.attributes,
+            serviceArn:
+              `${clusterArn.replace(":cluster/", ":service/")}/${serviceName}` as ServiceArn,
+            serviceName,
+            clusterArn,
+            status: "INACTIVE",
           };
         }),
         list: () =>
@@ -3476,14 +3684,38 @@ export const ServiceProvider = () =>
                   session,
                 })
               : undefined;
-          const task = byoTask ?? {
+          const reference = byoTask ?? {
             taskDefinitionArn: owned!.taskDefinitionArn,
             containerName: owned!.containerName,
             port: owned!.port,
           };
-
-          // Resolve networking (explicit props or the default VPC).
-          const network = yield* resolveNetwork(news);
+          // The registered definition is authoritative, including BYO tasks and overrides.
+          const describedTask = yield* ecs.describeTaskDefinition({
+            taskDefinition: reference.taskDefinitionArn,
+          });
+          if (describedTask.taskDefinition === undefined) {
+            return yield* new ServiceTaskNetworkModeRequired({
+              message: `Task definition ${reference.taskDefinitionArn} was not returned by ECS.`,
+            });
+          }
+          const task = {
+            ...reference,
+            networkMode: describedTask.taskDefinition.networkMode ?? "bridge",
+          };
+          if (
+            news.ingress !== undefined &&
+            (task.networkMode === "none" ||
+              serviceTargetType(task.networkMode) !==
+                serviceTargetType(declaredServiceNetworkMode(news)))
+          ) {
+            return yield* new ServiceTaskNetworkModeRequired({
+              message: `Managed ingress network mode does not match ${reference.taskDefinitionArn}. Set task.networkMode to the registered mode for a referenced task.`,
+            });
+          }
+          const network =
+            task.networkMode === "awsvpc"
+              ? yield* resolveNetwork(news)
+              : undefined;
 
           // Managed ingress: the composed child-resource outputs arrive via
           // the internal `ingress` prop (written by the factory's
@@ -3632,7 +3864,12 @@ export const ServiceProvider = () =>
                 news.serviceRegistries ??
                 ((olds?.serviceRegistries?.length ?? 0) > 0 ? [] : undefined),
               enableExecuteCommand: news.enableExecuteCommand,
-              forceNewDeployment: true,
+              // Idle services have no tasks to replace; configuration changes
+              // still trigger ECS deployments without forcing an empty rollout.
+              forceNewDeployment:
+                news.desiredCount !== 0 ||
+                (observed.runningCount ?? 0) > 0 ||
+                (observed.pendingCount ?? 0) > 0,
             })
             .pipe(
               // The service may still be transitioning (e.g. a prior
@@ -3715,7 +3952,14 @@ export const ServiceProvider = () =>
             ...ownedAttributes,
           };
         }),
-        delete: Effect.fn(function* ({ output, session }) {
+        delete: Effect.fn(function* ({ id, olds, output, session }) {
+          if (
+            output.taskFamily !== undefined ||
+            (olds !== undefined && !("task" in olds))
+          ) {
+            const recovered = yield* recoverServiceTask(id, output);
+            output = { ...output, ...recovered.attributes };
+          }
           // Scale to zero and prove every task/target has drained before
           // deleting the service or its dependent task-definition resources.
           yield* ecs
@@ -3723,6 +3967,16 @@ export const ServiceProvider = () =>
               cluster: output.clusterArn,
               service: output.serviceName,
               desiredCount: 0,
+              // Relax the rolling-deployment gates in the same call: with the
+              // AWS default minimumHealthyPercent of 100, a service caught
+              // mid-deployment (e.g. right after a load balancer detach)
+              // refuses to stop its old task even at desiredCount 0 ("unable
+              // to stop or start tasks during a deployment because of the
+              // service deployment configuration").
+              deploymentConfiguration: {
+                minimumHealthyPercent: 0,
+                maximumPercent: 200,
+              },
             })
             .pipe(
               // `ServiceNotActiveException` means the service is DRAINING or
@@ -3738,11 +3992,24 @@ export const ServiceProvider = () =>
           yield* session.note(
             `Waiting for ECS service ${output.serviceName} to drain`,
           );
+          // Best-effort drain: a service can wedge mid-deployment ("unable to
+          // stop or start tasks during a deployment because of the service
+          // deployment configuration" — e.g. after a load balancer was
+          // detached), in which case the old task never stops on its own.
+          // The forced delete below stops it regardless, so a drain timeout
+          // must never fail the delete.
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,
             serviceName: output.serviceName,
             mode: "drained",
-          });
+            timeout: "3 minutes",
+          }).pipe(
+            Effect.catchTag("ServiceDidNotStabilize", (error) =>
+              session.note(
+                `ECS service ${output.serviceName} did not drain in time (${error.message}); deleting with force`,
+              ),
+            ),
+          );
 
           yield* ecs
             .deleteService({
@@ -3754,6 +4021,42 @@ export const ServiceProvider = () =>
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
+
+          // ECS will not stop a task pinned by a deployment it could not
+          // complete, even for a forced delete of a now-DRAINING service.
+          // Stop whatever the service still runs so the delete can finish.
+          const lingeringTasks = yield* ecs.listTasks
+            .pages({
+              cluster: output.clusterArn,
+              serviceName: output.serviceName,
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.taskArns ?? []),
+              ),
+              Effect.catchTag(
+                ["ClusterNotFoundException", "ServiceNotFoundException"],
+                () => Effect.succeed([] as string[]),
+              ),
+            );
+          yield* Effect.forEach(
+            lingeringTasks,
+            (task) =>
+              ecs
+                .stopTask({
+                  cluster: output.clusterArn,
+                  task,
+                  reason: "alchemy delete",
+                })
+                .pipe(
+                  Effect.catchTag("ClusterNotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                  Effect.asVoid,
+                ),
+            { discard: true },
+          );
 
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,

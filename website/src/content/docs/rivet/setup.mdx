@@ -1,0 +1,138 @@
+---
+title: Setup
+description: Provision a private Rivet Engine and register an actor runner with Alchemy.
+---
+
+import { Code } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+
+Rivet separates the Engine, actor runners, and application ingress. This guide
+uses the ECS host. The Engine and its actor gateway remain private; a
+`Rivet.Worker` registers actors, not an HTTP `fetch` handler.
+
+## Prepare the deployment environment
+
+Use a Bun project and an [Alchemy profile](/environments/profiles) with AWS
+credentials authorized to provision ECS, networking, IAM, images, and the host's
+other resources.
+
+<Code code={`bun add alchemy "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}"`} lang="sh" />
+
+The deployment bundles the runner and installs the pinned RivetKit runtime in its
+image. Test Engine and RivetKit overrides together before changing their versions.
+
+## Declare the cluster
+
+```typescript
+// src/cluster.ts
+import * as Rivet from "alchemy/Rivet";
+
+export class Actors extends Rivet.Cluster<Actors>()("Actors", {
+  instances: 1,
+}) {}
+```
+
+This minimal cluster uses the built-in single-node RocksDB backend. Its storage
+is on the node's ephemeral disk: actor sleep/wake persistence is not protection
+against losing that disk. Configure `postgresUrl` with a managed PostgreSQL
+backend for storage that outlives engine-node replacement and for multi-node use.
+
+## Declare the runner
+
+```typescript
+// src/worker.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import { Actors } from "./cluster.ts";
+
+export default class ActorWorker extends Rivet.Worker<ActorWorker>()(
+  "ActorWorker",
+  { cluster: Actors, main: import.meta.url },
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+The empty return value is intentional. Yield Durable Object classes in this
+Effect to register actors, as shown in [Workers](/rivet/compute/workers).
+Do not add `fetch`, `expose`, or `domain` to turn this into public ingress.
+
+## Register the host
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import ActorWorker from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "RivetRooms",
+  {
+    providers: Layer.mergeAll(
+      AWS.providers(),
+      Rivet.providers(),
+      Rivet.EcsCluster(),
+    ),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* ActorWorker;
+    return { endpoint: worker.endpoint };
+  }),
+);
+```
+
+`Rivet.EcsCluster()` supplies the platform host. The endpoint is private discovery
+information, not a browser-facing API URL or an authorization boundary.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The host provisions the Engine and runner. Subsequent code updates register a
+new runner version; retain the cluster and actor names to retain identity.
+
+## Invoke an actor
+
+Follow [Durable Objects](/rivet/compute/durable-objects#call-from-a-network-attached-function)
+to add a Counter and a network-attached Lambda caller. That example invokes
+buffered actor actions through `Rivet.bindWorker`; the empty runner above has
+no public endpoint to curl.
+
+## Remove the compute
+
+```sh
+bun alchemy destroy
+```
+
+Review deletion of the Engine separately from application data retention. The
+default ephemeral storage is unsuitable for data you need after teardown. Back
+up and manage the lifecycle of an external PostgreSQL database independently.
+
+## Runtime behavior
+
+The runner hosts actors on behalf of the private Engine. Network-attached
+application code uses the gateway, while the application's own ingress performs
+authentication and authorization before selecting an actor name.
+
+## Limitations
+
+A gateway token is not a substitute for network isolation: do not expose the
+Engine's data plane publicly. `Rivet.Worker` rejects `expose` and `domain`.
+A Lambda Function URL supports request/response calls, **not WebSocket upgrades**.
+Streaming RPC needs a WebSocket-capable, authenticated application ingress or a
+caller already inside the private network. Rivet has no Alchemy Workflow API.
+
+## Related guides
+
+- [Workers](/rivet/compute/workers)
+- [Cloudflare setup](/cloudflare/setup) · [Celld setup](/celld/setup)
+- [Cluster reference](/providers/rivet/cluster)
+- [ECS host reference](/providers/rivet/ecscluster)
+- [Worker reference](/providers/rivet/worker)

@@ -52,6 +52,7 @@ const packageOf = (id: string) => {
 const bundleWorkerEntry = Effect.fn(function* (
   entry: string,
   generated = false,
+  target: "workerd" | "node" = "workerd",
 ) {
   const path = yield* Path.Path;
   const packageRoot = yield* path.fromFileUrl(
@@ -71,6 +72,7 @@ const bundleWorkerEntry = Effect.fn(function* (
       rolldown({
         input: path.join(packageRoot, entry),
         cwd: packageRoot,
+        ...(target === "node" ? { platform: "node" as const } : {}),
         external: [
           "lightningcss",
           "fsevents",
@@ -78,10 +80,12 @@ const bundleWorkerEntry = Effect.fn(function* (
           ...(generated ? [path.join(packageRoot, entry)] : []),
         ],
         plugins: [
-          cloudflare({
-            compatibilityDate: "2025-04-01",
-            compatibilityFlags: ["nodejs_compat"],
-          }),
+          target === "workerd"
+            ? cloudflare({
+                compatibilityDate: "2025-04-01",
+                compatibilityFlags: ["nodejs_compat"],
+              })
+            : undefined,
           generated
             ? virtualEntry(
                 makeEffectVirtualEntry(
@@ -210,6 +214,28 @@ layer(NodeServices.layer)(
           expect(code).not.toContain("require.resolve");
         }),
     );
+
+    for (const [entry, target] of [
+      ["src/Cloudflare/Workers/DurableObjectState.ts", "workerd"],
+      ["src/Celld/DurableObjectState.ts", "workerd"],
+      ["src/Runtime/Bootstrap/CelldFleet.ts", "workerd"],
+      ["src/Rivet/DurableObjectState.ts", "node"],
+      ["src/Runtime/Bootstrap/RivetRunner.ts", "node"],
+    ] as const) {
+      it.effect(`keeps ${entry} free of provisioning dependencies`, () =>
+        Effect.gen(function* () {
+          const { sources, packages } = yield* bundleWorkerEntry(
+            entry,
+            false,
+            target,
+          );
+          expect(sources.filter(isPlannerSource)).toEqual([]);
+          expect(
+            toolchainPackages.filter((name) => packages.has(name)),
+          ).toEqual([]);
+        }),
+      );
+    }
 
     it.effect("the alchemy/Cloudflare namespace does pull that tooling", () =>
       Effect.gen(function* () {

@@ -90,9 +90,15 @@ const assertBrowserGraph = Effect.fn(function* (
   const alchemyModules = modules.filter(
     (id) => id.startsWith(sourceRoot) || id.startsWith(libRoot),
   );
-  expect(alchemyModules).toEqual([
-    path.join(root, expectedEntry).replaceAll("\\", "/"),
-  ]);
+  const sharedEntry = expectedEntry.startsWith("src/")
+    ? "src/Workers/RpcWebSocketClient.ts"
+    : "lib/Workers/RpcWebSocketClient.js";
+  expect(alchemyModules.sort()).toEqual(
+    [
+      path.join(root, expectedEntry).replaceAll("\\", "/"),
+      path.join(root, sharedEntry).replaceAll("\\", "/"),
+    ].sort(),
+  );
   expect(modules.some((id) => id.includes("/effect/"))).toBe(true);
   expect(
     modules.filter(

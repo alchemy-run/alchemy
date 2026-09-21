@@ -94,6 +94,11 @@ export interface SourceContext {
     | {
         readonly kind: "effect";
         readonly exports: Record<string, WorkerExport>;
+        /** Override the entry generator for another native Worker runtime. */
+        readonly makeVirtualEntry?: (
+          exports: Record<string, WorkerExport>,
+          stack: { name: string; stage: string },
+        ) => (importPath: string) => string;
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**

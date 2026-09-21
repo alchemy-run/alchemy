@@ -84,8 +84,9 @@ so you can only *use* them in the inner (runtime) Effect. That's why
 
 ## SQL migrations
 
-For objects that use SQL tables, generate and commit migration files with your
-schema changes before deploying. Load them in the outer Effect and apply them
+For objects that use SQL tables, follow the [Users SQL migration guide](/cloudflare/data/sql-migrations)
+for construction-time capture, per-instance application, and SQL-only redeploys.
+Generate and commit migration files with your schema changes before deploying. Load them in the outer Effect and apply them
 in the inner Effect:
 
 ```typescript
@@ -405,17 +406,14 @@ mechanism works across Workers: one Worker can host the DO while
 others bind to it by class — see
 [Bind to another Worker's Durable Object](/cloudflare/compute/cross-worker-durable-object).
 
-Alchemy also ships a schema-based `RpcDurableObject` that serves an
-Effect RPC group on the DO's `fetch`. It is no longer the suggested
-path for DO method calls — the schemaless bridge covers typed
-methods and streaming without the ceremony. Its one remaining niche
-is when return values are `Schema.Class` instances whose identity
-must survive the boundary — the schemaless bridge serializes return
-values and strips class identity — see
-[`Cloudflare.RpcDurableObject`](/cloudflare/apis/effect-rpc#sugar-cloudflarerpcdurableobject).
-If you want schema-*validated* procedures (payload validation,
-tagged error schemas shared with external clients), reach for
-[Effect RPC](/cloudflare/apis/effect-rpc) on a Worker instead.
+Use schema-based `RpcDurableObject` when external clients share an explicit
+`RpcGroup`, need schema-validated payloads and tagged errors, or connect directly
+to a named object over a hibernatable WebSocket. It also preserves schema-backed
+values across the wire where the class-method bridge serializes plain values.
+See [`Cloudflare.RpcDurableObject`](/cloudflare/apis/effect-rpc#sugar-cloudflarerpcdurableobject)
+and the cross-provider [RoomRpcs example](/cloudflare/apis/effect-rpc#build-the-roomrpcs-example).
+Class-method RPC remains the simpler choice for internal calls that do not need
+an explicit wire schema.
 
 ## Place an instance in a region
 
@@ -486,6 +484,10 @@ the method and close with its scope (see the
 for the model across all runtimes.
 
 ## Create an object for scheduled work
+
+The focused [durable schedules guide](/cloudflare/compute/durable-schedules)
+uses the same archive callback as Celld and Rivet. The existing Document example
+below also covers legacy schedule upgrades.
 
 Use `Alchemy.makeCallback` when work must survive the request and run
 later. Durable Objects persist these jobs in SQLite and deliver them
@@ -694,3 +696,23 @@ Related:
 Reference:
 
 - [DurableObject API reference](/providers/cloudflare/workers/durableobject)
+
+
+## Runtime behavior
+
+The two-phase declaration resolves services during construction and initializes
+one instance during activation. Calls get fresh scopes. Storage transactions
+cover the same object's native storage and callback scheduling, not remote work.
+
+## Limitations
+
+Class-method RPC is not schema-backed WebSocket RPC. Use explicit schemas for
+external clients and authorize the selected object before forwarding requests.
+Cloudflare's namespace transfer and placement rules are not portable host APIs.
+
+## Related guides
+
+- [Durable schedules](/cloudflare/compute/durable-schedules)
+- [SQL migrations](/cloudflare/data/sql-migrations)
+- [Celld Durable Objects](/celld/compute/durable-objects) · [Rivet Durable Objects](/rivet/compute/durable-objects)
+- [DurableObject reference](/providers/cloudflare/workers/durableobject)

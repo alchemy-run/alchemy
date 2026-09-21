@@ -220,7 +220,9 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`)).pipe(
+      yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`), {
+        retryDelay: dev ? "1 second" : "3 seconds",
+      }).pipe(
         Effect.flatMap((response) =>
           response.text.pipe(
             Effect.flatMap((body) =>

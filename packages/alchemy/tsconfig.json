@@ -42,6 +42,9 @@
       "path": "../../submodules/distilled/packages/aws/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/celld/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/cloudflare/tsconfig.json"
     },
     {

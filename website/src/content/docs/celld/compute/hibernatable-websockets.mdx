@@ -1,0 +1,167 @@
+---
+title: Hibernatable WebSockets
+description: Accept native Celld sockets and validate versioned Session attachments after a wake.
+---
+
+A native hibernatable connection can outlive the in-memory activation that
+accepted it. Keep durable connection data in an attachment, not only in a map.
+This guide uses a versioned `Session` schema shared with the Cloudflare and
+Rivet examples.
+
+## Accept a connection
+
+```typescript
+// src/room.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+
+export default class Room extends Celld.DurableObject<Room>()(
+  "Room",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {
+        fetch: Effect.gen(function* () {
+          const [response, socket] = yield* Celld.upgrade();
+          return response;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+`Celld.upgrade` returns the native upgrade response and provider-owned socket.
+Return that response from `fetch`; do not perform a second acceptance handshake.
+
+## Define the session data
+
+Add the schema above the class:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+const Session = Schema.Struct({
+  version: Schema.Literal(1),
+  userId: Schema.String,
+  connectedAt: Schema.DateFromString,
+});
+```
+
+`connectedAt` is a Date in application code and a string in its encoded form.
+The version makes incompatible old attachments detectable; it is not an
+automatic migration strategy.
+
+## Save session data on a socket
+
+```diff lang="typescript"
+           const [response, socket] = yield* Celld.upgrade();
++          const connectedAt = yield* Effect.sync(() => new Date());
++          yield* socket.setAttachment(Session, {
++            version: 1,
++            userId: "sam",
++            connectedAt,
++          }).pipe(Effect.orDie);
+           return response;
+```
+
+This demonstration uses a fixed identity. In an application, derive the identity
+from an authenticated and authorized upgrade request, not from a client-claimed
+user ID. The encoded value belongs to the native socket attachment.
+
+## Read the session back
+
+Add this handler beside `fetch` in the returned object:
+
+```typescript
+webSocketMessage: (socket: Celld.WebSocket, _message: string | ArrayBuffer) =>
+  Effect.gen(function* () {
+    const session = yield* socket.getAttachment(Session);
+    yield* socket.send(`Welcome back, ${session.userId}`);
+  }).pipe(
+    Effect.catchTag("WebSocketAttachmentError", () =>
+      socket.close(1008, "Invalid session"),
+    ),
+  ),
+```
+
+Decode on each message, including the first message after a native wake. The
+application chooses to close invalid sessions; `getAttachment` does not close
+them automatically.
+
+## Validate attachments after hibernation
+
+Resolve `const state = yield* Celld.DurableObjectState` in the outer Effect.
+At the start of the inner Effect, validate any surviving sockets:
+
+```typescript
+for (const socket of yield* state.getWebSockets()) {
+  yield* socket.getAttachment(Session).pipe(
+    Effect.catchTag("WebSocketAttachmentError", () =>
+      socket.close(1008, "Invalid session"),
+    ),
+  );
+}
+```
+
+Native sockets survive independently of activation-local collections. If you
+maintain a broadcast map, rebuild it here from the retained sockets and decoded
+sessions rather than assuming the old map still exists.
+
+## Forward the upgrade
+
+```typescript
+// src/worker.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Room from "./room.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, expose: "public" },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.headers.upgrade !== "websocket") {
+          return HttpServerResponse.empty({ status: 426 });
+        }
+        return yield* rooms.getByName("lobby").fetch(request);
+      }),
+    };
+  }),
+) {}
+```
+
+Publish this entrypoint with the [Setup Application](/celld/setup). This fixed
+public lobby is a demonstration, not an authorization policy. Authenticate
+private connections before forwarding the upgrade.
+
+## Runtime behavior
+
+The inner Effect is rerun on activation; messages then arrive on provider-owned
+socket wrappers. Schema attachment failures distinguish `missing`, `read`,
+`decode`, `encode`, and `write` reasons through `WebSocketAttachmentError`.
+Encoded application data is separate from reserved RPC recovery metadata.
+Celld evicts idle objects under memory pressure or its residency limit. For
+age-based eviction, configure `CELLD_IDLE_EVICT_S` on the native daemon;
+Celld v0.5.0 leaves this policy disabled when the variable is unset.
+
+## Limitations
+
+Celld uses its native attachment and socket implementation, not workerd. Keep
+attachments small and JSON-compatible when sharing schemas across providers;
+do not assume Cloudflare's 16,384-byte limit is a Celld quota. Codec success does
+not waive native serialization or size limits. Ordinary application messages
+have no automatic heartbeat protocol; [Effect RPC](/celld/apis/effect-rpc)
+manages its own protocol and recovery. Hibernation retains idle connections,
+not running JavaScript fibers or resumable in-flight RPC calls.
+
+## Related guides
+
+- [Durable Objects](/celld/compute/durable-objects)
+- [Effect RPC](/celld/apis/effect-rpc)
+- [Cloudflare hibernatable WebSockets](/cloudflare/compute/hibernatable-websockets) · [Rivet hibernatable WebSockets](/rivet/compute/hibernatable-websockets)
+- [DurableObject reference](/providers/celld/durableobject)

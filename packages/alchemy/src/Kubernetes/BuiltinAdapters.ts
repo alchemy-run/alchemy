@@ -49,7 +49,7 @@ const requireEndpoint = (connection: Connection) =>
  * plugins.
  */
 export const KubeConfigAdapter: Layer.Layer<
-  ClusterAdapterService,
+  ClusterAdapter<"kubeconfig">,
   never,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effect(
@@ -110,7 +110,7 @@ export const KubeConfigAdapter: Layer.Layer<
 );
 
 /** `token` — a static bearer token against an explicit endpoint. */
-export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
+export const TokenAdapter: Layer.Layer<ClusterAdapter<"token">> = Layer.succeed(
   ClusterAdapter("token"),
   {
     kind: "Kubernetes.ClusterAdapter" as const,
@@ -134,7 +134,7 @@ export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
 );
 
 /** `client-cert` — mutual TLS against an explicit endpoint. */
-export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> =
+export const ClientCertAdapter: Layer.Layer<ClusterAdapter<"client-cert">> =
   Layer.succeed(ClusterAdapter("client-cert"), {
     kind: "Kubernetes.ClusterAdapter" as const,
     connect: Effect.fn(function* (connection: Connection) {
@@ -163,7 +163,7 @@ export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> =
  * against an explicit endpoint.
  */
 export const ExecAdapter: Layer.Layer<
-  ClusterAdapterService,
+  ClusterAdapter<"exec">,
   never,
   ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effect(
@@ -203,7 +203,10 @@ export const ExecAdapter: Layer.Layer<
 
 /** All built-in adapters, merged for `Kubernetes.providers()`. */
 export const builtinAdapters = (): Layer.Layer<
-  ClusterAdapterService,
+  | ClusterAdapter<"kubeconfig">
+  | ClusterAdapter<"token">
+  | ClusterAdapter<"client-cert">
+  | ClusterAdapter<"exec">,
   never,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > =>

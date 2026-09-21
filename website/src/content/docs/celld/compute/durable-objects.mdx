@@ -1,0 +1,120 @@
+---
+title: Durable Objects
+description: Persist a Counter per name and call it through a Celld Worker.
+---
+
+A Celld Durable Object is a named cell with native SQLite-backed storage.
+Use the Fleet, Application, and Worker from [Setup](/celld/setup); declaring
+an object does not independently publish it.
+
+## Create the Counter file
+
+```typescript
+// src/counter.ts
+import * as Celld from "alchemy/Celld";
+import * as Effect from "effect/Effect";
+
+export default class Counter extends Celld.DurableObject<Counter>()(
+  "Counter",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {};
+    });
+  }),
+) {}
+```
+
+The outer Effect assembles dependencies; the inner Effect initializes one
+activation and returns its public methods. Avoid runtime I/O in the outer Effect.
+
+## Resolve the state handle
+
+```diff lang="typescript"
+   Effect.gen(function* () {
++    const state = yield* Celld.DurableObjectState;
+     return Effect.gen(function* () {
+       return {};
+     });
+   }),
+```
+
+Resolving the handle is construction-safe. Calling its storage methods requires
+the runtime context, supplied during activation and method execution.
+
+## Persist the count
+
+Replace the inner return value:
+
+```diff lang="typescript"
+-      return {};
++      return {
++        get: () => state.storage.get<number>("count").pipe(
++          Effect.map((count) => count ?? 0),
++        ),
++        increment: () => state.storage.transaction(
++          Effect.gen(function* () {
++            const count = (yield* state.storage.get<number>("count")) ?? 0;
++            yield* state.storage.put("count", count + 1);
++            return count + 1;
++          }),
++        ),
++      };
+```
+
+Read and write the persisted value in the same native storage transaction.
+JavaScript variables are not durable and are not rolled back by a storage
+transaction.
+
+## Bind the Counter to the Worker
+
+```diff lang="typescript"
+ // src/worker.ts
++import Counter from "./counter.ts";
+
+   Effect.gen(function* () {
++    const counters = yield* Counter;
+```
+
+Yield the class in the Worker's outer Effect. The namespace belongs to that
+Worker's publication and supplies typed class-method stubs.
+
+## Call a named Counter
+
+Replace the Worker's returned handler with:
+
+```typescript
+return {
+  fetch: Effect.gen(function* () {
+    const count = yield* counters.getByName("visits").increment().pipe(Effect.orDie);
+    return HttpServerResponse.text(String(count));
+  }),
+};
+```
+
+This uses `HttpServerResponse` already imported in Setup. `"visits"` identifies
+one Counter; choosing another name selects independent state. Re-publish with
+`bun alchemy deploy` and call the Application URL twice to observe consecutive
+values.
+
+## Runtime behavior
+
+Class-method RPC follows the methods returned by the inner Effect. It is distinct
+from schema-backed [Effect RPC](/celld/apis/effect-rpc). Each call gets a fresh
+scope; acquire connections and other disposable resources inside that call.
+The inner Effect runs again after activation loss, so recover durable state
+from storage rather than retaining an initialization promise.
+
+## Limitations
+
+Keep the Worker, class, fleet, and object-name identities stable across updates.
+Do not infer Cloudflare location, cross-Worker transfer, or native binding
+semantics from similarly named Celld APIs. Transactions cover the current cell,
+not another cell or an external API.
+
+## Related guides
+
+- [Durable schedules](/celld/compute/durable-schedules)
+- [Hibernatable WebSockets](/celld/compute/hibernatable-websockets)
+- [SQL migrations](/celld/data/sql-migrations)
+- [Cloudflare Durable Objects](/cloudflare/compute/durable-objects) · [Rivet Durable Objects](/rivet/compute/durable-objects)
+- [DurableObject reference](/providers/celld/durableobject)
