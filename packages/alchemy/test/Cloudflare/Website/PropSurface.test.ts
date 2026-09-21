@@ -164,9 +164,8 @@ describe("Website prop surfaces", () => {
       }),
     () =>
       Cloudflare.Website.Astro("A", {
-        // @ts-expect-error only "always" | "never" | "ignore" — the value
-        // mismatch surfaces on the containing `astro` assignment
         astro: {
+          // @ts-expect-error only "always" | "never" | "ignore"
           trailingSlash: "sometimes",
         },
       }),
