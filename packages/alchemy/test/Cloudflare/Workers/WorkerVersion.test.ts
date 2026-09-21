@@ -3,18 +3,11 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import {
-  Credentials,
-  formatHeaders,
-} from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -43,33 +36,6 @@ const latestDeployment = Effect.fn(function* (scriptName: string) {
   return deployments[0];
 });
 
-// The SDK's getScriptVersion response schema does not expose annotations.
-// Read the API response directly to verify what Cloudflare stored.
-const versionAnnotations = Effect.fn(function* (
-  accountId: string,
-  scriptName: string,
-  versionId: string,
-) {
-  const credentials = yield* yield* Credentials;
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* client
-    .get(
-      `${credentials.apiBaseUrl}/accounts/${accountId}/workers/scripts/${scriptName}/versions/${versionId}`,
-      { headers: formatHeaders(credentials) },
-    )
-    .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-  const body = yield* HttpClientResponse.schemaBodyJson(
-    Schema.Struct({
-      result: Schema.Struct({
-        annotations: Schema.optional(
-          Schema.Record(Schema.String, Schema.String),
-        ),
-      }),
-    }),
-  )(response);
-  return body.result.annotations;
-});
-
 describe.concurrent("Cloudflare.Worker version", () => {
   for (const traffic of [undefined, 100] as const) {
     test.provider(
@@ -90,28 +56,24 @@ describe.concurrent("Cloudflare.Worker version", () => {
             );
             const { deployment, version } = yield* Effect.gen(function* () {
               const deployment = yield* latestDeployment(worker.workerName);
-              const versionId = deployment?.versions[0]?.versionId;
-              const version = versionId
-                ? yield* versionAnnotations(
-                    accountId,
-                    worker.workerName,
-                    versionId,
-                  )
-                : undefined;
+              const version = yield* workers.getScriptScriptAndVersionSetting({
+                accountId,
+                scriptName: worker.workerName,
+              });
               return { deployment, version };
             }).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 times: 10,
                 until: ({ version }) =>
-                  version?.["workers/tag"] === tag &&
-                  version?.["workers/message"] === message,
+                  version.annotations?.workersTag === tag &&
+                  version.annotations?.workersMessage === message,
               }),
             );
             expect(deployment?.versions).toHaveLength(1);
             expect(deployment?.versions[0].percentage).toEqual(100);
-            expect(version?.["workers/tag"]).toEqual(tag);
-            expect(version?.["workers/message"]).toEqual(message);
+            expect(version.annotations?.workersTag).toEqual(tag);
+            expect(version.annotations?.workersMessage).toEqual(message);
           }
 
           yield* stack.destroy();
