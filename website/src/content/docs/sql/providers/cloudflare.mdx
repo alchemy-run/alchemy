@@ -1,6 +1,6 @@
 ---
 title: SQL on Cloudflare
-description: D1 and Hyperdrive-backed Postgres or MySQL for Workers.
+description: D1, Durable Object SQLite, and Hyperdrive-backed Postgres or MySQL for Workers.
 ---
 
 ## D1
@@ -35,6 +35,68 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```
 
 [Drizzle + D1](/cloudflare/data/d1-drizzle) · [Effect SQL](/sql/effect-sql/d1) · [Migrations](/cloudflare/data/d1)
+
+## Durable Objects
+
+```sql
+-- migrations/0001_users.sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL
+);
+```
+
+```typescript
+// src/Users.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class Users extends Cloudflare.DurableObject<Users>()(
+  "Users",
+  Effect.gen(function* () {
+    const migrations = yield* Cloudflare.SqlMigrations("./migrations");
+    const state = yield* Cloudflare.DurableObjectState;
+
+    return Effect.gen(function* () {
+      yield* migrations.apply().pipe(Effect.orDie);
+
+      return {
+        listUsers: () =>
+          state.storage.sql
+            .exec<{ id: number; name: string }>("SELECT id, name FROM users")
+            .pipe(Effect.flatMap((cursor) => cursor.toArray())),
+      };
+    });
+  }),
+) {}
+```
+
+```typescript
+// src/SqlApi.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Users from "./Users.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const users = yield* Users;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* users.getByName("demo").listUsers();
+        return yield* HttpServerResponse.json(rows);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Commit migrations before deployment. SQL is bundled during construction and applied per object on activation, not to every object during deploy.
+
+[SQL migrations](/sql/effect-sql/migrations#durable-object-migrations) · [Drizzle.DurableObject](/sql/drizzle/migrations#durable-object-migrations) · [History adoption](/sql/effect-sql/migrations#adopting-drizzle-history) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql)
 
 ## Postgres and MySQL
 

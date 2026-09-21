@@ -1351,7 +1351,7 @@ export default defineConfig({
                 { label: "Neon", link: "/sql/providers/neon" },
                 { label: "PlanetScale", link: "/sql/providers/planetscale" },
                 {
-                  label: "Prisma Postgres & Compute",
+                  label: "Prisma",
                   link: "/sql/providers/prisma",
                 },
                 { label: "Railway", link: "/sql/providers/railway" },

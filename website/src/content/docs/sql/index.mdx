@@ -9,8 +9,8 @@ description: SQL clients, database providers, and runnable integrations.
 
 | Client | Guides |
 | --- | --- |
-| Effect SQL | [Postgres](/sql/effect-sql/postgres) · [MySQL](/sql/effect-sql/mysql) · [D1](/sql/effect-sql/d1) |
-| Drizzle | [Postgres](/sql/drizzle/postgres) · [MySQL](/sql/drizzle/mysql) · [D1](/sql/drizzle/d1) |
+| Effect SQL | [Postgres](/sql/effect-sql/postgres) · [MySQL](/sql/effect-sql/mysql) · [D1](/sql/effect-sql/d1) · [Durable Objects](/sql/effect-sql/migrations#durable-object-migrations) |
+| Drizzle | [Postgres](/sql/drizzle/postgres) · [MySQL](/sql/drizzle/mysql) · [D1](/sql/drizzle/d1) · [Durable Objects](/sql/drizzle/migrations#durable-object-migrations) |
 | Prisma ORM v8 | [Contracts](/sql/prisma/contracts) · [Postgres](/sql/prisma/postgres) |
 
 Prisma ORM v8 requires PostgreSQL 17+.
@@ -22,7 +22,7 @@ Prisma ORM v8 requires PostgreSQL 17+.
 | Provider | Databases and connections |
 | --- | --- |
 | [AWS](/sql/providers/aws) | Aurora PostgreSQL, Aurora DSQL, RDS Data API |
-| [Cloudflare](/sql/providers/cloudflare) | D1, Hyperdrive |
+| [Cloudflare](/sql/providers/cloudflare) | D1, Durable Objects, Hyperdrive |
 | [Fly.io](/sql/providers/fly) | Managed Postgres |
 | [Hetzner](/sql/providers/hetzner) | Services with an external database |
 | [Neon](/sql/providers/neon) | Postgres |
@@ -42,6 +42,7 @@ Prisma ORM v8 requires PostgreSQL 17+.
 | Lambda + Aurora DSQL + Drizzle | [AWS](/aws/data/drizzle-dsql) |
 | Workers + Neon or PlanetScale + Drizzle | [Cloudflare](/cloudflare/data/drizzle) |
 | Workers + D1 + Drizzle | [Cloudflare](/cloudflare/data/d1-drizzle) |
+| Durable Objects + SQLite | [Cloudflare](/sql/providers/cloudflare#durable-objects) |
 | Fly Service + Postgres + Drizzle | [Fly](/fly/data/postgres) |
 | Railway Service + Postgres + Drizzle | [Railway](/railway/data/postgres) |
 | Workers + Neon + Prisma ORM | [Cloudflare](/cloudflare/data/prisma) |

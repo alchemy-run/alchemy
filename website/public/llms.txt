@@ -526,12 +526,12 @@ One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Driz
 - [SQL](https://alchemy.run/sql) — SQL clients, database providers, and runnable integrations.
 - [Choose a database](https://alchemy.run/sql/databases) — Database integration guides for Aurora, D1, Fly, Neon, PlanetScale, Prisma, and Railway.
 - [SQL on AWS](https://alchemy.run/sql/providers/aws) — Aurora PostgreSQL, Aurora DSQL, and the RDS Data API.
-- [SQL on Cloudflare](https://alchemy.run/sql/providers/cloudflare) — D1 and Hyperdrive-backed Postgres or MySQL for Workers.
+- [SQL on Cloudflare](https://alchemy.run/sql/providers/cloudflare) — D1, Durable Object SQLite, and Hyperdrive-backed Postgres or MySQL for Workers.
 - [SQL on Fly.io](https://alchemy.run/sql/providers/fly) — Fly Managed Postgres with SQL migrations and a Service connection binding.
 - [SQL on Hetzner](https://alchemy.run/sql/providers/hetzner) — Connect a Hetzner Service to an external Postgres database.
 - [SQL with Neon](https://alchemy.run/sql/providers/neon) — Provision Neon Postgres, apply migrations, and connect your application.
 - [SQL with PlanetScale](https://alchemy.run/sql/providers/planetscale) — PlanetScale Postgres and MySQL databases, branches, and migrations.
-- [SQL with Prisma Postgres and Compute](https://alchemy.run/sql/providers/prisma) — Prisma-hosted Postgres and Compute, separate from the Prisma ORM client.
+- [Prisma](https://alchemy.run/sql/providers/prisma) — Prisma-hosted Postgres and Compute, separate from the Prisma ORM client.
 - [SQL on Railway](https://alchemy.run/sql/providers/railway) — Private Postgres and MySQL connections for Railway Services.
 - [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 - [D1](https://alchemy.run/sql/effect-sql/d1) — SQL.D1 wraps a bound D1 database in an @effect/sql-d1 client — tagged-template queries with typed errors over the native binding.
@@ -556,4 +556,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~966 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~968 KB) — only fetch it when you need to locate a specific resource's reference page.

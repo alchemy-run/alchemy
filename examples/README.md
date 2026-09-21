@@ -12,6 +12,7 @@ Examples create billable infrastructure. Follow each README's cleanup commands.
 | AWS Lambda | Aurora DSQL | Drizzle | [aws-dsql-drizzle](./aws-dsql-drizzle) |
 | AWS Lambda | Aurora PostgreSQL | `pg` | [aws-rds](./aws-rds) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Drizzle | [cloudflare-neon-drizzle](./cloudflare-neon-drizzle) |
+| Cloudflare Durable Objects | SQLite per object | Drizzle | [cloudflare-durable-object-sql](./cloudflare-durable-object-sql) |
 | Cloudflare Workers | PlanetScale Postgres through Hyperdrive | Drizzle | [cloudflare-planetscale-postgres-drizzle](./cloudflare-planetscale-postgres-drizzle) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Prisma ORM, TypeScript-first | [cloudflare-neon-prisma](./cloudflare-neon-prisma) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Prisma ORM, PSL-first | [cloudflare-neon-prisma-psl](./cloudflare-neon-prisma-psl) |
