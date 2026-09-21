@@ -13,6 +13,7 @@ import { Progress, type ProgressEvent } from "@/Report.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
+import { hashInput } from "@/Util/sha256";
 import {
   InMemoryService,
   inMemoryState,
@@ -128,6 +129,459 @@ const makePlanWithCustomStack =
         Effect.provide(TestLayers()),
       );
     });
+
+describe("Action output convergence", () => {
+  const seedAction = (
+    id: string,
+    input: Record<string, unknown>,
+    output: unknown,
+    status: "ran" | "running" = "ran",
+  ) =>
+    Effect.gen(function* () {
+      const { name, stage } = yield* resolveStackId;
+      const state = yield* yield* State;
+      const row = {
+        kind: "action" as const,
+        fqn: id,
+        logicalId: id,
+        namespace: undefined,
+        actionType: "Compute",
+        inputHash: yield* hashInput(input),
+        input,
+        downstream: ["Host"],
+      };
+      yield* state.set({
+        stack: name,
+        stage,
+        fqn: id,
+        value:
+          status === "ran" ? { ...row, status, output } : { ...row, status },
+      });
+    });
+
+  const seedHost = (value: string) =>
+    seed({
+      Host: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Host",
+        fqn: "Host",
+        namespace: undefined,
+        resourceType: "Test.Function",
+        status: "created",
+        props: { name: "host", env: { RESULT: value } },
+        attr: {
+          name: "host",
+          env: { RESULT: value },
+          functionArn: "arn:test:host",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    });
+
+  test(
+    "unchanged Action output in host env produces repeated noop plans without running the body",
+    Effect.gen(function* () {
+      let calls = 0;
+      const Compute = Action("Compute", (_: { revision: string }) =>
+        Effect.sync(() => {
+          calls++;
+          return { value: "v1" };
+        }),
+      );
+      yield* seedAction("Compute", { revision: "one" }, { value: "v1" });
+      yield* seedHost("v1");
+      const program = Effect.gen(function* () {
+        const result = yield* Compute({ revision: "one" });
+        return yield* Function("Host", {
+          name: "host",
+          env: { RESULT: result.value },
+        });
+      });
+      for (const _ of [1, 2]) {
+        const plan = yield* program.pipe(makePlan);
+        expect(plan.actions.Compute.action).toBe("noop");
+        expect(plan.actions.Compute.downstream).toContain("Host");
+        expect(plan.resources.Host.action).toBe("noop");
+        expect(calls).toBe(0);
+      }
+    }),
+  );
+
+  test(
+    "a new consumer receives the persisted output of a noop Action and retains its dependency edge",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      yield* seedAction("Compute", {}, { value: "v1" });
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        return yield* Function("Host", { env: { RESULT: result.value } });
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.actions.Compute.downstream).toContain("Host");
+      expect(plan.resources.Host).toMatchObject({
+        action: "create",
+        props: { env: { RESULT: "v1" } },
+      });
+    }),
+  );
+
+  test(
+    "unchanged Action output in binding data does not dirty the host",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      yield* seedAction("Compute", {}, { value: "v1" });
+      yield* seed({
+        Host: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Host",
+          fqn: "Host",
+          namespace: undefined,
+          resourceType: "Test.BindingTarget",
+          status: "created",
+          props: { name: "host" },
+          attr: {
+            name: "host",
+            string: "",
+            env: { RESULT: "v1" },
+            replaceString: undefined,
+          },
+          bindings: [{ sid: "Result", data: { env: { RESULT: "v1" } } }],
+          downstream: [],
+        },
+      });
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        const host = yield* BindingTarget("Host", { name: "host" });
+        yield* host.bind("Result", { env: { RESULT: result.value } });
+        return host;
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.actions.Compute.downstream).toContain("Host");
+      expect(plan.resources.Host.action).toBe("noop");
+      expect(plan.resources.Host.bindings).toEqual([
+        { sid: "Result", action: "noop", data: { env: { RESULT: "v1" } } },
+      ]);
+    }),
+  );
+
+  for (const scenario of [
+    "changed input",
+    "force",
+    "unfinished prior run",
+  ] as const) {
+    test(
+      `${scenario} keeps the Action output unresolved instead of substituting stale state`,
+      Effect.gen(function* () {
+        const Compute = Action("Compute", (input: { revision: string }) =>
+          Effect.succeed({ value: input.revision }),
+        );
+        yield* seedAction(
+          "Compute",
+          { revision: "one" },
+          { value: "old" },
+          scenario === "unfinished prior run" ? "running" : "ran",
+        );
+        yield* seedHost("old");
+        const plan = yield* Effect.gen(function* () {
+          const result = yield* Compute({
+            revision: scenario === "changed input" ? "two" : "one",
+          });
+          return yield* Function("Host", {
+            name: "host",
+            env: { RESULT: result.value },
+          });
+        }).pipe((program) =>
+          makePlan(program, { force: scenario === "force" }),
+        );
+        expect(plan.actions.Compute.action).toBe("run");
+        expect(plan.resources.Host.action).toBe("update");
+        const host = plan.resources.Host;
+        if (host.action !== "update") throw new Error("Expected a host update");
+        expect(Output.hasOutputs(host.props.env.RESULT)).toBe(true);
+        expect(plan.actions.Compute.downstream).toContain("Host");
+      }),
+    );
+  }
+
+  for (const value of [undefined, null, false, 0, ""] as const) {
+    test(
+      `persisted ${String(value)} is a valid Action result, not a missing output`,
+      Effect.gen(function* () {
+        const Compute = Action("Compute", (_: {}) => Effect.succeed(value));
+        yield* seedAction("Compute", {}, value);
+        yield* seedHost(String(value));
+        const plan = yield* Effect.gen(function* () {
+          const result = yield* Compute({});
+          return yield* Function("Host", {
+            name: "host",
+            env: { RESULT: Output.map(result, (value) => String(value)) },
+          });
+        }).pipe(makePlan);
+        expect(plan.actions.Compute.action).toBe("noop");
+        expect(plan.resources.Host.action).toBe("noop");
+      }),
+    );
+  }
+
+  for (const changed of [false, true]) {
+    test(
+      `Action chains ${changed ? "invalidate downstream consumers when root input changes" : "converge when all inputs are unchanged"}`,
+      Effect.gen(function* () {
+        const Compute = Action("Compute", (input: { value: string }) =>
+          Effect.succeed({ value: input.value }),
+        );
+        yield* seedAction("First", { value: "v1" }, { value: "v1" });
+        yield* seedAction("Second", { value: "v1" }, { value: "v1" });
+        yield* seedHost("v1");
+        const plan = yield* Effect.gen(function* () {
+          const first = yield* Compute("First", {
+            value: changed ? "v2" : "v1",
+          });
+          const second = yield* Compute("Second", { value: first.value });
+          return yield* Function("Host", {
+            name: "host",
+            env: { RESULT: second.value },
+          });
+        }).pipe(makePlan);
+        expect(plan.actions.First.action).toBe(changed ? "run" : "noop");
+        expect(plan.actions.Second.action).toBe(changed ? "run" : "noop");
+        expect(plan.resources.Host.action).toBe(changed ? "update" : "noop");
+        expect(plan.actions.First.downstream).toContain("Second");
+        expect(plan.actions.Second.downstream).toContain("Host");
+      }),
+    );
+  }
+
+  test(
+    "changing only the Action body preserves the existing input-based invalidation contract",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "new-body" }),
+      );
+      yield* seedAction("Compute", {}, { value: "old-body" });
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        return yield* Function("Host", { env: { RESULT: result.value } });
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.resources.Host).toMatchObject({
+        action: "create",
+        props: { env: { RESULT: "old-body" } },
+      });
+    }),
+  );
+
+  test(
+    "a literal environment converges while an unrelated Action remains noop",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      yield* seedAction("Compute", {}, { value: "v1" });
+      yield* seedHost("v1");
+      const plan = yield* Effect.gen(function* () {
+        yield* Compute({});
+        return yield* Function("Host", { name: "host", env: { RESULT: "v1" } });
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.resources.Host.action).toBe("noop");
+    }),
+  );
+
+  test(
+    "a noop Action does not suppress changes to other consumer props",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      yield* seedAction("Compute", {}, { value: "v1" });
+      yield* seedHost("v1");
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        return yield* Function("Host", {
+          name: "changed",
+          env: { RESULT: result.value },
+        });
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test(
+    "an unchanged Action output does not hide a replacement-sensitive prop change",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      yield* seedAction("Compute", {}, { value: "v1" });
+      yield* seed({
+        Host: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Host",
+          fqn: "Host",
+          namespace: undefined,
+          resourceType: "Test.BindingTarget",
+          status: "created",
+          props: { name: "host", string: "v1", replaceString: "old" },
+          attr: { name: "host", string: "v1", env: {}, replaceString: "old" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        return yield* BindingTarget("Host", {
+          name: "host",
+          string: result.value,
+          replaceString: "new",
+        });
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("noop");
+      expect(plan.resources.Host.action).toBe("replace");
+    }),
+  );
+
+  for (const stable of [false, true]) {
+    test.provider(
+      `resource-backed Action inputs ${stable ? "reuse a stable property" : "invalidate a changing property"}`,
+      (stack) =>
+        Effect.gen(function* () {
+          const Compute = Action("Compute", (input: { value: string }) =>
+            Effect.succeed(input),
+          );
+          const program = (value: string) =>
+            Effect.gen(function* () {
+              const source = yield* TestResource("Source", { string: value });
+              const result = yield* Compute({
+                value: stable ? source.stableString : source.string,
+              });
+              return yield* Function("Host", { env: { RESULT: result.value } });
+            });
+          yield* stack.deploy(program("v1"));
+          const plan = yield* stack.plan(program("v2"));
+          expect(plan.resources.Source.action).toBe("update");
+          expect(plan.actions.Compute.action).toBe(stable ? "noop" : "run");
+          expect(plan.resources.Host.action).toBe(stable ? "noop" : "update");
+          expect(plan.resources.Source.downstream).toContain("Compute");
+          expect(plan.actions.Compute.downstream).toContain("Host");
+        }),
+    );
+  }
+
+  test(
+    "partial stable attributes cannot prove that a whole-resource Action input is unchanged",
+    Effect.gen(function* () {
+      const source = { stableString: "Source", stableArray: ["Source"] };
+      yield* seed({
+        Source: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Source",
+          fqn: "Source",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "v1" },
+          attr: source,
+          bindings: [],
+          downstream: ["Compute"],
+        },
+      });
+      yield* seedAction("Compute", { source }, { value: "v1" });
+      yield* seedHost("v1");
+      const Compute = Action(
+        "Compute",
+        (input: { source: { string?: string } }) =>
+          Effect.succeed({ value: input.source.string ?? "v1" }),
+      );
+      const plan = yield* Effect.gen(function* () {
+        const source = yield* TestResource("Source", { string: "v2" });
+        const result = yield* Compute({ source: Output.of(source) });
+        return yield* Function("Host", {
+          name: "host",
+          env: { RESULT: result.value },
+        });
+      }).pipe(makePlan);
+      expect(plan.resources.Source.action).toBe("update");
+      expect(plan.actions.Compute.action).toBe("run");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test(
+    "cyclic Action inputs remain unresolved instead of waiting on their own cached plans",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (input: { value: string }) =>
+        Effect.succeed(input),
+      );
+      yield* seedAction("First", { value: "v1" }, { value: "v1" });
+      yield* seedAction("Second", { value: "v1" }, { value: "v1" });
+      const plan = yield* Effect.gen(function* () {
+        const input: { value: Input<string> } = { value: "v1" };
+        const first = yield* Compute("First", input);
+        const second = yield* Compute("Second", { value: first.value });
+        input.value = second.value;
+        return second;
+      }).pipe(makePlan);
+      expect(plan.actions.First.action).toBe("run");
+      expect(plan.actions.Second.action).toBe("run");
+    }),
+    { timeout: 1000 },
+  );
+
+  test(
+    "a resource prop and Action input cycle does not deadlock output resolution",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (input: { value: string }) =>
+        Effect.succeed(input),
+      );
+      yield* seedAction("Compute", { value: "v1" }, { value: "v1" });
+      yield* seedHost("v1");
+      const plan = yield* Effect.gen(function* () {
+        const input: { value: Input<string> } = { value: "v1" };
+        const result = yield* Compute(input);
+        const host = yield* Function("Host", {
+          name: "host",
+          env: { RESULT: result.value },
+        });
+        input.value = host.env.RESULT;
+        return host;
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.action).toBe("run");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+    { timeout: 1000 },
+  );
+
+  test(
+    "a new Action retains its binding dependency without changing host props",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: {}) =>
+        Effect.succeed({ value: "v1" }),
+      );
+      const plan = yield* Effect.gen(function* () {
+        const result = yield* Compute({});
+        const host = yield* BindingTarget("Host", { name: "host" });
+        yield* host.bind("Result", { env: { RESULT: result.value } });
+        return host;
+      }).pipe(makePlan);
+      expect(plan.actions.Compute.downstream).toContain("Host");
+      expect(plan.resources.Host).toMatchObject({
+        action: "create",
+        props: { name: "host" },
+      });
+    }),
+  );
+});
 
 test(
   "artifacts are isolated by FQN during plan diff for namespaced resources",
