@@ -31,7 +31,6 @@ const fixtureEntries = [
   "package.json",
   "tsconfig.json",
   "next.config.mjs",
-  "open-next.config.ts",
   "middleware.ts",
   "app",
   "pages",
@@ -46,7 +45,6 @@ const memoInclude = [
   "tsconfig.json",
   "middleware.ts",
   "next.config.mjs",
-  "open-next.config.ts",
 ];
 
 /** GET `url` until it answers 200 with a JSON body — bounded (~60s). */
