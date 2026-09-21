@@ -1,6 +1,6 @@
 ---
-title: Configuration
-description: Configure Better Auth URLs, database layers, and deployment environments.
+title: Config and secrets
+description: Bind Effect Config into an Alchemy host, compose database layers, and preserve generated signing secrets.
 ---
 
 ## Keep configuration in a typed service
@@ -118,16 +118,3 @@ A gitignored env file can supply the same value through `--env-file .env.product
 Omit `secret` for a new application: Alchemy provisions a random signing secret once and preserves it across deployments. Keep the auth instance's `id`, resource namespace, stage, and state stable.
 
 When importing an existing installation, preserve its existing signing identity through protected configuration rather than generating a replacement. Preserving a secret alone does not migrate users, sessions, or cookies; follow the [upgrade guidance](/better-auth/upgrades/from-1-6-to-1-7) before moving an existing database.
-
-## Keep the browser client same-origin
-
-```typescript
-// client.ts — browser only
-import { createAuthClient } from "better-auth/client";
-
-export const authClient = createAuthClient();
-```
-
-The client calls `/api/auth` on the page's origin; your frontend must be served from that origin or use an intentionally configured cross-origin arrangement. Never import `auth.ts` into a browser bundle.
-
-The resolved auth origin is already trusted. Add exact additional origins to `trustedOrigins` only for intentional frontends; this allowlist does not configure CORS or cookie sharing, and disabling CSRF checks is not a URL fix.

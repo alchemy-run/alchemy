@@ -115,6 +115,6 @@ Refresh a previously signed-in browser after redeployment. Its existing session 
 
 ## Keep future changes safe
 
-Add verification and password reset through [email/password authentication](/better-auth/sign-in-providers/email-password). Use [authorization](/better-auth/guides/authorization) for ownership checks and [testing](/better-auth/guides/testing) for repeatable cookie-based checks.
+Review [migrations](/better-auth/guides/migrations) before changing the schema, and preserve the [signing identity](/better-auth/guides/configuration#preserve-the-signing-identity) across deployments. For authentication features beyond the Alchemy integration, see the [Better Auth documentation](https://better-auth.com/docs).
 
 The [complete companion application](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-better-auth) contains the assembled files. Its GitHub integration is opt-in so the email/password flow runs before external credentials are available.

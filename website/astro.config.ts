@@ -1191,33 +1191,18 @@ export default defineConfig({
               label: "Guides",
               items: [
                 {
-                  label: "Configuration",
+                  label: "Config and secrets",
                   link: "/better-auth/guides/configuration",
                 },
                 {
                   label: "HTTP API middleware",
                   link: "/better-auth/guides/http-api-middleware",
                 },
-                { label: "Sessions", link: "/better-auth/guides/sessions" },
-                {
-                  label: "Authorization",
-                  link: "/better-auth/guides/authorization",
-                },
-                {
-                  label: "Account linking",
-                  link: "/better-auth/guides/account-linking",
-                },
-                { label: "Plugins", link: "/better-auth/guides/plugins" },
                 {
                   label: "Secondary storage",
                   link: "/better-auth/guides/secondary-storage",
                 },
                 { label: "Migrations", link: "/better-auth/guides/migrations" },
-                { label: "Testing", link: "/better-auth/guides/testing" },
-                {
-                  label: "Troubleshooting",
-                  link: "/better-auth/guides/troubleshooting",
-                },
               ],
             },
             {

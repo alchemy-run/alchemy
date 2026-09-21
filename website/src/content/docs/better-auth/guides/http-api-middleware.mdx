@@ -131,7 +131,11 @@ export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
 
 The layer captures `Auth` once, but reads the session inside each returned request effect. It provides only that request's user to the handler; never construct a process-wide user layer or accept identity from a request body.
 
+`auth.getSession()` reads headers from the ambient Effect HTTP request. Outside that boundary, `auth.getSession(headers)` accepts a web `Headers` object.
+
 Only `null` becomes `Unauthorized` with HTTP `401`; typed lookup failures and unexpected lookup defects become `AuthenticationUnavailable` with HTTP `503`. The catch surrounds session resolution, not the downstream handler, so it cannot hide unrelated application failures.
+
+For diagnostics, `BetterAuthApiError.statusCode` is numeric and `body.code` identifies the upstream error. Log those fields rather than the complete error, whose headers and cause can contain credentials.
 
 `RuntimeContext.phantom` adapts Alchemy's runtime marker to the native HTTP middleware boundary. It does not authenticate a request or provide a session.
 
@@ -176,4 +180,4 @@ The first request returns `401` with `{"_tag":"Unauthorized"}`; the second retur
 
 An intentionally public endpoint can call `auth.getSession()` within its request effect and treat only `null` as anonymous. Keep lookup failures in the error channel or map them to a declared server error; do not attach required-auth middleware merely to obtain optional identity.
 
-Authentication identifies the caller; authorization still needs server-side ownership or permission checks. If cookie caching is enabled, sensitive checks should bypass it as described in [sessions](/better-auth/guides/sessions).
+Authentication identifies the caller; authorization still needs server-side ownership or permission checks. For session lifetime, revocation, and cookie-cache behavior, see [Better Auth's session documentation](https://better-auth.com/docs/concepts/session-management).
