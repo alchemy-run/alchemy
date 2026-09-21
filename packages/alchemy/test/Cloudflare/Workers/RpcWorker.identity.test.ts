@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { normalizeTransferredFrom } from "@/Cloudflare/Workers/DurableObject";
+import type { PlatformIdentity } from "@/Platform.ts";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -24,6 +25,21 @@ class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   { main: import.meta.url, schema: PingRpcs },
   Effect.succeed(RpcServer.toHttpEffect(PingRpcs)),
 ) {}
+
+const identity = <const Id extends string>(
+  declaration: PlatformIdentity<Id>,
+): Id => declaration.LogicalId;
+
+class OrdinaryWorker extends Cloudflare.Worker<OrdinaryWorker>()(
+  "OrdinaryWorker",
+  {},
+) {}
+
+test("ordinary and RPC Workers share a native identity reader", () => {
+  expect(identity(OrdinaryWorker)).toBe("OrdinaryWorker");
+  expect(identity(ModularRpcWorker)).toBe("ModularRpcWorker");
+  expect(identity(InlineRpcWorker)).toBe("InlineRpcWorker");
+});
 
 test("RpcWorker modular class copies LogicalId from the underlying Worker", () => {
   expect(ModularRpcWorker.LogicalId).toBe("ModularRpcWorker");

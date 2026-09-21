@@ -15,6 +15,7 @@ import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
+import type { PlatformIdentity } from "../../Platform.ts";
 import type { Rpc as RpcShape } from "../../Rpc.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { Worker, WorkerProps } from "./Worker.ts";
@@ -64,15 +65,10 @@ export interface RpcWorkerYieldable<
 >
   extends
     Effect.Effect<Worker<{}> & RpcShape<Self> & Dependencies<Deps>, never, any>,
-    Named<Id> {
+    Named<Id>,
+    PlatformIdentity<Id> {
   /** @internal */
   readonly [SchemaSymbol]: RpcGroup.RpcGroup<Rpcs>;
-  /**
-   * Logical id of the Worker this class declares. Copied from the
-   * underlying `Cloudflare.Worker` so callers can read it off the
-   * class without yielding (e.g. `transferredFrom: TaskWorker`).
-   */
-  readonly LogicalId: Id;
 }
 
 /**
