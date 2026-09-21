@@ -344,7 +344,7 @@ test.provider.skipIf(skipLive)(
       expect([...remote.droplet.tags].sort()).toEqual(
         [
           "alchemy-test",
-          yield* ownershipTag(stack.name, "test", "TestDroplet"),
+          yield* ownershipTag(stack.name, stack.stage, "TestDroplet"),
         ].sort(),
       );
 
@@ -390,7 +390,7 @@ test.provider.skipIf(skipLive)(
       const state = yield* yield* State;
       yield* state.delete({
         stack: stack.name,
-        stage: "test",
+        stage: stack.stage,
         fqn: "TestDroplet",
       });
 
