@@ -36,10 +36,7 @@ export interface SendWorkflowStepState extends Binding.Service<
   () => Effect.Effect<
     (
       request: transfer.SendWorkflowStepStateRequest,
-    ) => Effect.Effect<
-      transfer.SendWorkflowStepStateResponse,
-      transfer.SendWorkflowStepStateError
-    >
+    ) => Effect.Effect<transfer.SendWorkflowStepStateResponse, transfer.SendWorkflowStepStateError>
   >
 > {}
 export const SendWorkflowStepState = Binding.Service<SendWorkflowStepState>(

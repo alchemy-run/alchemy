@@ -4,11 +4,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
 import { Encrypt, type EncryptRequest } from "./Encrypt.ts";
-import {
-  base64ToBytes,
-  bytesToBase64,
-  makeHttpSecretKeyBinding,
-} from "./SecretKeyHttp.ts";
+import { base64ToBytes, bytesToBase64, makeHttpSecretKeyBinding } from "./SecretKeyHttp.ts";
 
 /**
  * HTTP implementation of {@link Encrypt}. Provide it on the
@@ -48,7 +44,4 @@ export const EncryptHttp = Layer.effect(
         }),
     }),
   ),
-).pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(CredentialsFromAmbientOrEnv),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { HELLO_PNG_TEXT } from "./constants.ts";
 import TextractTestFunctionLive, { TextractTestFunction } from "./handler.ts";
 
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "TextractBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -66,15 +58,11 @@ const postJson = <T>(path: string) =>
   );
 
 /** Poll an async job's get route until it leaves IN_PROGRESS (bounded). */
-const pollJob = <T extends { jobStatus?: string }>(
-  path: string,
-  jobId: string,
-) =>
+const pollJob = <T extends { jobStatus?: string }>(path: string, jobId: string) =>
   getJson<T>(`${path}?jobId=${jobId}`).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (r): boolean =>
-        r.jobStatus !== undefined && r.jobStatus !== "IN_PROGRESS",
+      until: (r): boolean => r.jobStatus !== undefined && r.jobStatus !== "IN_PROGRESS",
       times: 40,
     }),
   );
@@ -82,9 +70,7 @@ const pollJob = <T extends { jobStatus?: string }>(
 describe("Textract Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Textract test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Textract test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Textract test setup: deploying fixture");
@@ -165,9 +151,7 @@ describe("Textract Bindings", () => {
       "StartDocumentTextDetection + GetDocumentTextDetection run to completion",
       (_stack) =>
         Effect.gen(function* () {
-          const { jobId } = yield* postJson<{ jobId: string }>(
-            "/start-text-detection",
-          );
+          const { jobId } = yield* postJson<{ jobId: string }>("/start-text-detection");
           expect(jobId).toBeTruthy();
 
           const result = yield* pollJob<{
@@ -196,24 +180,17 @@ describe("Textract Bindings", () => {
           expect(expense.jobId).toBeTruthy();
           expect(lending.jobId).toBeTruthy();
 
-          const [analysisResult, expenseResult, lendingResult] =
-            yield* Effect.all(
-              [
-                pollJob<{ jobStatus?: string; blocks: number }>(
-                  "/get-analysis",
-                  analysis.jobId,
-                ),
-                pollJob<{ jobStatus?: string; expenseDocuments: number }>(
-                  "/get-expense",
-                  expense.jobId,
-                ),
-                pollJob<{ jobStatus?: string; results: number }>(
-                  "/get-lending",
-                  lending.jobId,
-                ),
-              ],
-              { concurrency: 3 },
-            );
+          const [analysisResult, expenseResult, lendingResult] = yield* Effect.all(
+            [
+              pollJob<{ jobStatus?: string; blocks: number }>("/get-analysis", analysis.jobId),
+              pollJob<{ jobStatus?: string; expenseDocuments: number }>(
+                "/get-expense",
+                expense.jobId,
+              ),
+              pollJob<{ jobStatus?: string; results: number }>("/get-lending", lending.jobId),
+            ],
+            { concurrency: 3 },
+          );
           expect(analysisResult.jobStatus).toBe("SUCCEEDED");
           expect(analysisResult.blocks).toBeGreaterThan(0);
           expect(expenseResult.jobStatus).toBe("SUCCEEDED");
@@ -259,10 +236,9 @@ describe("Textract Bindings", () => {
             deleteVersionProbe: string;
             createVersionProbe: string;
           }>("/adapter-version-probes");
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(probes.getVersionProbe);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(
+            probes.getVersionProbe,
+          );
           // DeleteAdapterVersion is idempotent — deleting a nonexistent
           // version succeeds (verified live), which proves the grant.
           expect([

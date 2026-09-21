@@ -1,22 +1,19 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { AsyncPing } from "./fixtures/async-ping-fn.ts";
 import Ping from "./fixtures/ping.ts";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HTTP_SOURCE = `
 Bun.serve({
@@ -30,12 +27,8 @@ Bun.serve({
 
 const waitUntilGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -70,9 +63,7 @@ test.provider(
       expect(created.ping.serviceId).toEqual(expect.any(String));
       expect(created.ping.serviceId.length).toBeGreaterThan(0);
       expect(created.ping.projectId).toEqual(created.project.projectId);
-      expect(created.ping.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.ping.environmentId).toEqual(created.environment.environmentId);
       expect(created.ping.name).toEqual(expect.any(String));
       expect(created.ping.name.length).toBeGreaterThan(0);
       expect(created.ping.name.length).toBeLessThanOrEqual(32);
@@ -85,9 +76,7 @@ test.provider(
       expect(created.ping.domain).toEqual(expect.any(String));
       expect(created.ping.domain).toContain("up.railway.app");
       expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
-      expect(created.ping.dnsName).toEqual(
-        `${created.ping.name}.railway.internal`,
-      );
+      expect(created.ping.dnsName).toEqual(`${created.ping.name}.railway.internal`);
       expect(created.ping.rpcToken.length).toBeGreaterThanOrEqual(32);
       expect(created.ping.domainId).toEqual(expect.any(String));
       expect(created.ping.domainId!.length).toBeGreaterThan(0);
@@ -116,9 +105,7 @@ test.provider(
       expect(instance.serviceId).toEqual(created.ping.serviceId);
       expect(instance.environmentId).toEqual(created.ping.environmentId);
       expect(Railway.isFunctionImage(instance.source?.image)).toEqual(true);
-      expect(instance.startCommand).toEqual(
-        expect.stringMatching(/^\.\/run\.sh /),
-      );
+      expect(instance.startCommand).toEqual(expect.stringMatching(/^\.\/run\.sh /));
 
       const runtime = yield* railway.functionRuntime(
         { name: "bun" },
@@ -130,9 +117,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Function);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (fn) => fn.serviceId === created.ping.serviceId,
-      );
+      const found = listed.find((fn) => fn.serviceId === created.ping.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.ping.name);
       expect(found?.projectId).toEqual(created.ping.projectId);
@@ -141,9 +126,7 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.ping.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`function returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`function returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -193,9 +176,7 @@ test.provider(
       expect(created.ping.code.hash).toEqual(expect.any(String));
       expect(created.ping.domain).toContain("up.railway.app");
       expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
-      expect(created.ping.dnsName).toEqual(
-        `${created.ping.name}.railway.internal`,
-      );
+      expect(created.ping.dnsName).toEqual(`${created.ping.name}.railway.internal`);
 
       const instance = yield* railway.serviceInstance(
         {
@@ -205,12 +186,8 @@ test.provider(
         { source: { image: true }, startCommand: true },
       );
       expect(Railway.isFunctionImage(instance.source?.image)).toEqual(true);
-      expect(instance.startCommand).toEqual(
-        expect.stringMatching(/^\.\/run\.sh /),
-      );
-      expect(instance.startCommand!.length).toBeLessThanOrEqual(
-        Railway.FUNCTION_MAX_BYTES,
-      );
+      expect(instance.startCommand).toEqual(expect.stringMatching(/^\.\/run\.sh /));
+      expect(instance.startCommand!.length).toBeLessThanOrEqual(Railway.FUNCTION_MAX_BYTES);
 
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.ping.url!).pipe(
@@ -219,9 +196,7 @@ test.provider(
             ? res.text
             : res.text.pipe(
                 Effect.flatMap((text) =>
-                  Effect.fail(
-                    new Error(`function returned ${res.status}: ${text}`),
-                  ),
+                  Effect.fail(new Error(`function returned ${res.status}: ${text}`)),
                 ),
               ),
         ),
@@ -259,9 +234,7 @@ test.provider.skip(
       expect(created.ping.code.hash).toEqual(expect.any(String));
       expect(created.ping.domain).toContain("up.railway.app");
       expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
-      expect(created.ping.dnsName).toEqual(
-        `${created.ping.name}.railway.internal`,
-      );
+      expect(created.ping.dnsName).toEqual(`${created.ping.name}.railway.internal`);
       expect(created.ping.rpcToken.length).toBeGreaterThanOrEqual(32);
 
       const instance = yield* railway.serviceInstance(
@@ -272,9 +245,7 @@ test.provider.skip(
         { source: { image: true }, startCommand: true },
       );
       expect(Railway.isFunctionImage(instance.source?.image)).toEqual(true);
-      expect(instance.startCommand).toEqual(
-        expect.stringMatching(/^\.\/run\.sh /),
-      );
+      expect(instance.startCommand).toEqual(expect.stringMatching(/^\.\/run\.sh /));
 
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.ping.url!).pipe(
@@ -284,9 +255,7 @@ test.provider.skip(
             ? res.text
             : res.text.pipe(
                 Effect.flatMap((text) =>
-                  Effect.fail(
-                    new Error(`function returned ${res.status}: ${text}`),
-                  ),
+                  Effect.fail(new Error(`function returned ${res.status}: ${text}`)),
                 ),
               ),
         ),

@@ -158,9 +158,7 @@ export interface Collection extends Resource<
  *
  * @resource
  */
-export const Collection = Resource<Collection>(
-  "AWS.OpenSearchServerless.Collection",
-);
+export const Collection = Resource<Collection>("AWS.OpenSearchServerless.Collection");
 
 export const CollectionProvider = () =>
   Provider.effect(
@@ -192,10 +190,7 @@ export const CollectionProvider = () =>
         return response.collectionDetails?.[0];
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desired: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
         const observed = yield* aoss
           .listTagsForResource({ resourceArn: arn })
           .pipe(Effect.map((r) => tagsToRecord(r.tags)));
@@ -203,9 +198,7 @@ export const CollectionProvider = () =>
         if (upsert.length > 0) {
           yield* aoss.tagResource({
             resourceArn: arn,
-            tags: recordToTagList(
-              Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
-            ),
+            tags: recordToTagList(Object.fromEntries(upsert.map((t) => [t.Key, t.Value]))),
           });
         }
         if (removed.length > 0) {
@@ -218,17 +211,10 @@ export const CollectionProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* aoss.listCollections
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* aoss.listCollections.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.collectionSummaries ?? [])
-              .filter(
-                (s) =>
-                  s.id !== undefined &&
-                  s.name !== undefined &&
-                  s.arn !== undefined,
-              )
+              .filter((s) => s.id !== undefined && s.name !== undefined && s.arn !== undefined)
               .map((s) => ({
                 collectionId: s.id!,
                 collectionName: s.name!,
@@ -239,19 +225,16 @@ export const CollectionProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.collectionName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.collectionName ?? (yield* createName(id, olds ?? {}));
           const detail = yield* observeByName(name);
           if (detail?.id === undefined || detail.arn === undefined) {
             return undefined;
           }
           const attrs = toAttributes(detail);
-          const tags = yield* aoss
-            .listTagsForResource({ resourceArn: detail.arn })
-            .pipe(
-              Effect.map((r) => r.tags),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
+          const tags = yield* aoss.listTagsForResource({ resourceArn: detail.arn }).pipe(
+            Effect.map((r) => r.tags),
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
           return (yield* hasAlchemyTags(
             id,
             (tags ?? []).map((t) => ({ Key: t.key, Value: t.value })),
@@ -296,12 +279,9 @@ export const CollectionProvider = () =>
               .pipe(
                 Effect.map((r) => r.createCollectionDetail),
                 // a concurrent reconciler already created it — fall through
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
-            const collectionId =
-              created?.id ?? (yield* observeByName(name))?.id;
+            const collectionId = created?.id ?? (yield* observeByName(name))?.id;
             if (collectionId === undefined) {
               return yield* Effect.fail(
                 new aoss.ResourceNotFoundException({
@@ -317,8 +297,7 @@ export const CollectionProvider = () =>
 
           // 3. SYNC — description (deletionProtection updates alongside)
           const descriptionDrift =
-            news.description !== undefined &&
-            news.description !== detail.description;
+            news.description !== undefined && news.description !== detail.description;
           const protectionDrift =
             news.deletionProtection !== undefined &&
             news.deletionProtection !== detail.deletionProtection;
@@ -326,9 +305,7 @@ export const CollectionProvider = () =>
             yield* aoss.updateCollection({
               id: detail.id!,
               description: descriptionDrift ? news.description : undefined,
-              deletionProtection: protectionDrift
-                ? news.deletionProtection
-                : undefined,
+              deletionProtection: protectionDrift ? news.deletionProtection : undefined,
             });
           }
 
@@ -340,9 +317,7 @@ export const CollectionProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileConflict(
-            aoss.deleteCollection({ id: output.collectionId }),
-          ).pipe(
+          yield* retryWhileConflict(aoss.deleteCollection({ id: output.collectionId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

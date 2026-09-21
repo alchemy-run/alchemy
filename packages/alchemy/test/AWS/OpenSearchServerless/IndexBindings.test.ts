@@ -1,14 +1,13 @@
-import * as AWS from "@/AWS";
-import { AccessPolicy } from "@/AWS/OpenSearchServerless";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
+import * as AWS from "@/AWS";
+import { AccessPolicy } from "@/AWS/OpenSearchServerless";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import AossIndexFunctionLive, {
   AossIndexFunction,
   COLLECTION_NAME,
@@ -29,10 +28,7 @@ const drive = (request: HttpClientRequest.HttpClientRequest) =>
         : Effect.fail(new Error(`route not ready: ${response.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -69,16 +65,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
 
       // GetCollection — the bound collection is ACTIVE with an endpoint.
-      const collection = (yield* drive(
-        HttpClientRequest.get(`${baseUrl}/collection`),
-      ).pipe(Effect.flatMap((r) => r.json))) as any;
+      const collection = (yield* drive(HttpClientRequest.get(`${baseUrl}/collection`)).pipe(
+        Effect.flatMap((r) => r.json),
+      )) as any;
       expect(collection.status).toBe("ACTIVE");
       expect(collection.endpoint).toContain("aoss.amazonaws.com");
 
       // Create → read → update → delete an index at runtime.
-      const roundtrip = (yield* drive(
-        HttpClientRequest.post(`${baseUrl}/index/roundtrip`),
-      ).pipe(Effect.flatMap((r) => r.json))) as any;
+      const roundtrip = (yield* drive(HttpClientRequest.post(`${baseUrl}/index/roundtrip`)).pipe(
+        Effect.flatMap((r) => r.json),
+      )) as any;
       expect(roundtrip.created).toBe(true);
       expect(roundtrip.hadSchema).toBe(true);
       expect(roundtrip.deleted).toBe(true);
@@ -100,15 +96,10 @@ const assertCollectionGone = (id: string) =>
     const detail = response.collectionDetails?.[0];
     const status = detail?.status ?? "gone";
     if (status !== "gone" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`Collection '${id}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Collection '${id}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

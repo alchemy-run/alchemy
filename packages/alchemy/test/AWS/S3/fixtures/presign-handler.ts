@@ -1,9 +1,9 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class S3PresignTestFunction extends Lambda.Function<S3PresignTestFunction>()(
   "S3PresignTestFunction",
@@ -60,8 +60,7 @@ export default S3PresignTestFunction.make(
         }
 
         const key = url.searchParams.get("key");
-        const requireKey = () =>
-          HttpServerResponse.text("Missing key", { status: 400 });
+        const requireKey = () => HttpServerResponse.text("Missing key", { status: 400 });
 
         if (request.method === "GET" && pathname === "/bucket-name") {
           return yield* HttpServerResponse.json({ bucketName });
@@ -92,9 +91,7 @@ export default S3PresignTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/delete-objects") {
-          const keys = (url.searchParams.get("keys") ?? "")
-            .split(",")
-            .filter((k) => k.length > 0);
+          const keys = (url.searchParams.get("keys") ?? "").split(",").filter((k) => k.length > 0);
           const result = yield* deleteObjects({
             Delete: { Objects: keys.map((Key) => ({ Key })) },
           });
@@ -119,9 +116,7 @@ export default S3PresignTestFunction.make(
           if (!key) return requireKey();
           const result = yield* getObjectTagging({ Key: key });
           return yield* HttpServerResponse.json({
-            tags: Object.fromEntries(
-              (result.TagSet ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            tags: Object.fromEntries((result.TagSet ?? []).map((t) => [t.Key, t.Value])),
           });
         }
 
@@ -216,9 +211,7 @@ export default S3PresignTestFunction.make(
             },
           }).pipe(
             Effect.map((): { tag: string } => ({ tag: "success" })),
-            Effect.catch((e) =>
-              Effect.succeed<{ tag: string }>({ tag: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed<{ tag: string }>({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(outcome);
         }
@@ -227,9 +220,7 @@ export default S3PresignTestFunction.make(
           if (!key) return requireKey();
           const outcome = yield* getObjectRetention({ Key: key }).pipe(
             Effect.map((): { tag: string } => ({ tag: "success" })),
-            Effect.catch((e) =>
-              Effect.succeed<{ tag: string }>({ tag: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed<{ tag: string }>({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(outcome);
         }
@@ -244,9 +235,7 @@ export default S3PresignTestFunction.make(
             },
           }).pipe(
             Effect.map((): { tag: string } => ({ tag: "success" })),
-            Effect.catch((e) =>
-              Effect.succeed<{ tag: string }>({ tag: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed<{ tag: string }>({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(outcome);
         }
@@ -255,9 +244,7 @@ export default S3PresignTestFunction.make(
           if (!key) return requireKey();
           const outcome = yield* getObjectLegalHold({ Key: key }).pipe(
             Effect.map((): { tag: string } => ({ tag: "success" })),
-            Effect.catch((e) =>
-              Effect.succeed<{ tag: string }>({ tag: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed<{ tag: string }>({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(outcome);
         }
@@ -269,9 +256,7 @@ export default S3PresignTestFunction.make(
             LegalHold: { Status: "ON" },
           }).pipe(
             Effect.map((): { tag: string } => ({ tag: "success" })),
-            Effect.catch((e) =>
-              Effect.succeed<{ tag: string }>({ tag: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed<{ tag: string }>({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(outcome);
         }

@@ -32,6 +32,4 @@ export interface DescribeClusters extends Binding.Service<
     ) => Effect.Effect<dax.DescribeClustersResponse, dax.DescribeClustersError>
   >
 > {}
-export const DescribeClusters = Binding.Service<DescribeClusters>(
-  "AWS.DAX.DescribeClusters",
-);
+export const DescribeClusters = Binding.Service<DescribeClusters>("AWS.DAX.DescribeClusters");

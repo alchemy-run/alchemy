@@ -163,14 +163,8 @@ export const FirewallProvider = () =>
   Provider.effect(
     Firewall,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { firewallName?: string },
-      ) {
-        return (
-          props.firewallName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { firewallName?: string }) {
+        return props.firewallName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const endpointIds = (status: NFW.FirewallStatus | undefined): string[] =>
@@ -193,11 +187,7 @@ export const FirewallProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* nfw
           .describeFirewall({ FirewallName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Bounded readiness wait. Endpoint provisioning typically completes in
@@ -226,35 +216,24 @@ export const FirewallProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* nfw.listFirewalls
-              .pages({})
-              .pipe(Stream.runCollect);
-            const metas = Array.from(pages).flatMap(
-              (page) => page.Firewalls ?? [],
-            );
+            const pages = yield* nfw.listFirewalls.pages({}).pipe(Stream.runCollect);
+            const metas = Array.from(pages).flatMap((page) => page.Firewalls ?? []);
             const items = yield* Effect.forEach(
               metas,
               (meta) =>
                 nfw.describeFirewall({ FirewallArn: meta.FirewallArn }).pipe(
                   Effect.map((r) =>
-                    r.Firewall !== undefined
-                      ? toAttrs(r.Firewall, r.FirewallStatus)
-                      : undefined,
+                    r.Firewall !== undefined ? toAttrs(r.Firewall, r.FirewallStatus) : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 5 },
             );
-            return items.filter(
-              (item): item is Firewall["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is Firewall["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.firewallName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.firewallName ?? (yield* createName(id, olds ?? {}));
           const found = yield* describe(name);
           if (found?.Firewall === undefined) return undefined;
           const attrs = toAttrs(found.Firewall, found.FirewallStatus);
@@ -293,8 +272,7 @@ export const FirewallProvider = () =>
               SubnetMappings: news.subnetMappings,
               DeleteProtection: news.deleteProtection ?? false,
               SubnetChangeProtection: news.subnetChangeProtection ?? false,
-              FirewallPolicyChangeProtection:
-                news.firewallPolicyChangeProtection ?? false,
+              FirewallPolicyChangeProtection: news.firewallPolicyChangeProtection ?? false,
               Description: news.description,
               Tags: recordToNfwTags(desiredTags),
             });
@@ -320,15 +298,9 @@ export const FirewallProvider = () =>
           }
 
           // 3b. Subnet associations.
-          const observedSubnetIds = new Set(
-            firewall.SubnetMappings.map((m) => m.SubnetId),
-          );
-          const desiredSubnetIds = new Set(
-            news.subnetMappings.map((m) => m.SubnetId),
-          );
-          const toAssociate = news.subnetMappings.filter(
-            (m) => !observedSubnetIds.has(m.SubnetId),
-          );
+          const observedSubnetIds = new Set(firewall.SubnetMappings.map((m) => m.SubnetId));
+          const desiredSubnetIds = new Set(news.subnetMappings.map((m) => m.SubnetId));
+          const toAssociate = news.subnetMappings.filter((m) => !observedSubnetIds.has(m.SubnetId));
           const toDisassociate = [...observedSubnetIds].filter(
             (subnetId) => !desiredSubnetIds.has(subnetId),
           );
@@ -361,9 +333,7 @@ export const FirewallProvider = () =>
 
           // 3d. Protection flags.
           const desiredDeleteProtection = news.deleteProtection ?? false;
-          if (
-            (firewall.DeleteProtection ?? false) !== desiredDeleteProtection
-          ) {
+          if ((firewall.DeleteProtection ?? false) !== desiredDeleteProtection) {
             yield* nfw.updateFirewallDeleteProtection({
               UpdateToken: observed.UpdateToken,
               FirewallName: name,
@@ -371,12 +341,8 @@ export const FirewallProvider = () =>
             });
             yield* refresh();
           }
-          const desiredSubnetChangeProtection =
-            news.subnetChangeProtection ?? false;
-          if (
-            (firewall.SubnetChangeProtection ?? false) !==
-            desiredSubnetChangeProtection
-          ) {
+          const desiredSubnetChangeProtection = news.subnetChangeProtection ?? false;
+          if ((firewall.SubnetChangeProtection ?? false) !== desiredSubnetChangeProtection) {
             yield* nfw.updateSubnetChangeProtection({
               UpdateToken: observed.UpdateToken,
               FirewallName: name,
@@ -384,11 +350,9 @@ export const FirewallProvider = () =>
             });
             yield* refresh();
           }
-          const desiredPolicyChangeProtection =
-            news.firewallPolicyChangeProtection ?? false;
+          const desiredPolicyChangeProtection = news.firewallPolicyChangeProtection ?? false;
           if (
-            (firewall.FirewallPolicyChangeProtection ?? false) !==
-            desiredPolicyChangeProtection
+            (firewall.FirewallPolicyChangeProtection ?? false) !== desiredPolicyChangeProtection
           ) {
             yield* nfw.updateFirewallPolicyChangeProtection({
               UpdateToken: observed.UpdateToken,
@@ -417,11 +381,7 @@ export const FirewallProvider = () =>
           const name = output.firewallName;
           const observed = yield* nfw
             .describeFirewall({ FirewallName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (observed === undefined) return;
 
           // Clear delete protection first — DeleteFirewall requires it off.
@@ -432,9 +392,7 @@ export const FirewallProvider = () =>
                 FirewallName: name,
                 DeleteProtection: false,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           yield* session.note(
@@ -450,11 +408,7 @@ export const FirewallProvider = () =>
           yield* Effect.gen(function* () {
             const remaining = yield* nfw
               .describeFirewall({ FirewallName: name })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
             if (remaining !== undefined) {
               return yield* Effect.fail(
                 new FirewallNotDeleted({

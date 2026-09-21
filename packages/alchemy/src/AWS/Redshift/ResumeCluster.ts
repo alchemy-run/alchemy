@@ -28,13 +28,6 @@ export interface ResumeCluster extends Binding.Service<
   "AWS.Redshift.ResumeCluster",
   (
     cluster: Cluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      redshift.ResumeClusterResult,
-      redshift.ResumeClusterError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<redshift.ResumeClusterResult, redshift.ResumeClusterError>>
 > {}
-export const ResumeCluster = Binding.Service<ResumeCluster>(
-  "AWS.Redshift.ResumeCluster",
-);
+export const ResumeCluster = Binding.Service<ResumeCluster>("AWS.Redshift.ResumeCluster");

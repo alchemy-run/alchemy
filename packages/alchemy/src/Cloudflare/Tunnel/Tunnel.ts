@@ -4,7 +4,6 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -181,29 +180,23 @@ export const TunnelProvider = () =>
       const rows = yield* Effect.forEach(
         tunnels,
         (t) =>
-          zeroTrust
-            .getTunnelCloudflaredToken({ accountId, tunnelId: t.id })
-            .pipe(
-              Effect.map((token): Tunnel["Attributes"] => ({
-                tunnelId: t.id,
-                tunnelName: t.name ?? t.id,
-                accountTag: t.accountTag ?? undefined,
-                accountId,
-                createdAt: t.createdAt ?? undefined,
-                deletedAt: t.deletedAt ?? undefined,
-                configSrc: ((t as { configSrc?: "cloudflare" | "local" | null })
-                  .configSrc ?? "cloudflare") as "cloudflare" | "local",
-                token: Redacted.make(token),
-              })),
-              Effect.catchTag("TunnelTokenNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          zeroTrust.getTunnelCloudflaredToken({ accountId, tunnelId: t.id }).pipe(
+            Effect.map((token): Tunnel["Attributes"] => ({
+              tunnelId: t.id,
+              tunnelName: t.name ?? t.id,
+              accountTag: t.accountTag ?? undefined,
+              accountId,
+              createdAt: t.createdAt ?? undefined,
+              deletedAt: t.deletedAt ?? undefined,
+              configSrc: ((t as { configSrc?: "cloudflare" | "local" | null }).configSrc ??
+                "cloudflare") as "cloudflare" | "local",
+              token: Redacted.make(token),
+            })),
+            Effect.catchTag("TunnelTokenNotFound", () => Effect.succeed(undefined)),
+          ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is Tunnel["Attributes"] => row !== undefined,
-      );
+      return rows.filter((row): row is Tunnel["Attributes"] => row !== undefined);
     }),
     diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -211,8 +204,7 @@ export const TunnelProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.tunnelName ?? (yield* createTunnelName(id, olds.name));
+      const oldName = output?.tunnelName ?? (yield* createTunnelName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -220,18 +212,12 @@ export const TunnelProvider = () =>
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
-      const oldSecret = olds.tunnelSecret
-        ? Redacted.value(olds.tunnelSecret)
-        : undefined;
-      const newSecret = news.tunnelSecret
-        ? Redacted.value(news.tunnelSecret)
-        : undefined;
+      const oldSecret = olds.tunnelSecret ? Redacted.value(olds.tunnelSecret) : undefined;
+      const newSecret = news.tunnelSecret ? Redacted.value(news.tunnelSecret) : undefined;
       if (oldSecret !== newSecret) {
         return { action: "replace" } as const;
       }
-      if (
-        (olds.configSrc ?? "cloudflare") !== (news.configSrc ?? "cloudflare")
-      ) {
+      if ((olds.configSrc ?? "cloudflare") !== (news.configSrc ?? "cloudflare")) {
         return { action: "replace" } as const;
       }
     }),
@@ -241,9 +227,7 @@ export const TunnelProvider = () =>
       // resource if the generator's output for this id ever drifts.
       const name = yield* createTunnelName(id, news.name ?? output?.tunnelName);
       const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
-      const tunnelSecret = news.tunnelSecret
-        ? Redacted.value(news.tunnelSecret)
-        : undefined;
+      const tunnelSecret = news.tunnelSecret ? Redacted.value(news.tunnelSecret) : undefined;
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached tunnel; fall back to a name
@@ -300,11 +284,7 @@ export const TunnelProvider = () =>
       // idempotent: equal payloads converge to the same state, so we
       // always push to apply drift.
       if (configSrc !== "local") {
-        yield* writeConfiguration(
-          observed.id!,
-          news.ingress,
-          news.originRequest,
-        );
+        yield* writeConfiguration(observed.id!, news.ingress, news.originRequest);
       }
 
       const token = yield* zeroTrust.getTunnelCloudflaredToken({
@@ -330,9 +310,7 @@ export const TunnelProvider = () =>
           accountId: output.accountId,
           tunnelId: output.tunnelId,
         })
-        .pipe(
-          Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)));
       if (observed === undefined || observed.deletedAt != null) return;
       // Delete — sibling route/config deletions propagate asynchronously and
       // Cloudflare transiently rejects the tunnel delete while they drain.
@@ -345,10 +323,7 @@ export const TunnelProvider = () =>
         })
         .pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
           }),
         );
     }),
@@ -375,9 +350,7 @@ export const TunnelProvider = () =>
                     accountId: output.accountId,
                     createdAt: t.createdAt ?? output.createdAt,
                     deletedAt: t.deletedAt ?? output.deletedAt,
-                    configSrc: ((
-                      t as { configSrc?: "cloudflare" | "local" | null }
-                    ).configSrc ??
+                    configSrc: ((t as { configSrc?: "cloudflare" | "local" | null }).configSrc ??
                       output.configSrc ??
                       "cloudflare") as "cloudflare" | "local",
                     token: Redacted.make(token),
@@ -402,8 +375,8 @@ export const TunnelProvider = () =>
         accountId,
         createdAt: existing.createdAt ?? undefined,
         deletedAt: existing.deletedAt ?? undefined,
-        configSrc: ((existing as { configSrc?: "cloudflare" | "local" | null })
-          .configSrc ?? "cloudflare") as "cloudflare" | "local",
+        configSrc: ((existing as { configSrc?: "cloudflare" | "local" | null }).configSrc ??
+          "cloudflare") as "cloudflare" | "local",
         token: Redacted.make(token),
       };
     }),

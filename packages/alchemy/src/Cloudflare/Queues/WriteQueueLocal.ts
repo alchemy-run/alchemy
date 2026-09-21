@@ -4,8 +4,8 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Queue } from "./Queue.ts";
-import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 import { WriteQueue } from "./WriteQueue.ts";
+import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 
 /**
  * Local implementation of the {@link WriteQueue} binding — pushes messages
@@ -43,9 +43,7 @@ export const WriteQueueLocal = Layer.effect(
     // providers layer). Capture the full context so the bulk-push effect can
     // run with the current credentials instead of a scoped token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (queue: Queue) {
       // Deferred accessor — resolves the queueId against the tracker at apply

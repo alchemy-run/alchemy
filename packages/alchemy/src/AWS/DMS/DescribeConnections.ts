@@ -30,10 +30,7 @@ export interface DescribeConnections extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dms.DescribeConnectionsMessage,
-    ) => Effect.Effect<
-      dms.DescribeConnectionsResponse,
-      dms.DescribeConnectionsError
-    >
+    ) => Effect.Effect<dms.DescribeConnectionsResponse, dms.DescribeConnectionsError>
   >
 > {}
 

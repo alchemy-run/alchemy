@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 // Fixtures — generated once and checked in as constants (never generate key
 // material at test time).
@@ -50,9 +50,7 @@ export default class SecretKeyWorker extends Cloudflare.Worker<SecretKeyWorker>(
         // Sign with the raw-format key, verify with the jwk-format key —
         // both bindings carry the same material, so this only succeeds if
         // both formats imported correctly.
-        const signature = yield* Effect.promise(() =>
-          crypto.subtle.sign("HMAC", raw, data),
-        );
+        const signature = yield* Effect.promise(() => crypto.subtle.sign("HMAC", raw, data));
         const crossVerified = yield* Effect.promise(() =>
           crypto.subtle.verify("HMAC", jwk, signature, data),
         );

@@ -1,12 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  CustomMigratedObject,
-  MigratedObject,
-  MigrationScenarios,
-} from "./object.ts";
+import * as Cloudflare from "@/Cloudflare";
+import { CustomMigratedObject, MigratedObject, MigrationScenarios } from "./object.ts";
 
 export default class SqlMigrationsWorker extends Cloudflare.Worker<SqlMigrationsWorker>()(
   "SqlMigrationsWorker",

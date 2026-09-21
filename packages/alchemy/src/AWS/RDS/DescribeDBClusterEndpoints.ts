@@ -28,13 +28,9 @@ export interface DescribeDBClusterEndpoints extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rds.DescribeDBClusterEndpointsMessage,
-    ) => Effect.Effect<
-      rds.DBClusterEndpointMessage,
-      rds.DescribeDBClusterEndpointsError
-    >
+    ) => Effect.Effect<rds.DBClusterEndpointMessage, rds.DescribeDBClusterEndpointsError>
   >
 > {}
-export const DescribeDBClusterEndpoints =
-  Binding.Service<DescribeDBClusterEndpoints>(
-    "AWS.RDS.DescribeDBClusterEndpoints",
-  );
+export const DescribeDBClusterEndpoints = Binding.Service<DescribeDBClusterEndpoints>(
+  "AWS.RDS.DescribeDBClusterEndpoints",
+);

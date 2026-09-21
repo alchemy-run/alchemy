@@ -30,10 +30,7 @@ export interface GetEncryptionKey extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetEncryptionKeyRequest,
-    ) => Effect.Effect<
-      inspector2.GetEncryptionKeyResponse,
-      inspector2.GetEncryptionKeyError
-    >
+    ) => Effect.Effect<inspector2.GetEncryptionKeyResponse, inspector2.GetEncryptionKeyError>
   >
 > {}
 export const GetEncryptionKey = Binding.Service<GetEncryptionKey>(

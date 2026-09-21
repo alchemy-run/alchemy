@@ -28,10 +28,6 @@ export interface StopDBCluster extends Binding.Service<
   "AWS.RDS.StopDBCluster",
   (
     cluster: DBCluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<rds.StopDBClusterResult, rds.StopDBClusterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<rds.StopDBClusterResult, rds.StopDBClusterError>>
 > {}
-export const StopDBCluster = Binding.Service<StopDBCluster>(
-  "AWS.RDS.StopDBCluster",
-);
+export const StopDBCluster = Binding.Service<StopDBCluster>("AWS.RDS.StopDBCluster");

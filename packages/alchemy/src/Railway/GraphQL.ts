@@ -3,9 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-export class InvalidConnectionCursor extends Data.TaggedError(
-  "Railway.InvalidConnectionCursor",
-)<{
+export class InvalidConnectionCursor extends Data.TaggedError("Railway.InvalidConnectionCursor")<{
   connection: string;
   cursor: string | null;
 }> {}
@@ -17,9 +15,7 @@ const advance = (
 ) => {
   if (!page.hasNextPage) return Effect.succeed(undefined);
   if (page.endCursor === null || seen.has(page.endCursor)) {
-    return Effect.fail(
-      new InvalidConnectionCursor({ connection, cursor: page.endCursor }),
-    );
+    return Effect.fail(new InvalidConnectionCursor({ connection, cursor: page.endCursor }));
   }
   seen.add(page.endCursor);
   return Effect.succeed(page.endCursor);
@@ -48,19 +44,13 @@ export const projectServices = <const S extends railway.Selection<"Service">>(
         },
       );
       rows.push(...project.services.edges.map((edge) => edge.node));
-      after = yield* advance(
-        "Project.services",
-        project.services.pageInfo,
-        seen,
-      );
+      after = yield* advance("Project.services", project.services.pageInfo, seen);
     } while (after !== undefined);
     return rows;
   });
 
 /** Volumes are read through their environment so access checks remain scoped. */
-export const environmentVolumes = <
-  const S extends railway.Selection<"VolumeInstance">,
->(
+export const environmentVolumes = <const S extends railway.Selection<"VolumeInstance">>(
   environmentId: string,
   projectId: string,
   select: S,
@@ -94,9 +84,7 @@ export const environmentVolumes = <
     return rows;
   });
 /** Enumerate existing service instances without probing absent service/environment pairs. */
-export const environmentServiceInstances = <
-  const S extends railway.Selection<"ServiceInstance">,
->(
+export const environmentServiceInstances = <const S extends railway.Selection<"ServiceInstance">>(
   environmentId: string,
   projectId: string,
   select: S,
@@ -186,9 +174,7 @@ export const projectGroups = <const S extends railway.Selection<"Group">>(
   });
 
 /** A delete remains pending until its read path confirms absence. */
-export class ResourceDeletionPending extends Data.TaggedError(
-  "Railway.ResourceDeletionPending",
-)<{
+export class ResourceDeletionPending extends Data.TaggedError("Railway.ResourceDeletionPending")<{
   resourceType: string;
   resourceId: string;
 }> {}
@@ -206,10 +192,6 @@ export const waitUntilDeleted = <E, R>(
       times,
     }),
     Effect.flatMap((gone) =>
-      gone
-        ? Effect.void
-        : Effect.fail(
-            new ResourceDeletionPending({ resourceType, resourceId }),
-          ),
+      gone ? Effect.void : Effect.fail(new ResourceDeletionPending({ resourceType, resourceId })),
     ),
   );

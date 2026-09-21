@@ -24,9 +24,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.originalUrl);
         if (request.method === "GET" && url.pathname === "/health") {
-          const result = yield* db.execute(
-            sql`SELECT current_user AS username`,
-          );
+          const result = yield* db.execute(sql`SELECT current_user AS username`);
           return yield* HttpServerResponse.json(result);
         }
         if (url.pathname === "/todos" && request.method === "GET") {
@@ -43,29 +41,20 @@ export default class Api extends AWS.Lambda.Function<Api>()(
               ),
             ),
           );
-          return yield* HttpServerResponse.json(
-            yield* db.insert(Todos).values(input).returning(),
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json(yield* db.insert(Todos).values(input).returning(), {
+            status: 201,
+          });
         }
         if (url.pathname.startsWith("/todos/")) {
-          const id = yield* Schema.decodeUnknownEffect(
-            Schema.String.check(Schema.isUUID()),
-          )(url.pathname.slice(7));
+          const id = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isUUID()))(
+            url.pathname.slice(7),
+          );
           if (request.method === "PATCH") {
             const input = yield* request.json.pipe(
-              Effect.flatMap(
-                Schema.decodeUnknownEffect(
-                  Schema.Struct({ done: Schema.Boolean }),
-                ),
-              ),
+              Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ done: Schema.Boolean }))),
             );
             return yield* HttpServerResponse.json(
-              yield* db
-                .update(Todos)
-                .set(input)
-                .where(eq(Todos.id, id))
-                .returning(),
+              yield* db.update(Todos).set(input).where(eq(Todos.id, id)).returning(),
             );
           }
           if (request.method === "DELETE") {
@@ -76,9 +65,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
         return HttpServerResponse.text("Not found", { status: 404 });
       }).pipe(
         Effect.catchTag("SchemaError", () =>
-          Effect.succeed(
-            HttpServerResponse.text("Invalid request", { status: 400 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Invalid request", { status: 400 })),
         ),
         Effect.orDie,
       ),

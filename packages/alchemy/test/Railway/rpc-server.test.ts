@@ -1,15 +1,11 @@
-import { safeHttpEffect } from "@/Http";
-import { bindFunction } from "@/Railway/Bind.ts";
-import { serveRailwayRpc } from "@/Railway/rpc-server.ts";
-import {
-  RPC_PATH_PREFIX,
-  RPC_TOKEN_ENV,
-  RPC_TOKEN_HEADER,
-} from "@/Railway/rpc-token.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpEffect from "effect/unstable/http/HttpEffect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { safeHttpEffect } from "@/Http";
+import { bindFunction } from "@/Railway/Bind.ts";
+import { serveRailwayRpc } from "@/Railway/rpc-server.ts";
+import { RPC_PATH_PREFIX, RPC_TOKEN_ENV, RPC_TOKEN_HEADER } from "@/Railway/rpc-token.ts";
 
 const TOKEN = "a".repeat(64);
 const PRIVATE_URL = "http://greeter.railway.internal:3000";
@@ -21,9 +17,7 @@ const shape = {
 
 const fallback = Effect.succeed(HttpServerResponse.text("ok"));
 
-const webHandler = HttpEffect.toWebHandler(
-  safeHttpEffect(serveRailwayRpc(shape, fallback)),
-);
+const webHandler = HttpEffect.toWebHandler(safeHttpEffect(serveRailwayRpc(shape, fallback)));
 
 const fetchImpl = ((url: any, init?: any) => {
   const href = typeof url === "string" ? url : String(url);
@@ -73,9 +67,7 @@ describe.sequential("Railway private-mesh RPC", () => {
           }),
         );
         expect(response.status).toBe(200);
-        expect(yield* Effect.promise(() => response.text())).toBe(
-          JSON.stringify("hello sam"),
-        );
+        expect(yield* Effect.promise(() => response.text())).toBe(JSON.stringify("hello sam"));
       }),
     ));
 
@@ -134,9 +126,7 @@ describe.sequential("Railway private-mesh RPC", () => {
   it("falls through to fetch outside /__rpc__/", () =>
     withEnv(
       Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          webHandler(new Request(`${PUBLIC_URL}/`)),
-        );
+        const response = yield* Effect.promise(() => webHandler(new Request(`${PUBLIC_URL}/`)));
         expect(response.status).toBe(200);
         expect(yield* Effect.promise(() => response.text())).toBe("ok");
       }),

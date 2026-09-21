@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
-export interface StartExecutionRequest extends Omit<
-  sfn.StartExecutionInput,
-  "stateMachineArn"
-> {}
+export interface StartExecutionRequest extends Omit<sfn.StartExecutionInput, "stateMachineArn"> {}
 
 /**
  * Runtime binding for `states:StartExecution`.
@@ -46,6 +43,4 @@ export interface StartExecution extends Binding.Service<
     ) => Effect.Effect<sfn.StartExecutionOutput, sfn.StartExecutionError>
   >
 > {}
-export const StartExecution = Binding.Service<StartExecution>(
-  "AWS.StepFunctions.StartExecution",
-);
+export const StartExecution = Binding.Service<StartExecution>("AWS.StepFunctions.StartExecution");

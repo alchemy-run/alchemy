@@ -15,11 +15,7 @@ type DescriptionListProps = {
   readonly stacked?: boolean;
 };
 
-export function DescriptionList({
-  items,
-  labelWidth = 16,
-  stacked = false,
-}: DescriptionListProps) {
+export function DescriptionList({ items, labelWidth = 16, stacked = false }: DescriptionListProps) {
   return (
     <Box flexDirection="column" gap={stacked ? 1 : 0}>
       {items.map((item, index) => (
@@ -30,8 +26,7 @@ export function DescriptionList({
           <Box paddingLeft={stacked ? 1 : 0}>
             {/* Element values render bare: a Box (e.g. multi-line AnsiText
                 output) cannot nest inside Text. */}
-            {typeof item.value === "string" ||
-            typeof item.value === "number" ? (
+            {typeof item.value === "string" || typeof item.value === "number" ? (
               <Text>{item.value}</Text>
             ) : (
               item.value

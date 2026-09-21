@@ -135,11 +135,7 @@ export const SwarmProvider = () =>
       /** Active-manager info, or undefined when the engine isn't one. */
       const observe = Effect.fn(function* (context: string | undefined) {
         const info = yield* docker.swarm.info(context);
-        if (
-          info.LocalNodeState !== "active" ||
-          !info.ControlAvailable ||
-          !info.Cluster?.ID
-        ) {
+        if (info.LocalNodeState !== "active" || !info.ControlAvailable || !info.Cluster?.ID) {
           return undefined;
         }
         return info;
@@ -160,10 +156,7 @@ export const SwarmProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            dockerContextName(olds?.context) !==
-            dockerContextName(news?.context)
-          ) {
+          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
             return { action: "replace" as const, deleteFirst: true };
           }
           // The remaining props only apply at `swarm init`; changing them on

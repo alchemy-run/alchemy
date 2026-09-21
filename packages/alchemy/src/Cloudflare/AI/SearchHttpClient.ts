@@ -35,8 +35,7 @@ export interface SearchAuth {
   accountId: string;
 }
 
-const u = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const u = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const run = <A, E>(
   auth: SearchAuth,
@@ -47,8 +46,7 @@ const run = <A, E>(
       const message =
         cause instanceof Error
           ? cause.message
-          : typeof (cause as { message?: unknown } | undefined)?.message ===
-              "string"
+          : typeof (cause as { message?: unknown } | undefined)?.message === "string"
             ? (cause as { message: string }).message
             : "AI Search HTTP error";
       return new SearchError({ message, cause });
@@ -59,9 +57,7 @@ const run = <A, E>(
 
 type ChunkIn = aisearch.SearchNamespaceInstanceResponse["chunks"][number];
 
-const mapChunk = (
-  c: ChunkIn,
-): runtime.AiSearchSearchResponse["chunks"][number] => ({
+const mapChunk = (c: ChunkIn): runtime.AiSearchSearchResponse["chunks"][number] => ({
   id: c.id,
   type: c.type,
   score: c.score,
@@ -78,10 +74,7 @@ const mapChunk = (
         keyword_rank: u(c.scoringDetails.keywordRank),
         vector_rank: u(c.scoringDetails.vectorRank),
         reranking_score: u(c.scoringDetails.rerankingScore),
-        fusion_method: u(c.scoringDetails.fusionMethod) as
-          | "rrf"
-          | "max"
-          | undefined,
+        fusion_method: u(c.scoringDetails.fusionMethod) as "rrf" | "max" | undefined,
       }
     : undefined,
 });
@@ -102,12 +95,7 @@ const mapChat = (
   choices: r.choices.map((choice) => ({
     index: u(choice.index),
     message: {
-      role: choice.message.role as
-        | "system"
-        | "developer"
-        | "user"
-        | "assistant"
-        | "tool",
+      role: choice.message.role as "system" | "developer" | "user" | "assistant" | "tool",
       content:
         typeof choice.message.content === "string"
           ? choice.message.content
@@ -119,9 +107,7 @@ const mapChat = (
   chunks: r.chunks.map(mapChunk),
 });
 
-const mapStats = (
-  r: aisearch.StatsNamespaceInstanceResponse,
-): runtime.AiSearchStatsResponse => ({
+const mapStats = (r: aisearch.StatsNamespaceInstanceResponse): runtime.AiSearchStatsResponse => ({
   queued: u(r.queued),
   running: u(r.running),
   completed: u(r.completed),
@@ -148,9 +134,7 @@ const mapStats = (
     : undefined,
 });
 
-const mapInfo = (
-  r: aisearch.ReadNamespaceInstanceResponse,
-): runtime.AiSearchInstanceInfo => ({
+const mapInfo = (r: aisearch.ReadNamespaceInstanceResponse): runtime.AiSearchInstanceInfo => ({
   id: r.id,
   type: u(r.type) as runtime.AiSearchInstanceInfo["type"],
   source: u(r.source),
@@ -183,18 +167,10 @@ const mapInfo = (
     : undefined,
   retrieval_options: r.retrievalOptions
     ? {
-        keyword_match_mode: u(r.retrievalOptions.keywordMatchMode) as
-          | "and"
-          | "or"
-          | undefined,
+        keyword_match_mode: u(r.retrievalOptions.keywordMatchMode) as "and" | "or" | undefined,
         boost_by: u(r.retrievalOptions.boostBy)?.map((b) => ({
           field: b.field,
-          direction: u(b.direction) as
-            | "asc"
-            | "desc"
-            | "exists"
-            | "not_exists"
-            | undefined,
+          direction: u(b.direction) as "asc" | "desc" | "exists" | "not_exists" | undefined,
         })),
       }
     : undefined,
@@ -203,16 +179,12 @@ const mapInfo = (
   score_threshold: u(r.scoreThreshold),
   max_num_results: u(r.maxNumResults),
   cache: u(r.cache),
-  cache_threshold: u(
-    r.cacheThreshold,
-  ) as runtime.AiSearchInstanceInfo["cache_threshold"],
+  cache_threshold: u(r.cacheThreshold) as runtime.AiSearchInstanceInfo["cache_threshold"],
   custom_metadata: u(r.customMetadata)?.map((m) => ({
     field_name: m.fieldName,
     data_type: m.dataType as "text" | "number" | "boolean" | "datetime",
   })),
-  sync_interval: u(
-    r.syncInterval,
-  ) as runtime.AiSearchInstanceInfo["sync_interval"],
+  sync_interval: u(r.syncInterval) as runtime.AiSearchInstanceInfo["sync_interval"],
   metadata: u(r.metadata) as Record<string, unknown> | undefined,
 });
 
@@ -222,9 +194,7 @@ const mapList = (
   result: result.map(mapInfo),
 });
 
-const mapMulti = (
-  r: aisearch.SearchNamespaceResponse,
-): runtime.AiSearchMultiSearchResponse => ({
+const mapMulti = (r: aisearch.SearchNamespaceResponse): runtime.AiSearchMultiSearchResponse => ({
   search_query: r.searchQuery ?? "",
   chunks: r.chunks.map((c) => ({ ...mapChunk(c), instance_id: c.instanceId })),
   errors: u(r.errors)?.map((e) => ({
@@ -308,10 +278,7 @@ const dieRaw = (kind: string): Effect.Effect<never> =>
  * Build a single-instance {@link QuerySearchClient} over the HTTP API. `ref`
  * resolves the `{ namespace, instanceId }` at apply time.
  */
-export const makeLocalSearchClient = (
-  auth: SearchAuth,
-  ref: InstanceRef,
-): QuerySearchClient => {
+export const makeLocalSearchClient = (auth: SearchAuth, ref: InstanceRef): QuerySearchClient => {
   const withRef = <A, E>(
     fn: (r: {
       name: string;
@@ -396,9 +363,7 @@ export const makeLocalSearchNamespaceClient = (
       Effect.map((chunk) =>
         mapList(
           Array.from(chunk).flatMap(
-            (page) =>
-              (page.result ??
-                []) as unknown as aisearch.ReadNamespaceInstanceResponse[],
+            (page) => (page.result ?? []) as unknown as aisearch.ReadNamespaceInstanceResponse[],
           ),
         ),
       ),

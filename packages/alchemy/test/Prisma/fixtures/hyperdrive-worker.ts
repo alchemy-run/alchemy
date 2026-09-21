@@ -1,15 +1,15 @@
+import * as Effect from "effect/Effect";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 // Deep imports keep the Worker bundle lean: the `@/Prisma` barrel pulls in
 // the local dev-database machinery (@prisma/dev -> pglite), which balloons
 // the script and has no business inside a deployed Worker.
 import { Connection } from "@/Prisma/Connection.ts";
-import type { PostgresOrigin } from "@/Prisma/PostgresOrigin.ts";
 import { Postgres } from "@/Prisma/Postgres.ts";
+import type { PostgresOrigin } from "@/Prisma/PostgresOrigin.ts";
 import { Project } from "@/Prisma/Project.ts";
 import * as SQL from "@/SQL/Postgres.ts";
-import * as Effect from "effect/Effect";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Prisma Postgres origin + Hyperdrive wiring shared by the fixture Worker.
@@ -68,8 +68,7 @@ export default class PrismaHyperdriveWorker extends Cloudflare.Worker<PrismaHype
         }
 
         if (request.method === "GET" && url.pathname === "/widgets") {
-          const widgets =
-            yield* sql`SELECT id, name FROM ${sql(TABLE)} ORDER BY id`;
+          const widgets = yield* sql`SELECT id, name FROM ${sql(TABLE)} ORDER BY id`;
           return yield* HttpServerResponse.json({ widgets });
         }
 

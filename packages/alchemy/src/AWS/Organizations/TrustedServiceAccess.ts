@@ -76,8 +76,7 @@ export const TrustedServiceAccessProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const servicePrincipal =
-            output?.servicePrincipal ?? olds?.servicePrincipal;
+          const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // (they deserialize as `undefined`) — report "not found" so the
@@ -169,20 +168,15 @@ export const TrustedServiceAccessProvider = () =>
     }),
   );
 
-const readTrustedServiceAccess = Effect.fn(function* (
-  servicePrincipal: string,
-) {
+const readTrustedServiceAccess = Effect.fn(function* (servicePrincipal: string) {
   const principals = yield* retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listAWSServiceAccessForOrganization({ NextToken }),
+      (NextToken) => organizations.listAWSServiceAccessForOrganization({ NextToken }),
       (page) => page.EnabledServicePrincipals,
     ),
   );
 
-  const match = principals.find(
-    (candidate) => candidate.ServicePrincipal === servicePrincipal,
-  );
+  const match = principals.find((candidate) => candidate.ServicePrincipal === servicePrincipal);
 
   return match
     ? ({

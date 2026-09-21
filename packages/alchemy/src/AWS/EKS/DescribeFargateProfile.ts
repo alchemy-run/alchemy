@@ -32,10 +32,7 @@ export interface DescribeFargateProfile extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<eks.DescribeFargateProfileRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeFargateProfileResponse,
-      eks.DescribeFargateProfileError
-    >
+    ) => Effect.Effect<eks.DescribeFargateProfileResponse, eks.DescribeFargateProfileError>
   >
 > {}
 export const DescribeFargateProfile = Binding.Service<DescribeFargateProfile>(

@@ -26,10 +26,7 @@ export interface DescribeSlackWorkspaces extends Binding.Service<
   () => Effect.Effect<
     (
       request?: chatbot.DescribeSlackWorkspacesRequest,
-    ) => Effect.Effect<
-      chatbot.DescribeSlackWorkspacesResult,
-      chatbot.DescribeSlackWorkspacesError
-    >
+    ) => Effect.Effect<chatbot.DescribeSlackWorkspacesResult, chatbot.DescribeSlackWorkspacesError>
   >
 > {}
 

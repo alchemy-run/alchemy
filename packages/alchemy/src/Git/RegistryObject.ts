@@ -1,3 +1,6 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The singleton Registry Durable Object (DESIGN.md §2.1, §3.1).
  *
@@ -20,17 +23,10 @@
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
 import { StoreError } from "./Protocol/Store.ts";
-import {
-  initRegistrySchema,
-  makeSqlClient,
-  type RegistryRepoRow,
-} from "./Store/Sql.ts";
+import { initRegistrySchema, makeSqlClient, type RegistryRepoRow } from "./Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ULID
@@ -47,7 +43,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const ulid = (): Effect.Effect<string> =>
   Effect.sync(() => {
     let time = Date.now();
-    const chars = new Array<string>(26);
+    const chars = Array.from({ length: 26 }, () => "0");
     // 10 chars of time, most-significant first
     for (let i = 9; i >= 0; i--) {
       chars[i] = CROCKFORD[time % 32]!;
@@ -172,9 +168,7 @@ export interface RegistryShape {
    * `bumpForkCount(parentRepoId, 1)`; kept as its own verb for call-site
    * clarity.
    */
-  readonly recordFork: (
-    parentRepoId: string,
-  ) => Effect.Effect<number, StoreError, RuntimeContext>;
+  readonly recordFork: (parentRepoId: string) => Effect.Effect<number, StoreError, RuntimeContext>;
   /**
    * Adjusts a repo's `fork_count` by `delta` (may be 0 to read) and returns
    * the new value. The delete-purge job polls this: the parent's R2 prefix
@@ -188,17 +182,13 @@ export interface RegistryShape {
    * Soft-deletes a row (sets `deleted_at`); the name stays reserved until
    * {@link RegistryShape.removeRow} after the purge completes.
    */
-  readonly markDeleted: (
-    repoId: string,
-  ) => Effect.Effect<void, StoreError, RuntimeContext>;
+  readonly markDeleted: (repoId: string) => Effect.Effect<void, StoreError, RuntimeContext>;
   /**
    * Hard-removes a row after purge — the last step of repo deletion, which
    * frees the `owner/name` for reuse. Also decrements the fork parent's
    * `fork_count` when the removed repo was a fork.
    */
-  readonly removeRow: (
-    repoId: string,
-  ) => Effect.Effect<void, StoreError, RuntimeContext>;
+  readonly removeRow: (repoId: string) => Effect.Effect<void, StoreError, RuntimeContext>;
   /**
    * Refreshes the denormalised display fields for a repo. Called by the
    * Repo DO whenever they change (create, metadata update, status
@@ -252,10 +242,7 @@ export const DEFAULT_LIST_LIMIT = 50;
  * The singleton Registry Durable Object class (modular form — the runtime
  * implementation lives in {@link RegistryLive}, provided by `GitWorker`).
  */
-export class Registry extends Cloudflare.DurableObject<
-  Registry,
-  RegistryShape
->()("GitRegistry", {
+export class Registry extends Cloudflare.DurableObject<Registry, RegistryShape>()("GitRegistry", {
   // RPC-boundary error revival (see `DurableObjectProps.errors`).
   errors: [RepoAlreadyExists, ValidationError, StoreError],
 }) {}
@@ -282,10 +269,9 @@ export class Registry extends Cloudflare.DurableObject<
  *
  * @binding
  */
-export class RegistryStore extends Context.Service<
-  RegistryStore,
-  RegistryShape
->()("alchemy/Git/RegistryStore") {}
+export class RegistryStore extends Context.Service<RegistryStore, RegistryShape>()(
+  "alchemy/Git/RegistryStore",
+) {}
 
 /**
  * The Registry DO implementation Layer. Provide on the hosting Worker's
@@ -313,52 +299,50 @@ export const RegistryLive = Registry.make(
           const createdAt = Date.now();
           // The DO's single-threaded event loop + transactionSync make the
           // exists-check + insert a real CAS.
-          return yield* sql.transactionSync<RegistryEntry, RepoAlreadyExists>(
-            (raw, rollback) => {
-              const existing = raw
-                .exec<RegistryRepoRow>(
-                  `SELECT * FROM repos WHERE owner = ? AND name = ?`,
-                  owner,
-                  name,
-                )
-                .toArray();
-              if (existing.length > 0) {
-                // Includes soft-deleted rows: the name frees only after purge.
-                rollback(new RepoAlreadyExists({ owner, repo: name }));
-              }
-              raw.exec(
-                `INSERT INTO repos (owner, name, repo_id, description, is_public, fork_of, fork_count, created_at, deleted_at)
+          return yield* sql.transactionSync<RegistryEntry, RepoAlreadyExists>((raw, rollback) => {
+            const existing = raw
+              .exec<RegistryRepoRow>(
+                `SELECT * FROM repos WHERE owner = ? AND name = ?`,
+                owner,
+                name,
+              )
+              .toArray();
+            if (existing.length > 0) {
+              // Includes soft-deleted rows: the name frees only after purge.
+              rollback(new RepoAlreadyExists({ owner, repo: name }));
+            }
+            raw.exec(
+              `INSERT INTO repos (owner, name, repo_id, description, is_public, fork_of, fork_count, created_at, deleted_at)
                VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL)`,
-                owner,
-                name,
-                repoId,
-                input.description ?? null,
-                input.public === true ? 1 : 0,
-                input.forkOf ?? null,
-                createdAt,
+              owner,
+              name,
+              repoId,
+              input.description ?? null,
+              input.public === true ? 1 : 0,
+              input.forkOf ?? null,
+              createdAt,
+            );
+            if (input.forkOf !== undefined) {
+              raw.exec(
+                `UPDATE repos SET fork_count = fork_count + 1 WHERE repo_id = ?`,
+                input.forkOf,
               );
-              if (input.forkOf !== undefined) {
-                raw.exec(
-                  `UPDATE repos SET fork_count = fork_count + 1 WHERE repo_id = ?`,
-                  input.forkOf,
-                );
-              }
-              return {
-                owner,
-                name,
-                repoId,
-                defaultBranch: "main",
-                readOnly: false,
-                public: input.public === true,
-                status: "ready",
-                description: input.description ?? null,
-                forkOf: input.forkOf ?? null,
-                forkCount: 0,
-                createdAt,
-                deletedAt: null,
-              } satisfies RegistryEntry;
-            },
-          );
+            }
+            return {
+              owner,
+              name,
+              repoId,
+              defaultBranch: "main",
+              readOnly: false,
+              public: input.public === true,
+              status: "ready",
+              description: input.description ?? null,
+              forkOf: input.forkOf ?? null,
+              forkCount: 0,
+              createdAt,
+              deletedAt: null,
+            } satisfies RegistryEntry;
+          });
         }),
 
         resolve: Effect.fn(function* (owner: string, name: string) {
@@ -376,12 +360,8 @@ export const RegistryLive = Registry.make(
         }),
 
         list: Effect.fn(function* (input: ListReposInput) {
-          const limit = Math.max(
-            1,
-            Math.min(input.limit ?? DEFAULT_LIST_LIMIT, 100),
-          );
-          const after =
-            input.cursor === undefined ? undefined : decodeCursor(input.cursor);
+          const limit = Math.max(1, Math.min(input.limit ?? DEFAULT_LIST_LIMIT, 100));
+          const after = input.cursor === undefined ? undefined : decodeCursor(input.cursor);
           const conditions: Array<string> = ["deleted_at IS NULL"];
           const bindings: Array<string | number> = [];
           if (input.publicOnly === true) {
@@ -406,10 +386,7 @@ export const RegistryLive = Registry.make(
           const last = page[page.length - 1];
           return {
             items: page.map(toEntry),
-            nextCursor:
-              hasMore && last !== undefined
-                ? encodeCursor(last.owner, last.name)
-                : null,
+            nextCursor: hasMore && last !== undefined ? encodeCursor(last.owner, last.name) : null,
             hasMore,
           } satisfies ListReposResult;
         }),
@@ -450,10 +427,7 @@ export const RegistryLive = Registry.make(
           );
         }),
 
-        updateSummary: Effect.fn(function* (
-          repoId: string,
-          summary: RepoSummary,
-        ) {
+        updateSummary: Effect.fn(function* (repoId: string, summary: RepoSummary) {
           yield* sql.run(
             `UPDATE repos SET default_branch = ?, read_only = ?, is_public = ?, status = ?
               WHERE repo_id = ?`,

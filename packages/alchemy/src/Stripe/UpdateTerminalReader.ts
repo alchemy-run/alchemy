@@ -33,11 +33,7 @@ export interface UpdateTerminalReader extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateTerminalReaderRequest,
-    ) => Effect.Effect<
-      UpdateTerminalReaderResponse,
-      UpdateTerminalReaderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<UpdateTerminalReaderResponse, UpdateTerminalReaderError, RuntimeContext>
   >
 > {}
 

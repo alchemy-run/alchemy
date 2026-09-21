@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import AppSyncBindingsFunctionLive, {
-  AppSyncBindingsFunction,
-} from "./fixtures/bindings-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import AppSyncBindingsFunctionLive, { AppSyncBindingsFunction } from "./fixtures/bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -31,33 +29,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
 describe("AppSync Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "AppSync bindings setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("AppSync bindings setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "AppSync bindings setup: deploying api -> resolvers -> Lambda",
-      );
+      yield* Effect.logInfo("AppSync bindings setup: deploying api -> resolvers -> Lambda");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* AppSyncBindingsFunction;
@@ -75,10 +64,7 @@ describe("AppSync Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),
@@ -112,10 +98,7 @@ describe("AppSync Bindings", () => {
               (json) => new Error(`no data.add: ${JSON.stringify(json)}`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
             }),
           );
           expect(result.data?.add).toBe(5);
@@ -135,9 +118,7 @@ describe("AppSync Bindings", () => {
             ),
           ).pipe(
             Effect.flatMap((response) => response.json),
-            Effect.map(
-              (json) => json as { errors?: Array<{ message: string }> },
-            ),
+            Effect.map((json) => json as { errors?: Array<{ message: string }> }),
           );
           expect(result.errors?.length).toBeGreaterThan(0);
         }),
@@ -162,10 +143,7 @@ describe("AppSync Bindings", () => {
               (json) => new Error(`no data.greeting: ${JSON.stringify(json)}`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(result.data?.greeting).toBe("hello from ctx.env");
@@ -179,9 +157,7 @@ describe("AppSync Bindings", () => {
       "the Lambda reads the API's live SDL through the binding",
       () =>
         Effect.gen(function* () {
-          const result = yield* send(
-            HttpClientRequest.get(`${baseUrl}/schema`),
-          ).pipe(
+          const result = yield* send(HttpClientRequest.get(`${baseUrl}/schema`)).pipe(
             Effect.flatMap((response) => response.json),
             Effect.map((json) => json as { sdl?: string }),
             Effect.filterOrFail(
@@ -189,10 +165,7 @@ describe("AppSync Bindings", () => {
               (json) => new Error(`no sdl: ${JSON.stringify(json)}`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(result.sdl).toContain("add(a: Int!, b: Int!): Int!");
@@ -207,9 +180,7 @@ describe("AppSync Bindings", () => {
       "the Lambda evaluates APPSYNC_JS resolver code through the binding",
       () =>
         Effect.gen(function* () {
-          const result = yield* send(
-            HttpClientRequest.post(`${baseUrl}/evaluate`),
-          ).pipe(
+          const result = yield* send(HttpClientRequest.post(`${baseUrl}/evaluate`)).pipe(
             Effect.flatMap((response) => response.json),
             Effect.map(
               (json) =>
@@ -220,14 +191,10 @@ describe("AppSync Bindings", () => {
             ),
             Effect.filterOrFail(
               (json) => json.evaluationResult != null,
-              (json) =>
-                new Error(`no evaluationResult: ${JSON.stringify(json)}`),
+              (json) => new Error(`no evaluationResult: ${JSON.stringify(json)}`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(JSON.parse(result.evaluationResult!)).toMatchObject({
@@ -243,9 +210,7 @@ describe("AppSync Bindings", () => {
       "the Lambda renders a VTL mapping template through the binding",
       () =>
         Effect.gen(function* () {
-          const result = yield* send(
-            HttpClientRequest.post(`${baseUrl}/evaluate-template`),
-          ).pipe(
+          const result = yield* send(HttpClientRequest.post(`${baseUrl}/evaluate-template`)).pipe(
             Effect.flatMap((response) => response.json),
             Effect.map(
               (json) =>
@@ -256,14 +221,10 @@ describe("AppSync Bindings", () => {
             ),
             Effect.filterOrFail(
               (json) => json.evaluationResult != null,
-              (json) =>
-                new Error(`no evaluationResult: ${JSON.stringify(json)}`),
+              (json) => new Error(`no evaluationResult: ${JSON.stringify(json)}`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(JSON.parse(result.evaluationResult!)).toMatchObject({
@@ -283,9 +244,7 @@ describe("AppSync Bindings", () => {
           // hourly): a typed NotFoundException proves the binding executed
           // with the granted appsync:FlushApiCache; an IAM denial surfaces
           // a different tag. Repeat briefly through IAM propagation.
-          const outcome = yield* send(
-            HttpClientRequest.post(`${baseUrl}/flush`),
-          ).pipe(
+          const outcome = yield* send(HttpClientRequest.post(`${baseUrl}/flush`)).pipe(
             Effect.flatMap((response) => response.json),
             Effect.map(
               (json) =>

@@ -1,14 +1,14 @@
-import * as AppIntegrations from "@/AWS/AppIntegrations";
-import { Key } from "@/AWS/KMS";
-import * as Lambda from "@/AWS/Lambda";
-import { Bucket } from "@/AWS/S3";
-import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AppIntegrations from "@/AWS/AppIntegrations";
+import { Key } from "@/AWS/KMS";
+import * as Lambda from "@/AWS/Lambda";
+import { Bucket } from "@/AWS/S3";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -32,13 +32,10 @@ export default AppIntegrationsTestFunction.make(
       description: "alchemy appintegrations bindings test key",
       deletionWindow: "7 days",
     });
-    const dataIntegration = yield* AppIntegrations.DataIntegration(
-      "BindingsData",
-      {
-        kmsKey: key.keyArn,
-        sourceURI: Output.interpolate`s3://${bucket.bucketName}`,
-      },
-    );
+    const dataIntegration = yield* AppIntegrations.DataIntegration("BindingsData", {
+      kmsKey: key.keyArn,
+      sourceURI: Output.interpolate`s3://${bucket.bucketName}`,
+    });
 
     // Event source: creates the EventIntegration + the EventBridge rule on
     // the default bus, and registers the runtime handler. Partner events
@@ -64,8 +61,7 @@ export default AppIntegrationsTestFunction.make(
     const listDataIntegrations = yield* AppIntegrations.ListDataIntegrations();
     const listDataIntegrationAssociations =
       yield* AppIntegrations.ListDataIntegrationAssociations(dataIntegration);
-    const listEventIntegrations =
-      yield* AppIntegrations.ListEventIntegrations();
+    const listEventIntegrations = yield* AppIntegrations.ListEventIntegrations();
     const listEventIntegrationAssociations =
       yield* AppIntegrations.ListEventIntegrationAssociations(eventIntegration);
 
@@ -87,10 +83,7 @@ export default AppIntegrationsTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/application-associations"
-        ) {
+        if (request.method === "GET" && pathname === "/application-associations") {
           const result = yield* listApplicationAssociations();
           return yield* HttpServerResponse.json({
             associations: result.ApplicationAssociations ?? [],
@@ -105,10 +98,7 @@ export default AppIntegrationsTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/data-integration-associations"
-        ) {
+        if (request.method === "POST" && pathname === "/data-integration-associations") {
           // Create an association (idempotently — a retried request reuses
           // the one already created for our ClientId), then rerun its
           // on-demand job via update. Errors are surfaced as typed tags so
@@ -122,8 +112,7 @@ export default AppIntegrationsTestFunction.make(
           const created = found?.DataIntegrationAssociationArn
             ? {
                 created: "ok" as string,
-                associationId:
-                  found.DataIntegrationAssociationArn.split("/").at(-1),
+                associationId: found.DataIntegrationAssociationArn.split("/").at(-1),
               }
             : yield* createDataIntegrationAssociation({
                 ClientId: clientId,
@@ -159,10 +148,7 @@ export default AppIntegrationsTestFunction.make(
           return yield* HttpServerResponse.json({ ...created, updated });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/data-integration-associations"
-        ) {
+        if (request.method === "GET" && pathname === "/data-integration-associations") {
           const result = yield* listDataIntegrationAssociations();
           return yield* HttpServerResponse.json({
             associations: result.DataIntegrationAssociations ?? [],
@@ -177,10 +163,7 @@ export default AppIntegrationsTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/event-integration-associations"
-        ) {
+        if (request.method === "GET" && pathname === "/event-integration-associations") {
           const result = yield* listEventIntegrationAssociations();
           return yield* HttpServerResponse.json({
             associations: result.EventIntegrationAssociations ?? [],

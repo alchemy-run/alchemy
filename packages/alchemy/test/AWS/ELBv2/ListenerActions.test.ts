@@ -1,22 +1,19 @@
-import * as AWS from "@/AWS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import { Listener, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
-import * as Test from "@/Test/Alchemy";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import { Listener, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
+import * as Test from "@/Test/Alchemy";
 import { deleteCertBestEffort, ensureImportedCert } from "./fixtures/acm.ts";
 import { OIDC_CERT_PEM, OIDC_KEY_PEM } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Exercises the full DefaultActions surface on a single ALB listener:
 // forward -> redirect -> fixedResponse -> weighted multi-target-group forward
@@ -30,9 +27,9 @@ test.provider(
 
       const azResult = yield* EC2.describeAvailabilityZones({});
       const azs =
-        azResult.AvailabilityZones?.filter(
-          (az) => az.State === "available",
-        ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available").flatMap((az) =>
+          az.ZoneName ? [az.ZoneName] : [],
+        ) ?? [];
       const [az1, az2] = azs;
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
@@ -142,9 +139,7 @@ test.provider(
 
       observed = yield* describe;
       expect(observed?.DefaultActions?.[0]?.Type).toBe("redirect");
-      expect(observed?.DefaultActions?.[0]?.RedirectConfig?.StatusCode).toBe(
-        "HTTP_301",
-      );
+      expect(observed?.DefaultActions?.[0]?.RedirectConfig?.StatusCode).toBe("HTTP_301");
 
       // STAGE 3: fixed-response (in place).
       yield* stack.deploy(
@@ -195,9 +190,7 @@ test.provider(
 
       observed = yield* describe;
       expect(observed?.DefaultActions?.[0]?.Type).toBe("fixed-response");
-      expect(
-        observed?.DefaultActions?.[0]?.FixedResponseConfig?.StatusCode,
-      ).toBe("503");
+      expect(observed?.DefaultActions?.[0]?.FixedResponseConfig?.StatusCode).toBe("503");
 
       // STAGE 4: weighted multi-target-group forward with stickiness.
       yield* stack.deploy(
@@ -249,31 +242,21 @@ test.provider(
       );
 
       observed = yield* describe;
-      const forward = observed?.DefaultActions?.find(
-        (x) => x.Type === "forward",
-      );
+      const forward = observed?.DefaultActions?.find((x) => x.Type === "forward");
       expect(forward?.ForwardConfig?.TargetGroups?.length).toBe(2);
-      const weights = (forward?.ForwardConfig?.TargetGroups ?? [])
-        .map((t) => t.Weight)
-        .sort();
+      const weights = (forward?.ForwardConfig?.TargetGroups ?? []).map((t) => t.Weight).sort();
       expect(weights).toEqual([10, 90]);
-      expect(forward?.ForwardConfig?.TargetGroupStickinessConfig?.Enabled).toBe(
-        true,
-      );
+      expect(forward?.ForwardConfig?.TargetGroupStickinessConfig?.Enabled).toBe(true);
       // Duration.Input "1 hour" must reach the wire as whole seconds.
-      expect(
-        forward?.ForwardConfig?.TargetGroupStickinessConfig?.DurationSeconds,
-      ).toBe(3600);
+      expect(forward?.ForwardConfig?.TargetGroupStickinessConfig?.DurationSeconds).toBe(3600);
 
       yield* stack.destroy();
 
       // Verify the listener is gone.
-      const after = yield* elbv2
-        .describeListeners({ ListenerArns: [listenerArn] })
-        .pipe(
-          Effect.map((r) => r.Listeners?.length ?? 0),
-          Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(0)),
-        );
+      const after = yield* elbv2.describeListeners({ ListenerArns: [listenerArn] }).pipe(
+        Effect.map((r) => r.Listeners?.length ?? 0),
+        Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(0)),
+      );
       expect(after).toBe(0);
     }).pipe(logLevel),
   { timeout: 600_000 },
@@ -304,9 +287,9 @@ test.provider(
       yield* Effect.gen(function* () {
         const azResult = yield* EC2.describeAvailabilityZones({});
         const azs =
-          azResult.AvailabilityZones?.filter(
-            (az) => az.State === "available",
-          ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+          azResult.AvailabilityZones?.filter((az) => az.State === "available").flatMap((az) =>
+            az.ZoneName ? [az.ZoneName] : [],
+          ) ?? [];
         const [az1, az2] = azs;
         expect(az1).toBeTruthy();
         expect(az2).toBeTruthy();
@@ -340,12 +323,9 @@ test.provider(
                 {
                   type: "authenticateOidc",
                   issuer: "https://idp.elbv2-test.alchemy.internal",
-                  authorizationEndpoint:
-                    "https://idp.elbv2-test.alchemy.internal/authorize",
-                  tokenEndpoint:
-                    "https://idp.elbv2-test.alchemy.internal/token",
-                  userInfoEndpoint:
-                    "https://idp.elbv2-test.alchemy.internal/userinfo",
+                  authorizationEndpoint: "https://idp.elbv2-test.alchemy.internal/authorize",
+                  tokenEndpoint: "https://idp.elbv2-test.alchemy.internal/token",
+                  userInfoEndpoint: "https://idp.elbv2-test.alchemy.internal/userinfo",
                   clientId: "alchemy-test-client",
                   clientSecret: Redacted.make("alchemy-test-client-secret"),
                   sessionTimeout: "7 days",
@@ -367,20 +347,14 @@ test.provider(
           .describeListeners({ ListenerArns: [deployed.listenerArn] })
           .pipe(Effect.map((r) => r.Listeners?.[0]));
 
-        const oidc = observed?.DefaultActions?.find(
-          (a) => a.Type === "authenticate-oidc",
-        );
+        const oidc = observed?.DefaultActions?.find((a) => a.Type === "authenticate-oidc");
         // The create succeeding proves the Redacted secret was unwrapped to the
         // plain string on the wire (AWS validates ClientSecret is present).
         // Describe never echoes the secret back.
-        expect(oidc?.AuthenticateOidcConfig?.ClientId).toBe(
-          "alchemy-test-client",
-        );
+        expect(oidc?.AuthenticateOidcConfig?.ClientId).toBe("alchemy-test-client");
         // Duration.Input "7 days" must reach the wire as whole seconds.
         expect(oidc?.AuthenticateOidcConfig?.SessionTimeout).toBe(604800);
-        expect(oidc?.AuthenticateOidcConfig?.OnUnauthenticatedRequest).toBe(
-          "deny",
-        );
+        expect(oidc?.AuthenticateOidcConfig?.OnUnauthenticatedRequest).toBe("deny");
 
         yield* stack.destroy();
       }).pipe(

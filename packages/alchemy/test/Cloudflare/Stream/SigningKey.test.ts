@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * True when the key with the given id is listed on the account. The list
@@ -34,16 +31,11 @@ const keyListed = (accountId: string, keyId: string) =>
 const expectGone = (accountId: string, keyId: string) =>
   keyListed(accountId, keyId).pipe(
     Effect.flatMap((listed) =>
-      listed
-        ? Effect.fail({ _tag: "SigningKeyNotDeleted" } as const)
-        : Effect.void,
+      listed ? Effect.fail({ _tag: "SigningKeyNotDeleted" } as const) : Effect.void,
     ),
     Effect.retry({
       while: (e) => e._tag === "SigningKeyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -55,9 +47,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const key = yield* stack.deploy(
-        Cloudflare.Stream.SigningKey("PlaybackKey", {}),
-      );
+      const key = yield* stack.deploy(Cloudflare.Stream.SigningKey("PlaybackKey", {}));
 
       expect(key.keyId).toBeTruthy();
       expect(key.accountId).toEqual(accountId);
@@ -69,9 +59,7 @@ test.provider(
       expect(yield* keyListed(accountId, key.keyId)).toBe(true);
 
       // Redeploying is a no-op — same key, same material preserved.
-      const noop = yield* stack.deploy(
-        Cloudflare.Stream.SigningKey("PlaybackKey", {}),
-      );
+      const noop = yield* stack.deploy(Cloudflare.Stream.SigningKey("PlaybackKey", {}));
       expect(noop.keyId).toEqual(key.keyId);
       expect(Redacted.value(noop.pem)).toEqual(Redacted.value(key.pem));
 
@@ -88,13 +76,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const key = yield* stack.deploy(
-        Cloudflare.Stream.SigningKey("ListKey", {}),
-      );
+      const key = yield* stack.deploy(Cloudflare.Stream.SigningKey("ListKey", {}));
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Stream.SigningKey,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Stream.SigningKey);
       const all = yield* provider.list();
 
       expect(all.some((k) => k.keyId === key.keyId)).toBe(true);

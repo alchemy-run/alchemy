@@ -30,9 +30,7 @@ export interface ObservedDatabase {
   readonly name: string;
   readonly status: DatabaseStatus;
   readonly defaultConnectionId: string | null;
-  readonly connections: ReadonlyArray<
-    ObservedConnection & { readonly id: string }
-  >;
+  readonly connections: ReadonlyArray<ObservedConnection & { readonly id: string }>;
   readonly region?: { readonly id: string; readonly name: string } | null;
 }
 
@@ -140,9 +138,8 @@ export interface ObservedProject {
 }
 
 /** Read a required possibly-redacted secret as a plain string. */
-export const requiredSecretValue = (
-  value: string | Redacted.Redacted<string>,
-): string => (typeof value === "string" ? value : Redacted.value(value));
+export const requiredSecretValue = (value: string | Redacted.Redacted<string>): string =>
+  typeof value === "string" ? value : Redacted.value(value);
 
 /** Read a possibly-redacted secret as a plain string. */
 export const secretValue = (

@@ -1,3 +1,15 @@
+import type * as cf from "@cloudflare/workers-types";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * The per-repo Durable Object (DESIGN.md §2, §3.4, §3.6, §8).
  *
@@ -28,18 +40,6 @@
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { HttpEffect } from "../Http.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   BranchMissing,
   MergeConflict,
@@ -58,9 +58,15 @@ import {
   type Oid as ApiOid,
   type RepoStatus,
 } from "./Api.ts";
+import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
+import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
+import { type HasherShape, type HashPartResult } from "./Hasher/Hasher.ts";
+import { bundleCovers, runBundleJob, type BundleInfo } from "./Jobs/Bundle.ts";
+import { runCompactJob, runGeometricMergeJob, shouldCompact } from "./Jobs/Compact.ts";
+import { runForkJob, snapshotStream, type SnapshotChunk } from "./Jobs/Fork.ts";
+import { runImport, type ImportSource } from "./Jobs/Import.ts";
+import { runPurgeJob } from "./Jobs/Purge.ts";
 import { applyDelta } from "./Protocol/Delta.ts";
-import * as PackParser from "./Protocol/PackParser.ts";
-import type { RandomAccess } from "./Protocol/PackParser.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -83,6 +89,11 @@ import {
   type ObjectTypeName,
   type Oid,
 } from "./Protocol/ObjectCodec.ts";
+import * as PackParser from "./Protocol/PackParser.ts";
+import type { RandomAccess } from "./Protocol/PackParser.ts";
+import * as PartialScan from "./Protocol/PartialScan.ts";
+import type { ScanResult } from "./Protocol/PartialScan.ts";
+import type { DeltaBase, DeltaJob, UnresolvedDelta } from "./Protocol/PartialScan.ts";
 import {
   decodePktLines,
   errPkt,
@@ -92,16 +103,8 @@ import {
   readPktLineAt,
   type PktLine,
 } from "./Protocol/Pkt.ts";
-import {
-  progressMessage,
-  pumpPackBody,
-  sidebandFrames,
-} from "./Protocol/Sideband.ts";
-import {
-  StoreError,
-  type ManifestEntry,
-  type ObjectSource,
-} from "./Protocol/Store.ts";
+import { progressMessage, pumpPackBody } from "./Protocol/Sideband.ts";
+import { StoreError, type ManifestEntry, type ObjectSource } from "./Protocol/Store.ts";
 import {
   applyTreeChanges,
   conflictingPaths,
@@ -109,42 +112,12 @@ import {
   type DiffEntryData,
 } from "./Protocol/TreeDiff.ts";
 import * as Zlib from "./Protocol/Zlib.ts";
-import { runImport, type ImportSource } from "./Jobs/Import.ts";
-import { runForkJob, snapshotStream, type SnapshotChunk } from "./Jobs/Fork.ts";
-import { bundleCovers, runBundleJob, type BundleInfo } from "./Jobs/Bundle.ts";
-import {
-  runCompactJob,
-  runGeometricMergeJob,
-  shouldCompact,
-} from "./Jobs/Compact.ts";
-import { headKey, incomingKey, packKeyOf, wirePackId } from "./Store/Keys.ts";
-import { encodeHeadSnapshot, type HeadSnapshot } from "./Store/HeadSnapshot.ts";
-import { blobRandomAccess, sliceRandomAccess } from "./Store/PackSource.ts";
-import { SPILL_PART_BYTES } from "./Store/IncomingBody.ts";
-import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
-import type { StreamingFeeder } from "./Store/StreamingSource.ts";
-import {
-  BACKPRESSURE_BYTES,
-  makeStreamingSource,
-  RETAIN_BYTES,
-} from "./Store/StreamingSource.ts";
-import {
-  Hasher,
-  type HasherShape,
-  type HashPartResult,
-} from "./Hasher/Hasher.ts";
-import * as PartialScan from "./Protocol/PartialScan.ts";
-import type { ScanResult } from "./Protocol/PartialScan.ts";
-import type {
-  DeltaBase,
-  DeltaJob,
-  UnresolvedDelta,
-} from "./Protocol/PartialScan.ts";
-import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
-import { runPurgeJob } from "./Jobs/Purge.ts";
-import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { decodeStagedBatch } from "./PushWire.ts";
+import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./Store/Closure.ts";
+import { encodeHeadSnapshot, type HeadSnapshot } from "./Store/HeadSnapshot.ts";
+import { SPILL_PART_BYTES } from "./Store/IncomingBody.ts";
+import { headKey, packKeyOf } from "./Store/Keys.ts";
 import {
   makeObjectStore,
   MAX_OBJECT_SIZE,
@@ -152,7 +125,7 @@ import {
   type StagedObject,
   LIVE_OBJECTS,
 } from "./Store/ObjectStore.ts";
-import type * as cf from "@cloudflare/workers-types";
+import { blobRandomAccess } from "./Store/PackSource.ts";
 import {
   initRepoSchema,
   makeSqlClient,
@@ -160,6 +133,8 @@ import {
   type PullRow,
   type RefRow,
 } from "./Store/Sql.ts";
+import type { StreamingFeeder } from "./Store/StreamingSource.ts";
+import { BACKPRESSURE_BYTES, RETAIN_BYTES } from "./Store/StreamingSource.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -266,18 +241,17 @@ let sharedPushGate: Semaphore.Semaphore | undefined;
  * instances of a class share an isolate, so a per-instance gate would let
  * N repos each admit a full budget's worth of concurrent pushes.
  */
-export const isolatePushGate: Effect.Effect<Semaphore.Semaphore> =
-  Effect.suspend(() =>
-    sharedPushGate === undefined
-      ? Semaphore.make(PUSH_MEMORY_BUDGET_MB).pipe(
-          Effect.tap((gate) =>
-            Effect.sync(() => {
-              sharedPushGate = gate;
-            }),
-          ),
-        )
-      : Effect.succeed(sharedPushGate),
-  );
+export const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspend(() =>
+  sharedPushGate === undefined
+    ? Semaphore.make(PUSH_MEMORY_BUDGET_MB).pipe(
+        Effect.tap((gate) =>
+          Effect.sync(() => {
+            sharedPushGate = gate;
+          }),
+        ),
+      )
+    : Effect.succeed(sharedPushGate),
+);
 
 /**
  * Permits a push must reserve: its buffered ceiling in MiB. A body
@@ -297,9 +271,7 @@ export const pushPermitsFor = (contentLength: number | undefined): number => {
   // to, so charge the body twice (compressed + inflated) plus one for the
   // batch, rather than the caches' ceilings.
   const permits =
-    contentLength === undefined ||
-    !Number.isFinite(contentLength) ||
-    contentLength > MAX_PACK_BYTES
+    contentLength === undefined || !Number.isFinite(contentLength) || contentLength > MAX_PACK_BYTES
       ? spilled
       : mib(Math.max(contentLength, 0)) * 2 + 1;
   return Math.max(1, Math.min(PUSH_MEMORY_BUDGET_MB, permits));
@@ -332,10 +304,9 @@ export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
  * missing thin base, delta error). Reported in-band as `unpack <reason>` +
  * per-ref `ng` — never as an HTTP error.
  */
-export class PackIngestError extends Schema.TaggedError<PackIngestError>()(
-  "PackIngestError",
-  { reason: Schema.String },
-) {}
+export class PackIngestError extends Schema.TaggedError<PackIngestError>()("PackIngestError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * A syntactically valid request that the v0 grammar does not allow
@@ -614,13 +585,7 @@ export interface PullDetailData extends PullData {
   readonly aheadBy: number | null;
   readonly behindBy: number | null;
   readonly mergeable: boolean | null;
-  readonly mergeableReason:
-    | "ff"
-    | "merge-commit"
-    | "conflict"
-    | "up-to-date"
-    | "unknown"
-    | null;
+  readonly mergeableReason: "ff" | "merge-commit" | "conflict" | "up-to-date" | "unknown" | null;
 }
 
 /** Input of {@link GitRepoShape.createPull}. */
@@ -713,23 +678,11 @@ export interface GitRepoShape {
    * immutable R2 pack by the alarm (DESIGN.md §12.1). Normally armed
    * automatically by the post-push size check.
    */
-  readonly startCompact: () => Effect.Effect<
-    void,
-    RepoAuthError,
-    RuntimeContext
-  >;
+  readonly startCompact: () => Effect.Effect<void, RepoAuthError, RuntimeContext>;
   readonly startPurge: () => Effect.Effect<void, RepoAuthError, RuntimeContext>;
-  readonly getRepoMeta: () => Effect.Effect<
-    RepoMetaData,
-    RepoAuthError,
-    RuntimeContext
-  >;
+  readonly getRepoMeta: () => Effect.Effect<RepoMetaData, RepoAuthError, RuntimeContext>;
   /** Repo metadata for the Worker's own bookkeeping. */
-  readonly readMeta: () => Effect.Effect<
-    RepoMetaData,
-    RepoNotFound | StoreError,
-    RuntimeContext
-  >;
+  readonly readMeta: () => Effect.Effect<RepoMetaData, RepoNotFound | StoreError, RuntimeContext>;
   readonly updateRepoMeta: (
     patch: RepoMetaPatch,
   ) => Effect.Effect<RepoMetaData, RepoAuthError | RefNotFound, RuntimeContext>;
@@ -755,18 +708,10 @@ export interface GitRepoShape {
   >;
   readonly readObject: (
     input: ReadObjectInput,
-  ) => Effect.Effect<
-    ObjectData,
-    RepoAuthError | ObjectNotFound | WrongObjectType,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<ObjectData, RepoAuthError | ObjectNotFound | WrongObjectType, RuntimeContext>;
   readonly readCommitLog: (
     input: CommitLogInput,
-  ) => Effect.Effect<
-    CommitLogPage,
-    RepoAuthError | RefNotFound,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<CommitLogPage, RepoAuthError | RefNotFound, RuntimeContext>;
   /**
    * The changed-file list of a commit vs its FIRST parent (empty tree for
    * a root commit) — see the REST `diff` endpoint.
@@ -787,20 +732,12 @@ export interface GitRepoShape {
     input: CompareInput,
   ) => Effect.Effect<
     CompareData,
-    | RepoAuthError
-    | RefNotFound
-    | ObjectNotFound
-    | WrongObjectType
-    | NoMergeBase,
+    RepoAuthError | RefNotFound | ObjectNotFound | WrongObjectType | NoMergeBase,
     RuntimeContext
   >;
   readonly readFileAtPath: (
     input: ReadFileInput,
-  ) => Effect.Effect<
-    FileData,
-    RepoAuthError | RefNotFound | ObjectNotFound,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<FileData, RepoAuthError | RefNotFound | ObjectNotFound, RuntimeContext>;
   /** Opens a pull request (same-repo branches, `write` scope). */
   readonly createPull: (
     input: CreatePullInput,
@@ -816,19 +753,11 @@ export interface GitRepoShape {
   /** Reads one PR with live compare fields recomputed from current tips. */
   readonly getPull: (
     number: number,
-  ) => Effect.Effect<
-    PullDetailData,
-    RepoAuthError | PullNotFound,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<PullDetailData, RepoAuthError | PullNotFound, RuntimeContext>;
   /** Patches title/body, or closes/reopens via `state` (`write` scope). */
   readonly updatePull: (
     input: UpdatePullInput,
-  ) => Effect.Effect<
-    PullData,
-    RepoAuthError | PullNotFound | PullStateConflict,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<PullData, RepoAuthError | PullNotFound | PullStateConflict, RuntimeContext>;
   /**
    * Merges an open PR: fast-forward when possible, else a two-parent merge
    * commit iff the three-way tree merge is trivial (no path changed on both
@@ -862,11 +791,7 @@ export interface GitRepoShape {
    */
   readonly beginPush: (
     input: BeginPushInput,
-  ) => Effect.Effect<
-    BeginPushResult,
-    RepoNotFound | StoreError,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<BeginPushResult, RepoNotFound | StoreError, RuntimeContext>;
   /** Push, phase 2: stage one batch of rows (see `PushWire.ts`). */
   readonly stagePush: (
     pushId: string,
@@ -905,11 +830,7 @@ export interface GitRepoShape {
    */
   readonly commitPush: (
     input: CommitPushInput,
-  ) => Effect.Effect<
-    CommitPushResult,
-    RepoNotFound | StoreError,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<CommitPushResult, RepoNotFound | StoreError, RuntimeContext>;
   /** The git wire protocol (info/refs, upload-pack). */
   readonly fetch: HttpEffect<Cloudflare.DurableObjectState | RuntimeContext>;
   /** Alarm job dispatcher (import / fork / purge / gc). */
@@ -948,14 +869,9 @@ export const buildAdvertisement = (options: {
     options.service === "git-upload-pack"
       ? uploadCapabilities(options.defaultBranch)
       : receiveCapabilities();
-  const parts: Array<Uint8Array> = [
-    pktText(`# service=${options.service}`),
-    flushPkt,
-  ];
+  const parts: Array<Uint8Array> = [pktText(`# service=${options.service}`), flushPkt];
   const lines: Array<string> = [];
-  const headRef = options.refs.find(
-    (ref) => ref.name === `refs/heads/${options.defaultBranch}`,
-  );
+  const headRef = options.refs.find((ref) => ref.name === `refs/heads/${options.defaultBranch}`);
   if (options.service === "git-upload-pack" && headRef !== undefined) {
     lines.push(`${headRef.oid} HEAD`);
   }
@@ -1024,9 +940,7 @@ export const parseUploadPackRequest = (
           }
         }
         if (!isOid(rest)) {
-          return Effect.fail(
-            new WireProtocolError({ reason: `malformed want line: ${text}` }),
-          );
+          return Effect.fail(new WireProtocolError({ reason: `malformed want line: ${text}` }));
         }
         wants.push(rest);
         continue;
@@ -1051,9 +965,7 @@ export const parseUploadPackRequest = (
       if (text.startsWith("deepen ")) {
         const n = Number.parseInt(text.slice(7), 10);
         if (!Number.isInteger(n) || n <= 0) {
-          return Effect.fail(
-            new WireProtocolError({ reason: `malformed deepen line: ${text}` }),
-          );
+          return Effect.fail(new WireProtocolError({ reason: `malformed deepen line: ${text}` }));
         }
         depth = n;
         continue;
@@ -1066,16 +978,12 @@ export const parseUploadPackRequest = (
         );
       }
       if (text.startsWith("filter ")) {
-        return Effect.fail(
-          new WireProtocolError({ reason: "filter is not supported" }),
-        );
+        return Effect.fail(new WireProtocolError({ reason: "filter is not supported" }));
       }
       // ignore unknown lines defensively
     }
     if (wants.length === 0) {
-      return Effect.fail(
-        new WireProtocolError({ reason: "upload-pack request has no wants" }),
-      );
+      return Effect.fail(new WireProtocolError({ reason: "upload-pack request has no wants" }));
     }
     return Effect.succeed({
       wants,
@@ -1104,7 +1012,7 @@ export interface ReceivePackRequest {
   readonly probe: boolean;
 }
 
-const REF_NAME_REGEX = /^refs\/[^\s~^:?*\[\\]+$/;
+const REF_NAME_REGEX = /^refs\/[^\s~^:?*[\\]+$/;
 
 /**
  * Parses a v0 receive-pack POST body (already gunzipped): command
@@ -1143,10 +1051,7 @@ export const parseReceivePackRequest = (
       if (r._tag === "incomplete" || r._tag === "invalid") {
         return Effect.fail(
           new WireProtocolError({
-            reason:
-              r._tag === "invalid"
-                ? r.reason
-                : "truncated receive-pack request",
+            reason: r._tag === "invalid" ? r.reason : "truncated receive-pack request",
           }),
         );
       }
@@ -1184,9 +1089,7 @@ export const parseReceivePackRequest = (
         text[81] !== " " ||
         !REF_NAME_REGEX.test(ref)
       ) {
-        return Effect.fail(
-          new WireProtocolError({ reason: `malformed command line: ${text}` }),
-        );
+        return Effect.fail(new WireProtocolError({ reason: `malformed command line: ${text}` }));
       }
       commands.push({ oldOid, newOid, ref });
     }
@@ -1359,9 +1262,7 @@ export const ingestStoreOf = (store: ObjectStore): IngestStore => ({
         Effect.flatMap((meta) =>
           meta === undefined
             ? Effect.succeed(undefined)
-            : store
-                .readContent(oid)
-                .pipe(Effect.map((content) => ({ type: meta.type, content }))),
+            : store.readContent(oid).pipe(Effect.map((content) => ({ type: meta.type, content }))),
         ),
       ),
 });
@@ -1445,11 +1346,7 @@ export const ingestPackFrom = (
     const referenced = new Set<Oid>();
     const referencedParents = new Set<Oid>();
 
-    const record = Effect.fn(function* (
-      oid: Oid,
-      type: ObjectType,
-      content: Uint8Array,
-    ) {
+    const record = Effect.fn(function* (oid: Oid, type: ObjectType, content: Uint8Array) {
       switch (type) {
         case ObjectType.commit: {
           const parsed = yield* parseCommit(content).pipe(
@@ -1525,9 +1422,7 @@ export const ingestPackFrom = (
       readonly fromDelta: boolean;
       readonly content?: Uint8Array | undefined;
       /** Already in a pack in blob storage (the resolved pack, DESIGN §22.13). */
-      readonly pack?:
-        | { readonly packId: string; readonly offset: number }
-        | undefined;
+      readonly pack?: { readonly packId: string; readonly offset: number } | undefined;
     }
     let batch: Array<Incoming> = [];
     let batchBytes = 0;
@@ -1595,9 +1490,7 @@ export const ingestPackFrom = (
      */
     const resolvedBlobs: Array<Incoming> = [];
     /** In-memory span reads over the retained parts (set by the pump). */
-    let readSpan:
-      | ((at: number, length: number) => Uint8Array | undefined)
-      | undefined;
+    let readSpan: ((at: number, length: number) => Uint8Array | undefined) | undefined;
     /**
      * Stages a run of resolved entries (DESIGN §22.5): the parser's
      * synchronous fast path hands over up to SINK_BATCH non-delta entries
@@ -1623,10 +1516,7 @@ export const ingestPackFrom = (
           // Counted as inline until the flush decides; promoted rows carry
           // no BLOB, so this over-counts — safe for a memory cap.
           batchBytes += entry.zdata?.byteLength ?? entry.span ?? 0;
-          if (
-            batch.length >= STAGE_BATCH_OBJECTS ||
-            batchBytes >= STAGE_BATCH_BYTES
-          ) {
+          if (batch.length >= STAGE_BATCH_OBJECTS || batchBytes >= STAGE_BATCH_BYTES) {
             yield* flush();
           }
           if (entry.type !== ObjectType.blob) {
@@ -1651,15 +1541,10 @@ export const ingestPackFrom = (
         // may want smaller chunks than a part (a Lambda's 6 MB payload);
         // chunks then divide parts and the pump uploads the parts itself.
         const partBytes =
-          options.partBytes ??
-          (spill === undefined ? HASH_PART_BYTES : SPILL_PART_BYTES);
+          options.partBytes ?? (spill === undefined ? HASH_PART_BYTES : SPILL_PART_BYTES);
         const wanted = hasher.chunkBytes ?? partBytes;
-        const hashBytes =
-          wanted < partBytes && partBytes % wanted === 0 ? wanted : partBytes;
-        const asIngest = (error: {
-          readonly _tag: string;
-          readonly reason?: string;
-        }) =>
+        const hashBytes = wanted < partBytes && partBytes % wanted === 0 ? wanted : partBytes;
+        const asIngest = (error: { readonly _tag: string; readonly reason?: string }) =>
           new PackIngestError({
             reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
           });
@@ -1673,9 +1558,7 @@ export const ingestPackFrom = (
         ) {
           return yield* new PackIngestError({ reason: "bad pack magic" });
         }
-        const count = new DataView(header.buffer, header.byteOffset).getUint32(
-          8,
-        );
+        const count = new DataView(header.buffer, header.byteOffset).getUint32(8);
         // Trailer SHA-1 over [0, total − 20): hash with a 20-byte lag, so
         // the last 20 bytes seen are the trailer itself.
         const trailerSha = makeSha1();
@@ -1710,9 +1593,7 @@ export const ingestPackFrom = (
         // payloads and hashed by a small extra call. A boundary that does
         // not line up (a resync false positive) falls back to a sequential
         // rescan of that chunk from the known boundary.
-        const gate = yield* Semaphore.make(
-          hasher.concurrency ?? HASH_CONCURRENCY,
-        );
+        const gate = yield* Semaphore.make(hasher.concurrency ?? HASH_CONCURRENCY);
         interface Chunk {
           readonly index: number;
           /** Pack-relative offset of payload[0] (negative for a body-aligned first part). */
@@ -1726,8 +1607,7 @@ export const ingestPackFrom = (
           for (const c of chunks) {
             const start = Math.max(from, c.base);
             const end = Math.min(to, c.base + c.payload.length);
-            if (end > start)
-              pieces.push(c.payload.subarray(start - c.base, end - c.base));
+            if (end > start) pieces.push(c.payload.subarray(start - c.base, end - c.base));
           }
           if (pieces.length === 1) return pieces[0]!;
           // Neighbouring chunks are views of one slab: hand out one view.
@@ -1743,11 +1623,7 @@ export const ingestPackFrom = (
             end += piece.byteLength;
           }
           return contiguous
-            ? new Uint8Array(
-                first.buffer,
-                first.byteOffset,
-                end - first.byteOffset,
-              )
+            ? new Uint8Array(first.buffer, first.byteOffset, end - first.byteOffset)
             : concatBytes(pieces);
         };
         // Retained payloads serve every span read (inline rows, delta
@@ -1757,11 +1633,7 @@ export const ingestPackFrom = (
           const bytes = bytesFrom(at, at + length);
           return bytes.length === length ? bytes : undefined;
         };
-        const stageResult = (
-          payload: Uint8Array,
-          base: number,
-          result: ScanResult,
-        ) =>
+        const stageResult = (payload: Uint8Array, base: number, result: ScanResult) =>
           Effect.gen(function* () {
             const incoming: Array<Incoming> = [];
             for (const e of result.entries) {
@@ -1774,10 +1646,7 @@ export const ingestPackFrom = (
                   ? undefined
                   : yield* Zlib.inflate(
                       e.zdata ??
-                        payload.subarray(
-                          e.dataOffset - base,
-                          e.dataOffset - base + e.span,
-                        ),
+                        payload.subarray(e.dataOffset - base, e.dataOffset - base + e.span),
                     ).pipe(Effect.mapError(asIngest)));
               const item: Known = {
                 oid: e.oid,
@@ -1794,11 +1663,7 @@ export const ingestPackFrom = (
                 type: e.type,
                 size: e.size,
                 zdata:
-                  e.zdata ??
-                  payload.subarray(
-                    e.dataOffset - base,
-                    e.dataOffset - base + e.span,
-                  ),
+                  e.zdata ?? payload.subarray(e.dataOffset - base, e.dataOffset - base + e.span),
                 span: e.span,
                 dataOffset: e.dataOffset,
                 fromDelta: e.zdata !== undefined,
@@ -1859,9 +1724,7 @@ export const ingestPackFrom = (
                   maxObjectSize: MAX_OBJECT_SIZE,
                   resync: opts.resync,
                   spill:
-                    upload === undefined ||
-                    spill === undefined ||
-                    !hasher.writesSpill
+                    upload === undefined || spill === undefined || !hasher.writesSpill
                       ? undefined
                       : {
                           key: spill.key,
@@ -1917,17 +1780,15 @@ export const ingestPackFrom = (
                   uploadGate,
                   1,
                 )(
-                  spill.blobs
-                    .uploadPart(spill.key, settled.uploadId, partNumber, bytes)
-                    .pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new PackIngestError({
-                            reason: `spill part ${partNumber}: ${error.reason}`,
-                          }),
-                      ),
-                      Effect.provide(RuntimeContext.phantom),
+                  spill.blobs.uploadPart(spill.key, settled.uploadId, partNumber, bytes).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new PackIngestError({
+                          reason: `spill part ${partNumber}: ${error.reason}`,
+                        }),
                     ),
+                    Effect.provide(RuntimeContext.phantom),
+                  ),
                 ),
               );
               parts.push(Fiber.join(fiber));
@@ -2005,8 +1866,7 @@ export const ingestPackFrom = (
           // may lie past `limit` when that entry straddles a chunk edge.
           let end = result.count === 0 ? result.consumedTo : -1;
           for (const e of entries) end = Math.max(end, e.dataOffset + e.span);
-          for (const u of unresolved)
-            end = Math.max(end, u.dataOffset + u.span);
+          for (const u of unresolved) end = Math.max(end, u.dataOffset + u.span);
           return {
             firstOffset: result.firstOffset,
             entries,
@@ -2071,9 +1931,7 @@ export const ingestPackFrom = (
             if (k >= chunks.length) break;
             const current = chunks[k]!;
             const result = yield* Fiber.join(current.fiber);
-            console.log(
-              `[pump] chunk ${k + 1} settled at +${Date.now() - pumpStarted}ms`,
-            );
+            console.log(`[pump] chunk ${k + 1} settled at +${Date.now() - pumpStarted}ms`);
             if (result.part !== undefined) {
               parts.push(result.part.pipe(Effect.mapError(asIngest)));
             }
@@ -2112,11 +1970,7 @@ export const ingestPackFrom = (
               const sp = yield* Fiber.join(speculative.fiber);
               const start = speculative.start;
               speculative = undefined;
-              if (
-                sp.r.count === 1 &&
-                start === prevEnd &&
-                sp.r.consumedTo <= result.firstOffset
-              ) {
+              if (sp.r.count === 1 && start === prevEnd && sp.r.consumedTo <= result.firstOffset) {
                 staged += yield* stageResult(sp.bytes, start, sp.r);
                 prevEnd = sp.r.consumedTo;
               }
@@ -2138,10 +1992,7 @@ export const ingestPackFrom = (
             if (result.firstOffset > prevEnd) {
               trace(`  region [${prevEnd}, ${result.firstOffset})`);
               regionCalls += 1;
-              const region = bytesFrom(
-                prevEnd,
-                Math.min(result.firstOffset + 64, chunkEnd),
-              );
+              const region = bytesFrom(prevEnd, Math.min(result.firstOffset + 64, chunkEnd));
               const scanned = yield* hasher
                 .hashPart(region, {
                   base: prevEnd,
@@ -2150,12 +2001,8 @@ export const ingestPackFrom = (
                 })
                 .pipe(Effect.mapError(asIngest));
               const ends =
-                scanned.entries.some(
-                  (e) => e.dataOffset + e.span === result.firstOffset,
-                ) ||
-                scanned.unresolved.some(
-                  (u) => u.dataOffset + u.span === result.firstOffset,
-                );
+                scanned.entries.some((e) => e.dataOffset + e.span === result.firstOffset) ||
+                scanned.unresolved.some((u) => u.dataOffset + u.span === result.firstOffset);
               trace(
                 `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
               );
@@ -2166,11 +2013,7 @@ export const ingestPackFrom = (
                 prevEnd = again.r.consumedTo;
                 continue;
               }
-              staged += yield* stageResult(
-                region,
-                prevEnd,
-                keepBelow(scanned, result.firstOffset),
-              );
+              staged += yield* stageResult(region, prevEnd, keepBelow(scanned, result.firstOffset));
             }
             staged += yield* stageResult(current.payload, current.base, result);
             prevEnd = result.consumedTo;
@@ -2303,11 +2146,9 @@ export const ingestPackFrom = (
         const spanOf = (at: number, length: number) =>
           Effect.suspend(() => {
             const bytes = readSpan?.(at, length);
-            return bytes === undefined
-              ? source.read(at, length)
-              : Effect.succeed(bytes);
+            return bytes === undefined ? source.read(at, length) : Effect.succeed(bytes);
           });
-        const inflateSpan = (item: Known) =>
+        const _inflateSpan = (item: Known) =>
           item.content !== undefined
             ? Effect.succeed(item.content)
             : item.zdata !== undefined
@@ -2370,10 +2211,7 @@ export const ingestPackFrom = (
             ready.push({
               u,
               base,
-              baseKey:
-                base.dataOffset >= 0
-                  ? `o:${base.dataOffset}`
-                  : `oid:${base.oid}`,
+              baseKey: base.dataOffset >= 0 ? `o:${base.dataOffset}` : `oid:${base.oid}`,
             });
           }
           if (ready.length === 0) {
@@ -2395,13 +2233,10 @@ export const ingestPackFrom = (
           for (const r of ready) {
             const delta = yield* spanOf(r.u.dataOffset, r.u.span);
             const baseBytes = yield* baseBytesOf(r.base);
-            const baseCost = current?.index.has(r.baseKey)
-              ? 0
-              : baseBytes.bytes.length;
+            const baseCost = current?.index.has(r.baseKey) ? 0 : baseBytes.bytes.length;
             if (
               current === undefined ||
-              (current.jobs.length > 0 &&
-                current.bytes + delta.length + baseCost > batchBudget)
+              (current.jobs.length > 0 && current.bytes + delta.length + baseCost > batchBudget)
             ) {
               current = {
                 bases: [],
@@ -2505,9 +2340,7 @@ export const ingestPackFrom = (
             blobRandomAccess({
               blobs: spill.blobs,
               key: spill.key,
-              size: yield* spill.feeder.source.awaitEnd.pipe(
-                Effect.mapError(asIngest),
-              ),
+              size: yield* spill.feeder.source.awaitEnd.pipe(Effect.mapError(asIngest)),
             }),
           );
           parkedKey = spill.key;
@@ -2573,9 +2406,7 @@ export const ingestPackFrom = (
       // The connectivity check (DESIGN §22.14) needs only the edges that
       // leave the push: everything staged here is known present.
       referenced: Array.from(referenced).filter((oid) => !stagedOids.has(oid)),
-      referencedParents: Array.from(referencedParents).filter(
-        (oid) => !stagedOids.has(oid),
-      ),
+      referencedParents: Array.from(referencedParents).filter((oid) => !stagedOids.has(oid)),
     } satisfies IngestResult;
   });
 
@@ -2610,12 +2441,7 @@ export const ingestPack = (
     if (pack.length < 12 + 20) {
       return yield* new PackIngestError({ reason: "pack too small" });
     }
-    if (
-      pack[0] !== 0x50 ||
-      pack[1] !== 0x41 ||
-      pack[2] !== 0x43 ||
-      pack[3] !== 0x4b
-    ) {
+    if (pack[0] !== 0x50 || pack[1] !== 0x41 || pack[2] !== 0x43 || pack[3] !== 0x4b) {
       return yield* new PackIngestError({ reason: "bad pack signature" });
     }
     const view = new DataView(pack.buffer, pack.byteOffset, pack.byteLength);
@@ -2647,11 +2473,7 @@ export const ingestPack = (
     const referencedParents = new Set<Oid>();
 
     /** Record graph facts + referenced edges for a resolved object. */
-    const recordObject = Effect.fn(function* (
-      oid: Oid,
-      type: ObjectType,
-      content: Uint8Array,
-    ) {
+    const recordObject = Effect.fn(function* (oid: Oid, type: ObjectType, content: Uint8Array) {
       switch (type) {
         case ObjectType.commit: {
           const parsed = yield* parseCommit(content).pipe(
@@ -2752,10 +2574,7 @@ export const ingestPack = (
         }
         const type = header.type as ObjectType;
         const oid = yield* hashObject(type, inflated.content);
-        const zdata = pack.subarray(
-          header.next,
-          header.next + inflated.bytesConsumed,
-        );
+        const zdata = pack.subarray(header.next, header.next + inflated.bytesConsumed);
         const entry: RawEntry = {
           offset: entryStart,
           kind: "object",
@@ -2892,9 +2711,7 @@ export const ingestPack = (
           maxOutput: entry.declaredSize,
         }).pipe(Effect.mapError(zlibToIngest));
         const content = yield* applyDelta(base.content, delta.content).pipe(
-          Effect.mapError(
-            (error) => new PackIngestError({ reason: error.reason }),
-          ),
+          Effect.mapError((error) => new PackIngestError({ reason: error.reason })),
         );
         if (content.length > MAX_OBJECT_SIZE) {
           return yield* new PackIngestError({ reason: "object too large" });
@@ -2910,9 +2727,7 @@ export const ingestPack = (
       entry.resolvedType = resolved.type;
       byOid.set(oid, entry);
       cache.set(oid, resolved.content);
-      const zdata = yield* Zlib.deflate(resolved.content).pipe(
-        Effect.mapError(zlibToIngest),
-      );
+      const zdata = yield* Zlib.deflate(resolved.content).pipe(Effect.mapError(zlibToIngest));
       yield* stage(oid, resolved.type, resolved.content, zdata);
     }
 
@@ -2942,10 +2757,7 @@ const heapBefore = (a: WalkHeapNode, b: WalkHeapNode): boolean =>
   a.gen !== b.gen ? a.gen > b.gen : a.time > b.time;
 
 /** Pushes onto a binary max-heap keyed `(gen desc, commit_time desc)`. */
-export const heapPush = (
-  heap: Array<WalkHeapNode>,
-  node: WalkHeapNode,
-): void => {
+export const heapPush = (heap: Array<WalkHeapNode>, node: WalkHeapNode): void => {
   heap.push(node);
   let i = heap.length - 1;
   while (i > 0) {
@@ -3001,14 +2813,11 @@ export const gunzipIfNeeded = (
   return Effect.tryPromise({
     try: () =>
       new Response(
-        new Response(body as BodyInit).body!.pipeThrough(
-          new DecompressionStream("gzip"),
-        ),
+        new Response(body as BodyInit).body!.pipeThrough(new DecompressionStream("gzip")),
       )
         .arrayBuffer()
         .then((buffer) => new Uint8Array(buffer)),
-    catch: (error) =>
-      new PackIngestError({ reason: `gzip decompression failed: ${error}` }),
+    catch: (error) => new PackIngestError({ reason: `gzip decompression failed: ${error}` }),
   });
 };
 
@@ -3024,42 +2833,37 @@ const noCache = { "cache-control": "no-cache" } as const;
  * `Effect.provide(GitRepoLive)` and consumers `yield* GitRepo` for the
  * namespace handle.
  */
-export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
-  "GitRepo",
-  {
-    // Every tagged error the RPC surface can fail with: the calling Worker
-    // reconstructs real class instances from the RPC wire (see the
-    // `DurableObjectProps.errors` doc), so catchTag/instanceof/HttpApi
-    // encoding all see the classes the DO actually failed with.
-    errors: [
-      ReadOnlyRepo,
-      RepoNotFound,
-      RefNotFound,
-      RefConflict,
-      ObjectNotFound,
-      WrongObjectType,
-      NoMergeBase,
-      PullNotFound,
-      PullExists,
-      PullStateConflict,
-      BranchMissing,
-      NothingToMerge,
-      MergeConflict,
-      ValidationError,
-      StoreError,
-      PackIngestError,
-      WireProtocolError,
-    ],
-  },
-) {}
+export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()("GitRepo", {
+  // Every tagged error the RPC surface can fail with: the calling Worker
+  // reconstructs real class instances from the RPC wire (see the
+  // `DurableObjectProps.errors` doc), so catchTag/instanceof/HttpApi
+  // encoding all see the classes the DO actually failed with.
+  errors: [
+    ReadOnlyRepo,
+    RepoNotFound,
+    RefNotFound,
+    RefConflict,
+    ObjectNotFound,
+    WrongObjectType,
+    NoMergeBase,
+    PullNotFound,
+    PullExists,
+    PullStateConflict,
+    BranchMissing,
+    NothingToMerge,
+    MergeConflict,
+    ValidationError,
+    StoreError,
+    PackIngestError,
+    WireProtocolError,
+  ],
+}) {}
 
 /**
  * A repository's RPC stub: {@link GitRepoShape} as the Worker calls it,
  * with `fetch` taking the request.
  */
-export type RepoStub = ReturnType<
-  Cloudflare.Workers.DurableObject<GitRepoShape>["getByName"]
->;
+export type RepoStub = ReturnType<Cloudflare.Workers.DurableObject<GitRepoShape>["getByName"]>;
 
 /** What {@link RepoStore} provides: a repository's stub by id. */
 export interface RepoStoreShape {
@@ -3095,7 +2899,6 @@ export const GitRepoLive = GitRepo.make(
     const blobs: BlobStoreShape = yield* BlobStore;
     // The push pipeline's hasher (DESIGN §22.7): a self-binding fan-out in
     // production, in-process in tests without the binding.
-    const hasher = yield* Hasher;
     const registry = yield* RegistryStore;
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
@@ -3103,16 +2906,11 @@ export const GitRepoLive = GitRepo.make(
       // ── Inner init: per-instance construction (runtime only) ────────────
       const sql = makeSqlClient(state);
       yield* initRepoSchema(sql).pipe(Effect.orDie);
-      // Isolate-wide, not per repo: the memory it meters is shared.
-      const pushSemaphore = yield* isolatePushGate;
 
       // ── config helpers ───────────────────────────────────────────────────
       const getConfig = (key: string) =>
         sql
-          .first<{ value: string }>(
-            `SELECT value FROM config WHERE key = ?`,
-            key,
-          )
+          .first<{ value: string }>(`SELECT value FROM config WHERE key = ?`, key)
           .pipe(Effect.map((row) => row?.value));
 
       const setConfig = (key: string, value: string) =>
@@ -3202,15 +3000,11 @@ export const GitRepoLive = GitRepo.make(
       const requireMetaStats = requireFrom(readMetaStats);
 
       /** The object store, keyed by the current repoId. */
-      const storeFor = (repoId: string): ObjectStore =>
-        makeObjectStore({ sql, blobs, repoId });
+      const storeFor = (repoId: string): ObjectStore => makeObjectStore({ sql, blobs, repoId });
 
       // ── refs ─────────────────────────────────────────────────────────────
       /** Peels a (possibly annotated-tag) oid to its final non-tag target. */
-      const peelOid = (
-        repoId: string,
-        oid: Oid,
-      ): Effect.Effect<Oid | undefined, StoreError> =>
+      const peelOid = (repoId: string, oid: Oid): Effect.Effect<Oid | undefined, StoreError> =>
         Effect.gen(function* () {
           const objects = storeFor(repoId);
           let current = oid;
@@ -3222,9 +3016,7 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(current);
             const parsed = yield* parseTag(content).pipe(
-              Effect.mapError(
-                (error) => new StoreError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new StoreError({ reason: error.reason })),
             );
             current = parsed.object;
           }
@@ -3236,10 +3028,7 @@ export const GitRepoLive = GitRepo.make(
        * Candidates for short names: `refs/heads/<name>`, `refs/tags/<name>`.
        * `undefined` means HEAD (the default branch).
        */
-      const resolveRevision = Effect.fn(function* (
-        defaultBranch: string,
-        rev: string | undefined,
-      ) {
+      const resolveRevision = Effect.fn(function* (defaultBranch: string, rev: string | undefined) {
         const refName = rev === undefined ? `refs/heads/${defaultBranch}` : rev;
         if (isOid(refName)) return refName;
         const candidates = refName.startsWith("refs/")
@@ -3298,9 +3087,7 @@ export const GitRepoLive = GitRepo.make(
         Effect.gen(function* () {
           const rows =
             prefix === undefined || prefix.length === 0
-              ? yield* sql.all<RefRow>(
-                  `SELECT name, oid FROM refs ORDER BY name`,
-                )
+              ? yield* sql.all<RefRow>(`SELECT name, oid FROM refs ORDER BY name`)
               : yield* sql.all<RefRow>(
                   `SELECT name, oid FROM refs WHERE name >= ? AND name < ? ORDER BY name`,
                   prefix,
@@ -3378,9 +3165,7 @@ export const GitRepoLive = GitRepo.make(
             const results: Array<RefResult> = [];
             // atomic: verify every CAS before writing anything
             if (options.atomic && options.unconditional !== true) {
-              const failed = options.commands.some(
-                (cmd) => currentOf(cmd.ref) !== cmd.oldOid,
-              );
+              const failed = options.commands.some((cmd) => currentOf(cmd.ref) !== cmd.oldOid);
               if (failed) {
                 for (const cmd of options.commands) {
                   results.push({
@@ -3397,10 +3182,7 @@ export const GitRepoLive = GitRepo.make(
             }
             let anyOk = false;
             for (const cmd of options.commands) {
-              if (
-                options.unconditional !== true &&
-                currentOf(cmd.ref) !== cmd.oldOid
-              ) {
+              if (options.unconditional !== true && currentOf(cmd.ref) !== cmd.oldOid) {
                 results.push({
                   ref: cmd.ref,
                   ok: false,
@@ -3434,10 +3216,7 @@ export const GitRepoLive = GitRepo.make(
                     options.pushId,
                   );
                 }
-                raw.exec(
-                  `UPDATE pushes SET state = 'committed' WHERE push_id = ?`,
-                  options.pushId,
-                );
+                raw.exec(`UPDATE pushes SET state = 'committed' WHERE push_id = ?`, options.pushId);
               }
               // Multi-row inserts under SQLite's 100-parameter cap: a
               // per-row exec was most of finalize once rows were
@@ -3471,9 +3250,7 @@ export const GitRepoLive = GitRepo.make(
               // default branch does not exist but a branch was just created,
               // repoint the default at it (prefer main/master).
               const configured = raw
-                .exec<{ value: string }>(
-                  `SELECT value FROM config WHERE key = 'default_branch'`,
-                )
+                .exec<{ value: string }>(`SELECT value FROM config WHERE key = 'default_branch'`)
                 .toArray()[0]?.value;
               if (configured !== undefined) {
                 const exists = raw
@@ -3494,10 +3271,7 @@ export const GitRepoLive = GitRepo.make(
                     branches.find((b) => b === "master") ??
                     branches[0];
                   if (pick !== undefined) {
-                    raw.exec(
-                      `UPDATE config SET value = ? WHERE key = 'default_branch'`,
-                      pick,
-                    );
+                    raw.exec(`UPDATE config SET value = ? WHERE key = 'default_branch'`, pick);
                   }
                 }
               }
@@ -3508,9 +3282,7 @@ export const GitRepoLive = GitRepo.make(
             // Any committed ref movement changes what an anonymous reader
             // can see — republish the head snapshot (DESIGN.md §21).
             Effect.tap((results) =>
-              results.some((result) => result.ok)
-                ? writeHeadSnapshot
-                : Effect.void,
+              results.some((result) => result.ok) ? writeHeadSnapshot : Effect.void,
             ),
           );
 
@@ -3530,11 +3302,7 @@ export const GitRepoLive = GitRepo.make(
         Effect.gen(function* () {
           const stagedByOid = new Map(staged.map((c) => [c.oid, c]));
           const externalParents = Array.from(
-            new Set(
-              staged.flatMap((c) =>
-                c.parents.filter((p) => !stagedByOid.has(p)),
-              ),
-            ),
+            new Set(staged.flatMap((c) => c.parents.filter((p) => !stagedByOid.has(p)))),
           );
           const liveGens = new Map<string, number>();
           if (externalParents.length > 0) {
@@ -3556,8 +3324,7 @@ export const GitRepoLive = GitRepo.make(
             const gen =
               commit.parents.length === 0
                 ? 1
-                : Math.max(...commit.parents.map((p) => genOf(p, depth + 1))) +
-                  1;
+                : Math.max(...commit.parents.map((p) => genOf(p, depth + 1))) + 1;
             gens.set(oid, gen);
             return gen;
           };
@@ -3604,10 +3371,7 @@ export const GitRepoLive = GitRepo.make(
       });
 
       const loadPull = Effect.fn(function* (number: number) {
-        const row = yield* sql.first<PullRow>(
-          `SELECT * FROM pulls WHERE number = ?`,
-          number,
-        );
+        const row = yield* sql.first<PullRow>(`SELECT * FROM pulls WHERE number = ?`, number);
         if (row === undefined) {
           return yield* new PullNotFound({ number });
         }
@@ -3635,11 +3399,7 @@ export const GitRepoLive = GitRepo.make(
        * flags are complete when it pops. A tip missing from the commit
        * graph reports `saturated` (uncomputable), never an error.
        */
-      const paintWalk = Effect.fn(function* (
-        baseOid: string,
-        headOid: string,
-        maxPops: number,
-      ) {
+      const paintWalk = Effect.fn(function* (baseOid: string, headOid: string, maxPops: number) {
         const BASE = 1;
         const HEAD = 2;
         const BOTH = 3;
@@ -3670,10 +3430,7 @@ export const GitRepoLive = GitRepo.make(
         let pops = 0;
         while (heap.length > 0 && pops < maxPops) {
           // stop once nothing in the heap can still change the counts
-          if (
-            mergeBase !== undefined &&
-            heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)
-          ) {
+          if (mergeBase !== undefined && heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)) {
             break;
           }
           const node = heapPop(heap);
@@ -3747,10 +3504,7 @@ export const GitRepoLive = GitRepo.make(
         );
 
       // ── bootstrap (create / fork / import) ───────────────────────────────
-      const seedConfig = Effect.fn(function* (
-        input: InitRepoInput,
-        status: RepoStatus,
-      ) {
+      const seedConfig = Effect.fn(function* (input: InitRepoInput, status: RepoStatus) {
         const createdAt = Date.now();
         yield* setConfig("repo_id", input.repoId);
         yield* setConfig("owner", input.owner.toLowerCase());
@@ -3766,9 +3520,7 @@ export const GitRepoLive = GitRepo.make(
         }
         yield* setConfig("status", status);
         yield* readMeta.pipe(
-          Effect.flatMap((meta) =>
-            meta === undefined ? Effect.void : syncSummary(meta),
-          ),
+          Effect.flatMap((meta) => (meta === undefined ? Effect.void : syncSummary(meta))),
           Effect.ignore,
         );
         const existing = yield* getConfig("created_at");
@@ -3779,10 +3531,7 @@ export const GitRepoLive = GitRepo.make(
         return meta!;
       });
 
-      const bootstrap = Effect.fn(function* (
-        input: InitRepoInput,
-        status: RepoStatus,
-      ) {
+      const bootstrap = Effect.fn(function* (input: InitRepoInput, status: RepoStatus) {
         const meta = yield* seedConfig(input, status);
         return { meta } satisfies InitRepoResult;
       });
@@ -3828,10 +3577,9 @@ export const GitRepoLive = GitRepo.make(
       ) =>
         Effect.gen(function* () {
           if (service !== "git-upload-pack" && service !== "git-receive-pack") {
-            return HttpServerResponse.text(
-              "smart HTTP only (dumb protocol not supported)",
-              { status: 400 },
-            );
+            return HttpServerResponse.text("smart HTTP only (dumb protocol not supported)", {
+              status: 400,
+            });
           }
           const refs = yield* listAllRefs(meta.repoId);
           const body = buildAdvertisement({
@@ -3846,16 +3594,10 @@ export const GitRepoLive = GitRepo.make(
         });
 
       /** POST git-upload-pack — negotiation + pack (DESIGN.md §2.3). */
-      const handleUploadPack = (
-        request: HttpServerRequest.HttpServerRequest,
-        meta: RepoMetaData,
-      ) =>
+      const handleUploadPack = (request: HttpServerRequest.HttpServerRequest, meta: RepoMetaData) =>
         Effect.gen(function* () {
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
-          const body = yield* gunzipIfNeeded(
-            rawBody,
-            request.headers["content-encoding"],
-          );
+          const body = yield* gunzipIfNeeded(rawBody, request.headers["content-encoding"]);
           const resultType = "application/x-git-upload-pack-result";
           const errResponse = (message: string) =>
             HttpServerResponse.uint8Array(errPkt(message), {
@@ -3924,10 +3666,7 @@ export const GitRepoLive = GitRepo.make(
             const found = yield* blobs
               .head(bundle.key)
               .pipe(
-                Effect.mapError(
-                  (error) =>
-                    new StoreError({ reason: `bundle: ${error.reason}` }),
-                ),
+                Effect.mapError((error) => new StoreError({ reason: `bundle: ${error.reason}` })),
               );
             if (found !== null) {
               return HttpServerResponse.empty({
@@ -3974,8 +3713,7 @@ export const GitRepoLive = GitRepo.make(
           // lines). If this repo's own boundary truncated the walk for a
           // client that did neither, an unsolicited section would derail
           // its parser — refuse cleanly instead.
-          const clientShallowAware =
-            req.depth !== undefined || req.clientShallow.length > 0;
+          const clientShallowAware = req.depth !== undefined || req.clientShallow.length > 0;
           if (closure.shallow.length > 0 && !clientShallowAware) {
             return errResponse(
               "repository has shallow history (imported with depth); clone with --depth",
@@ -4006,11 +3744,7 @@ export const GitRepoLive = GitRepo.make(
           }
           const lastCommon = commons[commons.length - 1];
           if (req.done) {
-            head.push(
-              lastCommon === undefined
-                ? pktText("NAK")
-                : pktText(`ACK ${lastCommon}`),
-            );
+            head.push(lastCommon === undefined ? pktText("NAK") : pktText(`ACK ${lastCommon}`));
           } else {
             // !done implies commons.length > 0 (the NAK-only branch above).
             const ready = lastCommon ?? ZERO_OID;
@@ -4038,29 +3772,21 @@ export const GitRepoLive = GitRepo.make(
           const prefix = sideband
             ? concatBytes([
                 concatBytes(head),
-                progressMessage(
-                  `Enumerating objects: ${closure.entries.length}, done.`,
-                ),
+                progressMessage(`Enumerating objects: ${closure.entries.length}, done.`),
               ])
             : concatBytes(head);
-          return HttpServerResponse.raw(
-            pumpPackBody({ prefix, source, sideband }),
-            { contentType: resultType, headers: noCache },
-          );
+          return HttpServerResponse.raw(pumpPackBody({ prefix, source, sideband }), {
+            contentType: resultType,
+            headers: noCache,
+          });
         });
 
       // ── alarm jobs ───────────────────────────────────────────────────────
       /** Nulls a committed push's `staged_push` column and drops its row. */
       const flipPush = (pushId: string) =>
         Effect.gen(function* () {
-          yield* sql.run(
-            `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
-            pushId,
-          );
-          yield* sql.run(
-            `DELETE FROM pushes WHERE push_id = ? AND state = 'committed'`,
-            pushId,
-          );
+          yield* sql.run(`UPDATE objects SET staged_push = NULL WHERE staged_push = ?`, pushId);
+          yield* sql.run(`DELETE FROM pushes WHERE push_id = ? AND state = 'committed'`, pushId);
         });
 
       const runGcJob = Effect.gen(function* () {
@@ -4076,10 +3802,7 @@ export const GitRepoLive = GitRepo.make(
              (SELECT push_id FROM pushes WHERE state = 'staging' AND started_at < ?)`,
           cutoff,
         );
-        yield* sql.run(
-          `DELETE FROM pushes WHERE state = 'staging' AND started_at < ?`,
-          cutoff,
-        );
+        yield* sql.run(`DELETE FROM pushes WHERE state = 'staging' AND started_at < ?`, cutoff);
         yield* sql.run(`DELETE FROM jobs WHERE kind = 'gc'`);
       });
 
@@ -4099,9 +3822,7 @@ export const GitRepoLive = GitRepo.make(
             ? undefined
             : (JSON.parse(pendingRaw) as { keys: Array<string>; at: number });
         if (pending !== undefined && Date.now() - pending.at > 60_000) {
-          yield* blobs
-            .delete(pending.keys)
-            .pipe(Effect.catch(() => Effect.void));
+          yield* blobs.delete(pending.keys).pipe(Effect.catch(() => Effect.void));
           yield* setConfig("packs_pending_delete", "");
         }
         const outcome = yield* runCompactJob({
@@ -4118,9 +3839,7 @@ export const GitRepoLive = GitRepo.make(
         });
         if (merge.pendingDelete.length > 0) {
           const carried =
-            pending !== undefined && !(Date.now() - pending.at > 60_000)
-              ? pending.keys
-              : [];
+            pending !== undefined && !(Date.now() - pending.at > 60_000) ? pending.keys : [];
           yield* setConfig(
             "packs_pending_delete",
             JSON.stringify({
@@ -4155,20 +3874,18 @@ export const GitRepoLive = GitRepo.make(
       });
 
       /** Re-reads metadata and refreshes the Registry summary. */
-      const refreshSummary: Effect.Effect<void, never, RuntimeContext> =
-        readMeta.pipe(
-          Effect.flatMap((meta) =>
-            meta === undefined ? Effect.void : syncSummary(meta),
-          ),
-          Effect.ignore,
-        );
+      const refreshSummary: Effect.Effect<void, never, RuntimeContext> = readMeta.pipe(
+        Effect.flatMap((meta) => (meta === undefined ? Effect.void : syncSummary(meta))),
+        Effect.ignore,
+      );
 
-      const readBundle: Effect.Effect<BundleInfo | undefined, StoreError> =
-        getConfig("bundle").pipe(
-          Effect.map((value) =>
-            value === undefined ? undefined : (JSON.parse(value) as BundleInfo),
-          ),
-        );
+      const readBundle: Effect.Effect<BundleInfo | undefined, StoreError> = getConfig(
+        "bundle",
+      ).pipe(
+        Effect.map((value) =>
+          value === undefined ? undefined : (JSON.parse(value) as BundleInfo),
+        ),
+      );
 
       /**
        * Republishes the repo's head snapshot (DESIGN.md §21): a tiny
@@ -4182,8 +3899,8 @@ export const GitRepoLive = GitRepo.make(
        * snapshot that the next mutation — or the post-push bundle
        * alarm, seconds later — repairs.
        */
-      const writeHeadSnapshot: Effect.Effect<void, never, RuntimeContext> =
-        Effect.gen(function* () {
+      const writeHeadSnapshot: Effect.Effect<void, never, RuntimeContext> = Effect.gen(
+        function* () {
           const meta = yield* requireMeta;
           const refs = yield* listAllRefs(meta.repoId);
           const bundle = yield* readBundle;
@@ -4198,16 +3915,12 @@ export const GitRepoLive = GitRepo.make(
             refs,
             bundle,
           };
-          yield* blobs.put(
-            headKey(meta.repoId),
-            utf8Encode(encodeHeadSnapshot(snapshot)),
-          );
-        }).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning(`head snapshot write failed: ${String(error)}`),
-          ),
-          Effect.asVoid,
-        );
+          yield* blobs.put(headKey(meta.repoId), utf8Encode(encodeHeadSnapshot(snapshot)));
+        },
+      ).pipe(
+        Effect.catch((error) => Effect.logWarning(`head snapshot write failed: ${String(error)}`)),
+        Effect.asVoid,
+      );
 
       /**
        * Cuts a clone bundle for the current refs (DESIGN.md §12.2) so future
@@ -4216,9 +3929,7 @@ export const GitRepoLive = GitRepo.make(
       const runBundleAlarm = Effect.gen(function* () {
         const meta = yield* requireMeta;
         const objects = storeFor(meta.repoId);
-        const refRows = yield* sql.all<RefRow>(
-          `SELECT name, oid FROM refs ORDER BY name`,
-        );
+        const refRows = yield* sql.all<RefRow>(`SELECT name, oid FROM refs ORDER BY name`);
         const shallowRoots = JSON.parse(
           (yield* getConfig("shallow_roots")) ?? "[]",
         ) as ReadonlyArray<string>;
@@ -4257,9 +3968,7 @@ export const GitRepoLive = GitRepo.make(
           };
           const attempts = detail.attempts ?? 0;
           const outcome = yield* Effect.result(
-            runImport({ source: detail.source }).pipe(
-              Effect.provide(FetchHttpClient.layer),
-            ),
+            runImport({ source: detail.source }).pipe(Effect.provide(FetchHttpClient.layer)),
           );
           if (Result.isFailure(outcome)) {
             if (attempts + 1 >= 3) {
@@ -4319,10 +4028,7 @@ export const GitRepoLive = GitRepo.make(
             );
             // Connectivity: hard edges only — shallow imports may lack
             // parent commits (they become walk boundaries).
-            const missing = yield* objects.missingObjects(
-              [...ingest.referenced],
-              pushId,
-            );
+            const missing = yield* objects.missingObjects([...ingest.referenced], pushId);
             if (missing.length > 0) {
               return yield* new StoreError({
                 reason: `import produced ${missing.length} dangling objects`,
@@ -4335,14 +4041,10 @@ export const GitRepoLive = GitRepo.make(
             const parentOids = Array.from(
               new Set(ingest.commits.flatMap((commit) => commit.parents)),
             );
-            const missingParents = new Set(
-              yield* objects.missingObjects(parentOids, pushId),
-            );
+            const missingParents = new Set(yield* objects.missingObjects(parentOids, pushId));
             if (missingParents.size > 0) {
               const shallowRoots = ingest.commits
-                .filter((commit) =>
-                  commit.parents.some((parent) => missingParents.has(parent)),
-                )
+                .filter((commit) => commit.parents.some((parent) => missingParents.has(parent)))
                 .map((commit) => commit.oid);
               yield* setConfig("shallow_roots", JSON.stringify(shallowRoots));
             }
@@ -4381,9 +4083,7 @@ export const GitRepoLive = GitRepo.make(
             readonly parentRepoId: string;
             readonly attempts?: number;
           };
-          const parentStub = selfNamespace.getByName(
-            detail.parentRepoId,
-          ) as unknown as RepoStub;
+          const parentStub = selfNamespace.getByName(detail.parentRepoId) as unknown as RepoStub;
           const applied = yield* Effect.result(
             runForkJob({
               sql,
@@ -4428,21 +4128,15 @@ export const GitRepoLive = GitRepo.make(
           // RuntimeContext is genuinely satisfied here (we run inside the
           // DO); discharge the coloring so the purge job's deps stay R=never.
           forkCount: registryStub.bumpForkCount(meta.repoId, 0).pipe(
-            Effect.mapError(
-              (error) => new StoreError({ reason: String(error) }),
-            ),
+            Effect.mapError((error) => new StoreError({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
           deleteAllStorage: state.storage.deleteAll().pipe(
-            Effect.mapError(
-              (error) => new StoreError({ reason: String(error) }),
-            ),
+            Effect.mapError((error) => new StoreError({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
           removeRegistryRow: registryStub.removeRow(meta.repoId).pipe(
-            Effect.mapError(
-              (error) => new StoreError({ reason: String(error) }),
-            ),
+            Effect.mapError((error) => new StoreError({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
         });
@@ -4456,8 +4150,7 @@ export const GitRepoLive = GitRepo.make(
 
       // ── the shape ────────────────────────────────────────────────────────
       const shape: GitRepoShape = {
-        initRepo: (input) =>
-          bootstrap(input, "ready").pipe(Effect.tap(() => writeHeadSnapshot)),
+        initRepo: (input) => bootstrap(input, "ready").pipe(Effect.tap(() => writeHeadSnapshot)),
 
         startImport: Effect.fn(function* (input: StartImportInput) {
           const result = yield* bootstrap(input, "importing");
@@ -4468,10 +4161,7 @@ export const GitRepoLive = GitRepo.make(
 
         startFork: Effect.fn(function* (input: StartForkInput) {
           const result = yield* bootstrap(input, "forking");
-          yield* upsertJob(
-            "fork",
-            JSON.stringify({ parentRepoId: input.parentRepoId }),
-          );
+          yield* upsertJob("fork", JSON.stringify({ parentRepoId: input.parentRepoId }));
           yield* armAlarmAt(Date.now());
           return result;
         }),
@@ -4487,9 +4177,7 @@ export const GitRepoLive = GitRepo.make(
           yield* setConfig("status", "deleting");
           // Kill the DO-less fast path NOW — the prefix drain gets the
           // rest, but anonymous reads must stop serving immediately.
-          yield* blobs
-            .delete(headKey(meta.repoId))
-            .pipe(Effect.catch(() => Effect.void));
+          yield* blobs.delete(headKey(meta.repoId)).pipe(Effect.catch(() => Effect.void));
           yield* refreshSummary;
           yield* upsertJob("purge", null);
           yield* armAlarmAt(Date.now());
@@ -4555,10 +4243,7 @@ export const GitRepoLive = GitRepo.make(
 
         getRef: Effect.fn(function* (name: string) {
           const meta = yield* requireMeta;
-          const row = yield* sql.first<RefRow>(
-            `SELECT name, oid FROM refs WHERE name = ?`,
-            name,
-          );
+          const row = yield* sql.first<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, name);
           if (row === undefined) {
             return yield* new RefNotFound({ ref: name });
           }
@@ -4582,10 +4267,7 @@ export const GitRepoLive = GitRepo.make(
           }
           yield* sql.transactionSync<void, RefConflict>((raw, rollback) => {
             const rows = raw
-              .exec<RefRow>(
-                `SELECT name, oid FROM refs WHERE name = ?`,
-                input.name,
-              )
+              .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, input.name)
               .toArray();
             const current = rows.length > 0 ? rows[0]!.oid : null;
             if (input.expectedOid !== undefined) {
@@ -4615,36 +4297,28 @@ export const GitRepoLive = GitRepo.make(
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
-          yield* sql.transactionSync<void, RefConflict | RefNotFound>(
-            (raw, rollback) => {
-              const rows = raw
-                .exec<RefRow>(
-                  `SELECT name, oid FROM refs WHERE name = ?`,
-                  input.name,
-                )
-                .toArray();
-              if (rows.length === 0) {
-                rollback(new RefNotFound({ ref: input.name }));
-              }
-              const current = rows[0]!.oid;
-              if (
-                input.expectedOid !== undefined &&
-                current !== input.expectedOid
-              ) {
-                rollback(
-                  new RefConflict({
-                    ref: input.name,
-                    currentOid: asOid(current),
-                  }),
-                );
-              }
-              raw.exec(`DELETE FROM refs WHERE name = ?`, input.name);
-            },
-          );
+          yield* sql.transactionSync<void, RefConflict | RefNotFound>((raw, rollback) => {
+            const rows = raw
+              .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, input.name)
+              .toArray();
+            if (rows.length === 0) {
+              rollback(new RefNotFound({ ref: input.name }));
+            }
+            const current = rows[0]!.oid;
+            if (input.expectedOid !== undefined && current !== input.expectedOid) {
+              rollback(
+                new RefConflict({
+                  ref: input.name,
+                  currentOid: asOid(current),
+                }),
+              );
+            }
+            raw.exec(`DELETE FROM refs WHERE name = ?`, input.name);
+          });
           yield* writeHeadSnapshot;
         }),
 
-        beginPush: Effect.fn(function* (input: BeginPushInput) {
+        beginPush: Effect.fn(function* (_input: BeginPushInput) {
           const meta = yield* requireMeta;
           if (meta.readOnly) {
             return {
@@ -4663,40 +4337,24 @@ export const GitRepoLive = GitRepo.make(
 
         stagePush: Effect.fn(function* (pushId: string, batch: Uint8Array) {
           const meta = yield* requireMeta;
-          yield* storeFor(meta.repoId).insertStagedBatch(
-            pushId,
-            decodeStagedBatch(batch),
-          );
+          yield* storeFor(meta.repoId).insertStagedBatch(pushId, decodeStagedBatch(batch));
         }),
 
-        abortPush: Effect.fn(function* (
-          pushId: string,
-          packIds: ReadonlyArray<string> = [],
-        ) {
+        abortPush: Effect.fn(function* (pushId: string, packIds: ReadonlyArray<string> = []) {
           yield* requireMeta;
           return yield* sql.transactionSync((raw) => {
             const push = raw
-              .exec<{ state: string }>(
-                `SELECT state FROM pushes WHERE push_id = ?`,
-                pushId,
-              )
+              .exec<{ state: string }>(`SELECT state FROM pushes WHERE push_id = ?`, pushId)
               .toArray()[0];
             if (push?.state === "committed") return false;
             raw.exec(`DELETE FROM objects WHERE staged_push = ?`, pushId);
-            raw.exec(
-              `DELETE FROM pushes WHERE push_id = ? AND state = 'staging'`,
-              pushId,
-            );
+            raw.exec(`DELETE FROM pushes WHERE push_id = ? AND state = 'staging'`, pushId);
             // Another concurrent push may have adopted staged rows. Retain any
             // shared pack bytes even though this transaction has been aborted.
             for (const packId of packIds) {
               if (
-                raw
-                  .exec(
-                    `SELECT 1 FROM objects WHERE pack_id = ? LIMIT 1`,
-                    packId,
-                  )
-                  .toArray().length > 0
+                raw.exec(`SELECT 1 FROM objects WHERE pack_id = ? LIMIT 1`, packId).toArray()
+                  .length > 0
               )
                 return false;
             }
@@ -4706,10 +4364,7 @@ export const GitRepoLive = GitRepo.make(
 
         validatePush: Effect.fn(function* (input: CommitPushInput) {
           const meta = yield* requireMeta;
-          const referenced = new Set([
-            ...input.referenced,
-            ...input.referencedParents,
-          ]);
+          const referenced = new Set([...input.referenced, ...input.referencedParents]);
           for (const command of input.commands)
             if (command.newOid !== ZERO_OID) referenced.add(command.newOid);
           const missing = yield* storeFor(meta.repoId).missingObjects(
@@ -4722,11 +4377,7 @@ export const GitRepoLive = GitRepo.make(
             });
         }),
 
-        readPreparedObject: Effect.fn(function* (
-          pushId: string,
-          oid: Oid,
-          maxBytes: number,
-        ) {
+        readPreparedObject: Effect.fn(function* (pushId: string, oid: Oid, maxBytes: number) {
           const meta = yield* requireMeta;
           const push = yield* sql.first<{ state: string }>(
             `SELECT state FROM pushes WHERE push_id = ?`,
@@ -4736,11 +4387,7 @@ export const GitRepoLive = GitRepo.make(
             return yield* new StoreError({
               reason: "push is no longer active",
             });
-          return yield* storeFor(meta.repoId).readPrepared(
-            pushId,
-            oid,
-            maxBytes,
-          );
+          return yield* storeFor(meta.repoId).readPrepared(pushId, oid, maxBytes);
         }),
 
         readPushBase: Effect.fn(function* (oid: Oid) {
@@ -4752,29 +4399,22 @@ export const GitRepoLive = GitRepo.make(
           const meta = yield* requireMeta;
           const objects = storeFor(meta.repoId);
           const startedAt = yield* Effect.sync(() => performance.now());
-          const since = (from: number) =>
-            Effect.sync(() => performance.now() - from);
+          const since = (from: number) => Effect.sync(() => performance.now() - from);
           const allNg = (reason: string) =>
             input.commands.map((cmd) => ({
               ref: cmd.ref,
               ok: false,
               reason,
             }));
-          if (meta.readOnly)
-            return { unpack: "ok", results: allNg("repository is read-only") };
+          if (meta.readOnly) return { unpack: "ok", results: allNg("repository is read-only") };
           // Full connectivity check (§3.6 step 5) over the staged rows.
           const referenced = new Set<string>(input.referenced);
           for (const parent of input.referencedParents) referenced.add(parent);
           for (const cmd of input.commands) {
             if (cmd.newOid !== ZERO_OID) referenced.add(cmd.newOid);
           }
-          const connectivityStarted = yield* Effect.sync(() =>
-            performance.now(),
-          );
-          const missing = yield* objects.missingObjects(
-            Array.from(referenced),
-            input.pushId,
-          );
+          const connectivityStarted = yield* Effect.sync(() => performance.now());
+          const missing = yield* objects.missingObjects(Array.from(referenced), input.pushId);
           const connectivityMs = yield* since(connectivityStarted);
           if (missing.length > 0) {
             return {
@@ -4805,10 +4445,7 @@ export const GitRepoLive = GitRepo.make(
                 input.stats.phases === undefined
                   ? undefined
                   : Object.fromEntries(
-                      Object.entries(input.stats.phases).map(([k, v]) => [
-                        k,
-                        Math.round(v),
-                      ]),
+                      Object.entries(input.stats.phases).map(([k, v]) => [k, Math.round(v)]),
                     ),
               stageMs: Math.round(input.stats.stageMs),
               connectivityMs: Math.round(connectivityMs),
@@ -4900,9 +4537,7 @@ export const GitRepoLive = GitRepo.make(
           }
           const startCommit =
             startMeta.type === ObjectType.tag
-              ? yield* peelOid(meta.repoId, start).pipe(
-                  Effect.map((peeled) => peeled ?? start),
-                )
+              ? yield* peelOid(meta.repoId, start).pipe(Effect.map((peeled) => peeled ?? start))
               : start;
           yield* pushFrontier(startCommit);
 
@@ -4931,9 +4566,7 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(oid);
             const parsed = yield* parseCommit(content).pipe(
-              Effect.mapError(
-                (error) => new StoreError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new StoreError({ reason: error.reason })),
             );
             items.push({
               oid,
@@ -4980,19 +4613,14 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(oid);
             return yield* parseCommit(content).pipe(
-              Effect.mapError(
-                (error) => new StoreError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new StoreError({ reason: error.reason })),
             );
           });
 
           const commit = yield* readCommitOrFail(input.oid);
           // First-parent diff (the GitHub default for merge commits).
           const parent = commit.parents[0] ?? null;
-          const parentTree =
-            parent === null
-              ? undefined
-              : (yield* readCommitOrFail(parent)).tree;
+          const parentTree = parent === null ? undefined : (yield* readCommitOrFail(parent)).tree;
 
           const result = yield* diffTrees(objects, parentTree, commit.tree);
           return {
@@ -5007,16 +4635,8 @@ export const GitRepoLive = GitRepo.make(
           const meta = yield* requireMeta;
           const objects = storeFor(meta.repoId);
 
-          const baseOid = yield* resolveToCommit(
-            meta.repoId,
-            meta.defaultBranch,
-            input.base,
-          );
-          const headOid = yield* resolveToCommit(
-            meta.repoId,
-            meta.defaultBranch,
-            input.head,
-          );
+          const baseOid = yield* resolveToCommit(meta.repoId, meta.defaultBranch, input.base);
+          const headOid = yield* resolveToCommit(meta.repoId, meta.defaultBranch, input.head);
 
           // The classic merge-base paint walk over the commit-graph tables,
           // ordered by the pre-computed generation number (`gen`, maintained
@@ -5057,10 +4677,7 @@ export const GitRepoLive = GitRepo.make(
 
           while (heap.length > 0 && pops < MAX_COMPARE_WALK) {
             // stop when nothing in the heap can still change the counts
-            if (
-              mergeBase !== undefined &&
-              heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)
-            ) {
+            if (mergeBase !== undefined && heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)) {
               break;
             }
             const node = heapPop(heap);
@@ -5111,9 +4728,7 @@ export const GitRepoLive = GitRepo.make(
           for (const oid of commitOids) {
             const content = yield* objects.readContent(oid);
             const parsed = yield* parseCommit(content).pipe(
-              Effect.mapError(
-                (error) => new StoreError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new StoreError({ reason: error.reason })),
             );
             commits.push({
               oid,
@@ -5150,11 +4765,7 @@ export const GitRepoLive = GitRepo.make(
           });
           const mergeBaseTree = yield* treeOf(mergeBase);
           const headTree = yield* treeOf(headOid);
-          const filesResult = yield* diffTrees(
-            objects,
-            mergeBaseTree,
-            headTree,
-          );
+          const filesResult = yield* diffTrees(objects, mergeBaseTree, headTree);
 
           return {
             base: baseOid,
@@ -5163,8 +4774,7 @@ export const GitRepoLive = GitRepo.make(
             aheadBy,
             behindBy,
             commits,
-            commitsTruncated:
-              headSide.length > MAX_COMPARE_COMMITS || pops >= MAX_COMPARE_WALK,
+            commitsTruncated: headSide.length > MAX_COMPARE_COMMITS || pops >= MAX_COMPARE_WALK,
             files: filesResult.files,
             filesTruncated: filesResult.truncated,
           } satisfies CompareData;
@@ -5174,10 +4784,7 @@ export const GitRepoLive = GitRepo.make(
           const meta = yield* requireMeta;
           const objects = storeFor(meta.repoId);
 
-          const startOid = yield* resolveRevision(
-            meta.defaultBranch,
-            input.ref,
-          );
+          const startOid = yield* resolveRevision(meta.defaultBranch, input.ref);
 
           // Resolve start → commit → root tree (peel tags on the way).
           const rootTree = yield* Effect.gen(function* () {
@@ -5191,17 +4798,13 @@ export const GitRepoLive = GitRepo.make(
               const content = yield* objects.readContent(current);
               if (objectMeta.type === ObjectType.commit) {
                 const parsed = yield* parseCommit(content).pipe(
-                  Effect.mapError(
-                    (error) => new StoreError({ reason: error.reason }),
-                  ),
+                  Effect.mapError((error) => new StoreError({ reason: error.reason })),
                 );
                 return parsed.tree;
               }
               if (objectMeta.type === ObjectType.tag) {
                 const parsed = yield* parseTag(content).pipe(
-                  Effect.mapError(
-                    (error) => new StoreError({ reason: error.reason }),
-                  ),
+                  Effect.mapError((error) => new StoreError({ reason: error.reason })),
                 );
                 current = parsed.object;
                 continue;
@@ -5219,9 +4822,7 @@ export const GitRepoLive = GitRepo.make(
           for (let i = 0; i < segments.length; i++) {
             const content = yield* objects.readContent(treeOid);
             const entries = yield* parseTree(content).pipe(
-              Effect.mapError(
-                (error) => new StoreError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new StoreError({ reason: error.reason })),
             );
             const entry = entries.find((e) => e.name === segments[i]);
             if (entry === undefined) {
@@ -5263,10 +4864,7 @@ export const GitRepoLive = GitRepo.make(
             });
           }
           for (const ref of [baseRef, headRef]) {
-            const row = yield* sql.first<RefRow>(
-              `SELECT name, oid FROM refs WHERE name = ?`,
-              ref,
-            );
+            const row = yield* sql.first<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, ref);
             if (row === undefined) {
               return yield* new BranchMissing({ ref });
             }
@@ -5284,9 +4882,7 @@ export const GitRepoLive = GitRepo.make(
           // the DO's input/output gates make the counter race-free.
           const number = yield* sql.transactionSync((raw) => {
             const seq = raw
-              .exec<{ value: string }>(
-                `SELECT value FROM config WHERE key = 'pull_seq'`,
-              )
+              .exec<{ value: string }>(`SELECT value FROM config WHERE key = 'pull_seq'`)
               .toArray()[0];
             const next = (seq === undefined ? 0 : Number(seq.value)) + 1;
             raw.exec(
@@ -5325,8 +4921,7 @@ export const GitRepoLive = GitRepo.make(
           yield* requireMeta;
           const state = input.state ?? "open";
           const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
-          const cursor =
-            input.cursor === undefined ? undefined : Number(input.cursor);
+          const cursor = input.cursor === undefined ? undefined : Number(input.cursor);
           const where: Array<string> = [];
           const bindings: Array<string | number> = [];
           if (state !== "all") {
@@ -5348,9 +4943,7 @@ export const GitRepoLive = GitRepo.make(
           const hasMore = rows.length > limit;
           return {
             items,
-            nextCursor: hasMore
-              ? String(items[items.length - 1]!.number)
-              : null,
+            nextCursor: hasMore ? String(items[items.length - 1]!.number) : null,
             hasMore,
           } satisfies PullsPage;
         }),
@@ -5434,16 +5027,8 @@ export const GitRepoLive = GitRepo.make(
           // Trivial-merge dry run: diff intersection only, no tree building.
           const objects = storeFor(meta.repoId);
           const mbTree = yield* treeOfCommit(cmp.mergeBase);
-          const baseChanges = yield* diffTrees(
-            objects,
-            mbTree,
-            yield* treeOfCommit(baseTip),
-          );
-          const headChanges = yield* diffTrees(
-            objects,
-            mbTree,
-            yield* treeOfCommit(headTip),
-          );
+          const baseChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(baseTip));
+          const headChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(headTip));
           if (baseChanges.truncated || headChanges.truncated) {
             // Can't see every change — conservatively not mergeable.
             return {
@@ -5452,15 +5037,11 @@ export const GitRepoLive = GitRepo.make(
               mergeableReason: "conflict",
             } satisfies PullDetailData;
           }
-          const conflicts = conflictingPaths(
-            baseChanges.files,
-            headChanges.files,
-          );
+          const conflicts = conflictingPaths(baseChanges.files, headChanges.files);
           return {
             ...live,
             mergeable: conflicts.length === 0,
-            mergeableReason:
-              conflicts.length === 0 ? "merge-commit" : "conflict",
+            mergeableReason: conflicts.length === 0 ? "merge-commit" : "conflict",
           } satisfies PullDetailData;
         }),
 
@@ -5518,20 +5099,14 @@ export const GitRepoLive = GitRepo.make(
             return yield* new BranchMissing({ ref: row.head_ref });
           }
           const baseTip = baseRow.oid;
-          if (
-            input.expectedBaseOid !== undefined &&
-            input.expectedBaseOid !== baseTip
-          ) {
+          if (input.expectedBaseOid !== undefined && input.expectedBaseOid !== baseTip) {
             return yield* new RefConflict({
               ref: row.base_ref,
               currentOid: asOid(baseTip),
             });
           }
           const headTip = headRow.oid;
-          if (
-            input.expectedHeadOid !== undefined &&
-            input.expectedHeadOid !== headTip
-          ) {
+          if (input.expectedHeadOid !== undefined && input.expectedHeadOid !== headTip) {
             return yield* new RefConflict({
               ref: row.head_ref,
               currentOid: asOid(headTip),
@@ -5548,46 +5123,37 @@ export const GitRepoLive = GitRepo.make(
             // No new objects, no graph rows (all present from the push) —
             // one transaction re-checks the CAS, flips the ref, and stamps
             // the pulls row atomically.
-            const pull = yield* sql.transactionSync<PullData, RefConflict>(
-              (raw, rollback) => {
-                const rows = raw
-                  .exec<RefRow>(
-                    `SELECT name, oid FROM refs WHERE name = ?`,
-                    row.base_ref,
-                  )
-                  .toArray();
-                const currentOid = rows.length > 0 ? rows[0]!.oid : null;
-                if (currentOid !== baseTip) {
-                  rollback(
-                    new RefConflict({
-                      ref: row.base_ref,
-                      currentOid:
-                        currentOid === null ? null : asOid(currentOid),
-                    }),
-                  );
-                }
-                raw.exec(
-                  `INSERT INTO refs (name, oid) VALUES (?, ?)
+            const pull = yield* sql.transactionSync<PullData, RefConflict>((raw, rollback) => {
+              const rows = raw
+                .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, row.base_ref)
+                .toArray();
+              const currentOid = rows.length > 0 ? rows[0]!.oid : null;
+              if (currentOid !== baseTip) {
+                rollback(
+                  new RefConflict({
+                    ref: row.base_ref,
+                    currentOid: currentOid === null ? null : asOid(currentOid),
+                  }),
+                );
+              }
+              raw.exec(
+                `INSERT INTO refs (name, oid) VALUES (?, ?)
                    ON CONFLICT (name) DO UPDATE SET oid = excluded.oid`,
-                  row.base_ref,
-                  headTip,
-                );
-                raw.exec(
-                  `UPDATE pulls SET state = 'merged', merged_at = ?, merge_commit = ?, updated_at = ? WHERE number = ?`,
-                  now,
-                  headTip,
-                  now,
-                  input.number,
-                );
-                const updated = raw
-                  .exec<PullRow>(
-                    `SELECT * FROM pulls WHERE number = ?`,
-                    input.number,
-                  )
-                  .toArray()[0]!;
-                return rowToPull(updated);
-              },
-            );
+                row.base_ref,
+                headTip,
+              );
+              raw.exec(
+                `UPDATE pulls SET state = 'merged', merged_at = ?, merge_commit = ?, updated_at = ? WHERE number = ?`,
+                now,
+                headTip,
+                now,
+                input.number,
+              );
+              const updated = raw
+                .exec<PullRow>(`SELECT * FROM pulls WHERE number = ?`, input.number)
+                .toArray()[0]!;
+              return rowToPull(updated);
+            });
             // The base moved: the head snapshot (which serves clones
             // without waking this object) must say so.
             yield* writeHeadSnapshot;
@@ -5611,11 +5177,7 @@ export const GitRepoLive = GitRepo.make(
           const mbTree = yield* treeOfCommit(cmp.mergeBase);
           const baseTree = yield* treeOfCommit(baseTip);
           const baseChanges = yield* diffTrees(objects, mbTree, baseTree);
-          const headChanges = yield* diffTrees(
-            objects,
-            mbTree,
-            yield* treeOfCommit(headTip),
-          );
+          const headChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(headTip));
           if (baseChanges.truncated || headChanges.truncated) {
             // A truncated diff hides changes — conflict detection would be
             // unsound, so refuse conservatively.
@@ -5624,10 +5186,7 @@ export const GitRepoLive = GitRepo.make(
               paths: [],
             });
           }
-          const conflicts = conflictingPaths(
-            baseChanges.files,
-            headChanges.files,
-          );
+          const conflicts = conflictingPaths(baseChanges.files, headChanges.files);
           if (conflicts.length > 0) {
             return yield* new MergeConflict({
               number: input.number,
@@ -5637,17 +5196,12 @@ export const GitRepoLive = GitRepo.make(
 
           // Build the merged tree: head's mergeBase→head changes applied
           // onto the CURRENT base tree (disjoint by the check above).
-          const applied = yield* applyTreeChanges(
-            objects,
-            baseTree,
-            headChanges.files,
-          );
+          const applied = yield* applyTreeChanges(objects, baseTree, headChanges.files);
           const shortHead = row.head_ref.startsWith("refs/heads/")
             ? row.head_ref.slice("refs/heads/".length)
             : row.head_ref;
           const message =
-            input.message ??
-            `Merge pull request #${input.number} from ${shortHead}\n`;
+            input.message ?? `Merge pull request #${input.number} from ${shortHead}\n`;
           const when = Math.floor(now / 1000);
           const identity = {
             name: "git-service",
@@ -5681,18 +5235,14 @@ export const GitRepoLive = GitRepo.make(
               oid: tree.oid,
               type: ObjectType.tree,
               size: tree.content.length,
-              zdata: yield* Zlib.deflate(tree.content).pipe(
-                Effect.mapError(zlibToStore),
-              ),
+              zdata: yield* Zlib.deflate(tree.content).pipe(Effect.mapError(zlibToStore)),
             });
           }
           staged.push({
             oid: mergeOid,
             type: ObjectType.commit,
             size: commitContent.length,
-            zdata: yield* Zlib.deflate(commitContent).pipe(
-              Effect.mapError(zlibToStore),
-            ),
+            zdata: yield* Zlib.deflate(commitContent).pipe(Effect.mapError(zlibToStore)),
           });
           yield* objects.insertStagedBatch(pushId, staged);
           // Crash safety: arm the staging-GC alarm (like the push path) so
@@ -5710,9 +5260,7 @@ export const GitRepoLive = GitRepo.make(
             },
           ]);
           const results = yield* finalizeRefTxn({
-            commands: [
-              { oldOid: baseTip, newOid: mergeOid, ref: row.base_ref },
-            ],
+            commands: [{ oldOid: baseTip, newOid: mergeOid, ref: row.base_ref }],
             atomic: true,
             pushId,
             graph,
@@ -5778,10 +5326,7 @@ export const GitRepoLive = GitRepo.make(
           if (path.endpoint === "info/refs" && request.method === "GET") {
             return yield* handleInfoRefs(request, path.service, meta);
           }
-          if (
-            path.endpoint === "git-upload-pack" &&
-            request.method === "POST"
-          ) {
+          if (path.endpoint === "git-upload-pack" && request.method === "POST") {
             return yield* handleUploadPack(request, meta);
           }
           return HttpServerResponse.text("not found", { status: 404 });
@@ -5804,19 +5349,14 @@ export const GitRepoLive = GitRepo.make(
 
         alarm: () =>
           Effect.gen(function* () {
-            const jobs = yield* sql.all<JobRow>(
-              `SELECT * FROM jobs WHERE state = 'running'`,
-            );
+            const jobs = yield* sql.all<JobRow>(`SELECT * FROM jobs WHERE state = 'running'`);
             // `purge` runs FIRST and every job is individually isolated: a
             // job that keeps crashing must never starve the others. (It
             // did: a fork job dying on every alarm blocked the purge job
             // behind it forever, wedging the repo in `status: deleting`
             // and reserving its name.)
-            const order = (kind: string) =>
-              kind === "purge" ? 0 : kind === "gc" ? 2 : 1;
-            const ordered = [...jobs].sort(
-              (a, b) => order(a.kind) - order(b.kind),
-            );
+            const order = (kind: string) => (kind === "purge" ? 0 : kind === "gc" ? 2 : 1);
+            const ordered = [...jobs].sort((a, b) => order(a.kind) - order(b.kind));
             for (const job of ordered) {
               const isolated = Effect.gen(function* () {
                 switch (job.kind) {
@@ -5845,13 +5385,7 @@ export const GitRepoLive = GitRepo.make(
                 }
               }).pipe(
                 Effect.catchCause((cause) =>
-                  Effect.as(
-                    Effect.logError(
-                      `repo alarm job '${job.kind}' failed`,
-                      cause,
-                    ),
-                    false,
-                  ),
+                  Effect.as(Effect.logError(`repo alarm job '${job.kind}' failed`, cause), false),
                 ),
               );
               if (yield* isolated) return;

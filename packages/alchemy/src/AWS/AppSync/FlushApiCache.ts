@@ -30,13 +30,6 @@ export interface FlushApiCache extends Binding.Service<
   "AWS.AppSync.FlushApiCache",
   (
     api: GraphqlApi,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      appsync.FlushApiCacheResponse,
-      appsync.FlushApiCacheError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<appsync.FlushApiCacheResponse, appsync.FlushApiCacheError>>
 > {}
-export const FlushApiCache = Binding.Service<FlushApiCache>(
-  "AWS.AppSync.FlushApiCache",
-);
+export const FlushApiCache = Binding.Service<FlushApiCache>("AWS.AppSync.FlushApiCache");

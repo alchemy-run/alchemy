@@ -1,11 +1,11 @@
-import * as IoTFleetWise from "@/AWS/IoTFleetWise";
-import * as Lambda from "@/AWS/Lambda";
-import { Bucket } from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IoTFleetWise from "@/AWS/IoTFleetWise";
+import * as Lambda from "@/AWS/Lambda";
+import { Bucket } from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -94,10 +94,7 @@ export default FleetWiseBindingsFunction.make(
           Effect: "Allow",
           Principal: { Service: "iotfleetwise.amazonaws.com" },
           Action: ["s3:GetBucketLocation", "s3:PutObject"],
-          Resource: [
-            `arn:aws:s3:::${TELEMETRY_BUCKET}`,
-            `arn:aws:s3:::${TELEMETRY_BUCKET}/*`,
-          ],
+          Resource: [`arn:aws:s3:::${TELEMETRY_BUCKET}`, `arn:aws:s3:::${TELEMETRY_BUCKET}/*`],
         },
       ],
     });
@@ -119,22 +116,16 @@ export default FleetWiseBindingsFunction.make(
     const ModelManifestArn = yield* model.modelManifestArn;
 
     const getVehicleStatus = yield* IoTFleetWise.GetVehicleStatus(vehicle);
-    const listFleetsForVehicle =
-      yield* IoTFleetWise.ListFleetsForVehicle(vehicle);
+    const listFleetsForVehicle = yield* IoTFleetWise.ListFleetsForVehicle(vehicle);
     const listVehiclesInFleet = yield* IoTFleetWise.ListVehiclesInFleet(fleet);
-    const associateVehicleFleet =
-      yield* IoTFleetWise.AssociateVehicleFleet(fleet);
-    const disassociateVehicleFleet =
-      yield* IoTFleetWise.DisassociateVehicleFleet(fleet);
+    const associateVehicleFleet = yield* IoTFleetWise.AssociateVehicleFleet(fleet);
+    const disassociateVehicleFleet = yield* IoTFleetWise.DisassociateVehicleFleet(fleet);
     const updateCampaign = yield* IoTFleetWise.UpdateCampaign(campaign);
-    const listSignalCatalogNodes =
-      yield* IoTFleetWise.ListSignalCatalogNodes(catalog);
-    const listModelManifestNodes =
-      yield* IoTFleetWise.ListModelManifestNodes(model);
+    const listSignalCatalogNodes = yield* IoTFleetWise.ListSignalCatalogNodes(catalog);
+    const listModelManifestNodes = yield* IoTFleetWise.ListModelManifestNodes(model);
     const listDecoderManifestNetworkInterfaces =
       yield* IoTFleetWise.ListDecoderManifestNetworkInterfaces(decoder);
-    const listDecoderManifestSignals =
-      yield* IoTFleetWise.ListDecoderManifestSignals(decoder);
+    const listDecoderManifestSignals = yield* IoTFleetWise.ListDecoderManifestSignals(decoder);
     const batchCreateVehicle = yield* IoTFleetWise.BatchCreateVehicle();
     const batchUpdateVehicle = yield* IoTFleetWise.BatchUpdateVehicle();
     const listVehicles = yield* IoTFleetWise.ListVehicles();
@@ -240,10 +231,7 @@ export default FleetWiseBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/campaign/suspend-resume"
-        ) {
+        if (request.method === "POST" && pathname === "/campaign/suspend-resume") {
           yield* updateCampaign({ action: "SUSPEND" });
           yield* updateCampaign({ action: "RESUME" });
           return yield* HttpServerResponse.json({ ok: true });

@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 // Pins expectUrlContains's time bounds against hostile servers: the total
 // timeout must fire even when the underlying fetch never settles. A wedged
 // bun fetch (keep-alive reuse against a closed connection) once pinned the
@@ -6,7 +7,6 @@
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { createServer } from "node:http";
 import { expectUrlContains } from "./Http.ts";
 
 const timed = <A, E>(eff: Effect.Effect<A, E>) =>

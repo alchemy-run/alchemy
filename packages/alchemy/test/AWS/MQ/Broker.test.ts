@@ -1,48 +1,39 @@
-import * as AWS from "@/AWS";
-import { Broker } from "@/AWS/MQ";
-import * as Test from "@/Test/Alchemy";
 import * as mq from "@distilled.cloud/aws/mq";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Broker } from "@/AWS/MQ";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled MQ error union carries the
 // not-found tag the provider's observe/read/delete paths depend on.
-test.provider(
-  "describeBroker on a nonexistent broker fails with NotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        mq.describeBroker({
-          BrokerId: "b-00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("NotFoundException");
-    }),
+test.provider("describeBroker on a nonexistent broker fails with NotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      mq.describeBroker({
+        BrokerId: "b-00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("NotFoundException");
+  }),
 );
 
 const assertBrokerGone = (brokerId: string) =>
   Effect.gen(function* () {
     const status = yield* mq.describeBroker({ BrokerId: brokerId }).pipe(
       Effect.map((r) => r.BrokerState ?? "UNKNOWN"),
-      Effect.catchTag("NotFoundException", () =>
-        Effect.succeed("GONE" as const),
-      ),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("GONE" as const)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`MQ broker still exists (state: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`MQ broker still exists (state: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -59,8 +50,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const engines = yield* mq.describeBrokerEngineTypes({
         EngineType: "ACTIVEMQ",
       });
-      const engineVersion =
-        engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
+      const engineVersion = engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
       expect(engineVersion).toBeDefined();
 
       const broker = yield* stack.deploy(

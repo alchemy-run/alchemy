@@ -1,4 +1,3 @@
-import { projectServices as fetchProjectServices } from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,13 +6,13 @@ import * as Schema from "effect/Schema";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { projectServices as fetchProjectServices } from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
-import { withEnvironmentConfigLock } from "./transient.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
-type PrivateNetworkEndpointSyncStatus =
-  railway.Scalars["PrivateNetworkEndpointSyncStatus"];
+type PrivateNetworkEndpointSyncStatus = railway.Scalars["PrivateNetworkEndpointSyncStatus"];
 
 const selection = {
   createdAt: true,
@@ -37,10 +36,7 @@ const endpointSelection = {
   syncStatus: true,
   tags: true,
 } as const satisfies railway.Selection<"PrivateNetworkEndpoint">;
-type PrivateNetworksResultItem = railway.Result<
-  "PrivateNetwork!",
-  typeof selection
->;
+type PrivateNetworksResultItem = railway.Result<"PrivateNetwork!", typeof selection>;
 type PrivateNetworkEndpointValue = railway.Result<
   "PrivateNetworkEndpoint!",
   typeof endpointSelection
@@ -65,9 +61,7 @@ const NetworkConfig = Schema.Struct({
             networking: Schema.optional(
               Schema.NullOr(
                 Schema.Struct({
-                  privateNetworkEndpoint: Schema.optional(
-                    Schema.NullOr(Schema.String),
-                  ),
+                  privateNetworkEndpoint: Schema.optional(Schema.NullOr(Schema.String)),
                 }),
               ),
             ),
@@ -172,26 +166,18 @@ export type PrivateNetwork = Resource<
 >;
 
 const resolvePrivateNetworkProps = (
-  props:
-    | PrivateNetworkProps
-    | Effect.Effect<PrivateNetworkProps, never, Providers>,
+  props: PrivateNetworkProps | Effect.Effect<PrivateNetworkProps, never, Providers>,
 ): Effect.Effect<PrivateNetworkProps, never, Providers> =>
   Effect.gen(function* () {
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
     const environment = Effect.isEffect(resolved.environment)
-      ? yield* resolved.environment as Effect.Effect<
-          PrivateNetworkEnvironment,
-          never,
-          Providers
-        >
+      ? yield* resolved.environment as Effect.Effect<PrivateNetworkEnvironment, never, Providers>
       : resolved.environment;
     return { ...resolved, environment };
   });
 
-const PrivateNetworkResource = Resource<PrivateNetwork>(
-  "Railway.PrivateNetwork",
-);
+const PrivateNetworkResource = Resource<PrivateNetwork>("Railway.PrivateNetwork");
 
 /**
  * Enable Railway's platform-managed private network for an environment.
@@ -249,18 +235,12 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * @resource
  */
 export const PrivateNetwork: typeof PrivateNetworkResource = Object.assign(
-  (
-    id: string,
-    props:
-      | PrivateNetworkProps
-      | Effect.Effect<PrivateNetworkProps, never, Providers>,
-  ) => PrivateNetworkResource(id, resolvePrivateNetworkProps(props)),
+  (id: string, props: PrivateNetworkProps | Effect.Effect<PrivateNetworkProps, never, Providers>) =>
+    PrivateNetworkResource(id, resolvePrivateNetworkProps(props)),
   PrivateNetworkResource,
 );
 
-export class PrivateNetworkNotCreated extends Data.TaggedError(
-  "Railway.PrivateNetworkNotCreated",
-)<{
+export class PrivateNetworkNotCreated extends Data.TaggedError("Railway.PrivateNetworkNotCreated")<{
   name: string;
   environmentId: string;
 }> {}
@@ -284,17 +264,13 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const publicIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { publicId?: unknown };
-  return typeof rec.publicId === "string" && rec.publicId.length > 0
-    ? rec.publicId
-    : undefined;
+  return typeof rec.publicId === "string" && rec.publicId.length > 0 ? rec.publicId : undefined;
 };
 
 const isGoneNetwork = (network: CloudNetwork | undefined) =>
@@ -324,18 +300,11 @@ const resolveNetworkName = Effect.fn(function* (name?: string) {
 const listNetworks = (environmentId: string) =>
   railway.privateNetworks({ environmentId }, selection).pipe(
     Effect.map((items) => items.filter((network) => !isGoneNetwork(network))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as PrivateNetworksResultItem[]),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed([] as PrivateNetworksResultItem[])),
   );
 
-const findNetwork = (
-  environmentId: string,
-  match: (network: CloudNetwork) => boolean,
-) =>
-  listNetworks(environmentId).pipe(
-    Effect.map((networks) => networks.find(match)),
-  );
+const findNetwork = (environmentId: string, match: (network: CloudNetwork) => boolean) =>
+  listNetworks(environmentId).pipe(Effect.map((networks) => networks.find(match)));
 
 const observeNetwork = Effect.fn(function* (input: {
   environmentId: string;
@@ -350,10 +319,7 @@ const observeNetwork = Effect.fn(function* (input: {
     if (byId !== undefined) return byId;
   }
   if (input.name !== undefined && input.name.length > 0) {
-    return yield* findNetwork(
-      input.environmentId,
-      (network) => network.name === input.name,
-    );
+    return yield* findNetwork(input.environmentId, (network) => network.name === input.name);
   }
   return undefined;
 });
@@ -423,8 +389,7 @@ export const PrivateNetworkProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      const environmentId =
-        output?.environmentId ?? environmentIdOf(olds?.environment);
+      const environmentId = output?.environmentId ?? environmentIdOf(olds?.environment);
       const name = output?.name ?? olds?.name ?? PLATFORM_NETWORK_NAME;
       if (environmentId === undefined) return undefined;
       const config = yield* readNetworkConfig(environmentId).pipe(
@@ -482,8 +447,7 @@ export const PrivateNetworkProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as PrivateNetworkProps);
-      const environmentId =
-        environmentIdOf(props.environment) ?? output?.environmentId;
+      const environmentId = environmentIdOf(props.environment) ?? output?.environmentId;
       const projectId = projectIdOf(props.environment) ?? output?.projectId;
       if (environmentId === undefined || projectId === undefined) {
         return yield* new PrivateNetworkEnvironmentRequired({
@@ -496,8 +460,7 @@ export const PrivateNetworkProvider = () =>
       return {
         ...toNetworkAttrs(current.network, { name, projectId }),
         previousPrivateNetworkDisabled:
-          output?.previousPrivateNetworkDisabled ??
-          current.previousPrivateNetworkDisabled,
+          output?.previousPrivateNetworkDisabled ?? current.previousPrivateNetworkDisabled,
       };
     }),
 
@@ -597,26 +560,16 @@ export type PrivateNetworkEndpoint = Resource<
 >;
 
 const resolvePrivateNetworkEndpointProps = (
-  props:
-    | PrivateNetworkEndpointProps
-    | Effect.Effect<PrivateNetworkEndpointProps, never, Providers>,
+  props: PrivateNetworkEndpointProps | Effect.Effect<PrivateNetworkEndpointProps, never, Providers>,
 ): Effect.Effect<PrivateNetworkEndpointProps, never, Providers> =>
   Effect.gen(function* () {
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
     const network = Effect.isEffect(resolved.network)
-      ? yield* resolved.network as Effect.Effect<
-          PrivateNetworkEndpointNetwork,
-          never,
-          Providers
-        >
+      ? yield* resolved.network as Effect.Effect<PrivateNetworkEndpointNetwork, never, Providers>
       : resolved.network;
     const service = Effect.isEffect(resolved.service)
-      ? yield* resolved.service as Effect.Effect<
-          PrivateNetworkEndpointService,
-          never,
-          Providers
-        >
+      ? yield* resolved.service as Effect.Effect<PrivateNetworkEndpointService, never, Providers>
       : resolved.service;
     return { ...resolved, network, service };
   });
@@ -669,20 +622,15 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  *
  * @resource
  */
-export const PrivateNetworkEndpoint: typeof PrivateNetworkEndpointResource =
-  Object.assign(
-    (
-      id: string,
-      props:
-        | PrivateNetworkEndpointProps
-        | Effect.Effect<PrivateNetworkEndpointProps, never, Providers>,
-    ) =>
-      PrivateNetworkEndpointResource(
-        id,
-        resolvePrivateNetworkEndpointProps(props),
-      ),
-    PrivateNetworkEndpointResource,
-  );
+export const PrivateNetworkEndpoint: typeof PrivateNetworkEndpointResource = Object.assign(
+  (
+    id: string,
+    props:
+      | PrivateNetworkEndpointProps
+      | Effect.Effect<PrivateNetworkEndpointProps, never, Providers>,
+  ) => PrivateNetworkEndpointResource(id, resolvePrivateNetworkEndpointProps(props)),
+  PrivateNetworkEndpointResource,
+);
 
 export class PrivateNetworkEndpointNotCreated extends Data.TaggedError(
   "Railway.PrivateNetworkEndpointNotCreated",
@@ -717,26 +665,20 @@ type CloudEndpoint = PrivateNetworkEndpointValue;
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { serviceId?: unknown };
-  return typeof rec.serviceId === "string" && rec.serviceId.length > 0
-    ? rec.serviceId
-    : undefined;
+  return typeof rec.serviceId === "string" && rec.serviceId.length > 0 ? rec.serviceId : undefined;
 };
 
 const serviceNameOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { name?: unknown };
-  return typeof rec.name === "string" && rec.name.length > 0
-    ? rec.name
-    : undefined;
+  return typeof rec.name === "string" && rec.name.length > 0 ? rec.name : undefined;
 };
 
 const goneEndpointStatus = (status: PrivateNetworkEndpointSyncStatus) =>
   status === "DELETED" || status === "DELETING";
 
 const isGoneEndpoint = (endpoint: CloudEndpoint | null | undefined) =>
-  endpoint == null ||
-  endpoint.deletedAt != null ||
-  goneEndpointStatus(endpoint.syncStatus);
+  endpoint == null || endpoint.deletedAt != null || goneEndpointStatus(endpoint.syncStatus);
 
 const dnsPrefix = (dnsName: string) =>
   dnsName
@@ -837,31 +779,19 @@ const waitUntilEndpointNamed = (input: {
 
 export const PrivateNetworkEndpointProvider = () =>
   Provider.succeed(PrivateNetworkEndpoint, {
-    stables: [
-      "publicId",
-      "serviceId",
-      "privateNetworkId",
-      "environmentId",
-      "serviceInstanceId",
-    ],
+    stables: ["publicId", "serviceId", "privateNetworkId", "environmentId", "serviceInstanceId"],
     nuke: {
       skip: true,
-      dependsOn: [
-        "Railway.PrivateNetwork",
-        "Railway.Service",
-        "Railway.Project",
-      ],
+      dependsOn: ["Railway.PrivateNetwork", "Railway.Service", "Railway.Project"],
     },
 
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const serviceId = serviceIdOf(news.service);
-      const serviceChanged =
-        serviceId !== undefined && serviceId !== output.serviceId;
+      const serviceChanged = serviceId !== undefined && serviceId !== output.serviceId;
       const networkId = publicIdOf(news.network);
-      const networkChanged =
-        networkId !== undefined && networkId !== output.privateNetworkId;
+      const networkChanged = networkId !== undefined && networkId !== output.privateNetworkId;
       if (serviceChanged || networkChanged) {
         return { action: "replace" as const };
       }
@@ -870,12 +800,9 @@ export const PrivateNetworkEndpointProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const serviceId = output?.serviceId ?? serviceIdOf(olds?.service);
-      const privateNetworkId =
-        output?.privateNetworkId ?? publicIdOf(olds?.network);
+      const privateNetworkId = output?.privateNetworkId ?? publicIdOf(olds?.network);
       const environmentId =
-        output?.environmentId ??
-        environmentIdOf(olds?.network) ??
-        environmentIdOf(olds);
+        output?.environmentId ?? environmentIdOf(olds?.network) ?? environmentIdOf(olds);
       if (
         serviceId === undefined ||
         privateNetworkId === undefined ||
@@ -905,25 +832,14 @@ export const PrivateNetworkEndpointProvider = () =>
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
           const environmentIds = yield* projectEnvironmentIds(project);
-          const networks = (yield* Effect.forEach(
-            environmentIds,
-            listNetworks,
-          )).flat();
-          const owned = networks.filter(
-            (network) => network.name === PLATFORM_NETWORK_NAME,
-          );
+          const networks = (yield* Effect.forEach(environmentIds, listNetworks)).flat();
+          const owned = networks.filter((network) => network.name === PLATFORM_NETWORK_NAME);
           const live = yield* fetchProjectServices(project.projectId, {
             id: true,
             name: true,
             deletedAt: true,
-          }).pipe(
-            railway.catchTags(["RailwayNotFound"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
-          const services = (live ?? []).filter(
-            (service) => service.deletedAt == null,
-          );
+          }).pipe(railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)));
+          const services = (live ?? []).filter((service) => service.deletedAt == null);
           const nested = yield* Effect.forEach(owned, (network) =>
             Effect.forEach(services, (service) =>
               getEndpoint({
@@ -945,8 +861,7 @@ export const PrivateNetworkEndpointProvider = () =>
             ).pipe(
               Effect.map((items) =>
                 items.filter(
-                  (item): item is PrivateNetworkEndpoint["Attributes"] =>
-                    item !== undefined,
+                  (item): item is PrivateNetworkEndpoint["Attributes"] => item !== undefined,
                 ),
               ),
             ),
@@ -960,10 +875,8 @@ export const PrivateNetworkEndpointProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as PrivateNetworkEndpointProps);
       const serviceId = serviceIdOf(props.service) ?? output?.serviceId;
-      const privateNetworkId =
-        publicIdOf(props.network) ?? output?.privateNetworkId;
-      const environmentId =
-        environmentIdOf(props.network) ?? output?.environmentId;
+      const privateNetworkId = publicIdOf(props.network) ?? output?.privateNetworkId;
+      const environmentId = environmentIdOf(props.network) ?? output?.environmentId;
       const projectId = projectIdOf(props.network) ?? output?.projectId;
       if (
         serviceId === undefined ||
@@ -976,12 +889,8 @@ export const PrivateNetworkEndpointProvider = () =>
         });
       }
 
-      const serviceName = yield* resolveServiceName(
-        serviceId,
-        serviceNameOf(props.service),
-      );
-      const desiredOverride =
-        props.name === undefined ? null : sanitizeRailwayName(props.name);
+      const serviceName = yield* resolveServiceName(serviceId, serviceNameOf(props.service));
+      const desiredOverride = props.name === undefined ? null : sanitizeRailwayName(props.name);
       const desiredPrefix = desiredOverride ?? sanitizeRailwayName(serviceName);
 
       const network = yield* observeNetwork({
@@ -1005,29 +914,23 @@ export const PrivateNetworkEndpointProvider = () =>
                 "Enable private networking with PrivateNetwork before configuring an endpoint",
             });
           }
-          const configuredPrefix =
-            config.services?.[serviceId]?.networking?.privateNetworkEndpoint;
+          const configuredPrefix = config.services?.[serviceId]?.networking?.privateNetworkEndpoint;
           const current = yield* getEndpoint({
             environmentId,
             privateNetworkId,
             serviceId,
           });
           const hasDesiredName =
-            current !== undefined &&
-            dnsPrefix(current.dnsName) === desiredPrefix;
+            current !== undefined && dnsPrefix(current.dnsName) === desiredPrefix;
           if ((configuredPrefix ?? null) === desiredOverride) {
             return configuredPrefix ?? null;
           }
-          if (
-            !hasDesiredName &&
-            dnsPrefix(current?.newDnsName ?? "") !== desiredPrefix
-          ) {
-            const available =
-              yield* railway.privateNetworkEndpointNameAvailable({
-                environmentId,
-                privateNetworkId,
-                prefix: desiredPrefix,
-              });
+          if (!hasDesiredName && dnsPrefix(current?.newDnsName ?? "") !== desiredPrefix) {
+            const available = yield* railway.privateNetworkEndpointNameAvailable({
+              environmentId,
+              privateNetworkId,
+              prefix: desiredPrefix,
+            });
             if (!available) {
               return yield* new PrivateNetworkEndpointNameUnavailable({
                 name: desiredPrefix,
@@ -1065,9 +968,7 @@ export const PrivateNetworkEndpointProvider = () =>
           projectId,
         }),
         previousDnsPrefix:
-          output?.previousDnsPrefix !== undefined
-            ? output.previousDnsPrefix
-            : previousDnsPrefix,
+          output?.previousDnsPrefix !== undefined ? output.previousDnsPrefix : previousDnsPrefix,
       };
     }),
 
@@ -1085,15 +986,13 @@ export const PrivateNetworkEndpointProvider = () =>
         });
       }
       const previousDnsPrefix = output.previousDnsPrefix;
-      const managedPrefix =
-        olds.name === undefined ? null : sanitizeRailwayName(olds.name);
+      const managedPrefix = olds.name === undefined ? null : sanitizeRailwayName(olds.name);
       yield* withEnvironmentConfigLock(
         output.environmentId,
         Effect.gen(function* () {
           const config = yield* readNetworkConfig(output.environmentId);
           const configuredPrefix =
-            config.services?.[output.serviceId]?.networking
-              ?.privateNetworkEndpoint;
+            config.services?.[output.serviceId]?.networking?.privateNetworkEndpoint;
           if (
             (configuredPrefix ?? null) !== managedPrefix ||
             (configuredPrefix ?? null) === previousDnsPrefix
@@ -1114,8 +1013,8 @@ export const PrivateNetworkEndpointProvider = () =>
           yield* waitForNetworkConfig(
             output.environmentId,
             (observed) =>
-              (observed.services?.[output.serviceId]?.networking
-                ?.privateNetworkEndpoint ?? null) === previousDnsPrefix,
+              (observed.services?.[output.serviceId]?.networking?.privateNetworkEndpoint ??
+                null) === previousDnsPrefix,
           );
         }),
       ).pipe(railway.catchTags("RailwayNotFound", () => Effect.void));

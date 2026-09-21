@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -7,6 +5,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
 import { Sandbox } from "./sandbox.ts";
 
 /**
@@ -96,9 +96,7 @@ export default Cloudflare.Worker(
           return yield* Effect.gen(function* () {
             yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
               Effect.flatMap((m) =>
-                m.state === "RUNNING"
-                  ? Effect.void
-                  : Effect.fail(new Error(`microvm ${m.state}`)),
+                m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
               ),
               Effect.retry({
                 schedule: Schedule.spaced("2 seconds"),
@@ -129,10 +127,9 @@ export default Cloudflare.Worker(
             const client = yield* HttpClient.HttpClient;
             const headers = AWS.Lambda.microvmAuthHeaders(authToken);
             const echoRes = yield* client
-              .get(
-                `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                { headers },
-              )
+              .get(`https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`, {
+                headers,
+              })
               .pipe(
                 Effect.retry({
                   schedule: Schedule.exponential("500 millis"),
@@ -150,9 +147,7 @@ export default Cloudflare.Worker(
             });
           }).pipe(
             Effect.ensuring(
-              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-                Effect.ignore,
-              ),
+              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
             ),
             Effect.provide(FetchHttpClient.layer),
           );

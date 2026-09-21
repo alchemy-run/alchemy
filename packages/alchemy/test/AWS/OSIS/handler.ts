@@ -1,17 +1,15 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as OSIS from "@/AWS/OSIS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as OSIS from "@/AWS/OSIS";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class OsisTestFunction extends Lambda.Function<Lambda.Function>()(
-  "OsisTestFunction",
-) {}
+export class OsisTestFunction extends Lambda.Function<Lambda.Function>()("OsisTestFunction") {}
 
 // A syntactically-valid Data Prepper configuration (http source -> s3 sink).
 // ValidatePipeline is a static check; the role/bucket are never assumed.
@@ -54,8 +52,7 @@ export default OsisTestFunction.make(
     const validatePipeline = yield* OSIS.ValidatePipeline();
     const listPipelineBlueprints = yield* OSIS.ListPipelineBlueprints();
     const getPipelineBlueprint = yield* OSIS.GetPipelineBlueprint();
-    const listPipelineEndpointConnections =
-      yield* OSIS.ListPipelineEndpointConnections();
+    const listPipelineEndpointConnections = yield* OSIS.ListPipelineEndpointConnections();
 
     const bound = {
       validatePipeline,
@@ -106,9 +103,7 @@ export default OsisTestFunction.make(
           const { Blueprints } = yield* listPipelineBlueprints();
           return yield* HttpServerResponse.json({
             names: (Blueprints ?? []).flatMap((blueprint) =>
-              blueprint.BlueprintName !== undefined
-                ? [blueprint.BlueprintName]
-                : [],
+              blueprint.BlueprintName !== undefined ? [blueprint.BlueprintName] : [],
             ),
           });
         }
@@ -127,8 +122,7 @@ export default OsisTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/endpoint-connections") {
-          const { PipelineEndpointConnections } =
-            yield* listPipelineEndpointConnections();
+          const { PipelineEndpointConnections } = yield* listPipelineEndpointConnections();
           return yield* HttpServerResponse.json({
             count: (PipelineEndpointConnections ?? []).length,
           });

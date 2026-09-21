@@ -33,10 +33,7 @@ export interface BatchGetResourceConfig extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.BatchGetResourceConfigRequest,
-    ) => Effect.Effect<
-      config.BatchGetResourceConfigResponse,
-      config.BatchGetResourceConfigError
-    >
+    ) => Effect.Effect<config.BatchGetResourceConfigResponse, config.BatchGetResourceConfigError>
   >
 > {}
 

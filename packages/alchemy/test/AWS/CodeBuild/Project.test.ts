@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import { Project } from "@/AWS/CodeBuild/Project.ts";
-import {
-  normalizePolicyDocument,
-  type PolicyDocument,
-} from "@/AWS/IAM/Policy.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Project } from "@/AWS/CodeBuild/Project.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -43,11 +40,7 @@ const codebuildRole = (logical: string) =>
         Statement: [
           {
             Effect: "Allow",
-            Action: [
-              "logs:CreateLogGroup",
-              "logs:CreateLogStream",
-              "logs:PutLogEvents",
-            ],
+            Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
             Resource: ["*"],
           },
         ],
@@ -95,9 +88,7 @@ test.provider(
       expect(created?.source?.type).toBe("NO_SOURCE");
       expect(created?.environment?.computeType).toBe("BUILD_GENERAL1_SMALL");
       expect(
-        created?.environment?.environmentVariables?.find(
-          (v) => v.name === "STAGE",
-        )?.value,
+        created?.environment?.environmentVariables?.find((v) => v.name === "STAGE")?.value,
       ).toBe("dev");
 
       // Canonical list() coverage.
@@ -140,36 +131,26 @@ test.provider(
       const updated = yield* getProject;
       expect(updated?.environment?.computeType).toBe("BUILD_GENERAL1_MEDIUM");
       expect(
-        updated?.environment?.environmentVariables?.find(
-          (v) => v.name === "STAGE",
-        )?.value,
+        updated?.environment?.environmentVariables?.find((v) => v.name === "STAGE")?.value,
       ).toBe("prod");
       expect(updated?.timeoutInMinutes).toBe(30);
 
       // The PolicyDocument round-trips through the wire as a string that
       // normalizes back to exactly the desired document.
-      const readPolicy = codebuild
-        .getResourcePolicy({ resourceArn: deployed.projectArn })
-        .pipe(
-          Effect.map((res) => res.policy),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const readPolicy = codebuild.getResourcePolicy({ resourceArn: deployed.projectArn }).pipe(
+        Effect.map((res) => res.policy),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      );
       const attached = yield* readPolicy;
       expect(attached).toBeDefined();
-      expect(normalizePolicyDocument(attached!)).toBe(
-        normalizePolicyDocument(resourcePolicy),
-      );
+      expect(normalizePolicyDocument(attached!)).toBe(normalizePolicyDocument(resourcePolicy));
 
       // Re-deploy the identical PolicyDocument — the drift comparison is on
       // normalized documents, so this converges cleanly as a no-op and the
       // policy is unchanged.
       yield* stack.deploy(updateProject);
       const afterRedeploy = yield* readPolicy;
-      expect(normalizePolicyDocument(afterRedeploy!)).toBe(
-        normalizePolicyDocument(resourcePolicy),
-      );
+      expect(normalizePolicyDocument(afterRedeploy!)).toBe(normalizePolicyDocument(resourcePolicy));
 
       // Drop the resourcePolicy prop — reconcile deletes the attached policy.
       yield* stack.deploy(
@@ -233,12 +214,8 @@ test.provider(
       const configured = yield* codebuild.batchGetProjects({
         names: [deployed.projectName],
       });
-      expect(configured.projects?.[0]?.logsConfig?.cloudWatchLogs?.status).toBe(
-        "DISABLED",
-      );
-      expect(configured.projects?.[0]?.logsConfig?.s3Logs?.status).toBe(
-        "DISABLED",
-      );
+      expect(configured.projects?.[0]?.logsConfig?.cloudWatchLogs?.status).toBe("DISABLED");
+      expect(configured.projects?.[0]?.logsConfig?.s3Logs?.status).toBe("DISABLED");
 
       const build = yield* Effect.gen(function* () {
         const started = yield* codebuild.startBuild({
@@ -250,25 +227,23 @@ test.provider(
 
         // Poll until the build reaches a terminal status. IN_QUEUE is not
         // terminal; bound the total polling delay to 50 seconds.
-        const terminal = yield* codebuild
-          .batchGetBuilds({ ids: [buildId!] })
-          .pipe(
-            Effect.map((res) => res.builds?.[0]),
-            Effect.repeat({
-              schedule: Schedule.spaced("5 seconds"),
-              until: (b) => {
-                const status = b?.buildStatus;
-                return (
-                  status === "SUCCEEDED" ||
-                  status === "FAILED" ||
-                  status === "FAULT" ||
-                  status === "STOPPED" ||
-                  status === "TIMED_OUT"
-                );
-              },
-              times: 10,
-            }),
-          );
+        const terminal = yield* codebuild.batchGetBuilds({ ids: [buildId!] }).pipe(
+          Effect.map((res) => res.builds?.[0]),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (b) => {
+              const status = b?.buildStatus;
+              return (
+                status === "SUCCEEDED" ||
+                status === "FAILED" ||
+                status === "FAULT" ||
+                status === "STOPPED" ||
+                status === "TIMED_OUT"
+              );
+            },
+            times: 10,
+          }),
+        );
 
         // createProject validates the role but can return before the role's
         // trust policy is usable by the CodeBuild data plane. Retry only this
@@ -314,8 +289,7 @@ test.provider(
         Effect.gen(function* () {
           yield* Effect.forEach(
             buildIds,
-            (buildId) =>
-              codebuild.stopBuild({ id: buildId }).pipe(Effect.ignore),
+            (buildId) => codebuild.stopBuild({ id: buildId }).pipe(Effect.ignore),
             { concurrency: 2, discard: true },
           );
           yield* stack.destroy().pipe(Effect.ignore);

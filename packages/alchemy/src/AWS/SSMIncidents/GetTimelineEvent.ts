@@ -28,10 +28,7 @@ export interface GetTimelineEvent extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.GetTimelineEventInput,
-    ) => Effect.Effect<
-      incidents.GetTimelineEventOutput,
-      incidents.GetTimelineEventError
-    >
+    ) => Effect.Effect<incidents.GetTimelineEventOutput, incidents.GetTimelineEventError>
   >
 > {}
 export const GetTimelineEvent = Binding.Service<GetTimelineEvent>(

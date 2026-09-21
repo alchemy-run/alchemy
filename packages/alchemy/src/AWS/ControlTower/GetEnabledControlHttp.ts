@@ -10,8 +10,7 @@ export const GetEnabledControlHttp = Layer.effect(
     capability: "GetEnabledControl",
     iamActions: ["controltower:GetEnabledControl"],
     requestKey: "enabledControlIdentifier",
-    identifier: (enabledControl: EnabledControl) =>
-      enabledControl.enabledControlArn,
+    identifier: (enabledControl: EnabledControl) => enabledControl.enabledControlArn,
     operation: controltower.getEnabledControl,
   }),
 );

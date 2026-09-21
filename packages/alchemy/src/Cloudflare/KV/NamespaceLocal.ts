@@ -31,18 +31,14 @@ import type { KVAuth } from "./NamespaceHttp.ts";
  */
 export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
   makeHttpClient: (auth: KVAuth, namespaceId: Effect.Effect<string>) => Client;
-  makeNativeClient: (
-    helpers: ReturnType<typeof makeKVNamespaceHelpers>,
-  ) => Client;
+  makeNativeClient: (helpers: ReturnType<typeof makeKVNamespaceHelpers>) => Client;
 }) =>
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so KV HTTP ops can run with
     // the current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services and the Cloudflare
     // environment, all present during stack-eval but not statically

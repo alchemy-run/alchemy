@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command. The
@@ -20,10 +20,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const cloudflaredBin = Bun.which("cloudflared");
 
@@ -43,10 +40,7 @@ const getJsonReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -92,10 +86,7 @@ test.provider(
         Effect.gen(function* () {
           const managed = yield* tunnelAndService;
           const worker = yield* Cloudflare.Worker("vpc-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/vpc-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/vpc-local-worker.ts"),
             env: {
               VPC: managed,
               VPC_LOOKUP: Cloudflare.VpcService.lookup({
@@ -111,9 +102,9 @@ test.provider(
 
       // Both bindings surface as Fetchers inside the local workerd.
       for (const binding of ["VPC", "VPC_LOOKUP"]) {
-        const body = (yield* getJsonReady(
-          `${deployed.worker.url}/type?binding=${binding}`,
-        )) as { type: string };
+        const body = (yield* getJsonReady(`${deployed.worker.url}/type?binding=${binding}`)) as {
+          type: string;
+        };
         expect(body.type).toBe("function");
       }
 
@@ -122,12 +113,11 @@ test.provider(
       // reach an origin, so any JSON answer (an upstream error status or a
       // fetcher error) proves the bridge path; a broken bridge never
       // produces one.
-      const proxied = (yield* getJsonReady(
-        `${deployed.worker.url}/proxy?binding=VPC`,
-      )) as { status?: number; error?: string };
-      expect(proxied.status !== undefined || proxied.error !== undefined).toBe(
-        true,
-      );
+      const proxied = (yield* getJsonReady(`${deployed.worker.url}/proxy?binding=VPC`)) as {
+        status?: number;
+        error?: string;
+      };
+      expect(proxied.status !== undefined || proxied.error !== undefined).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -171,10 +161,7 @@ test.provider.skipIf(!cloudflaredBin)(
         Effect.gen(function* () {
           const { service } = yield* tunnelAndService;
           const worker = yield* Cloudflare.Worker("vpc-e2e-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/vpc-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/vpc-local-worker.ts"),
             env: { VPC: service },
           });
           return { worker };
@@ -188,8 +175,7 @@ test.provider.skipIf(!cloudflaredBin)(
             Effect.sync(() =>
               Bun.serve({
                 port: ORIGIN_PORT,
-                fetch: (req) =>
-                  new Response(`origin:${new URL(req.url).pathname}`),
+                fetch: (req) => new Response(`origin:${new URL(req.url).pathname}`),
               }),
             ),
             (server) => Effect.sync(() => void server.stop(true)),
@@ -199,13 +185,7 @@ test.provider.skipIf(!cloudflaredBin)(
           yield* Effect.acquireRelease(
             Effect.sync(() =>
               Bun.spawn(
-                [
-                  cloudflaredBin!,
-                  "tunnel",
-                  "run",
-                  "--token",
-                  Redacted.value(tunnel.token),
-                ],
+                [cloudflaredBin!, "tunnel", "run", "--token", Redacted.value(tunnel.token)],
                 { stdout: "ignore", stderr: "ignore" },
               ),
             ),

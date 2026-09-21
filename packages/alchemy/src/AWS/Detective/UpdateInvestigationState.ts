@@ -38,7 +38,6 @@ export interface UpdateInvestigationState extends Binding.Service<
     >
   >
 > {}
-export const UpdateInvestigationState =
-  Binding.Service<UpdateInvestigationState>(
-    "AWS.Detective.UpdateInvestigationState",
-  );
+export const UpdateInvestigationState = Binding.Service<UpdateInvestigationState>(
+  "AWS.Detective.UpdateInvestigationState",
+);

@@ -1,6 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as MediaPackageV2 from "@/AWS/MediaPackageV2";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as MediaPackageV2 from "@/AWS/MediaPackageV2";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -64,10 +64,7 @@ export default MediaPackageV2TestFunction.make(
           Effect: "Allow",
           Principal: { Service: "mediapackagev2.amazonaws.com" },
           Action: ["s3:PutObject", "s3:GetBucketLocation"],
-          Resource: [
-            `arn:aws:s3:::${HARVEST_BUCKET}`,
-            `arn:aws:s3:::${HARVEST_BUCKET}/*`,
-          ],
+          Resource: [`arn:aws:s3:::${HARVEST_BUCKET}`, `arn:aws:s3:::${HARVEST_BUCKET}/*`],
         },
       ],
       tags: { fixture: "mediapackagev2-bindings" },
@@ -84,8 +81,7 @@ export default MediaPackageV2TestFunction.make(
     );
 
     const resetChannel = yield* MediaPackageV2.ResetChannelState(channel);
-    const resetEndpoint =
-      yield* MediaPackageV2.ResetOriginEndpointState(endpoint);
+    const resetEndpoint = yield* MediaPackageV2.ResetOriginEndpointState(endpoint);
     const createHarvestJob = yield* MediaPackageV2.CreateHarvestJob(endpoint);
     const getHarvestJob = yield* MediaPackageV2.GetHarvestJob(endpoint);
     const cancelHarvestJob = yield* MediaPackageV2.CancelHarvestJob(endpoint);
@@ -188,9 +184,7 @@ export default MediaPackageV2TestFunction.make(
                   HarvestJobName: job.HarvestJobName,
                 }).pipe(
                   Effect.map(() => true),
-                  Effect.catchTag("ConflictException", () =>
-                    Effect.succeed(false),
-                  ),
+                  Effect.catchTag("ConflictException", () => Effect.succeed(false)),
                 );
                 return {
                   created: true,

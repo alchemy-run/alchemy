@@ -102,10 +102,7 @@ export default Api.make(
             Key: { pk: { S: `entry#${match[1]}` } },
           });
           if (!result.Item) {
-            return yield* HttpServerResponse.json(
-              { error: "not found" },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
           }
           return yield* HttpServerResponse.json({
             id: match[1],
@@ -138,11 +135,7 @@ export default Api.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.DynamoDB.PutItemHttp,
-        AWS.DynamoDB.GetItemHttp,
-        AWS.DynamoDB.ScanHttp,
-      ),
+      Layer.mergeAll(AWS.DynamoDB.PutItemHttp, AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.ScanHttp),
     ),
   ),
 );

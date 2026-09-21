@@ -33,13 +33,8 @@ export interface CancelQuery extends Binding.Service<
   () => Effect.Effect<
     (
       request: CancelQueryRequest,
-    ) => Effect.Effect<
-      TSQ.CancelQueryResponse,
-      TSQ.CancelQueryError | TSQ.DescribeEndpointsError
-    >
+    ) => Effect.Effect<TSQ.CancelQueryResponse, TSQ.CancelQueryError | TSQ.DescribeEndpointsError>
   >
 > {}
 
-export const CancelQuery = Binding.Service<CancelQuery>(
-  "AWS.Timestream.CancelQuery",
-);
+export const CancelQuery = Binding.Service<CancelQuery>("AWS.Timestream.CancelQuery");

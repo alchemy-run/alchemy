@@ -86,9 +86,7 @@ export interface ResourceServer extends Resource<
  *
  * @resource
  */
-export const ResourceServer = Resource<ResourceServer>(
-  "AWS.Cognito.ResourceServer",
-);
+export const ResourceServer = Resource<ResourceServer>("AWS.Cognito.ResourceServer");
 
 const toWireScopes = (scopes: ResourceServerScope[] | undefined) =>
   scopes?.map((scope) => ({
@@ -96,9 +94,7 @@ const toWireScopes = (scopes: ResourceServerScope[] | undefined) =>
     ScopeDescription: scope.scopeDescription,
   }));
 
-const canonicalScopes = (
-  scopes: { ScopeName?: string; ScopeDescription?: string }[] | undefined,
-) =>
+const canonicalScopes = (scopes: { ScopeName?: string; ScopeDescription?: string }[] | undefined) =>
   (scopes ?? [])
     .map((scope) => `${scope.ScopeName}:${scope.ScopeDescription}`)
     .sort()
@@ -112,16 +108,10 @@ export const ResourceServerProvider = () =>
         id: string,
         props: Pick<ResourceServerProps, "identifier">,
       ) {
-        return (
-          props.identifier ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.identifier ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
-      const describeServer = Effect.fn(function* (
-        userPoolId: string,
-        identifier: string,
-      ) {
+      const describeServer = Effect.fn(function* (userPoolId: string, identifier: string) {
         return yield* cip
           .describeResourceServer({
             UserPoolId: userPoolId,
@@ -129,9 +119,7 @@ export const ResourceServerProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ResourceServer),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -147,8 +135,7 @@ export const ResourceServerProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;
-          const identifier =
-            output?.identifier ?? (yield* createIdentifier(id, olds ?? {}));
+          const identifier = output?.identifier ?? (yield* createIdentifier(id, olds ?? {}));
           const observed = yield* describeServer(userPoolId, identifier);
           return observed === undefined
             ? undefined
@@ -163,17 +150,13 @@ export const ResourceServerProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldIdentifier = yield* createIdentifier(id, olds ?? {});
           const newIdentifier = yield* createIdentifier(id, news ?? {});
-          if (
-            oldIdentifier !== newIdentifier ||
-            olds?.userPoolId !== news?.userPoolId
-          ) {
+          if (oldIdentifier !== newIdentifier || olds?.userPoolId !== news?.userPoolId) {
             return { action: "replace" } as const;
           }
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.identifier ?? (yield* createIdentifier(id, news));
+          const identifier = output?.identifier ?? (yield* createIdentifier(id, news));
           const userPoolId = news.userPoolId;
           const name = news.name ?? identifier;
 
@@ -194,8 +177,7 @@ export const ResourceServerProvider = () =>
             // 3. SYNC — name and scopes are mutable in place.
             const drift =
               observed.Name !== name ||
-              canonicalScopes(observed.Scopes) !==
-                canonicalScopes(toWireScopes(news.scopes));
+              canonicalScopes(observed.Scopes) !== canonicalScopes(toWireScopes(news.scopes));
             if (drift) {
               observed = yield* cip
                 .updateResourceServer({
@@ -218,9 +200,7 @@ export const ResourceServerProvider = () =>
               UserPoolId: output.userPoolId,
               Identifier: output.identifier,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

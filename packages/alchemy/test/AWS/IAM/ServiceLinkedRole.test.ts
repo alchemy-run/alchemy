@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { ServiceLinkedRole } from "@/AWS/IAM";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ServiceLinkedRole } from "@/AWS/IAM";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -38,9 +38,7 @@ const adoptRoleName = `AWSServiceRoleForAutoScaling_${testAdoptSuffix}`;
 const deleteAdoptRoleIfExists = IAM.deleteServiceLinkedRole({
   RoleName: adoptRoleName,
 }).pipe(
-  Effect.catchTag("NoSuchEntityException", () =>
-    Effect.succeed({ DeletionTaskId: "" }),
-  ),
+  Effect.catchTag("NoSuchEntityException", () => Effect.succeed({ DeletionTaskId: "" })),
   Effect.asVoid,
   // Any non-not-found failure is a real cleanup bug — surface it loudly.
   Effect.orDie,
@@ -72,13 +70,9 @@ describe("AWS.IAM.ServiceLinkedRole", () => {
 
         // Out-of-band: the role exists under the service's deterministic path.
         const observed = yield* IAM.getRole({ RoleName: created.roleName });
-        expect(observed.Role?.Path).toBe(
-          `/aws-service-role/${testServiceName}/`,
-        );
+        expect(observed.Role?.Path).toBe(`/aws-service-role/${testServiceName}/`);
         expect(observed.Role?.Arn).toBe(created.roleArn);
-        expect(observed.Role?.Description).toBe(
-          "alchemy service-linked role test",
-        );
+        expect(observed.Role?.Description).toBe("alchemy service-linked role test");
 
         // Update — the description is the only mutable aspect of an SLR.
         const updated = yield* deployRole("alchemy SLR updated description");
@@ -87,9 +81,7 @@ describe("AWS.IAM.ServiceLinkedRole", () => {
         const afterUpdate = yield* IAM.getRole({
           RoleName: created.roleName,
         });
-        expect(afterUpdate.Role?.Description).toBe(
-          "alchemy SLR updated description",
-        );
+        expect(afterUpdate.Role?.Description).toBe("alchemy SLR updated description");
 
         // Destroy — the provider waits for the async deletion task; give
         // getRole a bounded window to observe the removal.
@@ -115,9 +107,7 @@ describe("AWS.IAM.ServiceLinkedRole", () => {
         }).pipe(
           // Idempotence across re-runs: an earlier interrupted run may have
           // left the role behind — the create then reports InvalidInput.
-          Effect.catchTag("InvalidInputException", () =>
-            Effect.succeed({ Role: undefined }),
-          ),
+          Effect.catchTag("InvalidInputException", () => Effect.succeed({ Role: undefined })),
         );
 
         const adopted = yield* stack.deploy(

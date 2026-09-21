@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ConfigurationSet, Tenant, TenantResourceAssociation } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { ConfigurationSet, Tenant, TenantResourceAssociation } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,16 +15,12 @@ const associatedArns = (tenantName: string) =>
     Effect.map((pages) =>
       Array.from(pages)
         .flatMap((page) => page.TenantResources ?? [])
-        .flatMap((resource) =>
-          resource.ResourceArn ? [resource.ResourceArn] : [],
-        ),
+        .flatMap((resource) => (resource.ResourceArn ? [resource.ResourceArn] : [])),
     ),
   );
 
 const isAssociated = (tenantName: string, resourceArn: string) =>
-  associatedArns(tenantName).pipe(
-    Effect.map((arns) => arns.includes(resourceArn)),
-  );
+  associatedArns(tenantName).pipe(Effect.map((arns) => arns.includes(resourceArn)));
 
 test.provider(
   "tenant resource association lifecycle: associate a config set, verify, delete",
@@ -47,10 +43,7 @@ test.provider(
       // out-of-band verification via distilled. The association is eventually
       // consistent, so poll the SUCCESS value — `Effect.retry`'s `while` reads
       // the error channel and would never see the boolean.
-      const found = yield* isAssociated(
-        tenant.tenantName,
-        configSet.configurationSetArn,
-      ).pipe(
+      const found = yield* isAssociated(tenant.tenantName, configSet.configurationSetArn).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
           until: (associated) => associated,
@@ -63,10 +56,9 @@ test.provider(
 
       // The tenant and its associations are gone after destroy; listing a
       // deleted tenant surfaces NotFoundException, treated as "not associated".
-      const gone = yield* isAssociated(
-        tenant.tenantName,
-        configSet.configurationSetArn,
-      ).pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(false)));
+      const gone = yield* isAssociated(tenant.tenantName, configSet.configurationSetArn).pipe(
+        Effect.catchTag("NotFoundException", () => Effect.succeed(false)),
+      );
       expect(gone).toBe(false);
     }),
   { timeout: 120_000 },

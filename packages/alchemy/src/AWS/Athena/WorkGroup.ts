@@ -11,8 +11,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type WorkGroupName = string;
-export type WorkGroupArn =
-  `arn:aws:athena:${RegionID}:${AccountID}:workgroup/${WorkGroupName}`;
+export type WorkGroupArn = `arn:aws:athena:${RegionID}:${AccountID}:workgroup/${WorkGroupName}`;
 
 export interface WorkGroupProps {
   /**
@@ -169,9 +168,7 @@ export const WorkGroupProvider = () =>
         stables: ["workGroupName", "workGroupArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -180,8 +177,7 @@ export const WorkGroupProvider = () =>
           const name = output?.workGroupName ?? (yield* toName(id, olds ?? {}));
           const wg = yield* getOne(name);
           if (!wg) return undefined;
-          const arn =
-            `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
+          const arn = `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
           return {
             workGroupName: name,
             workGroupArn: arn,
@@ -193,9 +189,7 @@ export const WorkGroupProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* athena.listWorkGroups
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* athena.listWorkGroups.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.WorkGroups ?? [])
               .flatMap((wg) =>
@@ -208,9 +202,7 @@ export const WorkGroupProvider = () =>
                         workGroupName: wg.Name,
                         workGroupArn:
                           `arn:aws:athena:${region}:${accountId}:workgroup/${wg.Name}` as WorkGroupArn,
-                        state: (wg.State ?? "ENABLED") as
-                          | "ENABLED"
-                          | "DISABLED",
+                        state: (wg.State ?? "ENABLED") as "ENABLED" | "DISABLED",
                         outputLocation: undefined,
                         tags: {} as Record<string, string>,
                       },
@@ -221,8 +213,7 @@ export const WorkGroupProvider = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.workGroupName ?? (yield* toName(id, news));
-          const arn =
-            `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
+          const arn = `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";
@@ -250,8 +241,7 @@ export const WorkGroupProvider = () =>
                     }
                   : undefined,
                 EnforceWorkGroupConfiguration: enforce,
-                PublishCloudWatchMetricsEnabled:
-                  news.publishCloudWatchMetricsEnabled,
+                PublishCloudWatchMetricsEnabled: news.publishCloudWatchMetricsEnabled,
                 BytesScannedCutoffPerQuery: news.bytesScannedCutoffPerQuery,
                 RequesterPaysEnabled: news.requesterPaysEnabled,
                 EngineVersion: news.engineVersion
@@ -288,8 +278,8 @@ export const WorkGroupProvider = () =>
             }
             if (
               encryption &&
-              cfg?.ResultConfiguration?.EncryptionConfiguration
-                ?.EncryptionOption !== encryption.EncryptionOption
+              cfg?.ResultConfiguration?.EncryptionConfiguration?.EncryptionOption !==
+                encryption.EncryptionOption
             ) {
               updates.ResultConfigurationUpdates = {
                 ...updates.ResultConfigurationUpdates,
@@ -305,22 +295,17 @@ export const WorkGroupProvider = () =>
                 news.publishCloudWatchMetricsEnabled ?? false;
               dirty = true;
             }
-            if (
-              (cfg?.RequesterPaysEnabled ?? false) !==
-              (news.requesterPaysEnabled ?? false)
-            ) {
+            if ((cfg?.RequesterPaysEnabled ?? false) !== (news.requesterPaysEnabled ?? false)) {
               updates.RequesterPaysEnabled = news.requesterPaysEnabled ?? false;
               dirty = true;
             }
             if (
-              (cfg?.BytesScannedCutoffPerQuery ?? undefined) !==
-              news.bytesScannedCutoffPerQuery
+              (cfg?.BytesScannedCutoffPerQuery ?? undefined) !== news.bytesScannedCutoffPerQuery
             ) {
               if (news.bytesScannedCutoffPerQuery === undefined) {
                 updates.RemoveBytesScannedCutoffPerQuery = true;
               } else {
-                updates.BytesScannedCutoffPerQuery =
-                  news.bytesScannedCutoffPerQuery;
+                updates.BytesScannedCutoffPerQuery = news.bytesScannedCutoffPerQuery;
               }
               dirty = true;
             }
@@ -334,13 +319,9 @@ export const WorkGroupProvider = () =>
               dirty = true;
             }
 
-            const stateChange =
-              (wg.State ?? "ENABLED") !== desiredState
-                ? desiredState
-                : undefined;
+            const stateChange = (wg.State ?? "ENABLED") !== desiredState ? desiredState : undefined;
             const descChange =
-              news.description !== undefined &&
-              wg.Description !== news.description
+              news.description !== undefined && wg.Description !== news.description
                 ? news.description
                 : undefined;
 

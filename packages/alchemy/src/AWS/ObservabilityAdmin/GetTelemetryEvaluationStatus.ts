@@ -38,7 +38,6 @@ export interface GetTelemetryEvaluationStatus extends Binding.Service<
   >
 > {}
 
-export const GetTelemetryEvaluationStatus =
-  Binding.Service<GetTelemetryEvaluationStatus>(
-    "AWS.ObservabilityAdmin.GetTelemetryEvaluationStatus",
-  );
+export const GetTelemetryEvaluationStatus = Binding.Service<GetTelemetryEvaluationStatus>(
+  "AWS.ObservabilityAdmin.GetTelemetryEvaluationStatus",
+);

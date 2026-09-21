@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { Product } from "@/AWS/ServiceCatalog";
-import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { Product } from "@/AWS/ServiceCatalog";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,10 +31,7 @@ const assertProductGone = (productId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ProductStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -98,9 +95,7 @@ test.provider(
       expect(summary?.Owner).toBe("alchemy-tests");
       expect(summary?.Type).toBe("CLOUD_FORMATION_TEMPLATE");
       expect(described.ProvisioningArtifactSummaries?.[0]?.Name).toBe("v1");
-      const tags = Object.fromEntries(
-        (described.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((described.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.purpose).toBe("lifecycle");
       expect(tags["alchemy::id"]).toBe("TestProduct");
 
@@ -133,9 +128,7 @@ test.provider(
       expect(updated.ProvisioningArtifactSummaries?.[0]?.Description).toBe(
         "updated version description",
       );
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.purpose).toBe("lifecycle-updated");
 
       yield* stack.destroy();

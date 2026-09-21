@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
@@ -8,16 +5,16 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { inDev } from "../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * The full provider-mode cycle against the real cloud. Mode transitions are
@@ -47,9 +44,7 @@ test.provider(
 
       const program = (liveKV: boolean) =>
         Effect.gen(function* () {
-          const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(
-            Alchemy.remote(liveKV),
-          );
+          const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(Alchemy.remote(liveKV));
           const bucket = yield* Cloudflare.R2.Bucket("CycleBucket", {
             forceDestroy: true,
           });
@@ -164,9 +159,7 @@ test.provider(
       // row (a no-op against its empty in-memory registry) — no cloud call.
       yield* stack.destroy();
 
-      expect(
-        yield* state.get({ stack: stk.name, stage: stk.stage, fqn }),
-      ).toBeUndefined();
+      expect(yield* state.get({ stack: stk.name, stage: stk.stage, fqn })).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

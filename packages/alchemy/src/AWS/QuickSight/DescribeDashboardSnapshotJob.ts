@@ -37,17 +37,13 @@ export interface DescribeDashboardSnapshotJob extends Binding.Service<
     dashboard: Dashboard,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.DescribeDashboardSnapshotJobRequest,
-        "AwsAccountId" | "DashboardId"
-      >,
+      request: Omit<quicksight.DescribeDashboardSnapshotJobRequest, "AwsAccountId" | "DashboardId">,
     ) => Effect.Effect<
       quicksight.DescribeDashboardSnapshotJobResponse,
       quicksight.DescribeDashboardSnapshotJobError
     >
   >
 > {}
-export const DescribeDashboardSnapshotJob =
-  Binding.Service<DescribeDashboardSnapshotJob>(
-    "AWS.QuickSight.DescribeDashboardSnapshotJob",
-  );
+export const DescribeDashboardSnapshotJob = Binding.Service<DescribeDashboardSnapshotJob>(
+  "AWS.QuickSight.DescribeDashboardSnapshotJob",
+);

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Firewall } from "./Firewall.ts";
 
-export interface StartFlowFlushRequest extends Omit<
-  NFW.StartFlowFlushRequest,
-  "FirewallArn"
-> {}
+export interface StartFlowFlushRequest extends Omit<NFW.StartFlowFlushRequest, "FirewallArn"> {}
 
 /**
  * Runtime binding for `network-firewall:StartFlowFlush` — flush matching
@@ -42,6 +39,4 @@ export interface StartFlowFlush extends Binding.Service<
   >
 > {}
 
-export const StartFlowFlush = Binding.Service<StartFlowFlush>(
-  "AWS.NetworkFirewall.StartFlowFlush",
-);
+export const StartFlowFlush = Binding.Service<StartFlowFlush>("AWS.NetworkFirewall.StartFlowFlush");

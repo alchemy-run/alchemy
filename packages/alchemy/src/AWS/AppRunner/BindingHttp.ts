@@ -54,11 +54,7 @@ export const makeAppRunnerHttpBinding = <
   service: Binding.Service<Self, Identifier, Shape>,
   options: {
     /** The distilled App Runner operation backing the capability. */
-    operation: Effect.Effect<
-      (input: WireIn) => Effect.Effect<Out, Err>,
-      never,
-      OpReq
-    >;
+    operation: Effect.Effect<(input: WireIn) => Effect.Effect<Out, Err>, never, OpReq>;
     /** Derive identifiers + IAM grant from the bound resources. */
     spec: (...args: Parameters<Shape>) => AppRunnerHttpBindingSpec;
   },
@@ -70,9 +66,7 @@ export const makeAppRunnerHttpBinding = <
 
       return Effect.fn(function* (...args: Parameters<Shape>) {
         const { identifiers, iam } = options.spec(...args);
-        const label = (args as ResourceLike[])
-          .map((arg) => arg.LogicalId)
-          .join(", ");
+        const label = (args as ResourceLike[]).map((arg) => arg.LogicalId).join(", ");
 
         // Outputs yield DEFERRED effects — resolving them here registers the
         // attributes on the host environment; re-yield per invocation below.
@@ -90,24 +84,19 @@ export const makeAppRunnerHttpBinding = <
                 region: string;
               }>;
             const { actions, resources } = iam({ accountId, region });
-            yield* host.bind(
-              `Allow(${host.LogicalId}, ${service.key}(${label}))`,
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: actions,
-                    Resource: resources,
-                  },
-                ],
-              },
-            );
+            yield* host.bind(`Allow(${host.LogicalId}, ${service.key}(${label}))`, {
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: actions,
+                  Resource: resources,
+                },
+              ],
+            });
           }
         }
 
-        return Effect.fn(`${service.key}(${label})`)(function* (
-          request?: object,
-        ) {
+        return Effect.fn(`${service.key}(${label})`)(function* (request?: object) {
           const ids: Record<string, string> = {};
           for (const [key, effect] of resolved) {
             ids[key] = yield* effect;

@@ -1,24 +1,5 @@
-import * as Provider from "@/Provider";
-import {
-  Compute,
-  ComputeDevProvider,
-  ComputeProvider,
-  syncComputeEnvironment,
-  waitForDeploymentUrl,
-  type ComputeProps,
-} from "@/Prisma/Compute";
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
-import * as Output from "@/Output";
-import type { ResourceBinding } from "@/Resource";
-import { Stack } from "@/Stack";
-import { PlatformServices } from "@/Util/PlatformServices";
-import type { Branch as ApiBranch } from "@/Prisma/Types";
+import { gunzipSync } from "node:zlib";
+import { fromApiToken } from "@distilled.cloud/prisma";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -31,10 +12,25 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
-import { fromApiToken } from "@distilled.cloud/prisma";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Output from "@/Output";
+import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import {
+  Compute,
+  ComputeDevProvider,
+  ComputeProvider,
+  syncComputeEnvironment,
+  waitForDeploymentUrl,
+  type ComputeProps,
+} from "@/Prisma/Compute";
 import { Credentials } from "@/Prisma/Credentials";
+import type { Branch as ApiBranch } from "@/Prisma/Types";
+import * as Provider from "@/Provider";
+import type { ResourceBinding } from "@/Resource";
+import { Stack } from "@/Stack";
+import { PlatformServices } from "@/Util/PlatformServices";
 import {
   type Captured,
   data,
@@ -44,10 +40,7 @@ import {
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
 
-const testBranch = (
-  id: string,
-  role: "production" | "preview" = "production",
-): ApiBranch => ({
+const testBranch = (id: string, role: "production" | "preview" = "production"): ApiBranch => ({
   id,
   type: "branch",
   url: `https://api.prisma.test/v1/branches/${id}`,
@@ -70,11 +63,9 @@ const withDefaultBranch = <T extends object>(
   const mock = client as Record<string, (...args: any[]) => any>;
   return {
     ...client,
-    getBranch: (id: string) =>
-      mock.getBranch?.(id) ?? Effect.succeed(testBranch(id, role)),
+    getBranch: (id: string) => mock.getBranch?.(id) ?? Effect.succeed(testBranch(id, role)),
     listBranches: (projectId: string, query?: { gitName?: string }) =>
-      mock.listBranches?.(projectId, query) ??
-      Effect.succeed([testBranch("branch-main", role)]),
+      mock.listBranches?.(projectId, query) ?? Effect.succeed([testBranch("branch-main", role)]),
     listApps: (query: { projectId?: string; limit?: number }) =>
       mock.listApps?.length >= 2
         ? mock.listApps(query.projectId, { limit: query.limit })
@@ -90,10 +81,8 @@ const withDefaultBranch = <T extends object>(
     startDeployment: (id: string) => mock.startDeployment?.(id),
     stopDeployment: (id: string) => mock.stopDeployment?.(id),
     deleteDeployment: (id: string) => mock.deleteDeployment?.(id),
-    listAppDeployments: (appId: string, query: unknown) =>
-      mock.listAppDeployments?.(appId, query),
-    promoteApp: (appId: string, target: { deploymentId: string }) =>
-      mock.promoteApp(appId, target),
+    listAppDeployments: (appId: string, query: unknown) => mock.listAppDeployments?.(appId, query),
+    promoteApp: (appId: string, target: { deploymentId: string }) => mock.promoteApp(appId, target),
     rollbackApp: (appId: string, target: { deploymentId: string }) =>
       mock.rollbackApp?.(appId, target),
   } as unknown as PrismaManagementClient;
@@ -107,9 +96,7 @@ const readHttpBodyBytes = Effect.fn(function* (body: HttpBody.HttpBody) {
   if (body._tag === "Uint8Array") return body.body;
   if (body._tag !== "Stream") return new Uint8Array();
   const chunks = yield* Stream.runCollect(body.stream).pipe(Effect.orDie);
-  const output = new Uint8Array(
-    chunks.reduce((total, chunk) => total + chunk.byteLength, 0),
-  );
+  const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
   let offset = 0;
   for (const chunk of chunks) {
     output.set(chunk, offset);
@@ -132,15 +119,10 @@ const readTarFile = (buffer: Uint8Array, expectedName: string) => {
     const name = readTarString(header, 0, 100);
     const prefix = readTarString(header, 345, 155);
     const fullName = prefix ? `${prefix}/${name}` : name;
-    const size = Number.parseInt(
-      readTarString(header, 124, 12).trim() || "0",
-      8,
-    );
+    const size = Number.parseInt(readTarString(header, 124, 12).trim() || "0", 8);
     const bodyStart = offset + 512;
     if (fullName === expectedName) {
-      return new TextDecoder().decode(
-        buffer.slice(bodyStart, bodyStart + size),
-      );
+      return new TextDecoder().decode(buffer.slice(bodyStart, bodyStart + size));
     }
     offset = bodyStart + size + ((512 - (size % 512)) % 512);
   }
@@ -148,9 +130,7 @@ const readTarFile = (buffer: Uint8Array, expectedName: string) => {
 };
 
 const httpBodyContentType = (body: HttpBody.HttpBody) =>
-  body._tag === "Uint8Array" || body._tag === "Stream"
-    ? body.contentType
-    : undefined;
+  body._tag === "Uint8Array" || body._tag === "Stream" ? body.contentType : undefined;
 
 const makeHealthLifecycleFixture = (options?: {
   latestDeploymentId?: string | null;
@@ -162,19 +142,16 @@ const makeHealthLifecycleFixture = (options?: {
   rollbackUpdatesLatest?: boolean;
 }) => {
   const calls: Array<[string, unknown?]> = [];
-  const deployments = new Map<
-    string,
-    "new" | "running" | "provisioning" | "stopped" | "failed"
-  >([["version-old", "running"]]);
+  const deployments = new Map<string, "new" | "running" | "provisioning" | "stopped" | "failed">([
+    ["version-old", "running"],
+  ]);
   let deploymentCounter = 0;
   let previewStatus = options?.previewStatus ?? 204;
   let stableStatus = options?.stableStatus ?? 204;
   let rollbackFailuresRemaining = options?.rollbackFailures ?? 0;
   let getAppCalls = 0;
   let latestDeploymentId =
-    options?.latestDeploymentId === undefined
-      ? "version-old"
-      : options.latestDeploymentId;
+    options?.latestDeploymentId === undefined ? "version-old" : options.latestDeploymentId;
 
   const app = () => ({
     id: "service-1",
@@ -210,9 +187,7 @@ const makeHealthLifecycleFixture = (options?: {
       calls.push(["createAppDeployment", { appId, input }]);
       deploymentCounter += 1;
       const deploymentId =
-        deploymentCounter === 1
-          ? "version-new"
-          : `version-new-${deploymentCounter}`;
+        deploymentCounter === 1 ? "version-new" : `version-new-${deploymentCounter}`;
       deployments.set(deploymentId, "new");
       return Effect.succeed({
         id: deploymentId,
@@ -301,9 +276,7 @@ const makeHealthLifecycleFixture = (options?: {
       HttpClientResponse.fromWeb(
         request,
         new Response(null, {
-          status: new URL(request.url).hostname.endsWith(
-            ".preview.prisma.build",
-          )
+          status: new URL(request.url).hostname.endsWith(".preview.prisma.build")
             ? previewStatus
             : stableStatus,
         }),
@@ -338,8 +311,7 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
-const computeProviderLive = () =>
-  ComputeProvider().pipe(Layer.provide(liveProviderContext));
+const computeProviderLive = () => ComputeProvider().pipe(Layer.provide(liveProviderContext));
 
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
@@ -450,10 +422,7 @@ const apiRoutedHttp = (client: any) =>
           return Effect.sync(() => {
             const url = new URL(request.url);
             const body = request.body as HttpBody.HttpBody;
-            const bodyText =
-              body._tag === "Uint8Array"
-                ? new TextDecoder().decode(body.body)
-                : "";
+            const bodyText = body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
             return HttpClientResponse.fromWeb(
               request,
               dispatchManagement(client, {
@@ -483,12 +452,7 @@ describe("Prisma Compute", () => {
       },
     });
     const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response(body, { status: 200 }),
-        ),
-      ),
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body, { status: 200 }))),
     );
 
     return waitForDeploymentUrl("https://app.prisma.build", {
@@ -534,22 +498,16 @@ describe("Prisma Compute", () => {
 
   it.effect("rejects unsafe application health contracts", () =>
     Effect.gen(function* () {
-      const pathError = yield* waitForDeploymentUrl(
-        "https://app.prisma.build",
-        {
-          project: "project-1",
-          appName: "api",
-          healthCheck: { path: "//attacker.example/health" },
-        },
-      ).pipe(Effect.flip);
-      const statusError = yield* waitForDeploymentUrl(
-        "https://app.prisma.build",
-        {
-          project: "project-1",
-          appName: "api",
-          healthCheck: { path: "/health", statusCodes: [] },
-        },
-      ).pipe(Effect.flip);
+      const pathError = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "//attacker.example/health" },
+      }).pipe(Effect.flip);
+      const statusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "/health", statusCodes: [] },
+      }).pipe(Effect.flip);
 
       expect(pathError.message).toContain("healthCheck.path");
       expect(statusError.message).toContain("healthCheck.statusCodes");
@@ -563,9 +521,7 @@ describe("Prisma Compute", () => {
         appName: "api",
         healthCheck: { path: "/health" },
       } as const;
-      const missingUrl = yield* waitForDeploymentUrl(undefined, props).pipe(
-        Effect.flip,
-      );
+      const missingUrl = yield* waitForDeploymentUrl(undefined, props).pipe(Effect.flip);
       const missingRoutingUrl = yield* waitForDeploymentUrl(undefined, {
         project: "project-1",
         appName: "api",
@@ -574,10 +530,9 @@ describe("Prisma Compute", () => {
         ...props,
         verifyUrl: false,
       }).pipe(Effect.flip);
-      const missingClient = yield* waitForDeploymentUrl(
-        "https://app.prisma.build",
-        props,
-      ).pipe(Effect.flip);
+      const missingClient = yield* waitForDeploymentUrl("https://app.prisma.build", props).pipe(
+        Effect.flip,
+      );
 
       expect(missingUrl.message).toContain("did not return");
       expect(missingRoutingUrl.message).toContain("readiness verification");
@@ -609,16 +564,13 @@ describe("Prisma Compute", () => {
         pollIntervalMs: 1,
         urlReadinessTimeoutSeconds: 0.05,
       });
-      const defaultStatusError = yield* waitForDeploymentUrl(
-        "https://app.prisma.build",
-        {
-          project: "project-1",
-          appName: "api",
-          healthCheck: { path: "/health" },
-          pollIntervalMs: 1,
-          urlReadinessTimeoutSeconds: 0.01,
-        },
-      ).pipe(Effect.flip);
+      const defaultStatusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "/health" },
+        pollIntervalMs: 1,
+        urlReadinessTimeoutSeconds: 0.01,
+      }).pipe(Effect.flip);
 
       expect(redirects.length).toBeGreaterThanOrEqual(2);
       expect(redirects.every((redirect) => redirect === "manual")).toBe(true);
@@ -654,17 +606,11 @@ describe("Prisma Compute", () => {
     } as const;
 
     return Effect.gen(function* () {
-      const requestError = yield* waitForDeploymentUrl(
-        "https://request.prisma.build",
-        props,
-      ).pipe(
+      const requestError = yield* waitForDeploymentUrl("https://request.prisma.build", props).pipe(
         Effect.provide(Layer.succeed(HttpClient.HttpClient, stalledRequest)),
         Effect.flip,
       );
-      const bodyError = yield* waitForDeploymentUrl(
-        "https://body.prisma.build",
-        props,
-      ).pipe(
+      const bodyError = yield* waitForDeploymentUrl("https://body.prisma.build", props).pipe(
         Effect.provide(Layer.succeed(HttpClient.HttpClient, stalledBody)),
         Effect.flip,
       );
@@ -676,61 +622,42 @@ describe("Prisma Compute", () => {
 
   it.live("bounds the inspected prefix of a large Prisma edge 404", () => {
     let requests = 0;
-    const hugeBody = `${"There is no service on this URL"}${"x".repeat(
-      256 * 1024,
-    )}`;
+    const hugeBody = `${"There is no service on this URL"}${"x".repeat(256 * 1024)}`;
     const http = HttpClient.make((request) => {
       requests += 1;
       return requests === 1
         ? Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              new Response(hugeBody, { status: 404 }),
-            ),
+            HttpClientResponse.fromWeb(request, new Response(hugeBody, { status: 404 })),
           )
         : Effect.never;
     });
 
     return Effect.gen(function* () {
-      const error = yield* waitForDeploymentUrl(
-        "https://missing.prisma.build",
-        {
-          project: "project-1",
-          appName: "api",
-          pollIntervalMs: 1,
-          urlReadinessTimeoutSeconds: 0.05,
-        },
-      ).pipe(
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.flip,
-      );
+      const error = yield* waitForDeploymentUrl("https://missing.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        pollIntervalMs: 1,
+        urlReadinessTimeoutSeconds: 0.05,
+      }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
 
       expect(error.message).toContain("There is no service on this URL");
       expect(requests).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it.effect(
-    "rejects invalid URL readiness timings before making a request",
-    () => {
-      const http = HttpClient.make(() =>
-        Effect.die("invalid readiness options must fail first"),
-      );
+  it.effect("rejects invalid URL readiness timings before making a request", () => {
+    const http = HttpClient.make(() => Effect.die("invalid readiness options must fail first"));
 
-      return Effect.gen(function* () {
-        const error = yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          appName: "api",
-          pollIntervalMs: 0,
-        }).pipe(
-          Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-          Effect.flip,
-        );
+    return Effect.gen(function* () {
+      const error = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        pollIntervalMs: 0,
+      }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
 
-        expect(error.message).toContain("pollIntervalMs");
-      });
-    },
-  );
+      expect(error.message).toContain("pollIntervalMs");
+    });
+  });
   it.effect("rejects destroyOldDeployment when promotion is skipped", () => {
     const client = {} as PrismaManagementClient;
 
@@ -755,9 +682,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "destroyOldDeployment cannot be combined with skipPromote",
-      );
+      expect(error.message).toContain("destroyOldDeployment cannot be combined with skipPromote");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -821,9 +746,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "start: false requires skipPromote: true",
-      );
+      expect(error.message).toContain("start: false requires skipPromote: true");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -855,9 +778,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "branchId and branchGitName are mutually exclusive",
-      );
+      expect(error.message).toContain("branchId and branchGitName are mutually exclusive");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -892,9 +813,7 @@ describe("Prisma Compute", () => {
             bindings: [],
           })
           .pipe(Effect.flip);
-        expect(error.message).toContain(
-          "must be an integer between 1 and 65535",
-        );
+        expect(error.message).toContain("must be an integer between 1 and 65535");
       }
     }).pipe(
       Effect.provide(computeProviderLive()),
@@ -994,9 +913,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "skipCodeUpload requires an existing Prisma deployment",
-      );
+      expect(error.message).toContain("skipCodeUpload requires an existing Prisma deployment");
       expect(calls).toEqual([["getApp", "service-1"]]);
     }).pipe(
       Effect.provide(computeProviderLive()),
@@ -1028,9 +945,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "Effect-native Prisma Compute apps require `main`",
-      );
+      expect(error.message).toContain("Effect-native Prisma Compute apps require `main`");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -1065,8 +980,40 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("Effect-native Prisma Compute apps cannot use build");
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
+
+  it.effect("rejects effect-native Compute with an invalid handler name", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            main: "app.ts",
+            handler: "Api;console.log('nope')",
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
       expect(error.message).toContain(
-        "Effect-native Prisma Compute apps cannot use build",
+        "handler must be `default` or a valid JavaScript export identifier",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
@@ -1075,196 +1022,150 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "rejects effect-native Compute with an invalid handler name",
-    () => {
-      const client = {} as PrismaManagementClient;
+  it.effect("replaces Compute when region changes even if project is unresolved", () => {
+    const client = {} as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              main: "app.ts",
-              handler: "Api;console.log('nope')",
-            },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider.diff!({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+        },
+        news: {
+          project: Output.asOutput("project-1"),
+          appName: "api",
+          regionId: "us-west-2",
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          appId: "service-1",
+          deploymentId: "version-1",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-1.preview.prisma.build",
+          deploymentUrl: "https://version-1.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: Redacted.make("hash-1"),
+          local: false,
+        },
+      } as never).pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain(
-          "handler must be `default` or a valid JavaScript export identifier",
-        );
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
+      expect(String(error)).toContain("cannot be changed atomically");
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
 
-  it.effect(
-    "replaces Compute when region changes even if project is unresolved",
-    () => {
-      const client = {} as PrismaManagementClient;
+  it.effect("replaces Compute when project changes even if region is unresolved", () => {
+    const client = {} as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider.diff!({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-          },
-          news: {
-            project: Output.asOutput("project-1"),
-            appName: "api",
-            regionId: "us-west-2",
-          },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            appId: "service-1",
-            deploymentId: "version-1",
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-1.preview.prisma.build",
-            deploymentUrl: "https://version-1.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: Redacted.make("hash-1"),
-            local: false,
-          },
-        } as never).pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const diff = yield* provider.diff!({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+        },
+        news: {
+          project: "project-2",
+          appName: "api",
+          regionId: Output.asOutput("us-east-1"),
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          appId: "service-1",
+          deploymentId: "version-1",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-1.preview.prisma.build",
+          deploymentUrl: "https://version-1.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: Redacted.make("hash-1"),
+          local: false,
+        },
+      } as never);
 
-        expect(String(error)).toContain("cannot be changed atomically");
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
+      expect(diff).toEqual({ action: "replace" });
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
 
-  it.effect(
-    "replaces Compute when project changes even if region is unresolved",
-    () => {
-      const client = {} as PrismaManagementClient;
+  it.effect("updates Compute when props are unchanged so artifacts can rehash", () => {
+    const client = {} as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const diff = yield* provider.diff!({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-          },
-          news: {
-            project: "project-2",
-            appName: "api",
-            regionId: Output.asOutput("us-east-1"),
-          },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            appId: "service-1",
-            deploymentId: "version-1",
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-1.preview.prisma.build",
-            deploymentUrl: "https://version-1.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: Redacted.make("hash-1"),
-            local: false,
-          },
-        } as never);
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const diff = yield* provider.diff!({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          path: ".",
+          entrypoint: "server.ts",
+        },
+        news: {
+          project: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          path: ".",
+          entrypoint: "server.ts",
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          appId: "service-1",
+          deploymentId: "version-1",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-1.preview.prisma.build",
+          deploymentUrl: "https://version-1.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: Redacted.make("hash-1"),
+          local: false,
+        },
+      } as never);
 
-        expect(diff).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
-
-  it.effect(
-    "updates Compute when props are unchanged so artifacts can rehash",
-    () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const diff = yield* provider.diff!({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            path: ".",
-            entrypoint: "server.ts",
-          },
-          news: {
-            project: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            path: ".",
-            entrypoint: "server.ts",
-          },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            appId: "service-1",
-            deploymentId: "version-1",
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-1.preview.prisma.build",
-            deploymentUrl: "https://version-1.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: Redacted.make("hash-1"),
-            local: false,
-          },
-        } as never);
-
-        expect(diff).toEqual({ action: "update" });
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
+      expect(diff).toEqual({ action: "update" });
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
 
   it.effect("dev provider applies the same Compute prop validation", () =>
     Effect.gen(function* () {
@@ -1291,9 +1192,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain(
-        "destroyOldDeployment cannot be combined with skipPromote",
-      );
+      expect(error.message).toContain("destroyOldDeployment cannot be combined with skipPromote");
     }).pipe(
       Effect.provide(ComputeDevProvider()),
       Effect.provide(
@@ -1307,104 +1206,97 @@ describe("Prisma Compute", () => {
     ),
   );
 
-  it.effect(
-    "adopts only the matching branch's latest deployment as Unowned",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([
-            {
-              id: "service-1",
-              type: "app" as const,
-              url: "https://api.prisma.test/v1/services/service-1",
-              name: "api",
-              region: { id: "us-east-1", name: "US East" },
-              projectId,
-              branchId: "branch-main",
-              latestDeploymentId: "version-live",
-              appEndpointDomain: "api.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-            {
-              id: "service-feature",
-              type: "app" as const,
-              url: "https://api.prisma.test/v1/services/service-feature",
-              name: "api",
-              region: { id: "us-east-1", name: "US East" },
-              projectId,
-              branchId: "branch-feature",
-              latestDeploymentId: "version-feature",
-              appEndpointDomain: "feature.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]);
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
+  it.effect("adopts only the matching branch's latest deployment as Unowned", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([
+          {
+            id: "service-1",
+            type: "app" as const,
+            url: "https://api.prisma.test/v1/services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId,
+            branchId: "branch-main",
+            latestDeploymentId: "version-live",
+            appEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "service-feature",
+            type: "app" as const,
+            url: "https://api.prisma.test/v1/services/service-feature",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId,
+            branchId: "branch-feature",
+            latestDeploymentId: "version-feature",
+            appEndpointDomain: "feature.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ]);
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: "foundry-live",
+          status: "running",
+          previewDomain: "version-live.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listAppDeployments: () =>
+        Effect.succeed([
+          {
+            id: "version-old",
             type: "deployment" as const,
             serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-live",
-            status: "running",
-            previewDomain: "version-live.preview.prisma.build",
+            url: "https://api.prisma.test/v1/deployments/version-old",
+            foundryVersionId: "foundry-version-old",
             createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "version-old",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-old",
-              foundryVersionId: "foundry-version-old",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(Compute);
-        const output = yield* provider.read!({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
           },
-          output: undefined,
-        });
+        ]),
+    } as unknown as PrismaManagementClient;
 
-        expect(output?.appId).toBe("service-1");
-        expect(output?.deploymentId).toBe("version-live");
-        expect(output?.deploymentEndpointDomain).toBe(
-          "version-live.preview.prisma.build",
-        );
-        expect(output?.deploymentUrl).toBe(
-          "https://version-live.preview.prisma.build",
-        );
-        expect(output?.appEndpointDomain).toBe("api.prisma.build");
-        expect(output?.url).toBe("https://api.prisma.build");
-        expect(output?.promoted).toBe(true);
-        expect(Unowned.is(output!)).toBe(true);
-        expect(calls).toEqual([
-          ["listApps", { projectId: "project-1", query: { limit: "100" } }],
-          ["getDeployment", "version-live"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+    return Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Compute);
+      const output = yield* provider.read!({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+        },
+        output: undefined,
+      });
+
+      expect(output?.appId).toBe("service-1");
+      expect(output?.deploymentId).toBe("version-live");
+      expect(output?.deploymentEndpointDomain).toBe("version-live.preview.prisma.build");
+      expect(output?.deploymentUrl).toBe("https://version-live.preview.prisma.build");
+      expect(output?.appEndpointDomain).toBe("api.prisma.build");
+      expect(output?.url).toBe("https://api.prisma.build");
+      expect(output?.promoted).toBe(true);
+      expect(Unowned.is(output!)).toBe(true);
+      expect(calls).toEqual([
+        ["listApps", { projectId: "project-1", query: { limit: "100" } }],
+        ["getDeployment", "version-live"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("reads the live deployment through the canonical route", () => {
     const calls: Array<[string, unknown]> = [];
@@ -1456,9 +1348,7 @@ describe("Prisma Compute", () => {
 
       expect(output?.deploymentId).toBe("version-live");
       expect(output?.promoted).toBe(true);
-      expect(output?.deploymentUrl).toBe(
-        "https://version-live.preview.prisma.build",
-      );
+      expect(output?.deploymentUrl).toBe("https://version-live.preview.prisma.build");
       expect(calls).toEqual([
         ["listApps", { projectId: "project-1", query: { limit: "100" } }],
         ["getDeployment", "version-live"],
@@ -1472,99 +1362,94 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "marks stored deployment unpromoted when live latest differs",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId: "version-live",
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
+  it.effect("marks stored deployment unpromoted when live latest differs", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: "version-live",
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: `foundry-${id}`,
+          status: "running",
+          previewDomain: `${id}.preview.prisma.build`,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listAppDeployments: () =>
+        Effect.succeed([
+          {
+            id: "version-old",
             type: "deployment" as const,
             serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: `foundry-${id}`,
-            status: "running",
-            previewDomain: `${id}.preview.prisma.build`,
+            url: "https://api.prisma.test/v1/deployments/version-old",
+            foundryVersionId: "foundry-version-old",
             createdAt: "2026-01-01T00:00:00Z",
-          });
+          },
+        ]),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Compute);
+      const output = yield* provider.read!({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
         },
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "version-old",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-old",
-              foundryVersionId: "foundry-version-old",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      } as unknown as PrismaManagementClient;
+        output: {
+          appId: "service-1",
+          deploymentId: "version-old",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-old.preview.prisma.build",
+          deploymentUrl: "https://version-old.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: Redacted.make("hash-old"),
+          local: false,
+        },
+      });
 
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(Compute);
-        const output = yield* provider.read!({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-          },
-          output: {
-            appId: "service-1",
-            deploymentId: "version-old",
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-old.preview.prisma.build",
-            deploymentUrl: "https://version-old.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: Redacted.make("hash-old"),
-            local: false,
-          },
-        });
-
-        expect(output?.deploymentId).toBe("version-old");
-        expect(output?.promoted).toBe(false);
-        expect(output?.deploymentEndpointDomain).toBe(
-          "version-old.preview.prisma.build",
-        );
-        expect(output?.url).toBe("https://version-old.preview.prisma.build");
-        expect(calls).toEqual([
-          ["getApp", "service-1"],
-          ["getDeployment", "version-old"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(output?.deploymentId).toBe("version-old");
+      expect(output?.promoted).toBe(false);
+      expect(output?.deploymentEndpointDomain).toBe("version-old.preview.prisma.build");
+      expect(output?.url).toBe("https://version-old.preview.prisma.build");
+      expect(calls).toEqual([
+        ["getApp", "service-1"],
+        ["getDeployment", "version-old"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("returns the preview URL for unpromoted Compute deploys", () => {
     const calls: Array<[string, unknown?]> = [];
@@ -1653,9 +1538,7 @@ describe("Prisma Compute", () => {
       });
 
       expect(output.promoted).toBe(false);
-      expect(output.deploymentUrl).toBe(
-        "https://version-new.preview.prisma.build",
-      );
+      expect(output.deploymentUrl).toBe("https://version-new.preview.prisma.build");
       expect(output.appEndpointDomain).toBe("api.prisma.build");
       expect(output.url).toBe("https://version-new.preview.prisma.build");
       expect(calls).toEqual([
@@ -1680,324 +1563,308 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "syncs a newly created service branch before creating a version",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([]);
+  it.effect("syncs a newly created service branch before creating a version", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([]);
+      },
+      createApp: (projectId: string, input: unknown) => {
+        calls.push(["createApp", { projectId, input }]);
+        return Effect.succeed({
+          id: "service-1",
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId,
+          branchId: null,
+          latestDeploymentId: null,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      updateApp: (id: string, input: unknown) => {
+        calls.push(["updateApp", { id, input }]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: null,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          branchId: "branch-main",
+          artifactPath: fixtureArtifactPath,
+          start: false,
+          skipPromote: true,
         },
-        createApp: (projectId: string, input: unknown) => {
-          calls.push(["createApp", { projectId, input }]);
-          return Effect.succeed({
-            id: "service-1",
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId,
-            branchId: null,
-            latestDeploymentId: null,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        updateApp: (id: string, input: unknown) => {
-          calls.push(["updateApp", { id, input }]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
+        olds: undefined,
+        output: undefined,
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(output.appId).toBe("service-1");
+      expect(output.deploymentId).toBe("version-1");
+      expect(calls).toContainEqual([
+        "createApp",
+        {
+          projectId: "project-1",
+          input: {
+            displayName: "api",
+            regionId: undefined,
             branchId: "branch-main",
-            latestDeploymentId: null,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
+            branchGitName: undefined,
+          },
         },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
-          });
+      ]);
+      expect(calls).toContainEqual([
+        "updateApp",
+        {
+          id: "service-1",
+          input: {
+            displayName: "api",
+            branchId: "branch-main",
+            branchGitName: undefined,
+          },
         },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
+      ]);
+      const updateIndex = calls.findIndex(([name]) => name === "updateApp");
+      const versionIndex = calls.findIndex(([name]) => name === "createAppDeployment");
+      expect(updateIndex).toBeGreaterThan(-1);
+      expect(versionIndex).toBeGreaterThan(updateIndex);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("creates a new version when branch attachment changes without artifact changes", () => {
+    const calls: Array<[string, unknown]> = [];
+    let branchId: string | null = "branch-main";
+    let versionCounter = 0;
+
+    const service = () => ({
+      id: "service-1",
+      type: "app" as const,
+      url: "https://api.prisma.test/v1/services/service-1",
+      name: "api",
+      region: { id: "us-east-1", name: "US East" },
+      projectId: "project-1",
+      branchId,
+      latestDeploymentId: "version-seed",
+      appEndpointDomain: "api.prisma.build",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed(service());
+      },
+      updateApp: (id: string, input: { branchId?: string | null }) => {
+        calls.push(["updateApp", { id, input }]);
+        branchId = input.branchId ?? null;
+        return Effect.succeed(service());
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        versionCounter += 1;
+        const id = `version-${versionCounter}`;
+        calls.push(["createAppDeployment", { appId, input, id }]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: `foundry-${versionCounter}`,
+          uploadUrl: null,
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: id.replace("version", "foundry"),
+          status: "new",
+          previewDomain: `${id}.preview.prisma.build`,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+
+    const baseProps = {
+      project: "project-1",
+      appName: "api",
+      branchId: "branch-main",
+      skipCodeUpload: true,
+      start: false,
+      skipPromote: true,
+    };
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const first = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: baseProps,
+        olds: undefined,
+        output: {
+          appId: "service-1",
+          deploymentId: undefined,
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: undefined,
+          deploymentUrl: undefined,
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: false,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: undefined,
+          local: false,
         },
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
-      );
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const output = yield* provider.reconcile({
+        session: undefined as never,
+        bindings: [],
+      });
+
+      const second = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: { ...baseProps, branchId: "branch-feature" },
+        olds: baseProps,
+        output: first,
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(first.deploymentId).toBe("version-1");
+      expect(second.deploymentId).toBe("version-2");
+      expect(second.artifactHash).not.toBe(first.artifactHash);
+      expect(calls).toContainEqual([
+        "updateApp",
+        {
+          id: "service-1",
+          input: {
+            displayName: "api",
+            branchId: "branch-feature",
+            branchGitName: undefined,
+          },
+        },
+      ]);
+      expect(calls.filter(([name]) => name === "createAppDeployment")).toHaveLength(2);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
+
+  it.effect("does not mutate remote Compute state when artifact resolution fails", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([]);
+      },
+      createApp: (projectId: string, input: unknown) => {
+        calls.push(["createApp", { projectId, input }]);
+        return Effect.die("should not create service");
+      },
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed([]);
+      },
+      createEnvironmentVariable: (input: unknown) => {
+        calls.push(["createEnvironmentVariable", input]);
+        return Effect.die("should not create env");
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const missingArtifact = path.resolve("tmp", "alchemy-prisma-missing-artifact.tar.gz");
+
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
           id: "App",
           fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
             appName: "api",
-            branchId: "branch-main",
-            artifactPath: fixtureArtifactPath,
-            start: false,
-            skipPromote: true,
+            artifactPath: missingArtifact,
+            env: {
+              TOKEN: "secret",
+            },
           },
           olds: undefined,
           output: undefined,
           session: undefined as never,
           bindings: [],
-        });
+        })
+        .pipe(Effect.flip);
 
-        expect(output.appId).toBe("service-1");
-        expect(output.deploymentId).toBe("version-1");
-        expect(calls).toContainEqual([
-          "createApp",
-          {
-            projectId: "project-1",
-            input: {
-              displayName: "api",
-              regionId: undefined,
-              branchId: "branch-main",
-              branchGitName: undefined,
-            },
-          },
-        ]);
-        expect(calls).toContainEqual([
-          "updateApp",
-          {
-            id: "service-1",
-            input: {
-              displayName: "api",
-              branchId: "branch-main",
-              branchGitName: undefined,
-            },
-          },
-        ]);
-        const updateIndex = calls.findIndex(([name]) => name === "updateApp");
-        const versionIndex = calls.findIndex(
-          ([name]) => name === "createAppDeployment",
-        );
-        expect(updateIndex).toBeGreaterThan(-1);
-        expect(versionIndex).toBeGreaterThan(updateIndex);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
-
-  it.effect(
-    "creates a new version when branch attachment changes without artifact changes",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      let branchId: string | null = "branch-main";
-      let versionCounter = 0;
-
-      const service = () => ({
-        id: "service-1",
-        type: "app" as const,
-        url: "https://api.prisma.test/v1/services/service-1",
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId,
-        latestDeploymentId: "version-seed",
-        appEndpointDomain: "api.prisma.build",
-        createdAt: "2026-01-01T00:00:00Z",
-      });
-
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed(service());
-        },
-        updateApp: (id: string, input: { branchId?: string | null }) => {
-          calls.push(["updateApp", { id, input }]);
-          branchId = input.branchId ?? null;
-          return Effect.succeed(service());
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          versionCounter += 1;
-          const id = `version-${versionCounter}`;
-          calls.push(["createAppDeployment", { appId, input, id }]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: `foundry-${versionCounter}`,
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: id.replace("version", "foundry"),
-            status: "new",
-            previewDomain: `${id}.preview.prisma.build`,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-      } as unknown as PrismaManagementClient;
-
-      const baseProps = {
-        project: "project-1",
-        appName: "api",
-        branchId: "branch-main",
-        skipCodeUpload: true,
-        start: false,
-        skipPromote: true,
-      };
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const first = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: baseProps,
-          olds: undefined,
-          output: {
-            appId: "service-1",
-            deploymentId: undefined,
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: undefined,
-            deploymentUrl: undefined,
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: undefined,
-            local: false,
-          },
-          session: undefined as never,
-          bindings: [],
-        });
-
-        const second = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: { ...baseProps, branchId: "branch-feature" },
-          olds: baseProps,
-          output: first,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(first.deploymentId).toBe("version-1");
-        expect(second.deploymentId).toBe("version-2");
-        expect(second.artifactHash).not.toBe(first.artifactHash);
-        expect(calls).toContainEqual([
-          "updateApp",
-          {
-            id: "service-1",
-            input: {
-              displayName: "api",
-              branchId: "branch-feature",
-              branchGitName: undefined,
-            },
-          },
-        ]);
-        expect(
-          calls.filter(([name]) => name === "createAppDeployment"),
-        ).toHaveLength(2);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
-
-  it.effect(
-    "does not mutate remote Compute state when artifact resolution fails",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([]);
-        },
-        createApp: (projectId: string, input: unknown) => {
-          calls.push(["createApp", { projectId, input }]);
-          return Effect.die("should not create service");
-        },
-        listEnvironmentVariables: (query: unknown) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed([]);
-        },
-        createEnvironmentVariable: (input: unknown) => {
-          calls.push(["createEnvironmentVariable", input]);
-          return Effect.die("should not create env");
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const missingArtifact = path.resolve(
-          "tmp",
-          "alchemy-prisma-missing-artifact.tar.gz",
-        );
-
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: missingArtifact,
-              env: {
-                TOKEN: "secret",
-              },
-            },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeDefined();
-        expect(calls).toEqual([]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(error).toBeDefined();
+      expect(calls).toEqual([]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("forwards command build output limits before cloud mutation", () =>
     Effect.gen(function* () {
@@ -2029,17 +1896,10 @@ describe("Prisma Compute", () => {
         })
         .pipe(Effect.flip);
 
-      expect(error.message).toContain(
-        "Build stdout exceeded the 8 byte output safety limit",
-      );
+      expect(error.message).toContain("Build stdout exceeded the 8 byte output safety limit");
     }).pipe(
       Effect.provide(computeProviderLive()),
-      Effect.provide(
-        Layer.succeed(
-          PrismaClient,
-          withDefaultBranch({} as PrismaManagementClient),
-        ),
-      ),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch({} as PrismaManagementClient))),
       Effect.provide(PlatformServices),
     ),
   );
@@ -2140,177 +2000,170 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "refuses a persisted App with mismatched immutable identity",
-    () => {
-      const calls: string[] = [];
-      const client = {
-        getApp: () => {
-          calls.push("getApp");
-          return Effect.succeed({
-            id: "service-1",
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-other",
+  it.effect("refuses a persisted App with mismatched immutable identity", () => {
+    const calls: string[] = [];
+    const client = {
+      getApp: () => {
+        calls.push("getApp");
+        return Effect.succeed({
+          id: "service-1",
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-other",
+          branchId: "branch-main",
+          latestDeploymentId: null,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      updateApp: () => Effect.die("must not patch immutable identity drift"),
+      createAppDeployment: () => Effect.die("must not deploy against immutable identity drift"),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactPath,
             branchId: "branch-main",
-            latestDeploymentId: null,
+            start: false,
+            skipPromote: true,
+          },
+          olds: undefined,
+          output: {
+            appId: "service-1",
+            deploymentId: undefined,
+            projectId: "project-1",
+            appName: "api",
+            regionId: "us-east-1",
+            deploymentEndpointDomain: undefined,
+            deploymentUrl: undefined,
             appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        updateApp: () => Effect.die("must not patch immutable identity drift"),
-        createAppDeployment: () =>
-          Effect.die("must not deploy against immutable identity drift"),
-      } as unknown as PrismaManagementClient;
+            url: "https://api.prisma.build",
+            promoted: false,
+            previousDeploymentId: undefined,
+            previousDeploymentAction: undefined,
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactPath,
-              branchId: "branch-main",
-              start: false,
-              skipPromote: true,
-            },
-            olds: undefined,
-            output: {
-              appId: "service-1",
-              deploymentId: undefined,
-              projectId: "project-1",
-              appName: "api",
-              regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
-              url: "https://api.prisma.build",
-              promoted: false,
-              previousDeploymentId: undefined,
-              previousDeploymentAction: undefined,
-              artifactHash: undefined,
-              local: false,
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+      expect(error.message).toContain("project-other");
+      expect(error.message).toContain("Refusing to patch");
+      expect(calls).toEqual(["getApp"]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
-        expect(error.message).toContain("project-other");
-        expect(error.message).toContain("Refusing to patch");
-        expect(calls).toEqual(["getApp"]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+  it.effect("deletes a newly created App when a later create step fails", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([]);
+      },
+      createApp: (projectId: string, input: unknown) => {
+        calls.push(["createApp", { projectId, input }]);
+        return Effect.succeed({
+          id: "service-1",
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId,
+          branchId: "branch-main",
+          latestDeploymentId: null,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listEnvironmentVariables: () => Effect.succeed([]),
+      createAppDeployment: () => {
+        calls.push(["createAppDeployment"]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: null,
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      deleteDeployment: (id: string) => {
+        calls.push(["deleteDeployment", id]);
+        return Effect.void;
+      },
+      listAppDeployments: (appId: string) => {
+        calls.push(["listAppDeployments", appId]);
+        return Effect.succeed([]);
+      },
+      deleteApp: (id: string) => {
+        calls.push(["deleteApp", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
 
-  it.effect(
-    "deletes a newly created App when a later create step fails",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([]);
-        },
-        createApp: (projectId: string, input: unknown) => {
-          calls.push(["createApp", { projectId, input }]);
-          return Effect.succeed({
-            id: "service-1",
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId,
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactPath,
             branchId: "branch-main",
-            latestDeploymentId: null,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listEnvironmentVariables: () => Effect.succeed([]),
-        createAppDeployment: () => {
-          calls.push(["createAppDeployment"]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-        listAppDeployments: (appId: string) => {
-          calls.push(["listAppDeployments", appId]);
-          return Effect.succeed([]);
-        },
-        deleteApp: (id: string) => {
-          calls.push(["deleteApp", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
+            start: false,
+            skipPromote: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactPath,
-              branchId: "branch-main",
-              start: false,
-              skipPromote: true,
-            },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("did not return an upload URL");
-        expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
-        expect(calls).toContainEqual(["deleteApp", "service-1"]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("did not return an upload URL");
+      expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
+      expect(calls).toContainEqual(["deleteApp", "service-1"]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("deletes created deployment when artifact upload fails", () => {
     const calls: Array<[string, unknown?]> = [];
@@ -2359,10 +2212,7 @@ describe("Prisma Compute", () => {
     } as unknown as PrismaManagementClient;
     const http = HttpClient.make((request) =>
       Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response("upload failed", { status: 500 }),
-        ),
+        HttpClientResponse.fromWeb(request, new Response("upload failed", { status: 500 })),
       ),
     );
 
@@ -2526,173 +2376,149 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.live(
-    "blocks promotion and deletes a new deployment when preview health fails",
-    () => {
-      const fixture = makeHealthLifecycleFixture({ previewStatus: 503 });
+  it.live("blocks promotion and deletes a new deployment when preview health fails", () => {
+    const fixture = makeHealthLifecycleFixture({ previewStatus: 503 });
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV2Path,
-              branchId: "branch-main",
-              healthCheck: { path: "/health" },
-              pollIntervalMs: 1,
-              timeoutSeconds: 0.05,
-              urlReadinessTimeoutSeconds: 0.02,
-            },
-            olds: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV1Path,
-              branchId: "branch-main",
-            },
-            output: {
-              appId: "service-1",
-              deploymentId: "version-old",
-              projectId: "project-1",
-              appName: "api",
-              regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
-              url: "https://api.prisma.build",
-              promoted: true,
-              previousDeploymentId: undefined,
-              previousDeploymentAction: undefined,
-              artifactHash: Redacted.make("old-hash"),
-              local: false,
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV2Path,
+            branchId: "branch-main",
+            healthCheck: { path: "/health" },
+            pollIntervalMs: 1,
+            timeoutSeconds: 0.05,
+            urlReadinessTimeoutSeconds: 0.02,
+          },
+          olds: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV1Path,
+            branchId: "branch-main",
+          },
+          output: {
+            appId: "service-1",
+            deploymentId: "version-old",
+            projectId: "project-1",
+            appName: "api",
+            regionId: "us-east-1",
+            deploymentEndpointDomain: "version-old.preview.prisma.build",
+            deploymentUrl: "https://version-old.preview.prisma.build",
+            appEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousDeploymentId: undefined,
+            previousDeploymentAction: undefined,
+            artifactHash: Redacted.make("old-hash"),
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
 
-        expect(error.message).toContain(
-          "https://version-new.preview.prisma.build/health",
-        );
-        expect(error.message).toContain("HTTP 503");
-        expect(
-          fixture.calls.filter(([operation]) => operation === "promoteApp"),
-        ).toEqual([]);
-        expect(fixture.calls).toContainEqual(["stopDeployment", "version-new"]);
-        expect(fixture.calls).toContainEqual([
-          "deleteDeployment",
-          "version-new",
-        ]);
-        expect(fixture.hasDeployment("version-new")).toBe(false);
-        expect(fixture.hasDeployment("version-old")).toBe(true);
-        expect(fixture.latestDeploymentId()).toBe("version-old");
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
-        Effect.provideService(HttpClient.HttpClient, fixture.http),
-        Effect.provide(PlatformServices),
+      expect(error.message).toContain("https://version-new.preview.prisma.build/health");
+      expect(error.message).toContain("HTTP 503");
+      expect(fixture.calls.filter(([operation]) => operation === "promoteApp")).toEqual([]);
+      expect(fixture.calls).toContainEqual(["stopDeployment", "version-new"]);
+      expect(fixture.calls).toContainEqual(["deleteDeployment", "version-new"]);
+      expect(fixture.hasDeployment("version-new")).toBe(false);
+      expect(fixture.hasDeployment("version-old")).toBe(true);
+      expect(fixture.latestDeploymentId()).toBe("version-old");
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
+      Effect.provideService(HttpClient.HttpClient, fixture.http),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.live("rolls back promotion and deletes the new deployment when stable health fails", () => {
+    const fixture = makeHealthLifecycleFixture({
+      previewStatus: 204,
+      stableStatus: 503,
+    });
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV2Path,
+            branchId: "branch-main",
+            healthCheck: { path: "/health" },
+            pollIntervalMs: 1,
+            timeoutSeconds: 0.05,
+            urlReadinessTimeoutSeconds: 0.02,
+          },
+          olds: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV1Path,
+            branchId: "branch-main",
+          },
+          output: {
+            appId: "service-1",
+            deploymentId: "version-old",
+            projectId: "project-1",
+            appName: "api",
+            regionId: "us-east-1",
+            deploymentEndpointDomain: "version-old.preview.prisma.build",
+            deploymentUrl: "https://version-old.preview.prisma.build",
+            appEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousDeploymentId: undefined,
+            previousDeploymentAction: undefined,
+            artifactHash: Redacted.make("old-hash"),
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error.message).toContain("https://api.prisma.build/health");
+      expect(error.message).toContain("HTTP 503");
+      expect(fixture.calls).toContainEqual([
+        "promoteApp",
+        { appId: "service-1", deploymentId: "version-new" },
+      ]);
+      expect(fixture.calls).toContainEqual([
+        "rollbackApp",
+        { appId: "service-1", deploymentId: "version-old" },
+      ]);
+      expect(fixture.calls).toContainEqual(["deleteDeployment", "version-new"]);
+      const promotionIndex = fixture.calls.findIndex(([operation]) => operation === "promoteApp");
+      const rollbackIndex = fixture.calls.findIndex(([operation]) => operation === "rollbackApp");
+      const deletionIndex = fixture.calls.findIndex(
+        ([operation]) => operation === "deleteDeployment",
       );
-    },
-  );
-
-  it.live(
-    "rolls back promotion and deletes the new deployment when stable health fails",
-    () => {
-      const fixture = makeHealthLifecycleFixture({
-        previewStatus: 204,
-        stableStatus: 503,
-      });
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV2Path,
-              branchId: "branch-main",
-              healthCheck: { path: "/health" },
-              pollIntervalMs: 1,
-              timeoutSeconds: 0.05,
-              urlReadinessTimeoutSeconds: 0.02,
-            },
-            olds: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV1Path,
-              branchId: "branch-main",
-            },
-            output: {
-              appId: "service-1",
-              deploymentId: "version-old",
-              projectId: "project-1",
-              appName: "api",
-              regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
-              url: "https://api.prisma.build",
-              promoted: true,
-              previousDeploymentId: undefined,
-              previousDeploymentAction: undefined,
-              artifactHash: Redacted.make("old-hash"),
-              local: false,
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error.message).toContain("https://api.prisma.build/health");
-        expect(error.message).toContain("HTTP 503");
-        expect(fixture.calls).toContainEqual([
-          "promoteApp",
-          { appId: "service-1", deploymentId: "version-new" },
-        ]);
-        expect(fixture.calls).toContainEqual([
-          "rollbackApp",
-          { appId: "service-1", deploymentId: "version-old" },
-        ]);
-        expect(fixture.calls).toContainEqual([
-          "deleteDeployment",
-          "version-new",
-        ]);
-        const promotionIndex = fixture.calls.findIndex(
-          ([operation]) => operation === "promoteApp",
-        );
-        const rollbackIndex = fixture.calls.findIndex(
-          ([operation]) => operation === "rollbackApp",
-        );
-        const deletionIndex = fixture.calls.findIndex(
-          ([operation]) => operation === "deleteDeployment",
-        );
-        expect(promotionIndex).toBeLessThan(rollbackIndex);
-        expect(rollbackIndex).toBeLessThan(deletionIndex);
-        expect(fixture.hasDeployment("version-new")).toBe(false);
-        expect(fixture.hasDeployment("version-old")).toBe(true);
-        expect(fixture.latestDeploymentId()).toBe("version-old");
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
-        Effect.provideService(HttpClient.HttpClient, fixture.http),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(promotionIndex).toBeLessThan(rollbackIndex);
+      expect(rollbackIndex).toBeLessThan(deletionIndex);
+      expect(fixture.hasDeployment("version-new")).toBe(false);
+      expect(fixture.hasDeployment("version-old")).toBe(true);
+      expect(fixture.latestDeploymentId()).toBe("version-old");
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
+      Effect.provideService(HttpClient.HttpClient, fixture.http),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.live(
     "does not probe stable health after a successful promotion response that does not converge",
@@ -2748,29 +2574,20 @@ describe("Prisma Compute", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain(
-          "promotion returned success",
-        );
+        expect((error as AggregateError).message).toContain("promotion returned success");
         expect((error as AggregateError).message).toContain("did not converge");
         expect(fixture.latestDeploymentId()).toBe("version-old");
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(
           fixture.calls.filter(
             ([operation, value]) =>
-              operation === "healthRequest" &&
-              value === "https://api.prisma.build/health",
+              operation === "healthRequest" && value === "https://api.prisma.build/health",
           ),
         ).toEqual([]);
-        expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "deleteDeployment",
-          ),
-        ).toEqual([]);
+        expect(fixture.calls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -2838,16 +2655,10 @@ describe("Prisma Compute", () => {
         expect(fixture.latestDeploymentId()).toBe("version-new");
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(fixture.hasDeployment("version-old")).toBe(true);
-        expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "deleteDeployment",
-          ),
-        ).toEqual([]);
+        expect(fixture.calls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -2855,106 +2666,98 @@ describe("Prisma Compute", () => {
     },
   );
 
-  it.live(
-    "replaces a hash-matching terminal failed deployment before cleaning it",
-    () => {
-      const fixture = makeHealthLifecycleFixture({
-        latestDeploymentId: null,
-        previewStatus: 204,
-        stableStatus: 204,
+  it.live("replaces a hash-matching terminal failed deployment before cleaning it", () => {
+    const fixture = makeHealthLifecycleFixture({
+      latestDeploymentId: null,
+      previewStatus: 204,
+      stableStatus: 204,
+    });
+    const news = {
+      project: "project-1",
+      appName: "api",
+      artifactPath: fixtureArtifactV1Path,
+      branchId: "branch-main",
+      healthCheck: { path: "/health" },
+      pollIntervalMs: 1,
+      timeoutSeconds: 0.02,
+      urlReadinessTimeoutSeconds: 0.02,
+    } as const;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const first = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news,
+        olds: undefined,
+        output: {
+          appId: "service-1",
+          deploymentId: undefined,
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: undefined,
+          deploymentUrl: undefined,
+          appEndpointDomain: "api.prisma.build",
+          url: undefined,
+          promoted: false,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
       });
-      const news = {
-        project: "project-1",
-        appName: "api",
-        artifactPath: fixtureArtifactV1Path,
-        branchId: "branch-main",
-        healthCheck: { path: "/health" },
-        pollIntervalMs: 1,
-        timeoutSeconds: 0.02,
-        urlReadinessTimeoutSeconds: 0.02,
-      } as const;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const first = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: undefined,
-          output: {
-            appId: "service-1",
-            deploymentId: undefined,
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: undefined,
-            deploymentUrl: undefined,
-            appEndpointDomain: "api.prisma.build",
-            url: undefined,
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: undefined,
-            local: false,
-          },
-          session: undefined as never,
-          bindings: [],
-        });
+      fixture.setDeploymentStatus("version-new", "failed");
+      fixture.calls.splice(0);
+      const recovered = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news,
+        olds: news,
+        output: first,
+        session: undefined as never,
+        bindings: [],
+      });
 
-        fixture.setDeploymentStatus("version-new", "failed");
-        fixture.calls.splice(0);
-        const recovered = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: news,
-          output: first,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        const replacementCreationIndex = fixture.calls.findIndex(
-          ([operation]) => operation === "createAppDeployment",
-        );
-        const stableHealthIndex = fixture.calls.findIndex(
-          ([operation, value]) =>
-            operation === "healthRequest" &&
-            value === "https://api.prisma.build/health",
-        );
-        const failedDeletionIndex = fixture.calls.findIndex(
-          ([operation, value]) =>
-            operation === "deleteDeployment" && value === "version-new",
-        );
-
-        expect(recovered.deploymentId).toBe("version-new-2");
-        expect(recovered.promoted).toBe(true);
-        expect(recovered.readinessStatus).toBe("ready");
-        expect(recovered.previousDeploymentId).toBe("version-new");
-        expect(recovered.previousDeploymentAction).toBe("destroyed");
-        expect(replacementCreationIndex).toBeGreaterThanOrEqual(0);
-        expect(stableHealthIndex).toBeGreaterThan(replacementCreationIndex);
-        expect(failedDeletionIndex).toBeGreaterThan(stableHealthIndex);
-        expect(fixture.hasDeployment("version-new")).toBe(false);
-        expect(fixture.hasDeployment("version-new-2")).toBe(true);
-        expect(
-          fixture.calls.filter(
-            ([operation, value]) =>
-              operation === "startDeployment" && value === "version-new",
-          ),
-        ).toEqual([]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
-        Effect.provideService(HttpClient.HttpClient, fixture.http),
-        Effect.provide(PlatformServices),
+      const replacementCreationIndex = fixture.calls.findIndex(
+        ([operation]) => operation === "createAppDeployment",
       );
-    },
-  );
+      const stableHealthIndex = fixture.calls.findIndex(
+        ([operation, value]) =>
+          operation === "healthRequest" && value === "https://api.prisma.build/health",
+      );
+      const failedDeletionIndex = fixture.calls.findIndex(
+        ([operation, value]) => operation === "deleteDeployment" && value === "version-new",
+      );
+
+      expect(recovered.deploymentId).toBe("version-new-2");
+      expect(recovered.promoted).toBe(true);
+      expect(recovered.readinessStatus).toBe("ready");
+      expect(recovered.previousDeploymentId).toBe("version-new");
+      expect(recovered.previousDeploymentAction).toBe("destroyed");
+      expect(replacementCreationIndex).toBeGreaterThanOrEqual(0);
+      expect(stableHealthIndex).toBeGreaterThan(replacementCreationIndex);
+      expect(failedDeletionIndex).toBeGreaterThan(stableHealthIndex);
+      expect(fixture.hasDeployment("version-new")).toBe(false);
+      expect(fixture.hasDeployment("version-new-2")).toBe(true);
+      expect(
+        fixture.calls.filter(
+          ([operation, value]) => operation === "startDeployment" && value === "version-new",
+        ),
+      ).toEqual([]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
+      Effect.provideService(HttpClient.HttpClient, fixture.http),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.live(
     "destroys a changed-hash terminal failed deployment only after replacement convergence",
@@ -3009,12 +2812,10 @@ describe("Prisma Compute", () => {
 
         const stableHealthIndex = fixture.calls.findIndex(
           ([operation, value]) =>
-            operation === "healthRequest" &&
-            value === "https://api.prisma.build/health",
+            operation === "healthRequest" && value === "https://api.prisma.build/health",
         );
         const failedDeletionIndex = fixture.calls.findIndex(
-          ([operation, value]) =>
-            operation === "deleteDeployment" && value === "version-old",
+          ([operation, value]) => operation === "deleteDeployment" && value === "version-old",
         );
 
         expect(output.deploymentId).toBe("version-new");
@@ -3026,15 +2827,12 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(
           fixture.calls.filter(
-            ([operation, value]) =>
-              operation === "stopDeployment" && value === "version-old",
+            ([operation, value]) => operation === "stopDeployment" && value === "version-old",
           ),
         ).toEqual([]);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -3099,12 +2897,8 @@ describe("Prisma Compute", () => {
           .pipe(Effect.flip);
 
         expect(firstError).toBeInstanceOf(AggregateError);
-        expect((firstError as AggregateError).message).toContain(
-          "no safe rollback target exists",
-        );
-        expect(
-          fixture.calls.filter(([operation]) => operation === "rollbackApp"),
-        ).toEqual([]);
+        expect((firstError as AggregateError).message).toContain("no safe rollback target exists");
+        expect(fixture.calls.filter(([operation]) => operation === "rollbackApp")).toEqual([]);
         expect(fixture.latestDeploymentId()).toBe("version-new");
         expect(fixture.hasDeployment("version-old")).toBe(true);
         expect(fixture.hasDeployment("version-new")).toBe(true);
@@ -3129,25 +2923,15 @@ describe("Prisma Compute", () => {
         expect((retryError as AggregateError).message).toContain(
           "cannot prove that the live deployment is the interrupted replacement",
         );
-        expect(
-          retryCalls.filter(
-            ([operation]) => operation === "createAppDeployment",
-          ),
-        ).toEqual([]);
-        expect(
-          retryCalls.filter(([operation]) => operation === "rollbackApp"),
-        ).toEqual([]);
-        expect(
-          retryCalls.filter(([operation]) => operation === "deleteDeployment"),
-        ).toEqual([]);
+        expect(retryCalls.filter(([operation]) => operation === "createAppDeployment")).toEqual([]);
+        expect(retryCalls.filter(([operation]) => operation === "rollbackApp")).toEqual([]);
+        expect(retryCalls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
         expect(fixture.latestDeploymentId()).toBe("version-new");
         expect(fixture.hasDeployment("version-old")).toBe(true);
         expect(fixture.hasDeployment("version-new")).toBe(true);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -3225,11 +3009,7 @@ describe("Prisma Compute", () => {
         expect(fixture.latestDeploymentId()).toBe("version-new-2");
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(fixture.hasDeployment("version-new-2")).toBe(true);
-        expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "deleteDeployment",
-          ),
-        ).toEqual([]);
+        expect(fixture.calls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
 
         fixture.setStableStatus(204);
         const callsBeforeRetry = fixture.calls.length;
@@ -3251,22 +3031,14 @@ describe("Prisma Compute", () => {
         expect((retryError as AggregateError).message).toContain(
           "cannot prove that the live deployment is the interrupted replacement",
         );
-        expect(
-          retryCalls.filter(
-            ([operation]) => operation === "createAppDeployment",
-          ),
-        ).toEqual([]);
-        expect(
-          retryCalls.filter(([operation]) => operation === "deleteDeployment"),
-        ).toEqual([]);
+        expect(retryCalls.filter(([operation]) => operation === "createAppDeployment")).toEqual([]);
+        expect(retryCalls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
         expect(fixture.latestDeploymentId()).toBe("version-new-2");
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(fixture.hasDeployment("version-new-2")).toBe(true);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -3344,11 +3116,7 @@ describe("Prisma Compute", () => {
         expect(fixture.latestDeploymentId()).toBe("version-new");
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(fixture.hasDeployment("version-old")).toBe(true);
-        expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "deleteDeployment",
-          ),
-        ).toEqual([]);
+        expect(fixture.calls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
 
         fixture.setStableStatus(204);
         const callsBeforeBlockedRetry = fixture.calls.length;
@@ -3361,20 +3129,14 @@ describe("Prisma Compute", () => {
         );
         expect(
           (retryError as AggregateError).errors.some(
-            (error) =>
-              error instanceof Error &&
-              error.message === "rollback unavailable",
+            (error) => error instanceof Error && error.message === "rollback unavailable",
           ),
         ).toBe(true);
         expect(
-          blockedRetryCalls.filter(
-            ([operation]) => operation === "createAppDeployment",
-          ),
+          blockedRetryCalls.filter(([operation]) => operation === "createAppDeployment"),
         ).toEqual([]);
         expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "createAppDeployment",
-          ),
+          fixture.calls.filter(([operation]) => operation === "createAppDeployment"),
         ).toHaveLength(1);
         expect(fixture.latestDeploymentId()).toBe("version-new");
         expect(fixture.hasDeployment("version-new")).toBe(true);
@@ -3382,12 +3144,9 @@ describe("Prisma Compute", () => {
         const callsBeforeRecovery = fixture.calls.length;
         const recovered = yield* reconcile;
         const recoveryCalls = fixture.calls.slice(callsBeforeRecovery);
-        const rollbackIndex = recoveryCalls.findIndex(
-          ([operation]) => operation === "rollbackApp",
-        );
+        const rollbackIndex = recoveryCalls.findIndex(([operation]) => operation === "rollbackApp");
         const failedDeletionIndex = recoveryCalls.findIndex(
-          ([operation, value]) =>
-            operation === "deleteDeployment" && value === "version-new",
+          ([operation, value]) => operation === "deleteDeployment" && value === "version-new",
         );
         const replacementCreationIndex = recoveryCalls.findIndex(
           ([operation]) => operation === "createAppDeployment",
@@ -3403,15 +3162,11 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-new-2")).toBe(true);
         expect(fixture.latestDeploymentId()).toBe("version-new-2");
         expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "createAppDeployment",
-          ),
+          fixture.calls.filter(([operation]) => operation === "createAppDeployment"),
         ).toHaveLength(2);
       }).pipe(
         Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
         Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
@@ -3419,85 +3174,70 @@ describe("Prisma Compute", () => {
     },
   );
 
-  it.effect(
-    "honors custom accepted health statuses before and after promotion",
-    () => {
-      const fixture = makeHealthLifecycleFixture({
-        latestDeploymentId: null,
-        previewStatus: 302,
-        stableStatus: 302,
+  it.effect("honors custom accepted health statuses before and after promotion", () => {
+    const fixture = makeHealthLifecycleFixture({
+      latestDeploymentId: null,
+      previewStatus: 302,
+      stableStatus: 302,
+    });
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          artifactPath: fixtureArtifactV2Path,
+          branchId: "branch-main",
+          healthCheck: { path: "/ready", statusCodes: [302] },
+          pollIntervalMs: 1,
+          timeoutSeconds: 0.05,
+          urlReadinessTimeoutSeconds: 0.02,
+        },
+        olds: undefined,
+        output: {
+          appId: "service-1",
+          deploymentId: undefined,
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: undefined,
+          deploymentUrl: undefined,
+          appEndpointDomain: "api.prisma.build",
+          url: undefined,
+          promoted: false,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
       });
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const output = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            appName: "api",
-            artifactPath: fixtureArtifactV2Path,
-            branchId: "branch-main",
-            healthCheck: { path: "/ready", statusCodes: [302] },
-            pollIntervalMs: 1,
-            timeoutSeconds: 0.05,
-            urlReadinessTimeoutSeconds: 0.02,
-          },
-          olds: undefined,
-          output: {
-            appId: "service-1",
-            deploymentId: undefined,
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: undefined,
-            deploymentUrl: undefined,
-            appEndpointDomain: "api.prisma.build",
-            url: undefined,
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: undefined,
-            local: false,
-          },
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.deploymentId).toBe("version-new");
-        expect(output.promoted).toBe(true);
-        expect(output.readinessStatus).toBe("ready");
-        expect(
-          fixture.calls.filter(([operation]) => operation === "healthRequest"),
-        ).toEqual([
-          ["healthRequest", "https://version-new.preview.prisma.build/ready"],
-          ["healthRequest", "https://api.prisma.build/ready"],
-        ]);
-        expect(
-          fixture.calls.filter(([operation]) => operation === "rollbackApp"),
-        ).toEqual([]);
-        expect(
-          fixture.calls.filter(
-            ([operation]) => operation === "deleteDeployment",
-          ),
-        ).toEqual([]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(
-          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
-        ),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
-        Effect.provideService(HttpClient.HttpClient, fixture.http),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(output.deploymentId).toBe("version-new");
+      expect(output.promoted).toBe(true);
+      expect(output.readinessStatus).toBe("ready");
+      expect(fixture.calls.filter(([operation]) => operation === "healthRequest")).toEqual([
+        ["healthRequest", "https://version-new.preview.prisma.build/ready"],
+        ["healthRequest", "https://api.prisma.build/ready"],
+      ]);
+      expect(fixture.calls.filter(([operation]) => operation === "rollbackApp")).toEqual([]);
+      expect(fixture.calls.filter(([operation]) => operation === "deleteDeployment")).toEqual([]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(fixture.client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
+      Effect.provideService(HttpClient.HttpClient, fixture.http),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("uploads a pre-created artifact from artifactPath", () => {
-    let uploaded:
-      | { url: string; contentType: string | undefined; bytes: Uint8Array }
-      | undefined;
+    let uploaded: { url: string; contentType: string | undefined; bytes: Uint8Array } | undefined;
     const client = {
       getApp: () =>
         Effect.succeed({
@@ -3591,9 +3331,7 @@ describe("Prisma Compute", () => {
       expect(output.deploymentId).toBe("version-1");
       expect(uploaded?.url).toBe("https://upload.prisma.test/app.tar.gz");
       expect(uploaded?.contentType).toBe("application/gzip");
-      expect(new TextDecoder().decode(uploaded?.bytes)).toBe(
-        "prebuilt-archive",
-      );
+      expect(new TextDecoder().decode(uploaded?.bytes)).toBe("prebuilt-archive");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -3603,171 +3341,166 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "bundles effect-native Compute apps into an upload artifact",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      let uploaded:
-        | { url: string; contentType: string | undefined; bytes: Uint8Array }
-        | undefined;
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([]);
-        },
-        createApp: (projectId: string, input: unknown) => {
-          calls.push(["createApp", { projectId, input }]);
-          return Effect.succeed({
-            id: "service-1",
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId,
-            branchId: "branch-main",
-            latestDeploymentId: "version-old",
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listEnvironmentVariables: () => Effect.succeed([]),
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/effect.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.gen(function* () {
-          const body = request.body as HttpBody.HttpBody;
-          uploaded = {
-            url: request.url,
-            contentType: httpBodyContentType(body),
-            bytes: yield* readHttpBodyBytes(body),
-          };
-          return HttpClientResponse.fromWeb(request, new Response(null));
-        }),
+  it.effect("bundles effect-native Compute apps into an upload artifact", () => {
+    const calls: Array<[string, unknown]> = [];
+    let uploaded: { url: string; contentType: string | undefined; bytes: Uint8Array } | undefined;
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([]);
+      },
+      createApp: (projectId: string, input: unknown) => {
+        calls.push(["createApp", { projectId, input }]);
+        return Effect.succeed({
+          id: "service-1",
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId,
+          branchId: "branch-main",
+          latestDeploymentId: "version-old",
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listEnvironmentVariables: () => Effect.succeed([]),
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/effect.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+    const http = HttpClient.make((request) =>
+      Effect.gen(function* () {
+        const body = request.body as HttpBody.HttpBody;
+        uploaded = {
+          url: request.url,
+          contentType: httpBodyContentType(body),
+          bytes: yield* readHttpBodyBytes(body),
+        };
+        return HttpClientResponse.fromWeb(request, new Response(null));
+      }),
+    );
+
+    return Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-effect-",
+      });
+      const main = path.join(root, "app.ts");
+      yield* fs.writeFileString(
+        main,
+        [
+          'import * as Prisma from "alchemy/Prisma";',
+          'import * as Effect from "effect/Effect";',
+          'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+          "",
+          "export default Prisma.Compute(",
+          '  "App",',
+          "  {",
+          '    project: "project-1",',
+          '    appName: "api",',
+          "    main: import.meta.filename,",
+          "    port: 4555,",
+          "  },",
+          "  Effect.gen(function* () {",
+          "    return {",
+          '      fetch: HttpServerResponse.text("effect-native-ok"),',
+          "    };",
+          "  }),",
+          ");",
+          "",
+        ].join("\n"),
       );
 
-      return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-compute-effect-",
-        });
-        const main = path.join(root, "app.ts");
-        yield* fs.writeFileString(
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          branchId: "branch-main",
           main,
-          [
-            'import * as Prisma from "alchemy/Prisma";',
-            'import * as Effect from "effect/Effect";',
-            'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
-            "",
-            "export default Prisma.Compute(",
-            '  "App",',
-            "  {",
-            '    project: "project-1",',
-            '    appName: "api",',
-            "    main: import.meta.filename,",
-            "    port: 4555,",
-            "  },",
-            "  Effect.gen(function* () {",
-            "    return {",
-            '      fetch: HttpServerResponse.text("effect-native-ok"),',
-            "    };",
-            "  }),",
-            ");",
-            "",
-          ].join("\n"),
-        );
+          port: 4555,
+          start: false,
+          skipPromote: true,
+        },
+        olds: undefined,
+        output: undefined,
+        session: undefined as never,
+        bindings: [],
+      });
 
-        const provider = yield* Compute.Provider;
-        const output = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            appName: "api",
-            branchId: "branch-main",
-            main,
-            port: 4555,
-            start: false,
-            skipPromote: true,
+      expect(output.deploymentId).toBe("version-1");
+      expect(uploaded?.url).toBe("https://upload.prisma.test/effect.tar.gz");
+      expect(uploaded?.contentType).toBe("application/gzip");
+      const tar = yield* Effect.sync(() => gunzipSync(uploaded!.bytes));
+      const manifest = readTarFile(tar, "compute.manifest.json");
+      const bundle = readTarFile(tar, "bundle/index.js");
+      expect(JSON.parse(manifest)).toMatchObject({
+        entrypoint: "bundle/index.js",
+      });
+      // The generated entry is a shim over alchemy/Runtime/Bootstrap/Prisma;
+      // its label and the shared "bootstrap starting" message are separate
+      // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
+      expect(bundle).toContain("Prisma Compute");
+      expect(bundle).toContain("bootstrap starting");
+      expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);
+      // The deploy-time stack identity is baked into the artifact (the shim
+      // passes it to the bootstrap once; the module fans it out to `Stack`
+      // and `Stage`).
+      expect(bundle).toContain("prisma-runtime-stack-sentinel");
+      expect(bundle).toContain("prisma-runtime-stage-sentinel");
+      expect(bundle).toContain("ALCHEMY_PHASE");
+      expect(bundle).toContain("runtime");
+      expect(bundle).toContain("effect-native-ok");
+      expect(calls).toContainEqual([
+        "createAppDeployment",
+        {
+          appId: "service-1",
+          input: {
+            portMapping: { http: 4555 },
+            skipCodeUpload: undefined,
           },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.deploymentId).toBe("version-1");
-        expect(uploaded?.url).toBe("https://upload.prisma.test/effect.tar.gz");
-        expect(uploaded?.contentType).toBe("application/gzip");
-        const tar = yield* Effect.sync(() => gunzipSync(uploaded!.bytes));
-        const manifest = readTarFile(tar, "compute.manifest.json");
-        const bundle = readTarFile(tar, "bundle/index.js");
-        expect(JSON.parse(manifest)).toMatchObject({
-          entrypoint: "bundle/index.js",
-        });
-        // The generated entry is a shim over alchemy/Runtime/Bootstrap/Prisma;
-        // its label and the shared "bootstrap starting" message are separate
-        // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
-        expect(bundle).toContain("Prisma Compute");
-        expect(bundle).toContain("bootstrap starting");
-        expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);
-        // The deploy-time stack identity is baked into the artifact (the shim
-        // passes it to the bootstrap once; the module fans it out to `Stack`
-        // and `Stage`).
-        expect(bundle).toContain("prisma-runtime-stack-sentinel");
-        expect(bundle).toContain("prisma-runtime-stage-sentinel");
-        expect(bundle).toContain("ALCHEMY_PHASE");
-        expect(bundle).toContain("runtime");
-        expect(bundle).toContain("effect-native-ok");
-        expect(calls).toContainEqual([
-          "createAppDeployment",
-          {
-            appId: "service-1",
-            input: {
-              portMapping: { http: 4555 },
-              skipCodeUpload: undefined,
-            },
-          },
-        ]);
-      }).pipe(
-        Effect.provideService(Stack, {
-          name: "prisma-runtime-stack-sentinel",
-          stage: "prisma-runtime-stage-sentinel",
-          bindings: {},
-          resources: {},
-          actions: {},
-        }),
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+        },
+      ]);
+    }).pipe(
+      Effect.provideService(Stack, {
+        name: "prisma-runtime-stack-sentinel",
+        stage: "prisma-runtime-stage-sentinel",
+        bindings: {},
+        resources: {},
+        actions: {},
+      }),
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("bundles effect-native Compute apps from a named export", () => {
     let uploaded: Uint8Array | undefined;
@@ -3868,9 +3601,7 @@ describe("Prisma Compute", () => {
       });
 
       expect(output.deploymentId).toBe("version-1");
-      const tarText = new TextDecoder().decode(
-        yield* Effect.sync(() => gunzipSync(uploaded!)),
-      );
+      const tarText = new TextDecoder().decode(yield* Effect.sync(() => gunzipSync(uploaded!)));
       expect(tarText).toContain("compute.manifest.json");
       expect(tarText).toContain("named-handler-ok");
     }).pipe(
@@ -3921,10 +3652,7 @@ describe("Prisma Compute", () => {
       ],
       [
         "REMOVE_ME",
-        [
-          { ...projectRemove, id: "env-remove-branch", branchId: "branch-1" },
-          projectRemove,
-        ],
+        [{ ...projectRemove, id: "env-remove-branch", branchId: "branch-1" }, projectRemove],
       ],
     ]);
 
@@ -4027,58 +3755,49 @@ describe("Prisma Compute", () => {
     }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
-  it.effect(
-    "rolls back variables created by a partially failed env sync",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const createError = new Error("second create failed");
-      const client = {
-        listEnvironmentVariables: (query: unknown) => {
-          calls.push(["list", query]);
-          return Effect.succeed([]);
-        },
-        createEnvironmentVariable: (input: { key: string }) => {
-          calls.push(["create", input]);
-          return input.key === "A"
-            ? Effect.succeed({
-                id: "env-a",
-                type: "environment-variable" as const,
-                url: "https://api.prisma.test/v1/environment-variables/env-a",
-                projectId: "project-1",
-                branchId: null,
-                class: "production" as const,
-                key: "A",
-                valueKid: "kid-a",
-                isManagedBySystem: false,
-                createdAt: "2026-01-01T00:00:00Z",
-                updatedAt: "2026-01-01T00:00:00Z",
-              })
-            : Effect.fail(createError);
-        },
-        deleteEnvironmentVariable: (id: string) => {
-          calls.push(["delete", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
+  it.effect("rolls back variables created by a partially failed env sync", () => {
+    const calls: Array<[string, unknown]> = [];
+    const createError = new Error("second create failed");
+    const client = {
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["list", query]);
+        return Effect.succeed([]);
+      },
+      createEnvironmentVariable: (input: { key: string }) => {
+        calls.push(["create", input]);
+        return input.key === "A"
+          ? Effect.succeed({
+              id: "env-a",
+              type: "environment-variable" as const,
+              url: "https://api.prisma.test/v1/environment-variables/env-a",
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "A",
+              valueKid: "kid-a",
+              isManagedBySystem: false,
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:00:00Z",
+            })
+          : Effect.fail(createError);
+      },
+      deleteEnvironmentVariable: (id: string) => {
+        calls.push(["delete", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const error = yield* syncComputeEnvironment("project-1", "production", {
-          A: "one",
-          B: "two",
-        }).pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const error = yield* syncComputeEnvironment("project-1", "production", {
+        A: "one",
+        B: "two",
+      }).pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("second create failed");
-        expect(calls.map(([name]) => name)).toEqual([
-          "list",
-          "list",
-          "create",
-          "create",
-          "delete",
-        ]);
-        expect(calls).toContainEqual(["delete", "env-a"]);
-      }).pipe(Effect.provide(apiRoutedHttp(client)));
-    },
-  );
+      expect((error as Error).message).toContain("second create failed");
+      expect(calls.map(([name]) => name)).toEqual(["list", "list", "create", "create", "delete"]);
+      expect(calls).toContainEqual(["delete", "env-a"]);
+    }).pipe(Effect.provide(apiRoutedHttp(client)));
+  });
 
   it.effect("surfaces env rollback failures with manual cleanup routes", () => {
     const createError = new Error("second create failed");
@@ -4117,9 +3836,7 @@ describe("Prisma Compute", () => {
       expect(((error as AggregateError).errors[1] as Error).message).toContain(
         "rollback delete failed",
       );
-      expect((error as AggregateError).message).toContain(
-        "DELETE /v1/environment-variables/env-a",
-      );
+      expect((error as AggregateError).message).toContain("DELETE /v1/environment-variables/env-a");
     }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
@@ -4160,128 +3877,125 @@ describe("Prisma Compute", () => {
     }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
-  it.effect(
-    "preserves old owned env variables when new-scope validation fails",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        getApp: () =>
-          Effect.succeed({
-            id: "service-1",
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
+  it.effect("preserves old owned env variables when new-scope validation fails", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const client = {
+      getApp: () =>
+        Effect.succeed({
+          id: "service-1",
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: "version-old",
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        }),
+      getBranch: () => Effect.succeed(testBranch("branch-main")),
+      getDeployment: (id: string) =>
+        Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: `foundry-${id}`,
+          status: "running",
+          previewDomain: `${id}.preview.prisma.build`,
+          createdAt: "2026-01-01T00:00:00Z",
+        }),
+      listEnvironmentVariables: (query: { key: string }) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed([
+          {
+            id: query.key === "OLD" ? "env-old" : "env-foreign",
+            type: "environment-variable" as const,
+            url: `https://api.prisma.test/v1/environment-variables/${query.key}`,
             projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId: "version-old",
-            appEndpointDomain: "api.prisma.build",
+            branchId: null,
+            class: "production" as const,
+            key: query.key,
+            valueKid: "kid-1",
+            isManagedBySystem: false,
             createdAt: "2026-01-01T00:00:00Z",
-          }),
-        getBranch: () => Effect.succeed(testBranch("branch-main")),
-        getDeployment: (id: string) =>
-          Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: `foundry-${id}`,
-            status: "running",
-            previewDomain: `${id}.preview.prisma.build`,
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-        listEnvironmentVariables: (query: { key: string }) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed([
-            {
-              id: query.key === "OLD" ? "env-old" : "env-foreign",
-              type: "environment-variable" as const,
-              url: `https://api.prisma.test/v1/environment-variables/${query.key}`,
-              projectId: "project-1",
-              branchId: null,
-              class: "production" as const,
-              key: query.key,
-              valueKid: "kid-1",
-              isManagedBySystem: false,
-              createdAt: "2026-01-01T00:00:00Z",
-              updatedAt: "2026-01-01T00:00:00Z",
-            },
-          ]);
-        },
-        deleteEnvironmentVariable: (id: string) => {
-          calls.push(["deleteEnvironmentVariable", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactPath,
-              branchId: "branch-main",
-              env: { FOREIGN: "new" },
-              start: false,
-              skipPromote: true,
-            },
-            olds: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV1Path,
-              branchId: "branch-main",
-              env: { OLD: "old" },
-            },
-            output: {
-              appId: "service-1",
-              deploymentId: "version-old",
-              projectId: "project-1",
-              appName: "api",
-              regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
-              url: "https://api.prisma.build",
-              promoted: true,
-              previousDeploymentId: undefined,
-              previousDeploymentAction: undefined,
-              environmentVariableIds: { OLD: "env-old" },
-              environmentClass: "production",
-              environmentBranchId: null,
-              artifactHash: Redacted.make("old-hash"),
-              local: false,
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error.message).toContain("is not owned");
-        expect(calls).toEqual([
-          [
-            "listEnvironmentVariables",
-            {
-              projectId: "project-1",
-              class: "production",
-              key: "FOREIGN",
-              limit: "100",
-            },
-          ],
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
         ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      },
+      deleteEnvironmentVariable: (id: string) => {
+        calls.push(["deleteEnvironmentVariable", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactPath,
+            branchId: "branch-main",
+            env: { FOREIGN: "new" },
+            start: false,
+            skipPromote: true,
+          },
+          olds: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV1Path,
+            branchId: "branch-main",
+            env: { OLD: "old" },
+          },
+          output: {
+            appId: "service-1",
+            deploymentId: "version-old",
+            projectId: "project-1",
+            appName: "api",
+            regionId: "us-east-1",
+            deploymentEndpointDomain: "version-old.preview.prisma.build",
+            deploymentUrl: "https://version-old.preview.prisma.build",
+            appEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousDeploymentId: undefined,
+            previousDeploymentAction: undefined,
+            environmentVariableIds: { OLD: "env-old" },
+            environmentClass: "production",
+            environmentBranchId: null,
+            artifactHash: Redacted.make("old-hash"),
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error.message).toContain("is not owned");
+      expect(calls).toEqual([
+        [
+          "listEnvironmentVariables",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "FOREIGN",
+            limit: "100",
+          },
+        ],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("refuses to sync system-managed Compute env vars", () => {
     const calls: Array<[string, unknown]> = [];
@@ -4520,192 +4234,184 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(computeProviderLive()),
-      Effect.provide(
-        Layer.succeed(PrismaClient, withDefaultBranch(client, "preview")),
-      ),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client, "preview"))),
       Effect.provide(apiRoutedHttp(withDefaultBranch(client, "preview"))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
   });
 
-  it.effect(
-    "lets explicit Compute env override bindings and ignores deleted bindings",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId: "version-old",
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listEnvironmentVariables: (query: unknown) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed([]);
-        },
-        createEnvironmentVariable: (input: {
-          key: string;
-          projectId: string;
-          class: "production" | "preview";
-        }) => {
-          calls.push(["createEnvironmentVariable", input]);
-          return Effect.succeed({
-            id: `env-${input.key.toLowerCase()}`,
-            type: "environment-variable" as const,
-            url: `https://api.prisma.test/v1/environment-variables/env-${input.key.toLowerCase()}`,
-            projectId: input.projectId,
-            branchId: null,
-            class: input.class,
-            key: input.key,
-            valueKid: `kid-${input.key.toLowerCase()}`,
-            isManagedBySystem: false,
-            createdAt: "2026-01-01T00:00:00Z",
-            updatedAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-      } as unknown as PrismaManagementClient;
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const deletedBinding = {
-          sid: "RemovedConnection",
-          action: "delete",
-          data: {
-            env: {
-              DELETED_BINDING: "must-not-sync",
-            },
+  it.effect("lets explicit Compute env override bindings and ignores deleted bindings", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: "version-old",
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed([]);
+      },
+      createEnvironmentVariable: (input: {
+        key: string;
+        projectId: string;
+        class: "production" | "preview";
+      }) => {
+        calls.push(["createEnvironmentVariable", input]);
+        return Effect.succeed({
+          id: `env-${input.key.toLowerCase()}`,
+          type: "environment-variable" as const,
+          url: `https://api.prisma.test/v1/environment-variables/env-${input.key.toLowerCase()}`,
+          projectId: input.projectId,
+          branchId: null,
+          class: input.class,
+          key: input.key,
+          valueKid: `kid-${input.key.toLowerCase()}`,
+          isManagedBySystem: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const deletedBinding = {
+        sid: "RemovedConnection",
+        action: "delete",
+        data: {
+          env: {
+            DELETED_BINDING: "must-not-sync",
           },
-        } as ResourceBinding<Compute["Binding"]> & { action: "delete" };
-        const output = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            appName: "api",
-            branchId: "branch-main",
-            skipCodeUpload: true,
-            start: false,
-            skipPromote: true,
-            env: {
-              DATABASE_URL: Redacted.make("postgres://explicit"),
-              BOUND_ONLY: null,
-            },
+        },
+      } as ResourceBinding<Compute["Binding"]> & { action: "delete" };
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          branchId: "branch-main",
+          skipCodeUpload: true,
+          start: false,
+          skipPromote: true,
+          env: {
+            DATABASE_URL: Redacted.make("postgres://explicit"),
+            BOUND_ONLY: null,
           },
-          olds: undefined,
-          output: {
-            appId: "service-1",
-            deploymentId: undefined,
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: undefined,
-            deploymentUrl: undefined,
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            artifactHash: undefined,
-            local: false,
-          },
-          session: undefined as never,
-          bindings: [
-            {
-              sid: "Connection",
-              data: {
-                env: {
-                  DATABASE_URL: Redacted.make("postgres://bound"),
-                  BOUND_ONLY: "from-binding",
-                  ACTIVE_BINDING: "from-active-binding",
-                },
+        },
+        olds: undefined,
+        output: {
+          appId: "service-1",
+          deploymentId: undefined,
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: undefined,
+          deploymentUrl: undefined,
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: false,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [
+          {
+            sid: "Connection",
+            data: {
+              env: {
+                DATABASE_URL: Redacted.make("postgres://bound"),
+                BOUND_ONLY: "from-binding",
+                ACTIVE_BINDING: "from-active-binding",
               },
             },
-            deletedBinding,
-          ],
-        });
+          },
+          deletedBinding,
+        ],
+      });
 
-        expect(output.environmentKeys).toEqual([
-          "ACTIVE_BINDING",
-          "DATABASE_URL",
-        ]);
-        expect(calls).toContainEqual([
-          "createEnvironmentVariable",
-          {
-            projectId: "project-1",
-            class: "production",
-            key: "DATABASE_URL",
-            value: "postgres://explicit",
-          },
-        ]);
-        expect(calls).toContainEqual([
-          "createEnvironmentVariable",
-          {
-            projectId: "project-1",
-            class: "production",
-            key: "ACTIVE_BINDING",
-            value: "from-active-binding",
-          },
-        ]);
-        expect(calls).not.toContainEqual([
-          "createEnvironmentVariable",
-          {
-            projectId: "project-1",
-            class: "production",
-            key: "DELETED_BINDING",
-            value: "must-not-sync",
-          },
-        ]);
-        expect(calls).not.toContainEqual([
-          "createEnvironmentVariable",
-          {
-            projectId: "project-1",
-            class: "production",
-            key: "BOUND_ONLY",
-            value: "from-binding",
-          },
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(output.environmentKeys).toEqual(["ACTIVE_BINDING", "DATABASE_URL"]);
+      expect(calls).toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "DATABASE_URL",
+          value: "postgres://explicit",
+        },
+      ]);
+      expect(calls).toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "ACTIVE_BINDING",
+          value: "from-active-binding",
+        },
+      ]);
+      expect(calls).not.toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "DELETED_BINDING",
+          value: "must-not-sync",
+        },
+      ]);
+      expect(calls).not.toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "BOUND_ONLY",
+          value: "from-binding",
+        },
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("removes env vars from previously managed bindings", () => {
     const calls: Array<[string, unknown]> = [];
@@ -4745,9 +4451,7 @@ describe("Prisma Compute", () => {
       },
       listEnvironmentVariables: (query: { key: string }) => {
         calls.push(["listEnvironmentVariables", query]);
-        return Effect.succeed(
-          byKey.get(query.key) ? [byKey.get(query.key)] : [],
-        );
+        return Effect.succeed(byKey.get(query.key) ? [byKey.get(query.key)] : []);
       },
       createEnvironmentVariable: (input: unknown) => {
         calls.push(["createEnvironmentVariable", input]);
@@ -4843,10 +4547,7 @@ describe("Prisma Compute", () => {
       });
 
       expect(output.environmentKeys).toEqual(["DATABASE_URL"]);
-      expect(calls).toContainEqual([
-        "deleteEnvironmentVariable",
-        "env-old-bound-flag",
-      ]);
+      expect(calls).toContainEqual(["deleteEnvironmentVariable", "env-old-bound-flag"]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
@@ -4856,102 +4557,97 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "deletes persisted env keys even when old props contain null tombstones",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const staleVariable = {
-        id: "env-stale-flag",
-        type: "environment-variable" as const,
-        url: "https://api.prisma.test/v1/environment-variables/env-stale-flag",
-        projectId: "project-1",
-        branchId: null,
-        class: "production" as const,
-        key: "STALE_FLAG",
-        valueKid: "kid-stale",
-        isManagedBySystem: false,
-        createdAt: "2026-01-01T00:00:00Z",
-        updatedAt: "2026-01-01T00:00:00Z",
-      };
-      const client = {
-        listEnvironmentVariables: (query: { key: string }) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed(
-            query.key === "STALE_FLAG" ? [staleVariable] : [],
-          );
-        },
-        deleteEnvironmentVariable: (id: string) => {
-          calls.push(["deleteEnvironmentVariable", id]);
-          return Effect.void;
-        },
-        listAppDeployments: (appId: string, query: unknown) => {
-          calls.push(["listAppDeployments", { appId, query }]);
-          return Effect.succeed([]);
-        },
-        deleteApp: (id: string) => {
-          calls.push(["deleteApp", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
+  it.effect("deletes persisted env keys even when old props contain null tombstones", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const staleVariable = {
+      id: "env-stale-flag",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-stale-flag",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "STALE_FLAG",
+      valueKid: "kid-stale",
+      isManagedBySystem: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const client = {
+      listEnvironmentVariables: (query: { key: string }) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed(query.key === "STALE_FLAG" ? [staleVariable] : []);
+      },
+      deleteEnvironmentVariable: (id: string) => {
+        calls.push(["deleteEnvironmentVariable", id]);
+        return Effect.void;
+      },
+      listAppDeployments: (appId: string, query: unknown) => {
+        calls.push(["listAppDeployments", { appId, query }]);
+        return Effect.succeed([]);
+      },
+      deleteApp: (id: string) => {
+        calls.push(["deleteApp", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        yield* provider.delete({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-            env: {
-              STALE_FLAG: null,
-            },
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      yield* provider.delete({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+          env: {
+            STALE_FLAG: null,
           },
-          output: {
-            appId: "service-1",
-            deploymentId: undefined,
+        },
+        output: {
+          appId: "service-1",
+          deploymentId: undefined,
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: undefined,
+          deploymentUrl: undefined,
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: false,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          environmentKeys: ["STALE_FLAG"],
+          environmentVariableIds: {
+            STALE_FLAG: "env-stale-flag",
+          },
+          environmentClass: "production",
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(calls).toEqual([
+        [
+          "listEnvironmentVariables",
+          {
             projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: undefined,
-            deploymentUrl: undefined,
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            environmentKeys: ["STALE_FLAG"],
-            environmentVariableIds: {
-              STALE_FLAG: "env-stale-flag",
-            },
-            environmentClass: "production",
-            artifactHash: undefined,
-            local: false,
+            class: "production",
+            key: "STALE_FLAG",
+            limit: "100",
           },
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(calls).toEqual([
-          [
-            "listEnvironmentVariables",
-            {
-              projectId: "project-1",
-              class: "production",
-              key: "STALE_FLAG",
-              limit: "100",
-            },
-          ],
-          ["deleteEnvironmentVariable", "env-stale-flag"],
-          ["deleteApp", "service-1"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-      );
-    },
-  );
+        ],
+        ["deleteEnvironmentVariable", "env-stale-flag"],
+        ["deleteApp", "service-1"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+    );
+  });
 
   it.effect("does not expose redacted env values in Compute outputs", () => {
     const calls: Array<[string, unknown]> = [];
@@ -5078,9 +4774,7 @@ describe("Prisma Compute", () => {
   it.effect("runs a build command and uploads the built archive", () => {
     const calls: Array<[string, unknown]> = [];
     let latestDeploymentId: string | null = null;
-    let uploaded:
-      | { url: string; contentType: string | undefined; bytes: Uint8Array }
-      | undefined;
+    let uploaded: { url: string; contentType: string | undefined; bytes: Uint8Array } | undefined;
     const client = {
       listApps: (projectId: string, query: unknown) => {
         calls.push(["listApps", { projectId, query }]);
@@ -5153,10 +4847,7 @@ describe("Prisma Compute", () => {
           createdAt: "2026-01-01T00:00:00Z",
         });
       },
-      promoteApp: (
-        appId: string,
-        { deploymentId }: { deploymentId: string },
-      ) => {
+      promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) => {
         calls.push(["promoteApp", { appId, deploymentId }]);
         latestDeploymentId = deploymentId;
         return Effect.succeed({
@@ -5247,9 +4938,7 @@ describe("Prisma Compute", () => {
 
   it.effect("auto-builds a Bun app before uploading", () => {
     const calls: Array<[string, unknown]> = [];
-    let uploaded:
-      | { url: string; contentType: string | undefined; bytes: Uint8Array }
-      | undefined;
+    let uploaded: { url: string; contentType: string | undefined; bytes: Uint8Array } | undefined;
     const client = {
       listApps: (projectId: string, query: unknown) => {
         calls.push(["listApps", { projectId, query }]);
@@ -5318,10 +5007,7 @@ describe("Prisma Compute", () => {
         path.join(root, "package.json"),
         JSON.stringify({ main: "src/server.ts" }),
       );
-      yield* fs.writeFileString(
-        path.join(root, "src", "server.ts"),
-        "console.log('auto app');",
-      );
+      yield* fs.writeFileString(path.join(root, "src", "server.ts"), "console.log('auto app');");
 
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
@@ -5483,132 +5169,127 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "refuses to claim a foreign service after a create conflict",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      let serviceListCount = 0;
-      const service = {
-        id: "service-1",
-        type: "app" as const,
-        url: "https://api.prisma.test/v1/services/service-1",
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: "branch-main",
-        latestDeploymentId: null,
-        appEndpointDomain: "api.prisma.build",
-        createdAt: "2026-01-01T00:00:00Z",
-      };
+  it.effect("refuses to claim a foreign service after a create conflict", () => {
+    const calls: Array<[string, unknown]> = [];
+    let serviceListCount = 0;
+    const service = {
+      id: "service-1",
+      type: "app" as const,
+      url: "https://api.prisma.test/v1/services/service-1",
+      name: "api",
+      region: { id: "us-east-1", name: "US East" },
+      projectId: "project-1",
+      branchId: "branch-main",
+      latestDeploymentId: null,
+      appEndpointDomain: "api.prisma.build",
+      createdAt: "2026-01-01T00:00:00Z",
+    };
 
-      const client = {
-        listApps: (projectId: string, query: unknown) =>
-          Effect.sync(() => {
-            serviceListCount += 1;
-            calls.push(["listApps", { projectId, query }]);
-            return serviceListCount === 1 ? [] : [service];
-          }),
-        createApp: (projectId: string, input: unknown) =>
-          Effect.gen(function* () {
-            calls.push(["createApp", { projectId, input }]);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "POST",
-                path: `/v1/services`,
-                status: 409,
-                message: "already exists",
-              }),
-            );
-          }),
-        listBranches: (projectId: string, query: unknown) => {
-          calls.push(["listBranches", { projectId, query }]);
-          return Effect.succeed([
-            {
-              id: "branch-main",
-              type: "branch" as const,
-              url: "https://api.prisma.test/v1/branches/branch-main",
-              gitName: "main",
-              isDefault: true,
-              createdAt: "2026-01-01T00:00:00Z",
-              updatedAt: "2026-01-01T00:00:00Z",
-              project: {
-                id: "project-1",
-                url: "https://api.prisma.test/v1/projects/project-1",
-                name: "project",
-              },
-            },
-          ]);
-        },
-        updateApp: (id: string, input: unknown) => {
-          calls.push(["updateApp", { id, input }]);
-          return Effect.succeed({ ...service, branchId: "branch-main" });
-        },
-        listEnvironmentVariables: (query: unknown) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed([]);
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
+    const client = {
+      listApps: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          serviceListCount += 1;
+          calls.push(["listApps", { projectId, query }]);
+          return serviceListCount === 1 ? [] : [service];
+        }),
+      createApp: (projectId: string, input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createApp", { projectId, input }]);
+          return yield* Effect.fail(
+            new PrismaApiError({
+              method: "POST",
+              path: `/v1/services`,
+              status: 409,
+              message: "already exists",
+            }),
+          );
+        }),
+      listBranches: (projectId: string, query: unknown) => {
+        calls.push(["listBranches", { projectId, query }]);
+        return Effect.succeed([
+          {
+            id: "branch-main",
+            type: "branch" as const,
+            url: "https://api.prisma.test/v1/branches/branch-main",
+            gitName: "main",
+            isDefault: true,
             createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
-      );
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactPath,
-              start: false,
-              skipPromote: true,
+            updatedAt: "2026-01-01T00:00:00Z",
+            project: {
+              id: "project-1",
+              url: "https://api.prisma.test/v1/projects/project-1",
+              name: "project",
             },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+          },
+        ]);
+      },
+      updateApp: (id: string, input: unknown) => {
+        calls.push(["updateApp", { id, input }]);
+        return Effect.succeed({ ...service, branchId: "branch-main" });
+      },
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed([]);
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+    );
 
-        expect(error.message).toContain("is not owned");
-        expect(calls.some(([name]) => name === "createAppDeployment")).toBe(
-          false,
-        );
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactPath,
+            start: false,
+            skipPromote: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error.message).toContain("is not owned");
+      expect(calls.some(([name]) => name === "createAppDeployment")).toBe(false);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("reconciles deploy updates and destroys old deployments", () => {
     const calls: Array<[string, unknown]> = [];
@@ -5812,12 +5493,8 @@ describe("Prisma Compute", () => {
       expect(firstWithSkip.deploymentId).toBe("version-1");
       expect(firstWithSkip.promoted).toBe(true);
       expect(firstWithSkip.url).toBe("https://api.prisma.build");
-      expect(skipCalls.map(([operation]) => operation)).not.toContain(
-        "createAppDeployment",
-      );
-      expect(skipCalls.map(([operation]) => operation)).not.toContain(
-        "promoteApp",
-      );
+      expect(skipCalls.map(([operation]) => operation)).not.toContain("createAppDeployment");
+      expect(skipCalls.map(([operation]) => operation)).not.toContain("promoteApp");
       calls.splice(callsBeforeSkip);
 
       const second = yield* provider.reconcile({
@@ -5927,597 +5604,571 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "creates a no-upload version for skipCodeUpload env updates",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const featureEnv = {
-        id: "env-feature",
-        type: "environment-variable" as const,
-        url: "https://api.prisma.test/v1/environment-variables/env-feature",
-        projectId: "project-1",
-        branchId: null,
-        class: "production" as const,
-        key: "FEATURE",
-        valueKid: "kid-feature",
-        isManagedBySystem: false,
-        createdAt: "2026-01-01T00:00:00Z",
-        updatedAt: "2026-01-01T00:00:00Z",
-      };
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: "https://api.prisma.test/v1/services/service-1",
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId: "version-old",
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listEnvironmentVariables: (query: { key: string }) => {
-          calls.push(["listEnvironmentVariables", query]);
-          return Effect.succeed(query.key === "FEATURE" ? [featureEnv] : []);
-        },
-        updateEnvironmentVariable: (id: string, input: unknown) => {
-          calls.push(["updateEnvironmentVariable", { id, input }]);
-          return Effect.succeed(featureEnv);
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-new",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-new",
-            foundryVersionId: "foundry-new",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-new",
-            status: "new",
-            previewDomain: "version-new.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const output = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            appName: "api",
-            branchId: "branch-main",
-            skipCodeUpload: true,
-            start: false,
-            skipPromote: true,
-            env: {
-              FEATURE: "on",
-            },
-          },
-          olds: {
-            project: "project-1",
-            appName: "api",
-            branchId: "branch-main",
-            skipCodeUpload: true,
-            start: false,
-            skipPromote: true,
-            env: {
-              FEATURE: "off",
-            },
-          },
-          output: {
-            appId: "service-1",
-            deploymentId: "version-old",
-            projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-old.preview.prisma.build",
-            deploymentUrl: "https://version-old.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            environmentVariableIds: { FEATURE: "env-feature" },
-            artifactHash: Redacted.make("old-hash"),
-            local: false,
-          },
-          session: undefined as never,
-          bindings: [],
+  it.effect("creates a no-upload version for skipCodeUpload env updates", () => {
+    const calls: Array<[string, unknown]> = [];
+    const featureEnv = {
+      id: "env-feature",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-feature",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "FEATURE",
+      valueKid: "kid-feature",
+      isManagedBySystem: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: "https://api.prisma.test/v1/services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: "version-old",
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
         });
+      },
+      listEnvironmentVariables: (query: { key: string }) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed(query.key === "FEATURE" ? [featureEnv] : []);
+      },
+      updateEnvironmentVariable: (id: string, input: unknown) => {
+        calls.push(["updateEnvironmentVariable", { id, input }]);
+        return Effect.succeed(featureEnv);
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-new",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-new",
+          foundryVersionId: "foundry-new",
+          uploadUrl: null,
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: "foundry-new",
+          status: "new",
+          previewDomain: "version-new.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
 
-        expect(output.deploymentId).toBe("version-new");
-        expect(output.previousDeploymentId).toBe("version-old");
-        expect(output.previousDeploymentAction).toBe("still-active");
-        expect(calls).toEqual([
-          ["getApp", "service-1"],
-          ["getDeployment", "version-old"],
-          [
-            "listEnvironmentVariables",
-            {
-              projectId: "project-1",
-              class: "production",
-              key: "FEATURE",
-              limit: "100",
-            },
-          ],
-          [
-            "updateEnvironmentVariable",
-            { id: "env-feature", input: { value: "on" } },
-          ],
-          [
-            "createAppDeployment",
-            {
-              appId: "service-1",
-              input: { portMapping: { http: 8080 }, skipCodeUpload: true },
-            },
-          ],
-          ["getDeployment", "version-new"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
-
-  it.effect(
-    "replays promotion to repair endpoint drift for a matching deployment",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      let latestDeploymentId: string | null = null;
-
-      const service = () => ({
-        id: "service-1",
-        type: "app" as const,
-        url: "https://api.prisma.test/v1/services/service-1",
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: "branch-main",
-        latestDeploymentId,
-        appEndpointDomain: "api.prisma.build",
-        createdAt: "2026-01-01T00:00:00Z",
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          branchId: "branch-main",
+          skipCodeUpload: true,
+          start: false,
+          skipPromote: true,
+          env: {
+            FEATURE: "on",
+          },
+        },
+        olds: {
+          project: "project-1",
+          appName: "api",
+          branchId: "branch-main",
+          skipCodeUpload: true,
+          start: false,
+          skipPromote: true,
+          env: {
+            FEATURE: "off",
+          },
+        },
+        output: {
+          appId: "service-1",
+          deploymentId: "version-old",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-old.preview.prisma.build",
+          deploymentUrl: "https://version-old.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          environmentVariableIds: { FEATURE: "env-feature" },
+          artifactHash: Redacted.make("old-hash"),
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
       });
 
-      const client = {
-        listApps: (projectId: string, query: unknown) => {
-          calls.push(["listApps", { projectId, query }]);
-          return Effect.succeed([]);
-        },
-        createApp: (projectId: string, input: unknown) => {
-          calls.push(["createApp", { projectId, input }]);
-          return Effect.succeed(service());
-        },
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed(service());
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "running",
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        promoteApp: (
-          appId: string,
-          { deploymentId }: { deploymentId: string },
-        ) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            latestDeploymentId = deploymentId;
-            return {
-              appEndpointDomain: "api.prisma.build",
-              reassignedDomains: 0,
-            };
-          }),
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
-      );
-
-      const news = {
-        project: "project-1",
-        appName: "api",
-        branchId: "branch-main",
-        artifactPath: fixtureArtifactPath,
-        verifyUrl: false,
-      };
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const first = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        const second = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: news,
-          output: first,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(first.deploymentId).toBe("version-1");
-        expect(second.deploymentId).toBe("version-1");
-        expect(second.previousDeploymentId).toBeNull();
-        expect(calls.filter(([name]) => name === "promoteApp")).toEqual([
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-        ]);
-        expect(
-          calls.filter(([name]) => name === "createAppDeployment"),
-        ).toHaveLength(1);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
-
-  it.effect(
-    "persists pending cleanup when destroying the old deployment fails",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      let latestDeploymentId = "version-1";
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: `https://api.prisma.test/v1/services/${id}`,
-            name: "api",
-            region: { id: "us-east-1", name: "us-east-1" },
+      expect(output.deploymentId).toBe("version-new");
+      expect(output.previousDeploymentId).toBe("version-old");
+      expect(output.previousDeploymentAction).toBe("still-active");
+      expect(calls).toEqual([
+        ["getApp", "service-1"],
+        ["getDeployment", "version-old"],
+        [
+          "listEnvironmentVariables",
+          {
             projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId,
+            class: "production",
+            key: "FEATURE",
+            limit: "100",
+          },
+        ],
+        ["updateEnvironmentVariable", { id: "env-feature", input: { value: "on" } }],
+        [
+          "createAppDeployment",
+          {
+            appId: "service-1",
+            input: { portMapping: { http: 8080 }, skipCodeUpload: true },
+          },
+        ],
+        ["getDeployment", "version-new"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("replays promotion to repair endpoint drift for a matching deployment", () => {
+    const calls: Array<[string, unknown]> = [];
+    let latestDeploymentId: string | null = null;
+
+    const service = () => ({
+      id: "service-1",
+      type: "app" as const,
+      url: "https://api.prisma.test/v1/services/service-1",
+      name: "api",
+      region: { id: "us-east-1", name: "US East" },
+      projectId: "project-1",
+      branchId: "branch-main",
+      latestDeploymentId,
+      appEndpointDomain: "api.prisma.build",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const client = {
+      listApps: (projectId: string, query: unknown) => {
+        calls.push(["listApps", { projectId, query }]);
+        return Effect.succeed([]);
+      },
+      createApp: (projectId: string, input: unknown) => {
+        calls.push(["createApp", { projectId, input }]);
+        return Effect.succeed(service());
+      },
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed(service());
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: "foundry-1",
+          status: "running",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
+        Effect.sync(() => {
+          calls.push(["promoteApp", { appId, deploymentId }]);
+          latestDeploymentId = deploymentId;
+          return {
             appEndpointDomain: "api.prisma.build",
+            reassignedDomains: 0,
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+    );
+
+    const news = {
+      project: "project-1",
+      appName: "api",
+      branchId: "branch-main",
+      artifactPath: fixtureArtifactPath,
+      verifyUrl: false,
+    };
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const first = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news,
+        olds: undefined,
+        output: undefined,
+        session: undefined as never,
+        bindings: [],
+      });
+
+      const second = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news,
+        olds: news,
+        output: first,
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(first.deploymentId).toBe("version-1");
+      expect(second.deploymentId).toBe("version-1");
+      expect(second.previousDeploymentId).toBeNull();
+      expect(calls.filter(([name]) => name === "promoteApp")).toEqual([
+        ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
+        ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
+      ]);
+      expect(calls.filter(([name]) => name === "createAppDeployment")).toHaveLength(1);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("persists pending cleanup when destroying the old deployment fails", () => {
+    const calls: Array<[string, unknown]> = [];
+    let latestDeploymentId = "version-1";
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: `https://api.prisma.test/v1/services/${id}`,
+          name: "api",
+          region: { id: "us-east-1", name: "us-east-1" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listBranches: (projectId: string, query: unknown) => {
+        calls.push(["listBranches", { projectId, query }]);
+        return Effect.succeed([
+          {
+            id: "branch-main",
+            type: "branch" as const,
+            url: "https://api.prisma.test/v1/branches/branch-main",
+            gitName: "main",
+            isDefault: true,
             createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listBranches: (projectId: string, query: unknown) => {
-          calls.push(["listBranches", { projectId, query }]);
-          return Effect.succeed([
-            {
-              id: "branch-main",
-              type: "branch" as const,
-              url: "https://api.prisma.test/v1/branches/branch-main",
-              gitName: "main",
-              isDefault: true,
-              createdAt: "2026-01-01T00:00:00Z",
-              updatedAt: "2026-01-01T00:00:00Z",
-              project: {
-                id: "project-1",
-                url: "https://api.prisma.test/v1/projects/project-1",
-                name: "project",
-              },
+            updatedAt: "2026-01-01T00:00:00Z",
+            project: {
+              id: "project-1",
+              url: "https://api.prisma.test/v1/projects/project-1",
+              name: "project",
             },
-          ]);
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-2",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-2",
-            foundryVersionId: "foundry-version-2",
-            uploadUrl: "https://upload.prisma.test/version-2.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: `foundry-${id}`,
-            status: id === "version-1" ? "stopped" : "running",
-            previewDomain: `${id}.preview.prisma.build`,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            return { previewDomain: `${id}.preview.prisma.build` };
-          }),
-        promoteApp: (
-          appId: string,
-          { deploymentId }: { deploymentId: string },
-        ) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            latestDeploymentId = deploymentId;
-            return {
-              appEndpointDomain: "api.prisma.build",
-              reassignedDomains: 0,
-            };
-          }),
-        stopDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["stopDeployment", id]);
-          }),
-        deleteDeployment: (id: string) =>
-          Effect.gen(function* () {
-            calls.push(["deleteDeployment", id]);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/deployments/${id}`,
-                status: 400,
-                message: "Internal Server Error",
-              }),
-            );
-          }),
-      } as unknown as PrismaManagementClient;
+          },
+        ]);
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-2",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-2",
+          foundryVersionId: "foundry-version-2",
+          uploadUrl: "https://upload.prisma.test/version-2.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: `foundry-${id}`,
+          status: id === "version-1" ? "stopped" : "running",
+          previewDomain: `${id}.preview.prisma.build`,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      startDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["startDeployment", id]);
+          return { previewDomain: `${id}.preview.prisma.build` };
+        }),
+      promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
+        Effect.sync(() => {
+          calls.push(["promoteApp", { appId, deploymentId }]);
+          latestDeploymentId = deploymentId;
+          return {
+            appEndpointDomain: "api.prisma.build",
+            reassignedDomains: 0,
+          };
+        }),
+      stopDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["stopDeployment", id]);
+        }),
+      deleteDeployment: (id: string) =>
+        Effect.gen(function* () {
+          calls.push(["deleteDeployment", id]);
+          return yield* Effect.fail(
+            new PrismaApiError({
+              method: "DELETE",
+              path: `/v1/deployments/${id}`,
+              status: 400,
+              message: "Internal Server Error",
+            }),
+          );
+        }),
+    } as unknown as PrismaManagementClient;
 
-      const http = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
-      );
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+    );
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const output = yield* provider.reconcile({
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          artifactPath: fixtureArtifactV2Path,
+          port: 3000,
+          destroyOldDeployment: true,
+        },
+        olds: {
+          project: "project-1",
+          appName: "api",
+          artifactPath: fixtureArtifactV1Path,
+          port: 3000,
+        },
+        output: {
+          appId: "service-1",
+          deploymentId: "version-1",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-1.preview.prisma.build",
+          deploymentUrl: "https://version-1.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          artifactHash: Redacted.make("old-hash"),
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(output.deploymentId).toBe("version-2");
+      expect(output.previousDeploymentAction).toBe("still-active");
+      expect(output.pendingDeploymentCleanup).toEqual({
+        deploymentId: "version-1",
+        action: "destroy",
+      });
+      expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provideService(HttpClient.HttpClient, http),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("preserves a newly created deployment when promotion commit is ambiguous", () => {
+    const calls: Array<[string, unknown]> = [];
+    const versions = new Map([["version-new", "new"]]);
+    const client = {
+      getApp: (id: string) => {
+        calls.push(["getApp", id]);
+        return Effect.succeed({
+          id,
+          type: "app" as const,
+          url: `https://api.prisma.test/v1/services/${id}`,
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestDeploymentId: null,
+          appEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      createAppDeployment: (appId: string, input: unknown) => {
+        calls.push(["createAppDeployment", { appId, input }]);
+        return Effect.succeed({
+          id: "version-new",
+          type: "deployment" as const,
+          url: "https://api.prisma.test/v1/deployments/version-new",
+          foundryVersionId: "foundry-new",
+          uploadUrl: "https://upload.prisma.test/version-new.tar.gz",
+        });
+      },
+      getDeployment: (id: string) => {
+        calls.push(["getDeployment", id]);
+        return Effect.succeed({
+          id,
+          type: "deployment" as const,
+          serviceId: "service-1",
+          url: `https://api.prisma.test/v1/deployments/${id}`,
+          foundryVersionId: "foundry-new",
+          status: versions.get(id) ?? "new",
+          previewDomain: `${id}.preview.prisma.build`,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      startDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["startDeployment", id]);
+          versions.set(id, "running");
+          return { previewDomain: `${id}.preview.prisma.build` };
+        }),
+      promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
+        Effect.gen(function* () {
+          calls.push(["promoteApp", { appId, deploymentId }]);
+          return yield* Effect.fail(
+            new PrismaApiError({
+              method: "POST",
+              path: `/v1/services/${appId}/promote`,
+              status: 400,
+              message: "promote failed",
+            }),
+          );
+        }),
+      rollbackApp: () =>
+        Effect.fail(
+          new PrismaApiError({
+            method: "POST",
+            path: "/v1/services/service-1/rollback",
+            status: 400,
+            message: "promotion recovery failed",
+          }),
+        ),
+      stopDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["stopDeployment", id]);
+          versions.set(id, "stopped");
+        }),
+      deleteDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDeployment", id]);
+          versions.delete(id);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+    );
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
           id: "App",
           fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
-            project: "project-1",
-            appName: "api",
-            artifactPath: fixtureArtifactV2Path,
-            port: 3000,
-            destroyOldDeployment: true,
-          },
-          olds: {
             project: "project-1",
             appName: "api",
             artifactPath: fixtureArtifactV1Path,
-            port: 3000,
+            branchId: "branch-main",
           },
+          olds: undefined,
           output: {
             appId: "service-1",
-            deploymentId: "version-1",
+            deploymentId: undefined,
             projectId: "project-1",
             appName: "api",
             regionId: "us-east-1",
-            deploymentEndpointDomain: "version-1.preview.prisma.build",
-            deploymentUrl: "https://version-1.preview.prisma.build",
+            deploymentEndpointDomain: undefined,
+            deploymentUrl: undefined,
             appEndpointDomain: "api.prisma.build",
             url: "https://api.prisma.build",
-            promoted: true,
+            promoted: false,
             previousDeploymentId: undefined,
             previousDeploymentAction: undefined,
-            artifactHash: Redacted.make("old-hash"),
+            artifactHash: undefined,
             local: false,
           },
           session: undefined as never,
           bindings: [],
-        });
+        })
+        .pipe(Effect.flip);
 
-        expect(output.deploymentId).toBe("version-2");
-        expect(output.previousDeploymentAction).toBe("still-active");
-        expect(output.pendingDeploymentCleanup).toEqual({
-          deploymentId: "version-1",
-          action: "destroy",
-        });
-        expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provideService(HttpClient.HttpClient, http),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
-
-  it.effect(
-    "preserves a newly created deployment when promotion commit is ambiguous",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const versions = new Map([["version-new", "new"]]);
-      const client = {
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: `https://api.prisma.test/v1/services/${id}`,
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId: null,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-new",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-new",
-            foundryVersionId: "foundry-new",
-            uploadUrl: "https://upload.prisma.test/version-new.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-new",
-            status: versions.get(id) ?? "new",
-            previewDomain: `${id}.preview.prisma.build`,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            versions.set(id, "running");
-            return { previewDomain: `${id}.preview.prisma.build` };
-          }),
-        promoteApp: (
-          appId: string,
-          { deploymentId }: { deploymentId: string },
-        ) =>
-          Effect.gen(function* () {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "POST",
-                path: `/v1/services/${appId}/promote`,
-                status: 400,
-                message: "promote failed",
-              }),
-            );
-          }),
-        rollbackApp: () =>
-          Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: "/v1/services/service-1/rollback",
-              status: 400,
-              message: "promotion recovery failed",
-            }),
-          ),
-        stopDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["stopDeployment", id]);
-            versions.set(id, "stopped");
-          }),
-        deleteDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["deleteDeployment", id]);
-            versions.delete(id);
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const http = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
-      );
-
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              appName: "api",
-              artifactPath: fixtureArtifactV1Path,
-              branchId: "branch-main",
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).message).toContain("ambiguous");
+      expect(versions.has("version-new")).toBe(true);
+      expect(calls).toEqual([
+        ["getApp", "service-1"],
+        [
+          "createAppDeployment",
+          {
+            appId: "service-1",
+            input: {
+              portMapping: { http: 8080 },
+              skipCodeUpload: undefined,
             },
-            olds: undefined,
-            output: {
-              appId: "service-1",
-              deploymentId: undefined,
-              projectId: "project-1",
-              appName: "api",
-              regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
-              url: "https://api.prisma.build",
-              promoted: false,
-              previousDeploymentId: undefined,
-              previousDeploymentAction: undefined,
-              artifactHash: undefined,
-              local: false,
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain("ambiguous");
-        expect(versions.has("version-new")).toBe(true);
-        expect(calls).toEqual([
-          ["getApp", "service-1"],
-          [
-            "createAppDeployment",
-            {
-              appId: "service-1",
-              input: {
-                portMapping: { http: 8080 },
-                skipCodeUpload: undefined,
-              },
-            },
-          ],
-          ["getDeployment", "version-new"],
-          ["startDeployment", "version-new"],
-          ["getDeployment", "version-new"],
-          ["promoteApp", { appId: "service-1", deploymentId: "version-new" }],
-          ["getApp", "service-1"],
-          ["getApp", "service-1"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+          },
+        ],
+        ["getDeployment", "version-new"],
+        ["startDeployment", "version-new"],
+        ["getDeployment", "version-new"],
+        ["promoteApp", { appId: "service-1", deploymentId: "version-new" }],
+        ["getApp", "service-1"],
+        ["getApp", "service-1"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("deletes env vars removed from Compute props on update", () => {
     const calls: Array<[string, unknown]> = [];
@@ -6706,10 +6357,7 @@ describe("Prisma Compute", () => {
             limit: "100",
           },
         ],
-        [
-          "updateEnvironmentVariable",
-          { id: "env-keep", input: { value: "new-value" } },
-        ],
+        ["updateEnvironmentVariable", { id: "env-keep", input: { value: "new-value" } }],
         [
           "createEnvironmentVariable",
           {
@@ -6784,9 +6432,7 @@ describe("Prisma Compute", () => {
       expect(chunks).toEqual([]);
     }).pipe(
       Effect.provide(computeProviderLive()),
-      Effect.provide(
-        Layer.succeed(PrismaClient, {} as unknown as PrismaManagementClient),
-      ),
+      Effect.provide(Layer.succeed(PrismaClient, {} as unknown as PrismaManagementClient)),
       Effect.provide(apiRoutedHttp({} as unknown as PrismaManagementClient)),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -6925,9 +6571,7 @@ describe("Prisma Compute", () => {
     const client = {
       listEnvironmentVariables: (query: { key: string }) => {
         calls.push(["listEnvironmentVariables", query]);
-        return Effect.succeed(
-          byKey.get(query.key) ? [byKey.get(query.key)] : [],
-        );
+        return Effect.succeed(byKey.get(query.key) ? [byKey.get(query.key)] : []);
       },
       deleteEnvironmentVariable: (id: string) => {
         calls.push(["deleteEnvironmentVariable", id]);
@@ -7103,88 +6747,85 @@ describe("Prisma Compute", () => {
     );
   });
 
-  it.effect(
-    "continues Compute destroy when managed env vars are already gone",
-    () => {
-      const calls: Array<[string, unknown]> = [];
-      const client = {
-        listEnvironmentVariables: (query: unknown) =>
-          Effect.gen(function* () {
-            calls.push(["listEnvironmentVariables", query]);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: "/v1/environment-variables",
-                status: 404,
-                message: "project not found",
-              }),
-            );
-          }),
-        listAppDeployments: (appId: string, query: unknown) => {
-          calls.push(["listAppDeployments", { appId, query }]);
-          return Effect.succeed([]);
-        },
-        deleteApp: (id: string) => {
-          calls.push(["deleteApp", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
+  it.effect("continues Compute destroy when managed env vars are already gone", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      listEnvironmentVariables: (query: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["listEnvironmentVariables", query]);
+          return yield* Effect.fail(
+            new PrismaApiError({
+              method: "GET",
+              path: "/v1/environment-variables",
+              status: 404,
+              message: "project not found",
+            }),
+          );
+        }),
+      listAppDeployments: (appId: string, query: unknown) => {
+        calls.push(["listAppDeployments", { appId, query }]);
+        return Effect.succeed([]);
+      },
+      deleteApp: (id: string) => {
+        calls.push(["deleteApp", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
-        yield* provider.delete({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          olds: {
-            project: "project-1",
-            appName: "api",
-            env: {
-              TOKEN: Redacted.make("secret"),
-            },
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      yield* provider.delete({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          appName: "api",
+          env: {
+            TOKEN: Redacted.make("secret"),
           },
-          output: {
-            appId: "service-1",
-            deploymentId: "version-1",
+        },
+        output: {
+          appId: "service-1",
+          deploymentId: "version-1",
+          projectId: "project-1",
+          appName: "api",
+          regionId: "us-east-1",
+          deploymentEndpointDomain: "version-1.preview.prisma.build",
+          deploymentUrl: "https://version-1.preview.prisma.build",
+          appEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousDeploymentId: undefined,
+          previousDeploymentAction: undefined,
+          environmentVariableIds: { TOKEN: "env-token" },
+          artifactHash: Redacted.make("hash-1"),
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(calls).toEqual([
+        [
+          "listEnvironmentVariables",
+          {
             projectId: "project-1",
-            appName: "api",
-            regionId: "us-east-1",
-            deploymentEndpointDomain: "version-1.preview.prisma.build",
-            deploymentUrl: "https://version-1.preview.prisma.build",
-            appEndpointDomain: "api.prisma.build",
-            url: "https://api.prisma.build",
-            promoted: true,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            environmentVariableIds: { TOKEN: "env-token" },
-            artifactHash: Redacted.make("hash-1"),
-            local: false,
+            class: "production",
+            key: "TOKEN",
+            limit: "100",
           },
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(calls).toEqual([
-          [
-            "listEnvironmentVariables",
-            {
-              projectId: "project-1",
-              class: "production",
-              key: "TOKEN",
-              limit: "100",
-            },
-          ],
-          ["deleteApp", "service-1"],
-        ]);
-      }).pipe(
-        Effect.provide(computeProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
-        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+        ],
+        ["deleteApp", "service-1"],
+      ]);
+    }).pipe(
+      Effect.provide(computeProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 
   it.effect("tails Compute logs through the provider", () =>
     withWebSocketServer((server) =>
@@ -7259,17 +6900,12 @@ describe("Prisma Compute", () => {
         expect(lines.map((line) => line.message)).toEqual(["compute app log"]);
         expect(authorization).toBe("Bearer app-token");
         expect(requestUrl).toBe("/v1/deployments/version-1/logs");
-      }).pipe(
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      ),
+      }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(PlatformServices)),
     ),
   );
 });
 
-const withWebSocketServer = <A, E, R>(
-  f: (server: WebSocketServer) => Effect.Effect<A, E, R>,
-) =>
+const withWebSocketServer = <A, E, R>(f: (server: WebSocketServer) => Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => new WebSocketServer({ host: "127.0.0.1", port: 0 })),
     f,
@@ -7292,9 +6928,7 @@ const listenUrl = (server: WebSocketServer) =>
     };
     const fail = (cause: unknown) => {
       cleanup();
-      resume(
-        Effect.fail(cause instanceof Error ? cause : new Error(String(cause))),
-      );
+      resume(Effect.fail(cause instanceof Error ? cause : new Error(String(cause))));
     };
     const cleanup = () => {
       server.off("listening", complete);

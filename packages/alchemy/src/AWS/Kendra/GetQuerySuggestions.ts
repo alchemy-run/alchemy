@@ -38,10 +38,7 @@ export interface GetQuerySuggestions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetQuerySuggestionsRequest,
-    ) => Effect.Effect<
-      kendra.GetQuerySuggestionsResponse,
-      kendra.GetQuerySuggestionsError
-    >
+    ) => Effect.Effect<kendra.GetQuerySuggestionsResponse, kendra.GetQuerySuggestionsError>
   >
 > {}
 export const GetQuerySuggestions = Binding.Service<GetQuerySuggestions>(

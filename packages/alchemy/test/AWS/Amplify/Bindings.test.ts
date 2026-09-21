@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as amplify from "@distilled.cloud/aws/amplify";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -9,9 +6,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import AmplifyTestFunctionLive, {
-  AmplifyTestFunction,
-} from "./fixtures/handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import AmplifyTestFunctionLive, { AmplifyTestFunction } from "./fixtures/handler";
 import { makeAmplifyTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -30,10 +28,7 @@ const branchName = "main";
 const SITE_ZIP_BASE64 =
   "UEsDBBQAAAAAAAAAIVwZ1jYHJwAAACcAAAAKAAAAaW5kZXguaHRtbDxodG1sPjxib2R5PmhlbGxvIGFtcGxpZnk8L2JvZHk+PC9odG1sPlBLAQIUAxQAAAAAAAAAIVwZ1jYHJwAAACcAAAAKAAAAAAAAAAAAAACAAQAAAABpbmRleC5odG1sUEsFBgAAAAABAAEAOAAAAE8AAAAAAA==";
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 let baseUrl: string;
 let appId: string;
@@ -65,18 +60,13 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const postJson = (path: string, body: unknown) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((response) => response.json));
 
 const getJson = (path: string) =>
@@ -109,16 +99,12 @@ const deploySite = (branchName: string) =>
     })) as { jobSummary: { jobId: string; status: string } };
     expect(released.jobSummary.jobId).toBe(staged.jobId);
 
-    const settled = yield* getJson(
-      `/job?branchName=${branchName}&jobId=${staged.jobId}`,
-    ).pipe(
+    const settled = yield* getJson(`/job?branchName=${branchName}&jobId=${staged.jobId}`).pipe(
       Effect.map((body) => body as { status: string; stepCount: number }),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
         until: (job): boolean =>
-          job.status === "SUCCEED" ||
-          job.status === "FAILED" ||
-          job.status === "CANCELLED",
+          job.status === "SUCCEED" || job.status === "FAILED" || job.status === "CANCELLED",
         times: 10,
       }),
     );
@@ -250,9 +236,7 @@ describe.sequential("Amplify Bindings", () => {
         testOptions,
         "AmplifyBindings",
       );
-      expect(remaining.jobSummaries.map((j) => j.jobId)).not.toContain(
-        deployed.jobId,
-      );
+      expect(remaining.jobSummaries.map((j) => j.jobId)).not.toContain(deployed.jobId);
     }),
     { timeout: 120_000, retry: 0 },
   );
@@ -289,8 +273,7 @@ describe.sequential("Amplify Bindings", () => {
       );
       const rule = rules.find(
         (r): boolean =>
-          typeof r.EventPattern === "string" &&
-          r.EventPattern.includes('"aws.amplify"'),
+          typeof r.EventPattern === "string" && r.EventPattern.includes('"aws.amplify"'),
       );
       expect(rule).toBeDefined();
       expect(rule!.EventPattern).toContain("Amplify Deployment Status Change");
@@ -320,9 +303,7 @@ describe.sequential("Amplify Bindings", () => {
       } else {
         // Some accounts gate access logs on the default domain — the typed
         // tag still proves the binding + IAM wiring.
-        expect(["BadRequestException", "NotFoundException"]).toContain(
-          result.errorTag,
-        );
+        expect(["BadRequestException", "NotFoundException"]).toContain(result.errorTag);
       }
     }),
     { timeout: 60_000, retry: 0 },

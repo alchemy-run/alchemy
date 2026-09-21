@@ -75,17 +75,15 @@ export interface PlaybackKeyPair extends Resource<
  *
  * @resource
  */
-export const PlaybackKeyPair = Resource<PlaybackKeyPair>(
-  "AWS.IVS.PlaybackKeyPair",
-);
+export const PlaybackKeyPair = Resource<PlaybackKeyPair>("AWS.IVS.PlaybackKeyPair");
 
 /**
  * Raised when the IVS API returns a playback key pair missing its ARN or
  * name.
  */
-export class IvsPlaybackKeyPairIncomplete extends Data.TaggedError(
-  "IvsPlaybackKeyPairIncomplete",
-)<{ message: string }> {}
+export class IvsPlaybackKeyPairIncomplete extends Data.TaggedError("IvsPlaybackKeyPairIncomplete")<{
+  message: string;
+}> {}
 
 /**
  * DeletePlaybackKeyPair intermittently returns InternalServerException even
@@ -97,20 +95,14 @@ const retryDeleteInternalServer = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (error) => error._tag === "InternalServerException",
-    schedule: Schedule.max([
-      Schedule.exponential("500 millis"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
   });
 
 export const PlaybackKeyPairProvider = () =>
   Provider.effect(
     PlaybackKeyPair,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { playbackKeyPairName?: string | undefined },
-      ) =>
+      const toName = (id: string, props: { playbackKeyPairName?: string | undefined }) =>
         props.playbackKeyPairName
           ? Effect.succeed(props.playbackKeyPairName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -133,9 +125,7 @@ export const PlaybackKeyPairProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getPlaybackKeyPair({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.keyPair;
       });
@@ -147,9 +137,7 @@ export const PlaybackKeyPairProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const summaries = yield* ivs.listPlaybackKeyPairs.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.keyPairs),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.keyPairs)),
           retryWhileThrottled,
         );
         const match = summaries.find((s) => s.name === name && s.arn);
@@ -165,9 +153,7 @@ export const PlaybackKeyPairProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (keyPair === undefined) return undefined;
           const attrs = yield* toAttrs(keyPair);
-          return (yield* hasAlchemyTags(id, toTagRecord(keyPair.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(keyPair.tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -178,8 +164,7 @@ export const PlaybackKeyPairProvider = () =>
           // first (create-before-delete would find the old one by name and
           // wrongly adopt it).
           if (olds.publicKeyMaterial !== news.publicKeyMaterial) {
-            const sameName =
-              (yield* toName(id, olds)) === (yield* toName(id, news));
+            const sameName = (yield* toName(id, olds)) === (yield* toName(id, news));
             return { action: "replace", deleteFirst: sameName } as const;
           }
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
@@ -239,21 +224,17 @@ export const PlaybackKeyPairProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* ivs
-            .deletePlaybackKeyPair({ arn: output.playbackKeyPairArn })
-            .pipe(
-              retryWhileThrottled,
-              retryDeleteInternalServer,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* ivs.deletePlaybackKeyPair({ arn: output.playbackKeyPairArn }).pipe(
+            retryWhileThrottled,
+            retryDeleteInternalServer,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
 
         list: () =>
           ivs.listPlaybackKeyPairs.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.keyPairs),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.keyPairs)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>
@@ -261,9 +242,7 @@ export const PlaybackKeyPairProvider = () =>
                     ? Effect.succeed(undefined)
                     : getByArn(summary.arn).pipe(
                         Effect.flatMap((keyPair) =>
-                          keyPair === undefined
-                            ? Effect.succeed(undefined)
-                            : toAttrs(keyPair),
+                          keyPair === undefined ? Effect.succeed(undefined) : toAttrs(keyPair),
                         ),
                       ),
                 { concurrency: 5 },

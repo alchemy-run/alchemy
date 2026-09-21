@@ -10,16 +10,12 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import {
-  backendEnvKey,
-  backendString,
-  bindBackendEnvironment,
-} from "./BackendConnection.ts";
+import { backendEnvKey, backendString, bindBackendEnvironment } from "./BackendConnection.ts";
 import type { DataApi } from "./DataApi.ts";
 
-export class DataApiRequestError extends Data.TaggedError(
-  "DataApiRequestError",
-)<{ message: string }> {}
+export class DataApiRequestError extends Data.TaggedError("DataApiRequestError")<{
+  message: string;
+}> {}
 
 export interface QueryDataApiClient {
   /** Bound public PostgREST endpoint. */

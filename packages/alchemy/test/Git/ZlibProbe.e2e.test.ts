@@ -1,3 +1,8 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
 /**
  * The same probe as ZlibProbe.local.test.ts, against REAL Cloudflare: which
  * synchronous exact-span inflate paths exist in production workerd, and
@@ -5,12 +10,7 @@
  * DESIGN §22.4: this is what decides the push-ingest CPU story.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import ZlibProbeWorker from "./fixtures/zlib-probe-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -37,9 +37,7 @@ test(
     const get = (q: string) =>
       client.get(`${url}/?${q}`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`status ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`status ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),

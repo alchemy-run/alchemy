@@ -37,7 +37,6 @@ export interface ListDocumentClassificationJobs extends Binding.Service<
     >
   >
 > {}
-export const ListDocumentClassificationJobs =
-  Binding.Service<ListDocumentClassificationJobs>(
-    "AWS.Comprehend.ListDocumentClassificationJobs",
-  );
+export const ListDocumentClassificationJobs = Binding.Service<ListDocumentClassificationJobs>(
+  "AWS.Comprehend.ListDocumentClassificationJobs",
+);

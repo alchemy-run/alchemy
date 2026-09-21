@@ -32,10 +32,7 @@ export interface GetPersonTracking extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetPersonTrackingRequest,
-    ) => Effect.Effect<
-      rekognition.GetPersonTrackingResponse,
-      rekognition.GetPersonTrackingError
-    >
+    ) => Effect.Effect<rekognition.GetPersonTrackingResponse, rekognition.GetPersonTrackingError>
   >
 > {}
 export const GetPersonTracking = Binding.Service<GetPersonTracking>(

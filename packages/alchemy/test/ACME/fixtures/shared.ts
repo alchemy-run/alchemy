@@ -1,12 +1,12 @@
-import * as ACME from "@/ACME";
-import * as AdoptPolicy from "@/AdoptPolicy";
-import { retain } from "@/RemovalPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import * as Output from "@/Output";
 import * as ZeroSsl from "@distilled.cloud/zerossl";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as ACME from "@/ACME";
+import * as AdoptPolicy from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import * as Output from "@/Output";
+import { retain } from "@/RemovalPolicy";
 
 export const ZONE_NAME = "alchemy-test-2.us";
 
@@ -34,9 +34,7 @@ const zeroSslEab = Effect.runSync(
     ZeroSsl.zerossl
       .generateEabCredentials({})
       .pipe(
-        Effect.provide(
-          Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer),
-        ),
+        Effect.provide(Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer)),
         Effect.orDie,
       ),
   ),
@@ -49,12 +47,8 @@ const zeroSslEab = Effect.runSync(
 export const ZeroSSLAccount = ACME.Account("ZeroSSL", {
   ca: ACME.ZeroSSL,
   eab: {
-    keyId: Output.fromEffect(
-      zeroSslEab.pipe(Effect.map((eab) => eab.eab_kid!)),
-    ),
-    hmacKey: Output.fromEffect(
-      zeroSslEab.pipe(Effect.map((eab) => eab.eab_hmac_key!)),
-    ),
+    keyId: Output.fromEffect(zeroSslEab.pipe(Effect.map((eab) => eab.eab_kid!))),
+    hmacKey: Output.fromEffect(zeroSslEab.pipe(Effect.map((eab) => eab.eab_hmac_key!))),
   },
   termsOfServiceAgreed: true,
 });

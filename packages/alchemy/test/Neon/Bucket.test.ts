@@ -1,48 +1,46 @@
-import { adopt, Unowned } from "@/AdoptPolicy";
-import { InstanceId } from "@/InstanceId";
-import { createPhysicalName } from "@/PhysicalName";
-import * as Provider from "@/Provider";
-import { Branch } from "@/Neon/Branch";
-import { Credential } from "@/Neon/Credential";
-import { Bucket, bucketStorageClient, type BucketProps } from "@/Neon/Bucket";
-import { storageBodyBytes } from "@/Neon/Object";
-import { makeStorageClient } from "@/Neon/Storage";
-import { Project } from "@/Neon/Project";
-import { providers } from "@/Neon/Providers";
-import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { adopt, Unowned } from "@/AdoptPolicy";
+import { InstanceId } from "@/InstanceId";
+import { Branch } from "@/Neon/Branch";
+import { Bucket, bucketStorageClient, type BucketProps } from "@/Neon/Bucket";
+import { Credential } from "@/Neon/Credential";
+import { storageBodyBytes } from "@/Neon/Object";
+import { Project } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import { makeStorageClient } from "@/Neon/Storage";
+import { createPhysicalName } from "@/PhysicalName";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 
-test.provider(
-  "never-created buckets without branch identity are absent",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const provider = yield* Provider.findProvider(Bucket);
-      const cases: BucketProps[] = [
-        { branch: { projectId: "", branchId: "" } },
-        { branch: { projectId: "project", branchId: "" } },
-        { branch: { projectId: "", branchId: "branch" } },
-        { project: { projectId: "" } },
-      ];
-      for (const olds of cases) {
-        expect(
-          yield* provider.read!({
-            id: "Incomplete",
-            fqn: "Incomplete",
-            instanceId: "never-created",
-            olds,
-            output: undefined,
-          }),
-        ).toBeUndefined();
-      }
-      yield* stack.destroy();
-    }),
+test.provider("never-created buckets without branch identity are absent", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    const provider = yield* Provider.findProvider(Bucket);
+    const cases: BucketProps[] = [
+      { branch: { projectId: "", branchId: "" } },
+      { branch: { projectId: "project", branchId: "" } },
+      { branch: { projectId: "", branchId: "branch" } },
+      { project: { projectId: "" } },
+    ];
+    for (const olds of cases) {
+      expect(
+        yield* provider.read!({
+          id: "Incomplete",
+          fqn: "Incomplete",
+          instanceId: "never-created",
+          olds,
+          output: undefined,
+        }),
+      ).toBeUndefined();
+    }
+    yield* stack.destroy();
+  }),
 );
 
 test.provider(
@@ -127,9 +125,7 @@ test.provider(
             });
             const bucket = yield* Bucket("Private", {
               project,
-              tags: updated
-                ? { phase: "updated" }
-                : { phase: "initial", removed: "yes" },
+              tags: updated ? { phase: "updated" } : { phase: "initial", removed: "yes" },
               cors: updated
                 ? []
                 : [
@@ -153,11 +149,7 @@ test.provider(
         project_id: first.bucket.projectId,
         branch_id: first.bucket.branchId,
       });
-      expect(
-        listing.buckets.some(
-          (bucket) => bucket.name === first.bucket.bucketName,
-        ),
-      ).toBe(true);
+      expect(listing.buckets.some((bucket) => bucket.name === first.bucket.bucketName)).toBe(true);
       const client = yield* bucketStorageClient(first.bucket);
       yield* client.put("private.txt", "private");
       const publicClient = yield* bucketStorageClient(first.publicBucket);
@@ -174,9 +166,7 @@ test.provider(
       expect(yield* publicRead.text).toBe("public");
       const updated = yield* deploy(true);
       expect(updated.bucket.bucketName).toBe(first.bucket.bucketName);
-      const observed = yield* (yield* bucketStorageClient(
-        updated.bucket,
-      )).getTags();
+      const observed = yield* (yield* bucketStorageClient(updated.bucket)).getTags();
       expect(observed.TagSet).toContainEqual({
         Key: "phase",
         Value: "updated",
@@ -185,12 +175,7 @@ test.provider(
       expect((yield* client.getCors()).CORSRules ?? []).toEqual([]);
       const upload = yield* client.createMultipartUpload("unfinished.bin");
       expect(upload.UploadId).toBeDefined();
-      yield* client.uploadPart(
-        "unfinished.bin",
-        upload.UploadId!,
-        1,
-        new Uint8Array([1, 2, 3]),
-      );
+      yield* client.uploadPart("unfinished.bin", upload.UploadId!, 1, new Uint8Array([1, 2, 3]));
       const completed = yield* client.createMultipartUpload("completed.bin");
       const part = yield* client.uploadPart(
         "completed.bin",
@@ -198,15 +183,10 @@ test.provider(
         1,
         new Uint8Array([4, 5, 6]),
       );
-      expect(
-        (yield* client.listParts("completed.bin", completed.UploadId!)).Parts
-          ?.length,
-      ).toBe(1);
-      yield* client.completeMultipartUpload(
-        "completed.bin",
-        completed.UploadId!,
-        [{ ETag: part.ETag, PartNumber: 1 }],
-      );
+      expect((yield* client.listParts("completed.bin", completed.UploadId!)).Parts?.length).toBe(1);
+      yield* client.completeMultipartUpload("completed.bin", completed.UploadId!, [
+        { ETag: part.ETag, PartNumber: 1 },
+      ]);
       expect((yield* client.head("completed.bin"))?.ContentLength).toBe(3);
       yield* stack.destroy();
       yield* stack.destroy();
@@ -219,10 +199,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const deploy = (
-        forceDestroy = false,
-        access: "private" | "public_read" = "private",
-      ) =>
+      const deploy = (forceDestroy = false, access: "private" | "public_read" = "private") =>
         stack.deploy(
           Effect.gen(function* () {
             const project = yield* Project("SafeBucketProject", {
@@ -238,18 +215,15 @@ test.provider(
       const bucket = yield* deploy();
       const client = yield* bucketStorageClient(bucket);
       yield* client.put("retained.txt", "preserve me");
-      const visibility = yield* deploy(false, "public_read").pipe(
-        Effect.result,
-      );
+      const visibility = yield* deploy(false, "public_read").pipe(Effect.result);
       expect(Result.isFailure(visibility)).toBe(true);
       const listing = yield* SDK.listProjectBranchBuckets({
         project_id: bucket.projectId,
         branch_id: bucket.branchId,
       });
-      expect(
-        listing.buckets.find((item) => item.name === bucket.bucketName)
-          ?.access_level,
-      ).toBe("private");
+      expect(listing.buckets.find((item) => item.name === bucket.bucketName)?.access_level).toBe(
+        "private",
+      );
       expect((yield* client.head("retained.txt"))?.ContentLength).toBe(11);
       yield* deploy();
       const deletion = yield* stack.destroy().pipe(Effect.result);
@@ -334,9 +308,7 @@ test.provider(
             }),
           );
         const child = yield* deployChild(false);
-        expect(child.bucket.tags["alchemy::branch"]).toBe(
-          child.branch.branchId,
-        );
+        expect(child.bucket.tags["alchemy::branch"]).toBe(child.branch.branchId);
         expect(child.bucket.tags.lineage).toBe("child");
         expect(child.bucket.cors).toEqual([
           {
@@ -345,12 +317,8 @@ test.provider(
           },
         ]);
         const childClient = yield* bucketStorageClient(child.bucket);
-        const inherited = yield* storageBodyBytes(
-          (yield* childClient.get("inherited.txt"))?.Body,
-        );
-        expect(
-          yield* Effect.sync(() => new TextDecoder().decode(inherited)),
-        ).toBe("parent");
+        const inherited = yield* storageBodyBytes((yield* childClient.get("inherited.txt"))?.Body);
+        expect(yield* Effect.sync(() => new TextDecoder().decode(inherited))).toBe("parent");
         expect(yield* parentClient.getTags()).toEqual(parentTags);
         expect(yield* parentClient.getCors()).toEqual(parentCors);
         const updated = yield* deployChild(true);
@@ -368,25 +336,15 @@ test.provider(
           },
           child.bucket.bucketName,
         );
-        expect(
-          (yield* ancestorClient.head("inherited.txt"))?.ContentLength,
-        ).toBe(6);
+        expect((yield* ancestorClient.head("inherited.txt"))?.ContentLength).toBe(6);
         yield* childClient.put("inherited.txt", "child");
-        const original = yield* storageBodyBytes(
-          (yield* parentClient.get("inherited.txt"))?.Body,
-        );
-        expect(
-          yield* Effect.sync(() => new TextDecoder().decode(original)),
-        ).toBe("parent");
+        const original = yield* storageBodyBytes((yield* parentClient.get("inherited.txt"))?.Body);
+        expect(yield* Effect.sync(() => new TextDecoder().decode(original))).toBe("parent");
         yield* childClient.delete("inherited.txt");
         expect(yield* childClient.get("inherited.txt")).toBeUndefined();
-        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-          6,
-        );
+        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(6);
         yield* stack.deploy(parentProgram);
-        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-          6,
-        );
+        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(6);
         expect(yield* parentClient.getTags()).toEqual(parentTags);
         expect(yield* parentClient.getCors()).toEqual(parentCors);
         expect(
@@ -461,40 +419,22 @@ test.provider(
         },
         parent.bucket.bucketName,
       );
-      const bytes = yield* storageBodyBytes(
-        (yield* reader.get("inherited.txt"))?.Body,
-      );
-      expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe(
-        "parent",
-      );
-      const denied = yield* reader
-        .put("denied.txt", "must not write")
-        .pipe(Effect.result);
+      const bytes = yield* storageBodyBytes((yield* reader.get("inherited.txt"))?.Body);
+      expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe("parent");
+      const denied = yield* reader.put("denied.txt", "must not write").pipe(Effect.result);
       expect(Result.isFailure(denied)).toBe(true);
-      if (Result.isFailure(denied))
-        expect(denied.failure._tag).toBe("AccessDeniedException");
-      const tagging = yield* client
-        .putTags({ phase: "child" })
-        .pipe(Effect.result);
+      if (Result.isFailure(denied)) expect(denied.failure._tag).toBe("AccessDeniedException");
+      const tagging = yield* client.putTags({ phase: "child" }).pipe(Effect.result);
       expect(Result.isFailure(tagging)).toBe(true);
-      if (Result.isFailure(tagging))
-        expect(tagging.failure._tag).toBe("NoSuchBucket");
+      if (Result.isFailure(tagging)) expect(tagging.failure._tag).toBe("NoSuchBucket");
       yield* client.put("inherited.txt", "child");
-      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-        6,
-      );
+      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(6);
       yield* client.delete("inherited.txt");
       expect(yield* client.get("inherited.txt")).toBeUndefined();
-      const original = yield* storageBodyBytes(
-        (yield* parentClient.get("inherited.txt"))?.Body,
-      );
-      expect(yield* Effect.sync(() => new TextDecoder().decode(original))).toBe(
-        "parent",
-      );
+      const original = yield* storageBodyBytes((yield* parentClient.get("inherited.txt"))?.Body);
+      expect(yield* Effect.sync(() => new TextDecoder().decode(original))).toBe("parent");
       yield* stack.deploy(parentProgram);
-      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-        6,
-      );
+      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(6);
       yield* stack.destroy();
       yield* stack.destroy();
     }),

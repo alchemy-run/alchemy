@@ -38,82 +38,74 @@ export const StatementsHttp = Layer.effect(
     const listTablesOp = yield* data.listTables;
     const listStatementsOp = yield* data.listStatements;
 
-    return Effect.fn(function* (
-      workgroup: Workgroup,
-      options: StatementsOptions = {},
-    ) {
+    return Effect.fn(function* (workgroup: Workgroup, options: StatementsOptions = {}) {
       const workgroupName = yield* workgroup.workgroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.RedshiftData.Statements(${workgroup}))`(
-            {
-              policyStatements: [
-                {
-                  // Workgroup-scoped Data API actions (submit statements and
-                  // read database metadata through the workgroup).
-                  Effect: "Allow",
-                  Action: [
-                    "redshift-data:ExecuteStatement",
-                    "redshift-data:BatchExecuteStatement",
-                    "redshift-data:DescribeTable",
-                    "redshift-data:ListDatabases",
-                    "redshift-data:ListSchemas",
-                    "redshift-data:ListTables",
-                  ],
-                  Resource: [workgroup.workgroupArn],
-                },
-                {
-                  // Statement-scoped actions are authorized per-statement
-                  // (owner condition), not by ARN.
-                  Effect: "Allow",
-                  Action: [
-                    "redshift-data:DescribeStatement",
-                    "redshift-data:GetStatementResult",
-                    "redshift-data:GetStatementResultV2",
-                    "redshift-data:CancelStatement",
-                    "redshift-data:ListStatements",
-                  ],
-                  Resource: ["*"],
-                },
-                {
-                  // IAM temporary-credential auth against the serverless
-                  // workgroup (used when no SecretArn is supplied).
-                  Effect: "Allow",
-                  Action: ["redshift-serverless:GetCredentials"],
-                  Resource: [workgroup.workgroupArn],
-                },
-                ...(options.secretArn
-                  ? [
-                      {
-                        Effect: "Allow" as const,
-                        Action: [
-                          "secretsmanager:GetSecretValue",
-                          "secretsmanager:DescribeSecret",
-                        ],
-                        Resource: [options.secretArn],
-                      },
-                    ]
-                  : []),
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.RedshiftData.Statements(${workgroup}))`({
+            policyStatements: [
+              {
+                // Workgroup-scoped Data API actions (submit statements and
+                // read database metadata through the workgroup).
+                Effect: "Allow",
+                Action: [
+                  "redshift-data:ExecuteStatement",
+                  "redshift-data:BatchExecuteStatement",
+                  "redshift-data:DescribeTable",
+                  "redshift-data:ListDatabases",
+                  "redshift-data:ListSchemas",
+                  "redshift-data:ListTables",
+                ],
+                Resource: [workgroup.workgroupArn],
+              },
+              {
+                // Statement-scoped actions are authorized per-statement
+                // (owner condition), not by ARN.
+                Effect: "Allow",
+                Action: [
+                  "redshift-data:DescribeStatement",
+                  "redshift-data:GetStatementResult",
+                  "redshift-data:GetStatementResultV2",
+                  "redshift-data:CancelStatement",
+                  "redshift-data:ListStatements",
+                ],
+                Resource: ["*"],
+              },
+              {
+                // IAM temporary-credential auth against the serverless
+                // workgroup (used when no SecretArn is supplied).
+                Effect: "Allow",
+                Action: ["redshift-serverless:GetCredentials"],
+                Resource: [workgroup.workgroupArn],
+              },
+              ...(options.secretArn
+                ? [
+                    {
+                      Effect: "Allow" as const,
+                      Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                      Resource: [options.secretArn],
+                    },
+                  ]
+                : []),
+            ],
+          });
         }
       }
 
       const database = options.database ?? "dev";
 
-      const execute = Effect.fn(
-        `AWS.RedshiftData.Statements.execute(${workgroup.LogicalId})`,
-      )(function* (request: ExecuteStatementRequest) {
-        return yield* executeStatement({
-          ...request,
-          WorkgroupName: yield* workgroupName,
-          Database: database,
-          SecretArn: options.secretArn,
-          DbUser: options.dbUser,
-        });
-      });
+      const execute = Effect.fn(`AWS.RedshiftData.Statements.execute(${workgroup.LogicalId})`)(
+        function* (request: ExecuteStatementRequest) {
+          return yield* executeStatement({
+            ...request,
+            WorkgroupName: yield* workgroupName,
+            Database: database,
+            SecretArn: options.secretArn,
+            DbUser: options.dbUser,
+          });
+        },
+      );
 
       const executeBatch = Effect.fn(
         `AWS.RedshiftData.Statements.executeBatch(${workgroup.LogicalId})`,
@@ -127,23 +119,23 @@ export const StatementsHttp = Layer.effect(
         });
       });
 
-      const describe = Effect.fn(
-        `AWS.RedshiftData.Statements.describe(${workgroup.LogicalId})`,
-      )(function* (id: string) {
-        return yield* describeStatement({ Id: id });
-      });
+      const describe = Effect.fn(`AWS.RedshiftData.Statements.describe(${workgroup.LogicalId})`)(
+        function* (id: string) {
+          return yield* describeStatement({ Id: id });
+        },
+      );
 
-      const cancel = Effect.fn(
-        `AWS.RedshiftData.Statements.cancel(${workgroup.LogicalId})`,
-      )(function* (id: string) {
-        return yield* cancelStatement({ Id: id });
-      });
+      const cancel = Effect.fn(`AWS.RedshiftData.Statements.cancel(${workgroup.LogicalId})`)(
+        function* (id: string) {
+          return yield* cancelStatement({ Id: id });
+        },
+      );
 
-      const getResult = Effect.fn(
-        `AWS.RedshiftData.Statements.getResult(${workgroup.LogicalId})`,
-      )(function* (id: string, nextToken?: string) {
-        return yield* getStatementResult({ Id: id, NextToken: nextToken });
-      });
+      const getResult = Effect.fn(`AWS.RedshiftData.Statements.getResult(${workgroup.LogicalId})`)(
+        function* (id: string, nextToken?: string) {
+          return yield* getStatementResult({ Id: id, NextToken: nextToken });
+        },
+      );
 
       const getResultV2 = Effect.fn(
         `AWS.RedshiftData.Statements.getResultV2(${workgroup.LogicalId})`,
@@ -208,32 +200,32 @@ export const StatementsHttp = Layer.effect(
         });
       });
 
-      const query = Effect.fn(
-        `AWS.RedshiftData.Statements.query(${workgroup.LogicalId})`,
-      )(function* (sql: string, parameters?: data.SqlParameter[]) {
-        const submitted = yield* execute({ Sql: sql, Parameters: parameters });
-        const id = submitted.Id!;
-        // Poll until the statement reaches a terminal status. Redshift
-        // Serverless typically finishes simple statements in a few seconds;
-        // budget ~2.5 min (30 * 5s).
-        const described = yield* describe(id).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (r) => isTerminal(r.Status),
-            times: 30,
-          }),
-        );
-        if (described.Status !== "FINISHED") {
-          return yield* Effect.fail(
-            new RedshiftStatementFailed({
-              statementId: id,
-              status: described.Status ?? "UNKNOWN",
-              error: described.Error,
+      const query = Effect.fn(`AWS.RedshiftData.Statements.query(${workgroup.LogicalId})`)(
+        function* (sql: string, parameters?: data.SqlParameter[]) {
+          const submitted = yield* execute({ Sql: sql, Parameters: parameters });
+          const id = submitted.Id!;
+          // Poll until the statement reaches a terminal status. Redshift
+          // Serverless typically finishes simple statements in a few seconds;
+          // budget ~2.5 min (30 * 5s).
+          const described = yield* describe(id).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (r) => isTerminal(r.Status),
+              times: 30,
             }),
           );
-        }
-        return yield* getResult(id);
-      });
+          if (described.Status !== "FINISHED") {
+            return yield* Effect.fail(
+              new RedshiftStatementFailed({
+                statementId: id,
+                status: described.Status ?? "UNKNOWN",
+                error: described.Error,
+              }),
+            );
+          }
+          return yield* getResult(id);
+        },
+      );
 
       return {
         execute,

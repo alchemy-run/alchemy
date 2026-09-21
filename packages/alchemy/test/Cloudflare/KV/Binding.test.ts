@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import ReadBindingWorker from "./fixtures/read-binding.ts";
 import ReadHttpWorker from "./fixtures/read-http.ts";
 import ReadWriteBindingWorker from "./fixtures/readwrite-binding.ts";
@@ -17,10 +17,7 @@ import WriteHttpWorker from "./fixtures/write-http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -32,17 +29,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 // test timeout while riding out cold-start propagation.
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -59,17 +52,12 @@ class ValueMismatch extends Data.TaggedError("ValueMismatch")<{
 // KV is eventually consistent — a fresh write can take a while to be
 // visible to a read on a different binding/edge, so allow generous
 // retries on the read-back.
-const propagate = Schedule.max([
-  Schedule.spaced("2 seconds"),
-  Schedule.recurs(45),
-]);
+const propagate = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
 
 const enc = encodeURIComponent;
 
 /** Retry a read-back until KV propagation makes it consistent. */
-const retryMismatch = <A, E, R>(
-  eff: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const retryMismatch = <A, E, R>(eff: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   eff.pipe(
     Effect.retry({
       while: (e: E) => e instanceof ValueMismatch,
@@ -110,11 +98,7 @@ const expectJson = (base: string, key: string, expected: unknown) =>
 
 /** `GET /get-bulk` and retry until every key resolves to its expected value. */
 const expectBulk = (base: string, expected: Record<string, string>) =>
-  untilOk(
-    HttpClient.get(
-      `${base}/get-bulk?keys=${enc(Object.keys(expected).join(","))}`,
-    ),
-  ).pipe(
+  untilOk(HttpClient.get(`${base}/get-bulk?keys=${enc(Object.keys(expected).join(","))}`)).pipe(
     Effect.flatMap((res) => res.json),
     Effect.flatMap((body) => {
       const values = (body as { values: Record<string, string | null> }).values;
@@ -159,9 +143,7 @@ const expectListed = (base: string, prefix: string, key: string) =>
       const keys = (body as { keys: string[] }).keys;
       return keys.includes(key)
         ? Effect.succeed(keys)
-        : Effect.fail(
-            new ValueMismatch({ expected: key, actual: keys.join(",") }),
-          );
+        : Effect.fail(new ValueMismatch({ expected: key, actual: keys.join(",") }));
     }),
     retryMismatch,
   );
@@ -182,9 +164,7 @@ const expectMissing = (base: string, key: string) =>
 const put = (base: string, key: string, value: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.put(`${base}/put?key=${enc(key)}`).pipe(
-        HttpClientRequest.bodyText(value),
-      ),
+      HttpClientRequest.put(`${base}/put?key=${enc(key)}`).pipe(HttpClientRequest.bodyText(value)),
     ),
   );
 
@@ -198,11 +178,7 @@ const putMeta = (base: string, key: string, value: string) =>
   );
 
 const del = (base: string, key: string) =>
-  untilOk(
-    HttpClient.execute(
-      HttpClientRequest.make("DELETE")(`${base}/del?key=${enc(key)}`),
-    ),
-  );
+  untilOk(HttpClient.execute(HttpClientRequest.make("DELETE")(`${base}/del?key=${enc(key)}`)));
 
 /**
  * Drive the FULL {@link ReadWriteNamespaceClient} surface through one
@@ -288,19 +264,11 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* exercise("rw-http", url(out.readWriteHttp));
 
       // ── Split Read/Write bindings agree on the shared namespace ──
-      const crossWorker = (
-        label: string,
-        writeBase: string,
-        readBase: string,
-      ) =>
+      const crossWorker = (label: string, writeBase: string, readBase: string) =>
         Effect.gen(function* () {
           const key = `${label}-key`;
-          expect((yield* put(writeBase, key, `${label}-value`)).status).toBe(
-            200,
-          );
-          expect(yield* expectValue(readBase, key, `${label}-value`)).toBe(
-            `${label}-value`,
-          );
+          expect((yield* put(writeBase, key, `${label}-value`)).status).toBe(200);
+          expect(yield* expectValue(readBase, key, `${label}-value`)).toBe(`${label}-value`);
           yield* del(writeBase, key);
           yield* expectMissing(readBase, key);
         });

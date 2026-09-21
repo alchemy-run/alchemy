@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { DBSubnetGroup } from "@/AWS/Neptune";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as neptune from "@distilled.cloud/aws/neptune";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DBSubnetGroup } from "@/AWS/Neptune";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -24,24 +24,17 @@ const defaultSubnetIds = Effect.gen(function* () {
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .sort();
   if (ids.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-AZ subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-AZ subnets"));
   }
   return ids;
 });
 
 const assertGone = (name: string) =>
   neptune.describeDBSubnetGroups({ DBSubnetGroupName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`subnet group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`subnet group '${name}' still exists`))),
     Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -73,9 +66,7 @@ test.provider(
         DBSubnetGroupName: group.dbSubnetGroupName,
       });
       const observed = described.DBSubnetGroups?.[0];
-      expect(observed?.DBSubnetGroupDescription).toBe(
-        "alchemy neptune subnet group",
-      );
+      expect(observed?.DBSubnetGroupDescription).toBe("alchemy neptune subnet group");
       expect(observed?.VpcId).toBeDefined();
 
       // Update the description in place (name unchanged).

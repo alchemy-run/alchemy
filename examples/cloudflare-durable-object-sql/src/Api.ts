@@ -50,10 +50,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         );
       }).pipe(
         Effect.catchTag("EffectDrizzleQueryError", () =>
-          HttpServerResponse.json(
-            { error: "Database query failed" },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: "Database query failed" }, { status: 500 }),
         ),
       ),
     };

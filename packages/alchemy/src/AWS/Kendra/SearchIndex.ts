@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -181,22 +176,17 @@ export interface Index extends Resource<
 export const Index = Resource<Index>("AWS.Kendra.Index");
 
 const createIndexName = (id: string, props: { name?: string | undefined }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 100 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(
-        ["ResourceNotFoundException", "ResourceUnavailableException"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
+        Effect.succeed(undefined),
       ),
     );
-  return Object.fromEntries(
-    (response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-  );
+  return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
 });
 
 interface IndexState {
@@ -204,17 +194,10 @@ interface IndexState {
   described: kendra.DescribeIndexResponse;
 }
 
-const readIndexById = Effect.fn(function* (
-  id: string,
-  arnOf: (indexId: string) => string,
-) {
+const readIndexById = Effect.fn(function* (id: string, arnOf: (indexId: string) => string) {
   const described = yield* kendra
     .describeIndex({ Id: id })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.Id ?? id);
   const state: IndexState = {
@@ -232,21 +215,14 @@ const readIndexById = Effect.fn(function* (
   return state;
 });
 
-const findIndexByName = Effect.fn(function* (
-  name: string,
-  arnOf: (indexId: string) => string,
-) {
+const findIndexByName = Effect.fn(function* (name: string, arnOf: (indexId: string) => string) {
   const summaries = yield* kendra.listIndices.pages({}).pipe(
     EffectStream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).flatMap(
-        (page) => page.IndexConfigurationSummaryItems ?? [],
-      ),
+      Array.from(chunk).flatMap((page) => page.IndexConfigurationSummaryItems ?? []),
     ),
   );
-  const match = summaries.find(
-    (summary) => summary.Name === name && summary.Status !== "DELETING",
-  );
+  const match = summaries.find((summary) => summary.Name === name && summary.Status !== "DELETING");
   if (!match?.Id) return undefined;
   return yield* readIndexById(match.Id, arnOf);
 });
@@ -264,9 +240,7 @@ class IndexNotReady extends Data.TaggedError("IndexNotReady")<{
  * An index whose asynchronous provisioning converged to the terminal
  * `FAILED` status.
  */
-export class IndexProvisioningFailed extends Data.TaggedError(
-  "IndexProvisioningFailed",
-)<{
+export class IndexProvisioningFailed extends Data.TaggedError("IndexProvisioningFailed")<{
   readonly id: string;
   readonly message: string | undefined;
 }> {}
@@ -281,10 +255,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "IndexNotReady",
     // Index provisioning is slow (~20–30 min); poll every 20s up to ~40 min.
-    schedule: Schedule.max([
-      Schedule.spaced("20 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(120)]),
   });
 
 // CreateIndex validates the IAM role up front; a freshly-created role may
@@ -304,16 +275,10 @@ const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* kendra
         .describeIndex({ Id: id })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new IndexNotReady({ id, status: described.Status }),
-        );
+        return yield* Effect.fail(new IndexNotReady({ id, status: described.Status }));
       }
       if (described?.Status === "ACTIVE") return;
       if (described?.Status === "FAILED") {
@@ -321,16 +286,13 @@ const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>
           new IndexProvisioningFailed({ id, message: described.ErrorMessage }),
         );
       }
-      return yield* Effect.fail(
-        new IndexNotReady({ id, status: described?.Status }),
-      );
+      return yield* Effect.fail(new IndexNotReady({ id, status: described?.Status }));
     }),
   );
 
 const currentArnOf = Effect.gen(function* () {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return (indexId: string) =>
-    `arn:aws:kendra:${region}:${accountId}:index/${indexId}`;
+  return (indexId: string) => `arn:aws:kendra:${region}:${accountId}:index/${indexId}`;
 });
 
 export const IndexProvider = () =>
@@ -345,9 +307,7 @@ export const IndexProvider = () =>
             const summaries = yield* kendra.listIndices.pages({}).pipe(
               EffectStream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.IndexConfigurationSummaryItems ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.IndexConfigurationSummaryItems ?? []),
               ),
             );
             const hydrated = yield* Effect.forEach(
@@ -355,18 +315,13 @@ export const IndexProvider = () =>
               (indexId) => readIndexById(indexId, arnOf),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* currentArnOf;
           const state = output?.id
             ? yield* readIndexById(output.id, arnOf)
-            : yield* findIndexByName(
-                yield* createIndexName(id, olds ?? {}),
-                arnOf,
-              );
+            : yield* findIndexByName(yield* createIndexName(id, olds ?? {}), arnOf);
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -377,10 +332,8 @@ export const IndexProvider = () =>
           if (olds === undefined) return;
           // Edition and encryption-at-rest are fixed at creation.
           if (
-            (olds.edition ?? "DEVELOPER_EDITION") !==
-              (news.edition ?? "DEVELOPER_EDITION") ||
-            olds.serverSideEncryption?.kmsKeyId !==
-              news.serverSideEncryption?.kmsKeyId
+            (olds.edition ?? "DEVELOPER_EDITION") !== (news.edition ?? "DEVELOPER_EDITION") ||
+            olds.serverSideEncryption?.kmsKeyId !== news.serverSideEncryption?.kmsKeyId
           ) {
             return { action: "replace" } as const;
           }
@@ -413,8 +366,7 @@ export const IndexProvider = () =>
                   : undefined,
                 UserContextPolicy: news.userContextPolicy,
                 UserTokenConfigurations: news.userTokenConfigurations,
-                UserGroupResolutionConfiguration:
-                  news.userGroupResolutionConfiguration,
+                UserGroupResolutionConfiguration: news.userGroupResolutionConfiguration,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
@@ -422,17 +374,13 @@ export const IndexProvider = () =>
               }),
             );
             if (!created.Id) {
-              return yield* Effect.fail(
-                new Error(`CreateIndex for '${name}' returned no Id`),
-              );
+              return yield* Effect.fail(new Error(`CreateIndex for '${name}' returned no Id`));
             }
             yield* session.note(`Creating index ${name} (${created.Id})...`);
             yield* waitForIndexStatus(created.Id, "ACTIVE");
             state = yield* readIndexById(created.Id, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created index ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created index ${name}`));
             }
           }
 
@@ -448,8 +396,7 @@ export const IndexProvider = () =>
             desiredCapacity !== undefined &&
             (desiredCapacity.StorageCapacityUnits !==
               described.CapacityUnits?.StorageCapacityUnits ||
-              desiredCapacity.QueryCapacityUnits !==
-                described.CapacityUnits?.QueryCapacityUnits);
+              desiredCapacity.QueryCapacityUnits !== described.CapacityUnits?.QueryCapacityUnits);
           const needsUpdate =
             name !== described.Name ||
             news.roleArn !== described.RoleArn ||
@@ -458,8 +405,7 @@ export const IndexProvider = () =>
               news.userContextPolicy !== described.UserContextPolicy) ||
             (news.userGroupResolutionConfiguration !== undefined &&
               news.userGroupResolutionConfiguration.UserGroupResolutionMode !==
-                described.UserGroupResolutionConfiguration
-                  ?.UserGroupResolutionMode) ||
+                described.UserGroupResolutionConfiguration?.UserGroupResolutionMode) ||
             news.userTokenConfigurations !== undefined ||
             capacityDrifted;
           if (needsUpdate) {
@@ -470,8 +416,7 @@ export const IndexProvider = () =>
               Description: news.description,
               UserContextPolicy: news.userContextPolicy,
               UserTokenConfigurations: news.userTokenConfigurations,
-              UserGroupResolutionConfiguration:
-                news.userGroupResolutionConfiguration,
+              UserGroupResolutionConfiguration: news.userGroupResolutionConfiguration,
               CapacityUnits: desiredCapacity,
             });
             yield* waitForIndexStatus(state.attrs.id, "ACTIVE");
@@ -497,18 +442,14 @@ export const IndexProvider = () =>
 
           const final = yield* readIndexById(state.attrs.id, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled index ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled index ${name}`));
           }
           return final.attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* kendra
             .deleteIndex({ Id: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForIndexStatus(output.id, "DELETED");
         }),
       };

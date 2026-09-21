@@ -34,10 +34,7 @@ export interface GetCodeBindingSource extends Binding.Service<
       Language: string;
       /** The version of the schema. Defaults to the latest. */
       SchemaVersion?: string;
-    }) => Effect.Effect<
-      schemas.GetCodeBindingSourceResponse,
-      schemas.GetCodeBindingSourceError
-    >
+    }) => Effect.Effect<schemas.GetCodeBindingSourceResponse, schemas.GetCodeBindingSourceError>
   >
 > {}
 export const GetCodeBindingSource = Binding.Service<GetCodeBindingSource>(

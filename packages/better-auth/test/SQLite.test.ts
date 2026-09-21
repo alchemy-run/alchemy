@@ -1,7 +1,7 @@
+import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
 import { AlchemyContext, RuntimeContext } from "alchemy";
 import { describe, expect, it } from "alchemy-test";
 import { organization } from "better-auth/plugins/organization";
-import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Result from "effect/Result";
@@ -30,27 +30,25 @@ const tempSqlitePath = Effect.gen(function* () {
 });
 
 describe("BetterAuth (bun:sqlite)", () => {
-  it.live(
-    "uses the configured runtime directory unless a filename is supplied",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped();
-        yield* Effect.gen(function* () {
-          for (const filename of [undefined, `${root}/explicit.sqlite`]) {
-            const expected = filename ?? `${root}/better-auth.sqlite`;
-            const db = yield* Database.pipe(Effect.provide(SQLite(filename)));
-            yield* applyMigrations(db.migrate!, baseOptions);
-            expect(yield* fs.exists(expected)).toBe(true);
-          }
-        }).pipe(
-          Effect.provideService(AlchemyContext, {
-            dotAlchemy: root,
-            dev: false,
-            adopt: false,
-          }),
-        );
-      }).pipe(Effect.scoped, provideTestEnv),
+  it.live("uses the configured runtime directory unless a filename is supplied", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped();
+      yield* Effect.gen(function* () {
+        for (const filename of [undefined, `${root}/explicit.sqlite`]) {
+          const expected = filename ?? `${root}/better-auth.sqlite`;
+          const db = yield* Database.pipe(Effect.provide(SQLite(filename)));
+          yield* applyMigrations(db.migrate!, baseOptions);
+          expect(yield* fs.exists(expected)).toBe(true);
+        }
+      }).pipe(
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: root,
+          dev: false,
+          adopt: false,
+        }),
+      );
+    }).pipe(Effect.scoped, provideTestEnv),
   );
 
   it.live("applies schema migrations idempotently", () =>
@@ -69,14 +67,10 @@ describe("BetterAuth (bun:sqlite)", () => {
       expect(second.indexesCreated).toBe(0);
 
       // verify the core tables actually exist in the file
-      const { Database: BunSqlite } = yield* Effect.promise(
-        () => import("bun:sqlite"),
-      );
+      const { Database: BunSqlite } = yield* Effect.promise(() => import("bun:sqlite"));
       const raw = new BunSqlite(path);
       const tables = (
-        raw
-          .query("SELECT name FROM sqlite_master WHERE type = 'table'")
-          .all() as { name: string }[]
+        raw.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
       ).map((row) => row.name);
       raw.close();
       for (const table of ["user", "session", "account", "verification"]) {
@@ -123,110 +117,94 @@ describe("BetterAuth (bun:sqlite)", () => {
     }).pipe(provideTestEnv),
   );
 
-  it.live(
-    "upgrades a populated 1.6 database without rewriting account identities",
-    () =>
-      Effect.gen(function* () {
-        const path = yield* tempSqlitePath;
-        const { Database: BunSqlite } = yield* Effect.promise(
-          () => import("bun:sqlite"),
+  it.live("upgrades a populated 1.6 database without rewriting account identities", () =>
+    Effect.gen(function* () {
+      const path = yield* tempSqlitePath;
+      const { Database: BunSqlite } = yield* Effect.promise(() => import("bun:sqlite"));
+      const { betterAuth: betterAuth16 } = yield* Effect.promise(() => import("better-auth-1.6"));
+      const { getMigrations } = yield* Effect.promise(() => import("better-auth-1.6/db/migration"));
+      const legacy = yield* Effect.gen(function* () {
+        const database = yield* Effect.acquireRelease(
+          Effect.sync(() => new BunSqlite(path)),
+          (database) => Effect.sync(() => database.close()),
         );
-        const { betterAuth: betterAuth16 } = yield* Effect.promise(
-          () => import("better-auth-1.6"),
+        const migrations = yield* Effect.promise(() => getMigrations({ ...baseOptions, database }));
+        yield* Effect.promise(() => migrations.runMigrations());
+        const auth = yield* Effect.sync(() => betterAuth16({ ...baseOptions, database }));
+        const user = yield* Effect.promise(() =>
+          auth.api.signUpEmail({
+            body: {
+              email: "existing@example.com",
+              password: "password1234",
+              name: "Existing User",
+            },
+          }),
         );
-        const { getMigrations } = yield* Effect.promise(
-          () => import("better-auth-1.6/db/migration"),
+        const signIn = yield* Effect.promise(() =>
+          auth.api.signInEmail({
+            body: { email: "existing@example.com", password: "password1234" },
+            asResponse: true,
+          }),
         );
-        const legacy = yield* Effect.gen(function* () {
-          const database = yield* Effect.acquireRelease(
-            Effect.sync(() => new BunSqlite(path)),
-            (database) => Effect.sync(() => database.close()),
-          );
-          const migrations = yield* Effect.promise(() =>
-            getMigrations({ ...baseOptions, database }),
-          );
-          yield* Effect.promise(() => migrations.runMigrations());
-          const auth = yield* Effect.sync(() =>
-            betterAuth16({ ...baseOptions, database }),
-          );
-          const user = yield* Effect.promise(() =>
-            auth.api.signUpEmail({
-              body: {
-                email: "existing@example.com",
-                password: "password1234",
-                name: "Existing User",
-              },
-            }),
-          );
-          const signIn = yield* Effect.promise(() =>
-            auth.api.signInEmail({
-              body: { email: "existing@example.com", password: "password1234" },
-              asResponse: true,
-            }),
-          );
-          const accounts = yield* Effect.sync(() =>
-            database
-              .query(
-                "SELECT id, accountId, providerId, userId, password FROM account ORDER BY id",
-              )
-              .all(),
-          );
-          return {
-            userId: user.user.id,
-            accounts,
-            cookie: signIn.headers
-              .getSetCookie()
-              .map((cookie) => cookie.split(";")[0])
-              .join("; "),
-          };
-        }).pipe(Effect.scoped);
+        const accounts = yield* Effect.sync(() =>
+          database
+            .query("SELECT id, accountId, providerId, userId, password FROM account ORDER BY id")
+            .all(),
+        );
+        return {
+          userId: user.user.id,
+          accounts,
+          cookie: signIn.headers
+            .getSetCookie()
+            .map((cookie) => cookie.split(";")[0])
+            .join("; "),
+        };
+      }).pipe(Effect.scoped);
 
-        const layer = SQLite(path);
-        const database = yield* Database.pipe(Effect.provide(layer));
-        yield* applyMigrations(database.migrate!, baseOptions);
-        const auth = yield* BetterAuth(baseOptions).pipe(Effect.provide(layer));
-        const session = yield* auth.api.getSession({
-          headers: new Headers({ cookie: legacy.cookie }),
-        });
-        expect(session?.user.id).toBe(legacy.userId);
-        const signIn = yield* auth.api.signInEmail({
-          body: { email: "existing@example.com", password: "password1234" },
-        });
-        expect(signIn.user.id).toBe(legacy.userId);
+      const layer = SQLite(path);
+      const database = yield* Database.pipe(Effect.provide(layer));
+      yield* applyMigrations(database.migrate!, baseOptions);
+      const auth = yield* BetterAuth(baseOptions).pipe(Effect.provide(layer));
+      const session = yield* auth.api.getSession({
+        headers: new Headers({ cookie: legacy.cookie }),
+      });
+      expect(session?.user.id).toBe(legacy.userId);
+      const signIn = yield* auth.api.signInEmail({
+        body: { email: "existing@example.com", password: "password1234" },
+      });
+      expect(signIn.user.id).toBe(legacy.userId);
 
-        yield* Effect.gen(function* () {
-          const raw = yield* Effect.acquireRelease(
-            Effect.sync(() => new BunSqlite(path)),
-            (raw) => Effect.sync(() => raw.close()),
-          );
-          const accounts = yield* Effect.sync(() =>
-            raw
-              .query(
-                "SELECT id, accountId, providerId, userId, password FROM account ORDER BY id",
-              )
-              .all(),
-          );
-          expect(accounts).toEqual(legacy.accounts);
-          const columns = yield* Effect.sync(() =>
-            raw.query<{ name: string }, []>("PRAGMA table_info(account)").all(),
-          );
-          expect(columns.map((column) => column.name)).not.toContain("issuer");
-        }).pipe(Effect.scoped);
+      yield* Effect.gen(function* () {
+        const raw = yield* Effect.acquireRelease(
+          Effect.sync(() => new BunSqlite(path)),
+          (raw) => Effect.sync(() => raw.close()),
+        );
+        const accounts = yield* Effect.sync(() =>
+          raw
+            .query("SELECT id, accountId, providerId, userId, password FROM account ORDER BY id")
+            .all(),
+        );
+        expect(accounts).toEqual(legacy.accounts);
+        const columns = yield* Effect.sync(() =>
+          raw.query<{ name: string }, []>("PRAGMA table_info(account)").all(),
+        );
+        expect(columns.map((column) => column.name)).not.toContain("issuer");
+      }).pipe(Effect.scoped);
 
-        const signUp = yield* auth.api.signUpEmail({
-          body: {
-            email: "new@example.com",
-            password: "password1234",
-            name: "New User",
-          },
-        });
-        expect(signUp.user.id).not.toBe(legacy.userId);
-        expect(yield* applyMigrations(database.migrate!, baseOptions)).toEqual({
-          tablesCreated: 0,
-          tablesAltered: 0,
-          indexesCreated: 0,
-        });
-      }).pipe(provideTestEnv),
+      const signUp = yield* auth.api.signUpEmail({
+        body: {
+          email: "new@example.com",
+          password: "password1234",
+          name: "New User",
+        },
+      });
+      expect(signUp.user.id).not.toBe(legacy.userId);
+      expect(yield* applyMigrations(database.migrate!, baseOptions)).toEqual({
+        tablesCreated: 0,
+        tablesAltered: 0,
+        indexesCreated: 0,
+      });
+    }).pipe(provideTestEnv),
   );
 
   it.live("reports unsafe populated-table changes as migration errors", () =>

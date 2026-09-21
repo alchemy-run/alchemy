@@ -1,6 +1,3 @@
-import * as AppConfig from "@/AWS/AppConfig";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AppConfig from "@/AWS/AppConfig";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "events-handler.ts");
 
@@ -53,12 +53,7 @@ export default AppConfigEventsTestFunction.make(
 
     // Deployments are triggered at runtime (POST /deploy) so the extension
     // association below exists before the first deployment starts.
-    const startDeployment = yield* AppConfig.StartDeployment(
-      app,
-      env,
-      profile,
-      strategy,
-    );
+    const startDeployment = yield* AppConfig.StartDeployment(app, env, profile, strategy);
 
     yield* AppConfig.consumeDeploymentEvents(
       env,
@@ -100,12 +95,8 @@ export default AppConfigEventsTestFunction.make(
           return yield* getObject({
             Key: `events/${number}-${type}.json`,
           }).pipe(
-            Effect.flatMap((result) =>
-              Stream.mkString(Stream.decodeText(result.Body!)),
-            ),
-            Effect.flatMap((text) =>
-              HttpServerResponse.json({ event: JSON.parse(text) }),
-            ),
+            Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+            Effect.flatMap((text) => HttpServerResponse.json({ event: JSON.parse(text) })),
             // Notification not delivered yet — the test polls until it is.
             Effect.catchTag("NoSuchKey", () =>
               HttpServerResponse.json({ event: null }, { status: 404 }),

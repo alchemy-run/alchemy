@@ -18,16 +18,16 @@ import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
+import type { Input, InputProps } from "./Input.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
 // drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
 // child process that loads Stack.ts.
 import type { Interaction } from "./Interaction.ts";
-import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
-import { Stage } from "./Stage.ts";
 import { StackContext } from "./StackContext.ts";
+import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -87,10 +87,7 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | Req
 >;
 
-export type Stack = Context.ServiceClass.Shape<
-  "Stack",
-  Omit<StackSpec, "output">
->;
+export type Stack = Context.ServiceClass.Shape<"Stack", Omit<StackSpec, "output">>;
 
 export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
@@ -105,20 +102,12 @@ export type ConfiguredStackMeta<Req = never> = {
   readonly stackName: string;
 } & StackProps<Req>;
 
-export const Stack: Context.ServiceClass<
-  Stack,
-  "Stack",
-  Omit<StackSpec, "output">
-> & {
+export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output">> & {
   make<A, Req>(
     stack: {
       Shape: A;
     },
-    effect: Effect.Effect<
-      NoInfer<A extends object ? InputProps<A> : Input<A>>,
-      ConfigError,
-      Req
-    >,
+    effect: Effect.Effect<NoInfer<A extends object ? InputProps<A> : Input<A>>, ConfigError, Req>,
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
   <Self>(): {
     <A, Req>(
@@ -140,8 +129,7 @@ export const Stack: Context.ServiceClass<
       make: <A, Req>(
         options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError> &
-        ConfiguredStackMeta<NoInfer<Req>>;
+      ) => Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -151,8 +139,7 @@ export const Stack: Context.ServiceClass<
     stackName: string,
     options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError> &
-    ConfiguredStackMeta<NoInfer<Req>>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
 } = Object.assign(
   taggedFunction(
     StackContext,
@@ -223,10 +210,7 @@ export interface StackSpec<Output = any> {
   output: Output;
 }
 
-export interface CompiledStack<
-  Output = any,
-  Services = any,
-> extends StackSpec<Output> {
+export interface CompiledStack<Output = any, Services = any> extends StackSpec<Output> {
   services: Context.Context<Services>;
 }
 
@@ -242,9 +226,7 @@ export interface MakeStackProps<ROut = never> {
 
 export const make =
   <ROut = never>(options: MakeStackProps<ROut>) =>
-  <A, Err = never, Req extends ROut | StackServices = never>(
-    effect: Effect.Effect<A, Err, Req>,
-  ) =>
+  <A, Err = never, Req extends ROut | StackServices = never>(effect: Effect.Effect<A, Err, Req>) =>
     Effect.scope.pipe(
       Effect.flatMap((scope) => {
         if (options.state == null) {
@@ -295,21 +277,12 @@ export const make =
         );
       }),
       Effect.flatMap((context) =>
-        Effect.all([
-          effect,
-          Stack,
-          Effect.context<ROut | StackServices>(),
-        ]).pipe(
-          Effect.map(
-            ([output, stack, services]): CompiledStack<
-              A,
-              ROut | StackServices
-            > => ({
-              ...stack,
-              output,
-              services: Context.merge(services, context),
-            }),
-          ),
+        Effect.all([effect, Stack, Effect.context<ROut | StackServices>()]).pipe(
+          Effect.map(([output, stack, services]): CompiledStack<A, ROut | StackServices> => ({
+            ...stack,
+            output,
+            services: Context.merge(services, context),
+          })),
           Effect.provideContext(context),
         ),
       ),
@@ -374,19 +347,13 @@ export const evalStack = <A, B, StackErr, Err, Req>(
     Effect.provide(
       Layer.effect(
         AuthProviders,
-        Effect.serviceOption(AuthProviders).pipe(
-          Effect.map(Option.getOrElse(() => ({}))),
-        ),
+        Effect.serviceOption(AuthProviders).pipe(Effect.map(Option.getOrElse(() => ({})))),
       ).pipe(
         Layer.provideMerge(Layer.succeed(Stage, options.stage)),
-        Layer.provideMerge(
-          Layer.provideMerge(alchemy({ dev: options.dev }), platform),
-        ),
+        Layer.provideMerge(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
       ),
     ),
   );
 
-  return options.scope === undefined
-    ? Effect.scoped(body)
-    : Scope.provide(body, options.scope);
+  return options.scope === undefined ? Effect.scoped(body) : Scope.provide(body, options.scope);
 };

@@ -12,9 +12,9 @@ import type {
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type { Worker } from "../Workers/Worker.ts";
-import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Worker } from "../Workers/Worker.ts";
 import { type TunnelAuth } from "./TunnelBinding.ts";
 
 /**
@@ -69,15 +69,10 @@ export interface ReadTunnel extends Binding.Service<
   () => Effect.Effect<ReadTunnelClient, never, Worker | CloudflareEnvironment>
 > {}
 
-export const ReadTunnel = Binding.Service<ReadTunnel>(
-  "Cloudflare.Tunnel.ReadTunnel",
-);
+export const ReadTunnel = Binding.Service<ReadTunnel>("Cloudflare.Tunnel.ReadTunnel");
 
 /** List-tunnels request, minus the account id (supplied by the binding). */
-export type ListTunnelsRequest = Omit<
-  ListTunnelCloudflaredsRequest,
-  "accountId"
->;
+export type ListTunnelsRequest = Omit<ListTunnelCloudflaredsRequest, "accountId">;
 
 /**
  * Read-only tunnel operations. Backed by the `Cloudflare Tunnel Read`
@@ -87,19 +82,11 @@ export interface ReadTunnelClient {
   /** Fetch a single tunnel by id. */
   get(
     tunnelId: string,
-  ): Effect.Effect<
-    GetTunnelCloudflaredResponse,
-    GetTunnelCloudflaredError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<GetTunnelCloudflaredResponse, GetTunnelCloudflaredError, RuntimeContext>;
   /** List tunnels in the account. */
   list(
     request?: ListTunnelsRequest,
-  ): Effect.Effect<
-    ListTunnelCloudflaredsResponse,
-    ListTunnelCloudflaredsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<ListTunnelCloudflaredsResponse, ListTunnelCloudflaredsError, RuntimeContext>;
   /** Fetch the connector token used to run the tunnel. */
   getToken(
     tunnelId: string,
@@ -124,29 +111,19 @@ export const readClient = (auth: TunnelAuth): ReadTunnelClient => {
   return {
     get: Effect.fn("Cloudflare.Tunnel.get")(function* (tunnelId) {
       const accountId = yield* auth.accountId;
-      return yield* authorize(
-        zeroTrust.getTunnelCloudflared({ accountId, tunnelId }),
-      );
+      return yield* authorize(zeroTrust.getTunnelCloudflared({ accountId, tunnelId }));
     }),
     list: Effect.fn("Cloudflare.Tunnel.list")(function* (request) {
       const accountId = yield* auth.accountId;
-      return yield* authorize(
-        zeroTrust.listTunnelCloudflareds({ accountId, ...request }),
-      );
+      return yield* authorize(zeroTrust.listTunnelCloudflareds({ accountId, ...request }));
     }),
     getToken: Effect.fn("Cloudflare.Tunnel.getToken")(function* (tunnelId) {
       const accountId = yield* auth.accountId;
-      return yield* authorize(
-        zeroTrust.getTunnelCloudflaredToken({ accountId, tunnelId }),
-      );
+      return yield* authorize(zeroTrust.getTunnelCloudflaredToken({ accountId, tunnelId }));
     }),
-    getConfiguration: Effect.fn("Cloudflare.Tunnel.getConfiguration")(
-      function* (tunnelId) {
-        const accountId = yield* auth.accountId;
-        return yield* authorize(
-          zeroTrust.getTunnelCloudflaredConfiguration({ accountId, tunnelId }),
-        );
-      },
-    ),
+    getConfiguration: Effect.fn("Cloudflare.Tunnel.getConfiguration")(function* (tunnelId) {
+      const accountId = yield* auth.accountId;
+      return yield* authorize(zeroTrust.getTunnelCloudflaredConfiguration({ accountId, tunnelId }));
+    }),
   };
 };

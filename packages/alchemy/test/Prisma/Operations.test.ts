@@ -1,15 +1,12 @@
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
-import * as Prisma from "@/Prisma/Operations";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { Credentials } from "@/Prisma/Credentials";
+import * as Prisma from "@/Prisma/Operations";
 
 type AssertNever<T extends never> = T;
-type ClientOperation = Exclude<
-  keyof PrismaManagementClient,
-  "request" | "paginate"
->;
+type ClientOperation = Exclude<keyof PrismaManagementClient, "request" | "paginate">;
 export type PrismaOperationCoverage = [
   AssertNever<Exclude<ClientOperation, keyof typeof Prisma>>,
   AssertNever<Exclude<keyof typeof Prisma, ClientOperation>>,
@@ -238,17 +235,13 @@ describe("Prisma operation helpers", () => {
       });
       yield* Prisma.deleteSourceRepository("repo-1");
 
-      expect(Object.keys(Prisma).sort()).toEqual(
-        [...expectedOperationHelpers].sort(),
-      );
+      expect(Object.keys(Prisma).sort()).toEqual([...expectedOperationHelpers].sort());
       // The log-request builders resolve the distilled Credentials service
       // directly instead of delegating to the client, so they never appear in
       // `calls`.
       expect(calls.map(([name]) => name)).toEqual(
         expectedOperationHelpers.filter(
-          (name) =>
-            name !== "getDeploymentLogsRequest" &&
-            name !== "getBuildLogsRequest",
+          (name) => name !== "getDeploymentLogsRequest" && name !== "getBuildLogsRequest",
         ),
       );
     }).pipe(

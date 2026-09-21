@@ -1,3 +1,7 @@
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   CachePolicy,
@@ -12,10 +16,6 @@ import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -60,15 +60,12 @@ describe("AWS.CloudFront smoke", () => {
               },
             });
 
-            const originRequestPolicy = yield* OriginRequestPolicy(
-              "SmokeOriginRequestPolicy",
-              {
-                comment: "smoke",
-                headersConfig: { HeaderBehavior: "none" },
-                cookiesConfig: { CookieBehavior: "none" },
-                queryStringsConfig: { QueryStringBehavior: "all" },
-              },
-            );
+            const originRequestPolicy = yield* OriginRequestPolicy("SmokeOriginRequestPolicy", {
+              comment: "smoke",
+              headersConfig: { HeaderBehavior: "none" },
+              cookiesConfig: { CookieBehavior: "none" },
+              queryStringsConfig: { QueryStringBehavior: "all" },
+            });
 
             const responseHeadersPolicy = yield* ResponseHeadersPolicy(
               "SmokeResponseHeadersPolicy",
@@ -114,10 +111,8 @@ describe("AWS.CloudFront smoke", () => {
                 allowedMethods: ["GET", "HEAD"],
                 cachedMethods: ["GET", "HEAD"],
                 cachePolicyId: cachePolicy.cachePolicyId,
-                originRequestPolicyId:
-                  originRequestPolicy.originRequestPolicyId,
-                responseHeadersPolicyId:
-                  responseHeadersPolicy.responseHeadersPolicyId,
+                originRequestPolicyId: originRequestPolicy.originRequestPolicyId,
+                responseHeadersPolicyId: responseHeadersPolicy.responseHeadersPolicyId,
               },
             });
 
@@ -133,9 +128,9 @@ describe("AWS.CloudFront smoke", () => {
               },
             };
 
-            yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-              { policyStatements: [statement] },
-            );
+            yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+              policyStatements: [statement],
+            });
 
             return {
               bucket,
@@ -155,11 +150,8 @@ describe("AWS.CloudFront smoke", () => {
         });
         expect(dist.Distribution?.Status).toEqual("Deployed");
 
-        const defaultBehavior =
-          dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
-        expect(defaultBehavior?.CachePolicyId).toEqual(
-          deployed.cachePolicy.cachePolicyId,
-        );
+        const defaultBehavior = dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
+        expect(defaultBehavior?.CachePolicyId).toEqual(deployed.cachePolicy.cachePolicyId);
         expect(defaultBehavior?.OriginRequestPolicyId).toEqual(
           deployed.originRequestPolicy.originRequestPolicyId,
         );
@@ -170,9 +162,7 @@ describe("AWS.CloudFront smoke", () => {
         const cachePolicy = yield* cloudfront.getCachePolicy({
           Id: deployed.cachePolicy.cachePolicyId,
         });
-        expect(cachePolicy.CachePolicy?.Id).toEqual(
-          deployed.cachePolicy.cachePolicyId,
-        );
+        expect(cachePolicy.CachePolicy?.Id).toEqual(deployed.cachePolicy.cachePolicyId);
 
         const originRequestPolicy = yield* cloudfront.getOriginRequestPolicy({
           Id: deployed.originRequestPolicy.originRequestPolicyId,
@@ -181,10 +171,9 @@ describe("AWS.CloudFront smoke", () => {
           deployed.originRequestPolicy.originRequestPolicyId,
         );
 
-        const responseHeadersPolicy =
-          yield* cloudfront.getResponseHeadersPolicy({
-            Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
-          });
+        const responseHeadersPolicy = yield* cloudfront.getResponseHeadersPolicy({
+          Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
+        });
         expect(responseHeadersPolicy.ResponseHeadersPolicy?.Id).toEqual(
           deployed.responseHeadersPolicy.responseHeadersPolicyId,
         );
@@ -192,16 +181,12 @@ describe("AWS.CloudFront smoke", () => {
         const keyGroup = yield* cloudfront.getKeyGroup({
           Id: deployed.keyGroup.keyGroupId,
         });
-        expect(keyGroup.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-          deployed.publicKey.publicKeyId,
-        ]);
+        expect(keyGroup.KeyGroup?.KeyGroupConfig?.Items).toEqual([deployed.publicKey.publicKeyId]);
 
         yield* stack.destroy();
         yield* assertDistributionDeleted(deployed.distribution.distributionId);
         yield* assertCachePolicyDeleted(deployed.cachePolicy.cachePolicyId);
-        yield* assertOriginRequestPolicyDeleted(
-          deployed.originRequestPolicy.originRequestPolicyId,
-        );
+        yield* assertOriginRequestPolicyDeleted(deployed.originRequestPolicy.originRequestPolicyId);
         yield* assertResponseHeadersPolicyDeleted(
           deployed.responseHeadersPolicy.responseHeadersPolicyId,
         );
@@ -214,8 +199,7 @@ describe("AWS.CloudFront smoke", () => {
 
 const retrying = (label: string) =>
   Effect.retry({
-    while: (error: unknown) =>
-      error instanceof Error && error.message === label,
+    while: (error: unknown) => error instanceof Error && error.message === label,
     schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
   });
 
@@ -235,18 +219,14 @@ const assertCachePolicyDeleted = (id: string) =>
 
 const assertOriginRequestPolicyDeleted = (id: string) =>
   cloudfront.getOriginRequestPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("OriginRequestPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("OriginRequestPolicyStillExists"))),
     Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.void),
     retrying("OriginRequestPolicyStillExists"),
   );
 
 const assertResponseHeadersPolicyDeleted = (id: string) =>
   cloudfront.getResponseHeadersPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("ResponseHeadersPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("ResponseHeadersPolicyStillExists"))),
     Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void),
     retrying("ResponseHeadersPolicyStillExists"),
   );

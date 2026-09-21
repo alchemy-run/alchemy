@@ -29,8 +29,7 @@ export const toTagKey = (metadataKey: string): string =>
     : metadataKey;
 
 /** Stripe metadata values are capped at 500 characters. */
-export const sanitizeMetadataValue = (value: string): string =>
-  value.slice(0, 500);
+export const sanitizeMetadataValue = (value: string): string => value.slice(0, 500);
 
 export const toMetadata = (
   tags: Record<string, string> | null | undefined,
@@ -45,12 +44,7 @@ export const toMetadata = (
 export const fromMetadata = (
   metadata: Record<string, string> | null | undefined,
 ): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(metadata ?? {}).map(([key, value]) => [
-      toTagKey(key),
-      value,
-    ]),
-  );
+  Object.fromEntries(Object.entries(metadata ?? {}).map(([key, value]) => [toTagKey(key), value]));
 
 export const createInternalMetadata = Effect.fn(function* (id: string) {
   return toMetadata(yield* createInternalTags(id));
@@ -60,15 +54,10 @@ export const stripInternalMetadata = (
   metadata: Record<string, string> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(metadata ?? {}).filter(
-      ([key]) => !key.startsWith(ALCHEMY_METADATA_PREFIX),
-    ),
+    Object.entries(metadata ?? {}).filter(([key]) => !key.startsWith(ALCHEMY_METADATA_PREFIX)),
   );
 
-export const hasAlchemyMetadata = Effect.fn(function* (
-  id: string,
-  metadata: Tags | undefined,
-) {
+export const hasAlchemyMetadata = Effect.fn(function* (id: string, metadata: Tags | undefined) {
   const expected = yield* createInternalMetadata(id);
   return hasTags(expected, metadata);
 });

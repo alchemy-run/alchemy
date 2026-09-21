@@ -29,10 +29,7 @@ export interface GetEmailContact extends Binding.Service<
   (
     contact: EmailContact,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      contacts.GetEmailContactResponse,
-      contacts.GetEmailContactError
-    >
+    () => Effect.Effect<contacts.GetEmailContactResponse, contacts.GetEmailContactError>
   >
 > {}
 

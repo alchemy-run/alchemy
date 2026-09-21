@@ -1,3 +1,13 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import path from "pathe";
 import {
   AuthError,
   AuthProvider,
@@ -18,16 +28,6 @@ import {
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import path from "pathe";
 import { messageForCapabilities } from "@/Util/interactive.ts";
 
 const FAKE_PROVIDER = "FakeAuthProvider";
@@ -35,18 +35,10 @@ const FAKE_PROVIDER = "FakeAuthProvider";
 it.effect("selects guidance from injected interaction capabilities", () =>
   Effect.gen(function* () {
     expect(
-      yield* messageForCapabilities(
-        Effect.succeed({ input: true }),
-        "interactive",
-        "plain",
-      ),
+      yield* messageForCapabilities(Effect.succeed({ input: true }), "interactive", "plain"),
     ).toBe("interactive");
     expect(
-      yield* messageForCapabilities(
-        Effect.succeed({ input: false }),
-        "interactive",
-        "plain",
-      ),
+      yield* messageForCapabilities(Effect.succeed({ input: false }), "interactive", "plain"),
     ).toBe("plain");
   }),
 );
@@ -55,38 +47,32 @@ it.effect("selects guidance from injected interaction capabilities", () =>
 // profile must short-circuit before provider configuration starts.
 const state = { configureCalls: 0 };
 
-const FakeAuth = AuthProviderLayer<{ method: "stored" }, undefined>()(
-  FAKE_PROVIDER,
-  {
-    configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
-    configure: () =>
-      Effect.sync(() => {
-        state.configureCalls += 1;
-        return { method: "stored" as const };
-      }),
-    login: () => Effect.void,
-    logout: () => Effect.void,
-    details: () => Effect.succeed({ lines: [] }),
-    read: () => Effect.succeed(undefined),
-  },
-);
+const FakeAuth = AuthProviderLayer<{ method: "stored" }, undefined>()(FAKE_PROVIDER, {
+  configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
+  configure: () =>
+    Effect.sync(() => {
+      state.configureCalls += 1;
+      return { method: "stored" as const };
+    }),
+  login: () => Effect.void,
+  logout: () => Effect.void,
+  details: () => Effect.succeed({ lines: [] }),
+  read: () => Effect.succeed(undefined),
+});
 
 const ENV_PROVIDER = "FakeEnvAuthProvider";
 
 /** A provider that supports both profile and environment credentials. */
-const FakeEnvAuth = AuthProviderLayer<{ method: "stored" }, string>()(
-  ENV_PROVIDER,
-  {
-    configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
-    configure: () => Effect.succeed({ method: "stored" as const }),
-    login: () => Effect.void,
-    logout: () => Effect.void,
-    details: () => Effect.succeed({ lines: [] }),
-    read: () => Effect.succeed("profile-credentials"),
-    readEnvironment: Effect.succeed("environment-credentials"),
-    environment: [{ name: "FAKE_ENV_TOKEN", required: true, secret: true }],
-  },
-);
+const FakeEnvAuth = AuthProviderLayer<{ method: "stored" }, string>()(ENV_PROVIDER, {
+  configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
+  configure: () => Effect.succeed({ method: "stored" as const }),
+  login: () => Effect.void,
+  logout: () => Effect.void,
+  details: () => Effect.succeed({ lines: [] }),
+  read: () => Effect.succeed("profile-credentials"),
+  readEnvironment: Effect.succeed("environment-credentials"),
+  environment: [{ name: "FAKE_ENV_TOKEN", required: true, secret: true }],
+});
 
 const makeTestLayer = (config: Record<string, unknown> = {}) =>
   Layer.mergeAll(ProfileStoreLive, FakeAuth, FakeEnvAuth).pipe(
@@ -133,13 +119,9 @@ it.live(
       Effect.gen(function* () {
         state.configureCalls = 0;
         const profile = yield* ProfileStore;
-        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(
-          FAKE_PROVIDER,
-        );
+        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(FAKE_PROVIDER);
 
-        const error = yield* profile
-          .loadProviderConfig(auth, "non-existent")
-          .pipe(Effect.flip);
+        const error = yield* profile.loadProviderConfig(auth, "non-existent").pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(ProfileError);
         expect((error as ProfileError).message).toContain("profile create");
@@ -157,14 +139,10 @@ it.live(
       Effect.gen(function* () {
         state.configureCalls = 0;
         const profile = yield* ProfileStore;
-        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(
-          FAKE_PROVIDER,
-        );
+        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(FAKE_PROVIDER);
         yield* profile.createProfile("explicit-login");
 
-        const error = yield* profile
-          .loadProviderConfig(auth, "explicit-login")
-          .pipe(Effect.flip);
+        const error = yield* profile.loadProviderConfig(auth, "explicit-login").pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain(
@@ -212,35 +190,19 @@ it.live(
         // default remains synthesized until it has a provider file.
         yield* profile.createProfile("work");
 
-        const renameError = yield* profile
-          .renameProfile("default", "other")
-          .pipe(Effect.flip);
+        const renameError = yield* profile.renameProfile("default", "other").pipe(Effect.flip);
         expect(renameError).toBeInstanceOf(ProfileError);
-        expect((renameError as ProfileError).message).toContain(
-          "Cannot rename",
-        );
+        expect((renameError as ProfileError).message).toContain("Cannot rename");
 
-        const deleteError = yield* profile
-          .deleteProfile("default")
-          .pipe(Effect.flip);
+        const deleteError = yield* profile.deleteProfile("default").pipe(Effect.flip);
         expect(deleteError).toBeInstanceOf(ProfileError);
-        expect((deleteError as ProfileError).message).toContain(
-          "Cannot delete",
-        );
+        expect((deleteError as ProfileError).message).toContain("Cannot delete");
 
-        const createError = yield* profile
-          .createProfile("default")
-          .pipe(Effect.flip);
-        expect((createError as ProfileError).message).toContain(
-          "already exists",
-        );
+        const createError = yield* profile.createProfile("default").pipe(Effect.flip);
+        expect((createError as ProfileError).message).toContain("already exists");
 
-        const shadowError = yield* profile
-          .renameProfile("work", "default")
-          .pipe(Effect.flip);
-        expect((shadowError as ProfileError).message).toContain(
-          "already exists",
-        );
+        const shadowError = yield* profile.renameProfile("work", "default").pipe(Effect.flip);
+        expect((shadowError as ProfileError).message).toContain("already exists");
 
         expect(yield* fs.exists(profileDirPath("work"))).toBe(true);
         expect(yield* fs.exists(configFilePath())).toBe(false);
@@ -280,9 +242,7 @@ it.live(
         expect(manifest.profiles.default!.id).toBe("default");
 
         const providerFile = JSON.parse(
-          yield* fs.readFileString(
-            profileProviderFilePath("legacy", "Cloudflare"),
-          ),
+          yield* fs.readFileString(profileProviderFilePath("legacy", "Cloudflare")),
         );
         expect(providerFile).toEqual({
           format: PROFILE_FORMAT,
@@ -292,8 +252,8 @@ it.live(
         });
         expect(yield* fs.exists(configFilePath())).toBe(false);
         expect(
-          (yield* fs.readDirectory(path.dirname(configFilePath()))).filter(
-            (entry) => entry.startsWith(".profiles-v0-"),
+          (yield* fs.readDirectory(path.dirname(configFilePath()))).filter((entry) =>
+            entry.startsWith(".profiles-v0-"),
           ),
         ).toHaveLength(1);
       }),
@@ -342,10 +302,7 @@ it.live(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const profiles = yield* ProfileStore;
-        yield* fs.writeFileString(
-          profileProviderFilePath("default", "Cloudflare"),
-          "{not-json",
-        );
+        yield* fs.writeFileString(profileProviderFilePath("default", "Cloudflare"), "{not-json");
         yield* fs.writeFileString(
           profileProviderFilePath("default", "Other"),
           JSON.stringify({
@@ -363,9 +320,7 @@ it.live(
         });
         const files = yield* fs.readDirectory(profileDirPath("default"));
         expect(files).toContain("other.json");
-        expect(
-          files.some((file) => file.startsWith("cloudflare.json.invalid-")),
-        ).toBe(true);
+        expect(files.some((file) => file.startsWith("cloudflare.json.invalid-"))).toBe(true);
       }),
     ),
   { exclusive: true },
@@ -408,9 +363,7 @@ it.live(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const profile = yield* ProfileStore;
-        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(
-          FAKE_PROVIDER,
-        );
+        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(FAKE_PROVIDER);
         yield* fs.makeDirectory(path.dirname(configFilePath()), {
           recursive: true,
         });
@@ -436,18 +389,12 @@ it.live(
 
         // ...and credential resolution reports "not configured" with the
         // hint to connect the provider, not a legacy-env special case.
-        const error = yield* profile
-          .loadProviderConfig(auth, "ci")
-          .pipe(Effect.flip);
+        const error = yield* profile.loadProviderConfig(auth, "ci").pipe(Effect.flip);
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain("--add");
 
-        expect(
-          yield* fs.exists(profileProviderFilePath("ci", FAKE_PROVIDER)),
-        ).toBe(false);
-        expect(yield* fs.exists(profileProviderFilePath("ci", "Other"))).toBe(
-          true,
-        );
+        expect(yield* fs.exists(profileProviderFilePath("ci", FAKE_PROVIDER))).toBe(false);
+        expect(yield* fs.exists(profileProviderFilePath("ci", "Other"))).toBe(true);
       }),
     ),
   { exclusive: true },
@@ -455,9 +402,7 @@ it.live(
 
 it.effect("accepts portable profile names", () =>
   Effect.gen(function* () {
-    expect(yield* validateProfileName("production-admin")).toBe(
-      "production-admin",
-    );
+    expect(yield* validateProfileName("production-admin")).toBe("production-admin");
     expect(yield* validateProfileName("team.prod_2")).toBe("team.prod_2");
   }),
 );
@@ -496,15 +441,13 @@ it.effect("lets custom providers refine metadata and values", () =>
   }),
 );
 
-it.effect(
-  "rejects profile names that can escape the credential directory",
-  () =>
-    Effect.gen(function* () {
-      for (const name of ["..", "../..", "team/prod", "/tmp/profile", ""]) {
-        const error = yield* validateProfileName(name).pipe(Effect.flip);
-        expect(error).toBeInstanceOf(ProfileError);
-      }
-    }),
+it.effect("rejects profile names that can escape the credential directory", () =>
+  Effect.gen(function* () {
+    for (const name of ["..", "../..", "team/prod", "/tmp/profile", ""]) {
+      const error = yield* validateProfileName(name).pipe(Effect.flip);
+      expect(error).toBeInstanceOf(ProfileError);
+    }
+  }),
 );
 
 it.effect("resolves the profile from env files and --profile overrides", () =>
@@ -513,12 +456,8 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
     const file = yield* fs.makeTempFileScoped();
     yield* fs.writeFileString(file, "ALCHEMY_PROFILE=from-env-file\n");
 
-    expect(yield* resolveProfileName(Option.some(file), undefined)).toBe(
-      "from-env-file",
-    );
-    expect(yield* resolveProfileName(Option.some(file), "from-cli")).toBe(
-      "from-cli",
-    );
+    expect(yield* resolveProfileName(Option.some(file), undefined)).toBe("from-env-file");
+    expect(yield* resolveProfileName(Option.some(file), "from-cli")).toBe("from-cli");
   }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
 );
 
@@ -531,9 +470,7 @@ it.live(
         const auth = yield* getAuthProvider(ENV_PROVIDER);
         yield* AuthProvider()("OtherNoticeProvider", auth);
         const resolve = resolveProviderConfig(ENV_PROVIDER);
-        yield* resolve.pipe(
-          Effect.provideService(SuppressMissingProviderConfig, true),
-        );
+        yield* resolve.pipe(Effect.provideService(SuppressMissingProviderConfig, true));
         expect(messages).toEqual([]);
         const results = yield* Effect.all(
           Array.from({ length: 10 }, () => resolve),
@@ -651,9 +588,7 @@ it.live(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const profile = yield* ProfileStore;
-        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(
-          FAKE_PROVIDER,
-        );
+        const auth = yield* getAuthProvider<{ method: "stored" }, undefined>(FAKE_PROVIDER);
         yield* fs.makeDirectory(path.dirname(configFilePath()), {
           recursive: true,
         });
@@ -665,9 +600,7 @@ it.live(
           }),
         );
 
-        const error = yield* profile
-          .loadProviderConfig(auth, "ci")
-          .pipe(Effect.flip);
+        const error = yield* profile.loadProviderConfig(auth, "ci").pipe(Effect.flip);
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain("--reconfigure");
       }),

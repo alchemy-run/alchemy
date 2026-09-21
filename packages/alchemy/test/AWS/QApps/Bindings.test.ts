@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as qapps from "@distilled.cloud/aws/qapps";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import QAppsTestFunctionLive, {
-  QAppsTestFunction,
-} from "./bindings-handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import QAppsTestFunctionLive, { QAppsTestFunction } from "./bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test } = Test.make(testOptions);
@@ -40,10 +38,7 @@ const TYPED_REJECTIONS = [
 // ---------------------------------------------------------------------------
 
 describe("QApps data-plane operations (typed-error probes)", () => {
-  const probes: Record<
-    string,
-    Effect.Effect<unknown, { _tag: string }, any>
-  > = {
+  const probes: Record<string, Effect.Effect<unknown, { _tag: string }, any>> = {
     startQAppSession: qapps.startQAppSession({
       instanceId: NONEXISTENT_INSTANCE,
       appId: NONEXISTENT_ID,
@@ -120,16 +115,11 @@ test.provider.skipIf(!process.env.AWS_TEST_QAPPS)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );

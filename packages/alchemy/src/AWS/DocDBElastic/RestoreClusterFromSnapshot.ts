@@ -38,7 +38,6 @@ export interface RestoreClusterFromSnapshot extends Binding.Service<
     >
   >
 > {}
-export const RestoreClusterFromSnapshot =
-  Binding.Service<RestoreClusterFromSnapshot>(
-    "AWS.DocDBElastic.RestoreClusterFromSnapshot",
-  );
+export const RestoreClusterFromSnapshot = Binding.Service<RestoreClusterFromSnapshot>(
+  "AWS.DocDBElastic.RestoreClusterFromSnapshot",
+);

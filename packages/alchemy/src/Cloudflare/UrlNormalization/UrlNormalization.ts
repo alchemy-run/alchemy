@@ -2,7 +2,6 @@ import * as urlNormalization from "@distilled.cloud/cloudflare/url-normalization
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -69,13 +68,7 @@ export interface Attributes {
   type: string;
 }
 
-export type UrlNormalization = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type UrlNormalization = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * The URL normalization configuration of a Cloudflare zone
@@ -157,10 +150,7 @@ export const UrlNormalizationProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
               schedule: Schedule.max([
-                Schedule.min([
-                  Schedule.exponential("500 millis"),
-                  Schedule.spaced("5 seconds"),
-                ]),
+                Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
                 Schedule.recurs(8),
               ]),
             }),
@@ -177,13 +167,8 @@ export const UrlNormalizationProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;

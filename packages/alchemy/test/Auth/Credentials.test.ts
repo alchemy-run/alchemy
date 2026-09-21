@@ -1,11 +1,11 @@
-import { AuthError } from "@/Auth/AuthProvider.ts";
-import { CredentialsStore, CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import { AuthError } from "@/Auth/AuthProvider.ts";
+import { CredentialsStore, CredentialsStoreLive } from "@/Auth/Credentials.ts";
 
 const failingDeleteLayer = CredentialsStoreLive.pipe(
   Layer.provide(
@@ -28,31 +28,26 @@ const TestCredentials = Schema.Struct({
   apiKey: Schema.String,
 });
 
-it.effect(
-  "fails read with a reconfigure hint when the stored shape is wrong",
-  () =>
-    Effect.gen(function* () {
-      const store = yield* CredentialsStore;
-      const error = yield* store
-        .read("test", "provider", TestCredentials)
-        .pipe(Effect.flip);
+it.effect("fails read with a reconfigure hint when the stored shape is wrong", () =>
+  Effect.gen(function* () {
+    const store = yield* CredentialsStore;
+    const error = yield* store.read("test", "provider", TestCredentials).pipe(Effect.flip);
 
-      expect(error).toBeInstanceOf(AuthError);
-      expect(error.message).toContain("do not match the expected shape");
-      expect(error.message).toContain("--reconfigure");
-    }).pipe(
-      Effect.provide(
-        CredentialsStoreLive.pipe(
-          Layer.provide(
-            FileSystem.layerNoop({
-              // valid JSON, but not the declared credential shape
-              readFileString: () =>
-                Effect.succeed(JSON.stringify({ token: "not-the-shape" })),
-            }),
-          ),
+    expect(error).toBeInstanceOf(AuthError);
+    expect(error.message).toContain("do not match the expected shape");
+    expect(error.message).toContain("--reconfigure");
+  }).pipe(
+    Effect.provide(
+      CredentialsStoreLive.pipe(
+        Layer.provide(
+          FileSystem.layerNoop({
+            // valid JSON, but not the declared credential shape
+            readFileString: () => Effect.succeed(JSON.stringify({ token: "not-the-shape" })),
+          }),
         ),
       ),
     ),
+  ),
 );
 
 it.effect("surfaces provider credential deletion failures", () =>
@@ -71,9 +66,7 @@ it.effect("surfaces profile credential deletion failures", () =>
     const error = yield* store.deleteProfile("test").pipe(Effect.flip);
 
     expect(error).toBeInstanceOf(AuthError);
-    expect(error.message).toBe(
-      "Could not delete credentials for profile 'test'.",
-    );
+    expect(error.message).toBe("Could not delete credentials for profile 'test'.");
   }).pipe(Effect.provide(failingDeleteLayer)),
 );
 

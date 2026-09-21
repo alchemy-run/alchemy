@@ -1,8 +1,6 @@
+import { randomBytes } from "node:crypto";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { checksPassing, configuredCheckNames } from "@/Fly/replicas";
-import type { ScratchStack } from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -14,7 +12,9 @@ import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { randomBytes } from "node:crypto";
+import * as Fly from "@/Fly";
+import { checksPassing, configuredCheckNames } from "@/Fly/replicas";
+import type { ScratchStack } from "@/Test/Alchemy";
 
 const Receipt = Schema.Struct({
   machineId: Schema.String,
@@ -29,13 +29,9 @@ const privateFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         Cause.fromReasons(
           cause.reasons.map((reason) =>
             Cause.isFailReason(reason)
-              ? Cause.makeFailReason(
-                  new Error("Readiness control request failed"),
-                )
+              ? Cause.makeFailReason(new Error("Readiness control request failed"))
               : Cause.isDieReason(reason)
-                ? Cause.makeDieReason(
-                    new Error("Readiness control request defect"),
-                  )
+                ? Cause.makeDieReason(new Error("Readiness control request defect"))
                 : Cause.makeInterruptReason(reason.fiberId),
           ),
         ),
@@ -47,17 +43,13 @@ export const makeReadinessControl = () =>
   Effect.gen(function* () {
     const token = yield* Effect.sync(() =>
       Redacted.make(
-        Array.from(randomBytes(32), (byte) =>
-          byte.toString(16).padStart(2, "0"),
-        ).join(""),
+        Array.from(randomBytes(32), (byte) => byte.toString(16).padStart(2, "0")).join(""),
       ),
     );
     const fs = yield* FileSystem;
     const path = yield* Path.Path;
     const script = yield* fs.readFileString(
-      yield* path.fromFileUrl(
-        new URL("./http-readiness-control.mjs", import.meta.url),
-      ),
+      yield* path.fromFileUrl(new URL("./http-readiness-control.mjs", import.meta.url)),
     );
     const infrastructure = Effect.gen(function* () {
       const app = yield* Fly.App("Site");
@@ -121,14 +113,8 @@ export const makeReadinessControl = () =>
         );
         if (response.status !== 200)
           return yield* Effect.fail(new Error("Unexpected readiness status"));
-        return yield* response.json.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(Receipt)),
-        );
-      }).pipe(
-        Effect.timeout("10 seconds"),
-        Effect.provide(FetchHttpClient.layer),
-        privateFailure,
-      );
+        return yield* response.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Receipt)));
+      }).pipe(Effect.timeout("10 seconds"), Effect.provide(FetchHttpClient.layer), privateFailure);
     const turnOff = (appName: string, machineId: string) =>
       Effect.gen(function* () {
         const observe = machines
@@ -156,9 +142,7 @@ export const makeReadinessControl = () =>
         expect(receipt).toEqual({ machineId, ready: false });
         const failed = (machine: machines.Machine) =>
           checkNames.every((name) =>
-            machine.checks?.some(
-              (check) => check.name === name && check.status === "critical",
-            ),
+            machine.checks?.some((check) => check.name === name && check.status === "critical"),
           );
         // Hold the provider barrier until Fly has observed the real file change.
         const after = yield* observe.pipe(
@@ -172,10 +156,7 @@ export const makeReadinessControl = () =>
         expect(after.id).toBe(machineId);
         expect(after.cordoned).toBe(false);
         expect(failed(after)).toBe(true);
-      }).pipe(
-        Effect.provide(FetchHttpClient.layer),
-        Effect.timeout("25 seconds"),
-      );
+      }).pipe(Effect.provide(FetchHttpClient.layer), Effect.timeout("25 seconds"));
     return { deployApp, deployWorker, turnOff };
   });
 

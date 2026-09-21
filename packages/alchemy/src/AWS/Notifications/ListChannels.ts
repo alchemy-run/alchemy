@@ -39,13 +39,8 @@ export interface ListChannels extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListChannelsRequest,
-    ) => Effect.Effect<
-      notifications.ListChannelsResponse,
-      notifications.ListChannelsError
-    >
+    ) => Effect.Effect<notifications.ListChannelsResponse, notifications.ListChannelsError>
   >
 > {}
 
-export const ListChannels = Binding.Service<ListChannels>(
-  "AWS.Notifications.ListChannels",
-);
+export const ListChannels = Binding.Service<ListChannels>("AWS.Notifications.ListChannels");

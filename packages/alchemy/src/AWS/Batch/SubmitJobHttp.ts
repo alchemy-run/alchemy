@@ -19,30 +19,28 @@ export const SubmitJobHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Batch.SubmitJob(${queue}, ${jobDefinition}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["batch:SubmitJob"],
-                  Resource: [queue.jobQueueArn, jobDefinition.jobDefinitionArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Batch.SubmitJob(${queue}, ${jobDefinition}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["batch:SubmitJob"],
+                Resource: [queue.jobQueueArn, jobDefinition.jobDefinitionArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.Batch.SubmitJob(${queue.LogicalId}, ${jobDefinition.LogicalId})`,
-      )(function* (request: SubmitJobRequest) {
-        const jobQueueArn = yield* JobQueueArn;
-        const jobDefinitionArn = yield* JobDefinitionArn;
-        return yield* submitJob({
-          ...request,
-          jobQueue: jobQueueArn,
-          jobDefinition: jobDefinitionArn,
-        });
-      });
+      return Effect.fn(`AWS.Batch.SubmitJob(${queue.LogicalId}, ${jobDefinition.LogicalId})`)(
+        function* (request: SubmitJobRequest) {
+          const jobQueueArn = yield* JobQueueArn;
+          const jobDefinitionArn = yield* JobDefinitionArn;
+          return yield* submitJob({
+            ...request,
+            jobQueue: jobQueueArn,
+            jobDefinition: jobDefinitionArn,
+          });
+        },
+      );
     });
   }),
 );

@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { SSHPublicKey, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { testSshPublicKey } from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -34,9 +34,7 @@ describe("AWS.IAM.SSHPublicKey", () => {
       const provider = yield* Provider.findProvider(SSHPublicKey);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (entry) => entry.sshPublicKeyId === deployed.key.sshPublicKeyId,
-      );
+      const found = all.find((entry) => entry.sshPublicKeyId === deployed.key.sshPublicKeyId);
       expect(found).toBeDefined();
       expect(found?.userName).toBe(deployed.user.userName);
       expect(found?.sshPublicKeyBody).toBeDefined();

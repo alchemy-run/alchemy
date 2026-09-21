@@ -20,9 +20,7 @@ export function createNodePrerenderPlugin(): vite.Plugin {
       return { environments: { prerender: { dev: {} } } };
     },
     configureServer(server) {
-      (server as unknown as Record<symbol, boolean>)[
-        devPrerenderMiddlewareSymbol
-      ] = true;
+      (server as unknown as Record<symbol, boolean>)[devPrerenderMiddlewareSymbol] = true;
     },
   };
 }

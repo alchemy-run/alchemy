@@ -9,24 +9,21 @@ import { decodeDefinition } from "./internal.ts";
 export const GetDefaultScraperConfigurationHttp = Layer.effect(
   GetDefaultScraperConfiguration,
   Effect.gen(function* () {
-    const getDefaultScraperConfiguration =
-      yield* amp.getDefaultScraperConfiguration;
+    const getDefaultScraperConfiguration = yield* amp.getDefaultScraperConfiguration;
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AMP.GetDefaultScraperConfiguration())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["aps:GetDefaultScraperConfiguration"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AMP.GetDefaultScraperConfiguration())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["aps:GetDefaultScraperConfiguration"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
       return Effect.fn("AWS.AMP.GetDefaultScraperConfiguration")(function* () {

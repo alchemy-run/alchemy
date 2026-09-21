@@ -33,7 +33,6 @@ export interface ListCustomDataIdentifiers extends Binding.Service<
     >
   >
 > {}
-export const ListCustomDataIdentifiers =
-  Binding.Service<ListCustomDataIdentifiers>(
-    "AWS.Macie2.ListCustomDataIdentifiers",
-  );
+export const ListCustomDataIdentifiers = Binding.Service<ListCustomDataIdentifiers>(
+  "AWS.Macie2.ListCustomDataIdentifiers",
+);

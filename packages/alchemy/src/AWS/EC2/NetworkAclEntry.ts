@@ -4,7 +4,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -194,19 +193,13 @@ export interface NetworkAclEntry extends Resource<
  *
  * @resource
  */
-export const NetworkAclEntry = Resource<NetworkAclEntry>(
-  "AWS.EC2.NetworkAclEntry",
-);
+export const NetworkAclEntry = Resource<NetworkAclEntry>("AWS.EC2.NetworkAclEntry");
 
 export const NetworkAclEntryProvider = () =>
   Provider.effect(
     NetworkAclEntry,
     Effect.gen(function* () {
-      const findEntry = (
-        networkAclId: string,
-        ruleNumber: number,
-        egress: boolean,
-      ) =>
+      const findEntry = (networkAclId: string, ruleNumber: number, egress: boolean) =>
         ec2.describeNetworkAcls({ NetworkAclIds: [networkAclId] }).pipe(
           Effect.catchTag("InvalidNetworkAclID.NotFound", () =>
             Effect.succeed({ NetworkAcls: [] }),
@@ -223,9 +216,7 @@ export const NetworkAclEntryProvider = () =>
         entry: NonNullable<
           Awaited<
             ReturnType<
-              typeof findEntry extends (
-                ...args: any
-              ) => Effect.Effect<infer R, any, any>
+              typeof findEntry extends (...args: any) => Effect.Effect<infer R, any, any>
                 ? () => Promise<R>
                 : never
             >
@@ -367,21 +358,13 @@ export const NetworkAclEntryProvider = () =>
           // Ensure / Sync — if the entry doesn't exist, create it; otherwise
           // ReplaceNetworkAclEntry overwrites its mutable properties in place.
           if (observed === undefined) {
-            yield* session.note(
-              `Creating Network ACL Entry (rule ${news.ruleNumber})...`,
-            );
+            yield* session.note(`Creating Network ACL Entry (rule ${news.ruleNumber})...`);
             yield* ec2.createNetworkAclEntry(entryParams);
-            yield* session.note(
-              `Network ACL Entry created: rule ${news.ruleNumber}`,
-            );
+            yield* session.note(`Network ACL Entry created: rule ${news.ruleNumber}`);
           } else {
-            yield* session.note(
-              `Updating Network ACL Entry (rule ${news.ruleNumber})...`,
-            );
+            yield* session.note(`Updating Network ACL Entry (rule ${news.ruleNumber})...`);
             yield* ec2.replaceNetworkAclEntry(entryParams);
-            yield* session.note(
-              `Network ACL Entry updated: rule ${news.ruleNumber}`,
-            );
+            yield* session.note(`Network ACL Entry updated: rule ${news.ruleNumber}`);
           }
 
           // Re-read final state. A freshly created/replaced entry can lag
@@ -393,21 +376,14 @@ export const NetworkAclEntryProvider = () =>
             news.egress ?? false,
           ).pipe(
             Effect.flatMap((e) =>
-              e
-                ? Effect.succeed(e)
-                : Effect.fail({ _tag: "EntryNotYetVisible" } as const),
+              e ? Effect.succeed(e) : Effect.fail({ _tag: "EntryNotYetVisible" } as const),
             ),
             Effect.retry({
               while: (e) => e._tag === "EntryNotYetVisible",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
             }),
             Effect.catchTag("EntryNotYetVisible", () =>
-              Effect.fail(
-                new Error("Network ACL Entry not found after reconcile"),
-              ),
+              Effect.fail(new Error("Network ACL Entry not found after reconcile")),
             ),
           );
           return toAttrs(news, entry);
@@ -415,9 +391,7 @@ export const NetworkAclEntryProvider = () =>
 
         delete: Effect.fn(function* ({ output, session }) {
           const networkAclId = output.networkAclId;
-          yield* session.note(
-            `Deleting Network ACL Entry (rule ${output.ruleNumber})...`,
-          );
+          yield* session.note(`Deleting Network ACL Entry (rule ${output.ruleNumber})...`);
 
           yield* ec2
             .deleteNetworkAclEntry({
@@ -427,14 +401,8 @@ export const NetworkAclEntryProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidNetworkAclEntry.NotFound",
-                () => Effect.void,
-              ),
-              Effect.catchTag(
-                "InvalidNetworkAclID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidNetworkAclEntry.NotFound", () => Effect.void),
+              Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
             );
 
           // Delete success is only an acknowledgement. Observe the exact
@@ -454,24 +422,17 @@ export const NetworkAclEntryProvider = () =>
             ),
             Effect.retry({
               while: (error) => error instanceof NetworkAclEntryStillVisible,
-              schedule: Schedule.max([
-                Schedule.fixed(1000),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(10)]),
             }),
           );
 
-          yield* session.note(
-            `Network ACL Entry deleted: rule ${output.ruleNumber}`,
-          );
+          yield* session.note(`Network ACL Entry deleted: rule ${output.ruleNumber}`);
         }),
       };
     }),
   );
 
-class NetworkAclEntryStillVisible extends Data.TaggedError(
-  "NetworkAclEntryStillVisible",
-)<{
+class NetworkAclEntryStillVisible extends Data.TaggedError("NetworkAclEntryStillVisible")<{
   networkAclId: string;
   ruleNumber: number;
   egress: boolean;

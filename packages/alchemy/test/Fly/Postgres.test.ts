@@ -1,22 +1,19 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as mpg from "@distilled.cloud/fly-io/mpg";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilClusterGone = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
@@ -177,9 +174,7 @@ test.provider(
       );
 
       expect(deployed.db.clusterId).toEqual(expect.any(String));
-      expect(deployed.api.url).toEqual(
-        `https://${deployed.app.appName}.fly.dev`,
-      );
+      expect(deployed.api.url).toEqual(`https://${deployed.app.appName}.fly.dev`);
 
       const names = yield* secretNames(deployed.app.appName);
       expect(names).toContain("DATABASE_URL");
@@ -271,10 +266,7 @@ test.provider(
           Effect.retry({
             while: (e) =>
               e._tag === "NotReady" &&
-              (e.status === 0 ||
-                e.status === 404 ||
-                e.status === 502 ||
-                e.status === 503),
+              (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
             schedule: Schedule.spaced("3 seconds"),
             times: 8,
           }),

@@ -1,12 +1,12 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -32,9 +32,7 @@ test.provider("create, update, and delete role", (stack) =>
         return yield* Role("IamRole", {
           assumeRolePolicyDocument: assumeRolePolicy,
           maxSessionDuration: "2 hours",
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"],
           inlinePolicies: {
             AllowLogs: {
               Version: "2012-10-17",
@@ -90,9 +88,7 @@ test.provider("create, update, and delete role", (stack) =>
       RoleName: role.roleName,
     });
     expect(
-      Object.fromEntries(
-        (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-      ),
+      Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
     ).toMatchObject({
       env: "prod",
     });
@@ -110,65 +106,63 @@ test.provider("create, update, and delete role", (stack) =>
   }),
 );
 
-test.provider(
-  "folds binding-supplied policy statements into an inline policy",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("folds binding-supplied policy statements into an inline policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      // Phase 1: a consumer binds policy statements to the role; the provider
-      // folds them into the synthesized `alchemy-bindings` inline policy.
-      const role = yield* stack.deploy(
-        Effect.gen(function* () {
-          const role = yield* Role("BoundRole", {
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
-          yield* role.bind`Allow(test, s3:GetObject)`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["s3:GetObject"],
-                Resource: ["arn:aws:s3:::example-bucket/*"],
-              },
-            ],
-          });
-          return role;
+    // Phase 1: a consumer binds policy statements to the role; the provider
+    // folds them into the synthesized `alchemy-bindings` inline policy.
+    const role = yield* stack.deploy(
+      Effect.gen(function* () {
+        const role = yield* Role("BoundRole", {
+          assumeRolePolicyDocument: assumeRolePolicy,
+        });
+        yield* role.bind`Allow(test, s3:GetObject)`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject"],
+              Resource: ["arn:aws:s3:::example-bucket/*"],
+            },
+          ],
+        });
+        return role;
+      }),
+    );
+
+    const bound = yield* IAM.getRolePolicy({
+      RoleName: role.roleName,
+      PolicyName: "alchemy-bindings",
+    });
+    const boundDoc = JSON.parse(decodeURIComponent(bound.PolicyDocument)) as {
+      Statement: Array<{ Action: string[]; Resource: string[] }>;
+    };
+    expect(boundDoc.Statement).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Action: ["s3:GetObject"],
+          Resource: ["arn:aws:s3:::example-bucket/*"],
         }),
-      );
+      ]),
+    );
 
-      const bound = yield* IAM.getRolePolicy({
-        RoleName: role.roleName,
-        PolicyName: "alchemy-bindings",
-      });
-      const boundDoc = JSON.parse(decodeURIComponent(bound.PolicyDocument)) as {
-        Statement: Array<{ Action: string[]; Resource: string[] }>;
-      };
-      expect(boundDoc.Statement).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            Action: ["s3:GetObject"],
-            Resource: ["arn:aws:s3:::example-bucket/*"],
-          }),
-        ]),
-      );
+    // Phase 2: re-deploy without the binding; the inline policy is removed.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Role("BoundRole", {
+          assumeRolePolicyDocument: assumeRolePolicy,
+        });
+      }),
+    );
 
-      // Phase 2: re-deploy without the binding; the inline policy is removed.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Role("BoundRole", {
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
-        }),
-      );
+    const afterUnbind = yield* IAM.getRolePolicy({
+      RoleName: role.roleName,
+      PolicyName: "alchemy-bindings",
+    }).pipe(Effect.option);
+    expect(afterUnbind._tag).toBe("None");
 
-      const afterUnbind = yield* IAM.getRolePolicy({
-        RoleName: role.roleName,
-        PolicyName: "alchemy-bindings",
-      }).pipe(Effect.option);
-      expect(afterUnbind._tag).toBe("None");
-
-      yield* stack.destroy();
-    }),
+    yield* stack.destroy();
+  }),
 );
 
 test.provider("bindings can supply the role's trust policy", (stack) =>
@@ -194,9 +188,9 @@ test.provider("bindings can supply the role's trust policy", (stack) =>
     );
 
     const live = yield* IAM.getRole({ RoleName: role.roleName });
-    const trust = JSON.parse(
-      decodeURIComponent(live.Role.AssumeRolePolicyDocument!),
-    ) as { Statement: Array<{ Principal?: { Service?: string } }> };
+    const trust = JSON.parse(decodeURIComponent(live.Role.AssumeRolePolicyDocument!)) as {
+      Statement: Array<{ Principal?: { Service?: string } }>;
+    };
     expect(trust.Statement).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -259,112 +253,102 @@ const deleteRoleIfExists = (roleName: string) =>
     Effect.orDie,
   );
 
-test.provider(
-  "owned role (matching alchemy tags) is silently adopted without --adopt",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("owned role (matching alchemy tags) is silently adopted without --adopt", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const roleName = "alchemy-test-role-adopt";
+    const roleName = "alchemy-test-role-adopt";
 
-      // Reclaim a leftover from a previously killed run.
-      yield* deleteRoleIfExists(roleName);
+    // Reclaim a leftover from a previously killed run.
+    yield* deleteRoleIfExists(roleName);
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Role("AdoptableRole", {
-            roleName,
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
-        }),
-      );
-
-      // Wipe state — the role stays in IAM.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableRole",
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Role("AdoptableRole", {
+          roleName,
+          assumeRolePolicyDocument: assumeRolePolicy,
         });
-      }).pipe(Effect.provide(stack.state));
+      }),
+    );
 
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Role("AdoptableRole", {
-            roleName,
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
-        }),
-      );
+    // Wipe state — the role stays in IAM.
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableRole",
+      });
+    }).pipe(Effect.provide(stack.state));
 
-      expect(adopted.roleArn).toEqual(initial.roleArn);
-      expect(adopted.roleName).toEqual(roleName);
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Role("AdoptableRole", {
+          roleName,
+          assumeRolePolicyDocument: assumeRolePolicy,
+        });
+      }),
+    );
 
-      yield* stack.destroy();
+    expect(adopted.roleArn).toEqual(initial.roleArn);
+    expect(adopted.roleName).toEqual(roleName);
 
-      const deleted = yield* IAM.getRole({ RoleName: roleName }).pipe(
-        Effect.option,
-      );
-      expect(deleted._tag).toBe("None");
-    }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-adopt"))),
+    yield* stack.destroy();
+
+    const deleted = yield* IAM.getRole({ RoleName: roleName }).pipe(Effect.option);
+    expect(deleted._tag).toBe("None");
+  }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-adopt"))),
 );
 
-test.provider(
-  "foreign-tagged role requires adopt(true) to take over",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("foreign-tagged role requires adopt(true) to take over", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      // Use a deterministic shared physical name for both deploys.
-      const sharedRoleName = "alchemy-test-role-takeover";
+    // Use a deterministic shared physical name for both deploys.
+    const sharedRoleName = "alchemy-test-role-takeover";
 
-      // Reclaim a leftover from a previously killed run.
-      yield* deleteRoleIfExists(sharedRoleName);
+    // Reclaim a leftover from a previously killed run.
+    yield* deleteRoleIfExists(sharedRoleName);
 
-      const original = yield* stack.deploy(
+    const original = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Role("Original", {
+          roleName: sharedRoleName,
+          assumeRolePolicyDocument: assumeRolePolicy,
+        });
+      }),
+    );
+
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Original",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    const takenOver = yield* stack
+      .deploy(
         Effect.gen(function* () {
-          return yield* Role("Original", {
+          return yield* Role("Different", {
             roleName: sharedRoleName,
             assumeRolePolicyDocument: assumeRolePolicy,
           });
         }),
-      );
+      )
+      .pipe(adopt(true));
 
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Original",
-        });
-      }).pipe(Effect.provide(stack.state));
+    expect(takenOver.roleArn).toEqual(original.roleArn);
 
-      const takenOver = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Role("Different", {
-              roleName: sharedRoleName,
-              assumeRolePolicyDocument: assumeRolePolicy,
-            });
-          }),
-        )
-        .pipe(adopt(true));
+    // After adoption, tags should now identify this stack/stage/id.
+    const tagsResp = yield* IAM.listRoleTags({ RoleName: sharedRoleName });
+    const tagMap = Object.fromEntries((tagsResp.Tags ?? []).map((t) => [t.Key, t.Value]));
+    expect(tagMap["alchemy::id"]).toEqual("Different");
 
-      expect(takenOver.roleArn).toEqual(original.roleArn);
+    yield* stack.destroy();
 
-      // After adoption, tags should now identify this stack/stage/id.
-      const tagsResp = yield* IAM.listRoleTags({ RoleName: sharedRoleName });
-      const tagMap = Object.fromEntries(
-        (tagsResp.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
-      expect(tagMap["alchemy::id"]).toEqual("Different");
-
-      yield* stack.destroy();
-
-      const deleted = yield* IAM.getRole({ RoleName: sharedRoleName }).pipe(
-        Effect.option,
-      );
-      expect(deleted._tag).toBe("None");
-    }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-takeover"))),
+    const deleted = yield* IAM.getRole({ RoleName: sharedRoleName }).pipe(Effect.option);
+    expect(deleted._tag).toBe("None");
+  }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-takeover"))),
 );

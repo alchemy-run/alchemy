@@ -33,12 +33,7 @@ export interface AssociateLicense extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<grafana.AssociateLicenseRequest, "workspaceId">,
-    ) => Effect.Effect<
-      grafana.AssociateLicenseResponse,
-      grafana.AssociateLicenseError
-    >
+    ) => Effect.Effect<grafana.AssociateLicenseResponse, grafana.AssociateLicenseError>
   >
 > {}
-export const AssociateLicense = Binding.Service<AssociateLicense>(
-  "AWS.Grafana.AssociateLicense",
-);
+export const AssociateLicense = Binding.Service<AssociateLicense>("AWS.Grafana.AssociateLicense");

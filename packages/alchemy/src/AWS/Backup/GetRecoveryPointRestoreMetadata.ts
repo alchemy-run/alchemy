@@ -52,7 +52,6 @@ export interface GetRecoveryPointRestoreMetadata extends Binding.Service<
     >
   >
 > {}
-export const GetRecoveryPointRestoreMetadata =
-  Binding.Service<GetRecoveryPointRestoreMetadata>(
-    "AWS.Backup.GetRecoveryPointRestoreMetadata",
-  );
+export const GetRecoveryPointRestoreMetadata = Binding.Service<GetRecoveryPointRestoreMetadata>(
+  "AWS.Backup.GetRecoveryPointRestoreMetadata",
+);

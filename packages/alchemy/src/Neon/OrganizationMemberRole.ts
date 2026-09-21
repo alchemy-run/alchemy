@@ -8,12 +8,7 @@ import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
 /** Organization roles supported by Neon; availability depends on the organization. */
-export type OrganizationRole =
-  | "admin"
-  | "member"
-  | "editor"
-  | "viewer"
-  | "collaborator";
+export type OrganizationRole = "admin" | "member" | "editor" | "viewer" | "collaborator";
 
 export interface OrganizationMemberRoleProps {
   /** Existing Neon organization ID. Restore and remove this control before changing its identity. */
@@ -89,16 +84,12 @@ export const OrganizationMemberRole = Resource<OrganizationMemberRole>(
   "Neon.OrganizationMemberRole",
 );
 
-export class GovernanceRoleSafetyError extends Data.TaggedError(
-  "NeonGovernanceRoleSafetyError",
-)<{
+export class GovernanceRoleSafetyError extends Data.TaggedError("NeonGovernanceRoleSafetyError")<{
   message: string;
 }> {}
 
 /** Validate scope without performing cloud I/O. @internal */
-export const validateGovernanceScope = (
-  scope: { orgId: string; memberId: string } | undefined,
-) =>
+export const validateGovernanceScope = (scope: { orgId: string; memberId: string } | undefined) =>
   typeof scope?.orgId === "string" &&
   scope.orgId.trim().length > 0 &&
   typeof scope.memberId === "string" &&
@@ -106,8 +97,7 @@ export const validateGovernanceScope = (
     ? Effect.void
     : Effect.fail(
         new GovernanceRoleSafetyError({
-          message:
-            "An explicit organization ID and existing membership ID are required",
+          message: "An explicit organization ID and existing membership ID are required",
         }),
       );
 
@@ -149,8 +139,7 @@ export const governanceRoleTransition = <Role>(
   desired: Role,
   restoring = false,
 ) => {
-  if (restoring && observed === baseline.originalRole)
-    return Effect.succeed(false);
+  if (restoring && observed === baseline.originalRole) return Effect.succeed(false);
   if (observed !== baseline.managedRole) {
     return Effect.fail(
       new GovernanceRoleSafetyError({
@@ -162,14 +151,11 @@ export const governanceRoleTransition = <Role>(
   return Effect.succeed(observed !== desired);
 };
 
-const normalizeOrganizationRole = (role: OrganizationRole) =>
-  role === "member" ? "editor" : role;
+const normalizeOrganizationRole = (role: OrganizationRole) => (role === "member" ? "editor" : role);
 
 /** Neon treats member as a legacy spelling of editor. @internal */
-export const sameOrganizationRole = (
-  a: OrganizationRole,
-  b: OrganizationRole,
-) => normalizeOrganizationRole(a) === normalizeOrganizationRole(b);
+export const sameOrganizationRole = (a: OrganizationRole, b: OrganizationRole) =>
+  normalizeOrganizationRole(a) === normalizeOrganizationRole(b);
 
 /** Preserve original spellings while comparing equivalent organization roles. @internal */
 export const organizationRoleTransition = (
@@ -206,9 +192,7 @@ const request = (scope: { orgId: string; memberId: string }) => ({
 });
 
 /** Complete membership evidence for cleanup; failed or truncated listings never prove absence. @internal */
-export const listGovernanceOrganizationMembers = Effect.fn(function* (
-  orgId: string,
-) {
+export const listGovernanceOrganizationMembers = Effect.fn(function* (orgId: string) {
   const members: Neon.Member[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
@@ -221,8 +205,7 @@ export const listGovernanceOrganizationMembers = Effect.fn(function* (
     for (const { member } of response.members) {
       if (member.org_id !== orgId) {
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "Organization member listing returned a different organization",
+          message: "Organization member listing returned a different organization",
         });
       }
       members.push(member);
@@ -231,8 +214,7 @@ export const listGovernanceOrganizationMembers = Effect.fn(function* (
     if (next === undefined) return members;
     if (!next || seen.has(next)) {
       return yield* new GovernanceRoleSafetyError({
-        message:
-          "Organization membership listing returned an invalid or repeated cursor",
+        message: "Organization membership listing returned an invalid or repeated cursor",
       });
     }
     seen.add(next);
@@ -248,29 +230,18 @@ const validateObservedMember = Effect.fn(function* (
   scope: { orgId: string; memberId: string },
   member: Neon.Member,
 ) {
-  if (
-    member.id !== scope.memberId ||
-    member.org_id !== scope.orgId ||
-    !member.user_id
-  ) {
+  if (member.id !== scope.memberId || member.org_id !== scope.orgId || !member.user_id) {
     return yield* new GovernanceRoleSafetyError({
-      message:
-        "Organization membership identity does not match the requested scope",
+      message: "Organization membership identity does not match the requested scope",
     });
   }
   yield* validateOrganizationRole(member.role);
   return member;
 });
 
-const observe = Effect.fn(function* (scope: {
-  orgId: string;
-  memberId: string;
-}) {
+const observe = Effect.fn(function* (scope: { orgId: string; memberId: string }) {
   yield* validateGovernanceScope(scope);
-  return yield* validateObservedMember(
-    scope,
-    yield* Neon.getOrganizationMember(request(scope)),
-  );
+  return yield* validateObservedMember(scope, yield* Neon.getOrganizationMember(request(scope)));
 });
 
 const validateScope = (
@@ -304,10 +275,7 @@ export const OrganizationMemberRoleProvider = () =>
       yield* validateGovernanceScope(news);
       yield* validateOrganizationRole(news.role);
       const previous = output ?? olds;
-      if (
-        news.orgId !== previous.orgId ||
-        news.memberId !== previous.memberId
-      ) {
+      if (news.orgId !== previous.orgId || news.memberId !== previous.memberId) {
         return yield* new GovernanceRoleSafetyError({
           message:
             "Restore and remove the existing role control before changing its membership identity; the new membership requires a separate durable adoption snapshot",
@@ -317,15 +285,12 @@ export const OrganizationMemberRoleProvider = () =>
     read: Effect.fn(function* ({ olds, output, fqn, instanceId }) {
       const scope = output ?? olds;
       yield* validateGovernanceScope(scope);
-      const baseline = output
-        ? yield* verifyBaseline(output, { fqn, instanceId })
-        : undefined;
+      const baseline = output ? yield* verifyBaseline(output, { fqn, instanceId }) : undefined;
       const member = yield* observe(scope);
       if (output && baseline) {
         if (member.user_id !== baseline.userId) {
           return yield* new GovernanceRoleSafetyError({
-            message:
-              "Membership user changed; refusing to reuse the captured baseline",
+            message: "Membership user changed; refusing to reuse the captured baseline",
           });
         }
         yield* organizationRoleTransition(baseline, member.role, member.role);
@@ -350,8 +315,7 @@ export const OrganizationMemberRoleProvider = () =>
       const baseline = yield* verifyBaseline(output, { fqn, instanceId });
       if (!output)
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "A persisted adoption snapshot is required before changing an organization role",
+          message: "A persisted adoption snapshot is required before changing an organization role",
         });
       yield* validateScope(news, output);
       const member = yield* observe(news);
@@ -360,23 +324,16 @@ export const OrganizationMemberRoleProvider = () =>
           message: "Membership user changed",
         });
       if (yield* organizationRoleTransition(baseline, member.role, news.role)) {
-        yield* validateGovernanceActor(
-          member.user_id,
-          (yield* Neon.getCurrentUserInfo({})).id,
-        );
+        yield* validateGovernanceActor(member.user_id, (yield* Neon.getCurrentUserInfo({})).id);
         yield* Neon.updateOrganizationMember({
           ...request(news),
           role: news.role,
         });
       }
       const current = yield* observe(news);
-      if (
-        current.user_id !== baseline.userId ||
-        !sameOrganizationRole(current.role, news.role)
-      ) {
+      if (current.user_id !== baseline.userId || !sameOrganizationRole(current.role, news.role)) {
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "Organization role did not converge; retaining the original baseline",
+          message: "Organization role did not converge; retaining the original baseline",
         });
       }
       return {
@@ -390,27 +347,17 @@ export const OrganizationMemberRoleProvider = () =>
       const baseline = yield* verifyBaseline(output, { fqn, instanceId });
       yield* validateGovernanceScope(output);
       // getOrganizationMember has no typed missing-member error in the SDK.
-      const listed = (yield* listGovernanceOrganizationMembers(
-        output.orgId,
-      )).find((member) => member.id === output.memberId);
+      const listed = (yield* listGovernanceOrganizationMembers(output.orgId)).find(
+        (member) => member.id === output.memberId,
+      );
       if (!listed) return;
       const member = yield* validateObservedMember(output, listed);
       if (member.user_id !== baseline.userId)
         return yield* new GovernanceRoleSafetyError({
           message: "Membership user changed",
         });
-      if (
-        yield* organizationRoleTransition(
-          baseline,
-          member.role,
-          baseline.originalRole,
-          true,
-        )
-      ) {
-        yield* validateGovernanceActor(
-          member.user_id,
-          (yield* Neon.getCurrentUserInfo({})).id,
-        );
+      if (yield* organizationRoleTransition(baseline, member.role, baseline.originalRole, true)) {
+        yield* validateGovernanceActor(member.user_id, (yield* Neon.getCurrentUserInfo({})).id);
         yield* Neon.updateOrganizationMember({
           ...request(output),
           role: baseline.originalRole,

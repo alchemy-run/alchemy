@@ -1,10 +1,10 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,9 +13,7 @@ const describeLogGroup = Effect.fn(function* (logGroupName: string) {
     logGroupNamePrefix: logGroupName,
     limit: 1,
   });
-  return (described.logGroups ?? []).find(
-    (group) => group.logGroupName === logGroupName,
-  );
+  return (described.logGroups ?? []).find((group) => group.logGroupName === logGroupName);
 });
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a real
@@ -38,9 +36,7 @@ test.provider("list enumerates the deployed log group", (stack) =>
     const provider = yield* Provider.findProvider(LogGroup);
     const all = yield* provider.list();
 
-    expect(all.some((g) => g.logGroupName === logGroup.logGroupName)).toBe(
-      true,
-    );
+    expect(all.some((g) => g.logGroupName === logGroup.logGroupName)).toBe(true);
 
     yield* stack.destroy();
     // Assert the log group is gone after the final destroy.

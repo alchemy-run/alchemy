@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import { DataSource } from "@/AWS/QuickSight";
-import * as Test from "@/Test/Alchemy";
 import * as quicksight from "@distilled.cloud/aws/quicksight";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { DataSource } from "@/AWS/QuickSight";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -42,13 +42,9 @@ test.provider(
         })
         .pipe(
           Effect.as("created" as const),
-          Effect.catchTag("QuickSightSubscriptionRequired", (e) =>
-            Effect.succeed(e._tag),
-          ),
+          Effect.catchTag("QuickSightSubscriptionRequired", (e) => Effect.succeed(e._tag)),
           // Tolerate a leftover probe from a prior entitled run.
-          Effect.catchTag("ResourceExistsException", () =>
-            Effect.succeed("created" as const),
-          ),
+          Effect.catchTag("ResourceExistsException", () => Effect.succeed("created" as const)),
         );
 
       // Clean up if the account turned out to be subscribed.
@@ -58,9 +54,7 @@ test.provider(
             AwsAccountId: accountId,
             DataSourceId: dataSourceId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       }
 
       expect(["QuickSightSubscriptionRequired", "created"]).toContain(outcome);
@@ -73,14 +67,10 @@ class DataSourceStillExists extends Data.TaggedError("DataSourceStillExists")<{
 }> {}
 
 const findDataSource = (accountId: string, dataSourceId: string) =>
-  quicksight
-    .describeDataSource({ AwsAccountId: accountId, DataSourceId: dataSourceId })
-    .pipe(
-      Effect.map((r) => r.DataSource),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  quicksight.describeDataSource({ AwsAccountId: accountId, DataSourceId: dataSourceId }).pipe(
+    Effect.map((r) => r.DataSource),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  );
 
 // Gated lifecycle: requires an entitled QuickSight account.
 test.provider.skipIf(!SUBSCRIBED)(
@@ -114,9 +104,7 @@ test.provider.skipIf(!SUBSCRIBED)(
       const tags = yield* quicksight
         .listTagsForResource({ ResourceArn: source.arn })
         .pipe(Effect.map((r) => r.Tags ?? []));
-      expect(tags.find((t) => t.Key === "alchemy::id")?.Value).toBe(
-        "AthenaSource",
-      );
+      expect(tags.find((t) => t.Key === "alchemy::id")?.Value).toBe("AthenaSource");
 
       yield* stack.destroy();
 
@@ -132,10 +120,7 @@ test.provider.skipIf(!SUBSCRIBED)(
         ),
         Effect.retry({
           while: (e) => e._tag === "DataSourceStillExists",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }),

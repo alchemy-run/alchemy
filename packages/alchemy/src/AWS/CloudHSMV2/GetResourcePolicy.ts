@@ -26,10 +26,7 @@ export interface GetResourcePolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request?: cloudhsm.GetResourcePolicyRequest,
-    ) => Effect.Effect<
-      cloudhsm.GetResourcePolicyResponse,
-      cloudhsm.GetResourcePolicyError
-    >
+    ) => Effect.Effect<cloudhsm.GetResourcePolicyResponse, cloudhsm.GetResourcePolicyError>
   >
 > {}
 export const GetResourcePolicy = Binding.Service<GetResourcePolicy>(

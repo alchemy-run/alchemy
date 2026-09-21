@@ -2,7 +2,6 @@ import * as dnsFirewall from "@distilled.cloud/cloudflare/dns-firewall";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -172,13 +171,7 @@ export type FirewallAttributes = {
   modifiedOn: string;
 };
 
-export type Firewall = Resource<
-  TypeId,
-  FirewallProps,
-  FirewallAttributes,
-  never,
-  Providers
->;
+export type Firewall = Resource<TypeId, FirewallProps, FirewallAttributes, never, Providers>;
 
 /**
  * A Cloudflare DNS Firewall cluster.
@@ -277,9 +270,7 @@ export const FirewallProvider = () =>
         const observed = yield* getCluster(acct, output.dnsFirewallId);
         if (!observed) return undefined;
         const reverseDns =
-          olds?.reverseDns !== undefined
-            ? yield* getReverseDns(acct, observed.id)
-            : undefined;
+          olds?.reverseDns !== undefined ? yield* getReverseDns(acct, observed.id) : undefined;
         return toAttributes(observed, acct, reverseDns);
       }
 
@@ -291,9 +282,7 @@ export const FirewallProvider = () =>
       const match = yield* findByName(acct, name);
       if (!match) return undefined;
       const reverseDns =
-        olds?.reverseDns !== undefined
-          ? yield* getReverseDns(acct, match.id)
-          : undefined;
+        olds?.reverseDns !== undefined ? yield* getReverseDns(acct, match.id) : undefined;
       return Unowned(toAttributes(match, acct, reverseDns));
     }),
     list: Effect.fn(function* () {
@@ -355,8 +344,7 @@ export const FirewallProvider = () =>
           upstreamIps: news.upstreamIps,
           attackMitigation: {
             enabled: news.attackMitigation?.enabled ?? false,
-            onlyWhenUpstreamUnhealthy:
-              news.attackMitigation?.onlyWhenUpstreamUnhealthy ?? false,
+            onlyWhenUpstreamUnhealthy: news.attackMitigation?.onlyWhenUpstreamUnhealthy ?? false,
           },
           deprecateAnyRequests: news.deprecateAnyRequests ?? false,
           ecsFallback: news.ecsFallback ?? false,
@@ -366,9 +354,7 @@ export const FirewallProvider = () =>
           ratelimit: news.ratelimit ?? null,
           retries: news.retries ?? 2,
         };
-        const observedMitigation = normalizeMitigation(
-          observed.attackMitigation,
-        );
+        const observedMitigation = normalizeMitigation(observed.attackMitigation);
         const dirty =
           observed.name !== desired.name ||
           !sameIps(observed.upstreamIps, desired.upstreamIps) ||

@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/worker-entrypoint-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -16,10 +16,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // Cold-start retry — fresh `workers.dev` URLs take a few seconds to start
 // answering, capped at 3s so the doubling sleeps can't blow the timeout.
 const coldStartRetry = Effect.retry({
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("3 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
   times: 30,
 });
 
@@ -43,9 +40,7 @@ test(
 
     // The default entrypoint has no `greet` — a greeting proves the
     // binding targeted the named `Api` class.
-    const res = yield* client
-      .get(`${callerUrl}/greet?name=alice`)
-      .pipe(coldStartRetry);
+    const res = yield* client.get(`${callerUrl}/greet?name=alice`).pipe(coldStartRetry);
     expect(yield* res.text).toBe("hello alice from Api");
   }),
   { timeout: 180_000 },

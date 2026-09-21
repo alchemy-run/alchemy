@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as codebuild from "@distilled.cloud/aws/codebuild";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CodeBuildTestFunctionLive, {
   CodeBuildTestFunction,
   FIXTURE_PROJECT_NAME,
@@ -20,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "CodeBuildBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -42,19 +39,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -62,12 +54,11 @@ const getJson = (url: string) =>
   send(HttpClientRequest.get(url)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
-const post = (url: string) =>
-  send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
+const post = (url: string) => send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * A route answered with a typed error tag. The tag being present proves the
@@ -96,10 +87,7 @@ const waitForTerminal = (buildId: string) =>
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "BuildNotTerminal",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -122,9 +110,7 @@ describe.sequential("CodeBuild Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/build/list`;
 
-      yield* Effect.logInfo(
-        `CodeBuild test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CodeBuild test setup: probing readiness at ${readinessUrl}`);
       // Ready = the function answers 200 AND the freshly attached codebuild
       // policy has propagated (an AccessDeniedException errorTag means IAM
       // is still converging — keep probing).
@@ -173,9 +159,7 @@ describe.sequential("CodeBuild Bindings", () => {
 
           // BatchGetBuilds — poll to a terminal status (bounded).
           const terminal = yield* waitForTerminal(buildId);
-          expect(["STOPPED", "SUCCEEDED", "FAILED", "STOPPING"]).toContain(
-            terminal,
-          );
+          expect(["STOPPED", "SUCCEEDED", "FAILED", "STOPPING"]).toContain(terminal);
 
           // RetryBuild — restarts the finished build (typed error is
           // acceptable if the build is still finalizing).
@@ -215,15 +199,13 @@ describe.sequential("CodeBuild Bindings", () => {
   });
 
   describe("Batch builds", () => {
-    test.provider(
-      "StartBuildBatch rejects a project without batch config (typed)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* post(`${baseUrl}/batch/start`)) as any;
-          // The fixture project has no build-batch configuration —
-          // CodeBuild must reject with the TYPED InvalidInputException.
-          expect(body.errorTag).toBe("InvalidInputException");
-        }),
+    test.provider("StartBuildBatch rejects a project without batch config (typed)", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* post(`${baseUrl}/batch/start`)) as any;
+        // The fixture project has no build-batch configuration —
+        // CodeBuild must reject with the TYPED InvalidInputException.
+        expect(body.errorTag).toBe("InvalidInputException");
+      }),
     );
 
     test.provider("ListBuildBatchesForProject lists (empty)", (_stack) =>
@@ -248,26 +230,24 @@ describe.sequential("CodeBuild Bindings", () => {
       }),
     );
 
-    test.provider(
-      "Stop/Retry/DeleteBuildBatch answer typed for unknown ids",
-      (_stack) =>
-        Effect.gen(function* () {
-          const fakeId = `${FIXTURE_PROJECT_NAME}:${FAKE_UUID}`;
-          const stopped = (yield* postJson(`${baseUrl}/batch/stop`, {
-            id: fakeId,
-          })) as any;
-          expectTypedNonAuthz(stopped);
+    test.provider("Stop/Retry/DeleteBuildBatch answer typed for unknown ids", (_stack) =>
+      Effect.gen(function* () {
+        const fakeId = `${FIXTURE_PROJECT_NAME}:${FAKE_UUID}`;
+        const stopped = (yield* postJson(`${baseUrl}/batch/stop`, {
+          id: fakeId,
+        })) as any;
+        expectTypedNonAuthz(stopped);
 
-          const retried = (yield* postJson(`${baseUrl}/batch/retry`, {
-            id: fakeId,
-          })) as any;
-          expectTypedNonAuthz(retried);
+        const retried = (yield* postJson(`${baseUrl}/batch/retry`, {
+          id: fakeId,
+        })) as any;
+        expectTypedNonAuthz(retried);
 
-          const deleted = (yield* postJson(`${baseUrl}/batch/delete`, {
-            id: fakeId,
-          })) as any;
-          expectAuthorized(deleted);
-        }),
+        const deleted = (yield* postJson(`${baseUrl}/batch/delete`, {
+          id: fakeId,
+        })) as any;
+        expectAuthorized(deleted);
+      }),
     );
   });
 
@@ -304,27 +284,25 @@ describe.sequential("CodeBuild Bindings", () => {
       { timeout: 120_000 },
     );
 
-    test.provider(
-      "command-execution bindings answer typed for an unknown sandbox",
-      (_stack) =>
-        Effect.gen(function* () {
-          const fakeSandbox = `${FIXTURE_PROJECT_NAME}:${FAKE_UUID}`;
-          const command = (yield* postJson(`${baseUrl}/sandbox/command`, {
-            sandboxId: fakeSandbox,
-            command: "echo hello",
-          })) as any;
-          expectTypedNonAuthz(command);
+    test.provider("command-execution bindings answer typed for an unknown sandbox", (_stack) =>
+      Effect.gen(function* () {
+        const fakeSandbox = `${FIXTURE_PROJECT_NAME}:${FAKE_UUID}`;
+        const command = (yield* postJson(`${baseUrl}/sandbox/command`, {
+          sandboxId: fakeSandbox,
+          command: "echo hello",
+        })) as any;
+        expectTypedNonAuthz(command);
 
-          const got = (yield* getJson(
-            `${baseUrl}/sandbox/command-get?sandboxId=${encodeURIComponent(fakeSandbox)}&commandId=${FAKE_UUID}`,
-          )) as any;
-          expectAuthorized(got);
+        const got = (yield* getJson(
+          `${baseUrl}/sandbox/command-get?sandboxId=${encodeURIComponent(fakeSandbox)}&commandId=${FAKE_UUID}`,
+        )) as any;
+        expectAuthorized(got);
 
-          const listed = (yield* getJson(
-            `${baseUrl}/sandbox/commands?sandboxId=${encodeURIComponent(fakeSandbox)}`,
-          )) as any;
-          expectAuthorized(listed);
-        }),
+        const listed = (yield* getJson(
+          `${baseUrl}/sandbox/commands?sandboxId=${encodeURIComponent(fakeSandbox)}`,
+        )) as any;
+        expectAuthorized(listed);
+      }),
     );
   });
 
@@ -350,10 +328,7 @@ describe.sequential("CodeBuild Bindings", () => {
               ),
             );
           expect(groupArn).toBeDefined();
-          const fakeReportArn = `${groupArn!.replace(
-            ":report-group/",
-            ":report/",
-          )}:${FAKE_UUID}`;
+          const fakeReportArn = `${groupArn!.replace(":report-group/", ":report/")}:${FAKE_UUID}`;
 
           const got = (yield* getJson(
             `${baseUrl}/reports/get?arn=${encodeURIComponent(fakeReportArn)}`,

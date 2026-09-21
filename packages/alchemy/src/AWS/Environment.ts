@@ -1,7 +1,4 @@
-import type {
-  CredentialsError,
-  ResolvedCredentials,
-} from "@distilled.cloud/aws/Credentials";
+import type { CredentialsError, ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -15,9 +12,7 @@ import {
   type AwsResolvedCredentials,
 } from "./AuthProvider.ts";
 
-export const AWS_PROFILE = Config.String("AWS_PROFILE").pipe(
-  Config.withDefault("default"),
-);
+export const AWS_PROFILE = Config.String("AWS_PROFILE").pipe(Config.withDefault("default"));
 
 export const AWS_REGION = Config.String("AWS_REGION");
 export const AWS_ACCOUNT_ID = Config.String("AWS_ACCOUNT_ID");
@@ -28,9 +23,7 @@ export const AWS_SESSION_TOKEN = Config.Redacted("AWS_SESSION_TOKEN");
 export type AccountID = string;
 export type RegionID = string;
 
-export class FailedToGetAccount extends Data.TaggedError(
-  "AWS::Environment::FailedToGetAccount",
-)<{
+export class FailedToGetAccount extends Data.TaggedError("AWS::Environment::FailedToGetAccount")<{
   message: string;
   cause: Error;
 }> {}
@@ -83,15 +76,10 @@ export const Default = Layer.effect(
     // is the emulator; only `Alchemy.remote()` rows ever need it), so the
     // profile/CI precedence is captured here and evaluated on first use,
     // exactly once.
-    const resolve = resolveProviderConfig<
-      AwsAuthConfig,
-      AwsResolvedCredentials
-    >(AWS_AUTH_PROVIDER_NAME).pipe(Effect.flatMap(({ resolve }) => resolve));
+    const resolve = resolveProviderConfig<AwsAuthConfig, AwsResolvedCredentials>(
+      AWS_AUTH_PROVIDER_NAME,
+    ).pipe(Effect.flatMap(({ resolve }) => resolve));
     const context = yield* Effect.context<Effect.Services<typeof resolve>>();
-    return yield* resolve.pipe(
-      Effect.provideContext(context),
-      Effect.orDie,
-      Effect.cached,
-    );
+    return yield* resolve.pipe(Effect.provideContext(context), Effect.orDie, Effect.cached);
   }),
 ).pipe(Layer.orDie);

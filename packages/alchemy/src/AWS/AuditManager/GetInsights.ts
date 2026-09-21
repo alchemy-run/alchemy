@@ -23,13 +23,8 @@ export interface GetInsights extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.GetInsightsRequest,
-    ) => Effect.Effect<
-      auditmanager.GetInsightsResponse,
-      auditmanager.GetInsightsError
-    >
+    ) => Effect.Effect<auditmanager.GetInsightsResponse, auditmanager.GetInsightsError>
   >
 > {}
 
-export const GetInsights = Binding.Service<GetInsights>(
-  "AWS.AuditManager.GetInsights",
-);
+export const GetInsights = Binding.Service<GetInsights>("AWS.AuditManager.GetInsights");

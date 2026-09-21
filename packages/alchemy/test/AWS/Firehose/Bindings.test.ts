@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Alchemy from "@/index.ts";
-import * as State from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -11,6 +7,10 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Alchemy from "@/index.ts";
+import * as State from "@/State";
+import * as Test from "@/Test/Alchemy";
 import FirehoseApiFunctionLive, {
   BucketAndDeliveryStream,
   FirehoseApiFunction,
@@ -55,13 +55,9 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 120_000 });
 // (eventual consistency) can both take a while on the first hit. Retrying on
 // any non-200 lets the first request wait through that window; warm calls
 // return on the first try and never retry.
-const readinessSchedule = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessSchedule = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
-const urlOf = (baseUrl: string, path: string) =>
-  `${baseUrl.replace(/\/+$/, "")}${path}`;
+const urlOf = (baseUrl: string, path: string) => `${baseUrl.replace(/\/+$/, "")}${path}`;
 
 const getJson = (baseUrl: string, path: string) =>
   HttpClient.execute(HttpClientRequest.get(urlOf(baseUrl, path))).pipe(
@@ -75,10 +71,7 @@ const getJson = (baseUrl: string, path: string) =>
 
 const postJson = (baseUrl: string, path: string, body: unknown) =>
   HttpClient.execute(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(urlOf(baseUrl, path)),
-      body,
-    ),
+    HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(urlOf(baseUrl, path)), body),
   ).pipe(
     Effect.flatMap((response) =>
       response.status === 200
@@ -106,9 +99,7 @@ describe("Firehose Bindings", () => {
         const described = yield* Firehose.describeDeliveryStream({
           DeliveryStreamName: deliveryStreamName,
         });
-        expect(
-          described.DeliveryStreamDescription.DeliveryStreamStatus,
-        ).toEqual("ACTIVE");
+        expect(described.DeliveryStreamDescription.DeliveryStreamStatus).toEqual("ACTIVE");
       }),
     );
   });
@@ -172,9 +163,7 @@ describe("Firehose Bindings", () => {
         const described = yield* Firehose.describeDeliveryStream({
           DeliveryStreamName: deliveryStreamName,
         });
-        expect(
-          described.DeliveryStreamDescription.DeliveryStreamStatus,
-        ).toEqual("ACTIVE");
+        expect(described.DeliveryStreamDescription.DeliveryStreamStatus).toEqual("ACTIVE");
       }),
     );
 
@@ -201,82 +190,72 @@ describe("Firehose Bindings", () => {
   // and has exceeded the default suite's 90-second platform budget in live
   // runs. Keep the end-to-end proof opt-in, but run its independent checks
   // concurrently so they share one bounded delivery window.
-  describe.concurrent.skipIf(!process.env.AWS_TEST_SLOW)(
-    "S3 delivery (slow)",
-    () => {
-      class MarkerNotDeliveredYet extends Data.TaggedError(
-        "MarkerNotDeliveredYet",
-      ) {}
+  describe.concurrent.skipIf(!process.env.AWS_TEST_SLOW)("S3 delivery (slow)", () => {
+    class MarkerNotDeliveredYet extends Data.TaggedError("MarkerNotDeliveredYet") {}
 
-      const waitForMarker = (bucketName: string, marker: string) => {
-        const findMarker = Effect.gen(function* () {
-          const listing = yield* S3.listObjectsV2({
-            Bucket: bucketName,
-            Prefix: "records/",
-          });
-          for (const object of listing.Contents ?? []) {
-            if (object.Key === undefined) {
-              continue;
-            }
-            const got = yield* S3.getObject({
-              Bucket: bucketName,
-              Key: object.Key,
-            });
-            // The body read surfaces plain `Error` (streaming transport) — a
-            // mid-delivery read hiccup is just "not delivered yet".
-            const text = yield* Stream.mkString(
-              Stream.decodeText(got.Body!),
-            ).pipe(
-              Effect.catch(() => Effect.fail(new MarkerNotDeliveredYet())),
-            );
-            if (text.includes(marker)) {
-              return object.Key;
-            }
-          }
-          return yield* new MarkerNotDeliveredYet();
+    const waitForMarker = (bucketName: string, marker: string) => {
+      const findMarker = Effect.gen(function* () {
+        const listing = yield* S3.listObjectsV2({
+          Bucket: bucketName,
+          Prefix: "records/",
         });
+        for (const object of listing.Contents ?? []) {
+          if (object.Key === undefined) {
+            continue;
+          }
+          const got = yield* S3.getObject({
+            Bucket: bucketName,
+            Key: object.Key,
+          });
+          // The body read surfaces plain `Error` (streaming transport) — a
+          // mid-delivery read hiccup is just "not delivered yet".
+          const text = yield* Stream.mkString(Stream.decodeText(got.Body!)).pipe(
+            Effect.catch(() => Effect.fail(new MarkerNotDeliveredYet())),
+          );
+          if (text.includes(marker)) {
+            return object.Key;
+          }
+        }
+        return yield* new MarkerNotDeliveredYet();
+      });
 
-        return findMarker.pipe(
-          Effect.retry({
-            while: (e) => e._tag === "MarkerNotDeliveredYet",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(12),
-            ]),
-          }),
-        );
-      };
-
-      test.provider(
-        "delivers buffered records to the destination bucket",
-        () =>
-          Effect.gen(function* () {
-            const { url, bucketName } = yield* stack;
-            // Randomness is only a payload correlation marker, never a
-            // physical resource name. It prevents a prior run's object from
-            // satisfying this delivery proof.
-            const marker = `put-record-delivery-${crypto.randomUUID()}`;
-            yield* postJson(url, "/put-record", {
-              data: marker,
-            });
-            expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
-          }),
-        { timeout: 180_000 },
+      return findMarker.pipe(
+        Effect.retry({
+          while: (e) => e._tag === "MarkerNotDeliveredYet",
+          schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(12)]),
+        }),
       );
+    };
 
-      test.provider(
-        "sink records land in the destination bucket (marker-anchored)",
-        () =>
-          Effect.gen(function* () {
-            const { url, bucketName } = yield* stack;
-            const marker = `sink-delivery-${crypto.randomUUID()}`;
-            yield* postJson(url, "/sink", {
-              records: [`${marker}-1`, `${marker}-2`],
-            });
-            expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
-          }),
-        { timeout: 180_000 },
-      );
-    },
-  );
+    test.provider(
+      "delivers buffered records to the destination bucket",
+      () =>
+        Effect.gen(function* () {
+          const { url, bucketName } = yield* stack;
+          // Randomness is only a payload correlation marker, never a
+          // physical resource name. It prevents a prior run's object from
+          // satisfying this delivery proof.
+          const marker = `put-record-delivery-${crypto.randomUUID()}`;
+          yield* postJson(url, "/put-record", {
+            data: marker,
+          });
+          expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "sink records land in the destination bucket (marker-anchored)",
+      () =>
+        Effect.gen(function* () {
+          const { url, bucketName } = yield* stack;
+          const marker = `sink-delivery-${crypto.randomUUID()}`;
+          yield* postJson(url, "/sink", {
+            records: [`${marker}-1`, `${marker}-2`],
+          });
+          expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
+        }),
+      { timeout: 180_000 },
+    );
+  });
 });

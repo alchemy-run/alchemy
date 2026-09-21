@@ -1,12 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": [
-    "alchemy.run.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "test/**/*.ts",
-    "vite.config.ts"
-  ],
+  "include": ["alchemy.run.ts", "src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "vite.config.ts"],
   "compilerOptions": {
     "rootDir": ".",
     "module": "ESNext",

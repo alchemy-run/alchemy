@@ -32,10 +32,7 @@ export interface DescribeClusters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: cloudhsm.DescribeClustersRequest,
-    ) => Effect.Effect<
-      cloudhsm.DescribeClustersResponse,
-      cloudhsm.DescribeClustersError
-    >
+    ) => Effect.Effect<cloudhsm.DescribeClustersResponse, cloudhsm.DescribeClustersError>
   >
 > {}
 export const DescribeClusters = Binding.Service<DescribeClusters>(

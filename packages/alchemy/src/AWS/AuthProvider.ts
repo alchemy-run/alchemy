@@ -1,11 +1,9 @@
+import * as NodeCrypto from "node:crypto";
+import * as NodeOs from "node:os";
 import * as Floci from "@alchemy.run/floci";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
-import {
-  Credentials,
-  ExpiredSSOToken,
-  InvalidSSOToken,
-} from "@distilled.cloud/aws/Credentials";
+import { Credentials, ExpiredSSOToken, InvalidSSOToken } from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
 import * as EffectConsole from "effect/Console";
 import * as Deferred from "effect/Deferred";
@@ -23,8 +21,6 @@ import * as Stream from "effect/Stream";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeCrypto from "node:crypto";
-import * as NodeOs from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
@@ -43,11 +39,7 @@ import {
   getEnvRequired,
   mapPromptCancellation,
 } from "../Auth/Env.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
+import { storedSecret, storedValueText, validateFieldValues } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as Region from "./Region.ts";
@@ -181,9 +173,7 @@ export const applyEnvRegionOverride = <C extends { region: string }>(
   creds: C,
 ): Effect.Effect<C, AuthError> =>
   getEnv("AWS_REGION").pipe(
-    Effect.map((envRegion) =>
-      envRegion ? { ...creds, region: envRegion } : creds,
-    ),
+    Effect.map((envRegion) => (envRegion ? { ...creds, region: envRegion } : creds)),
   );
 
 /**
@@ -191,10 +181,7 @@ export const applyEnvRegionOverride = <C extends { region: string }>(
  * {@link AuthProviders} registry when built. Include this in the AWS
  * `providers()` layer so the alchemy CLI can discover it.
  */
-export const AwsAuth = AuthProviderLayer<
-  AwsAuthConfig,
-  AwsResolvedCredentials
->()(
+export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>()(
   AWS_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const interaction = Interaction.accessors;
@@ -242,7 +229,7 @@ export const AwsAuth = AuthProviderLayer<
         ),
       );
 
-    const loginStored = Effect.fn(function* (profileName: string) {
+    const loginStored = Effect.fn(function* () {
       const accessKeyId = yield* interaction.prompt
         .text({
           message: "AWS Access Key ID",
@@ -291,7 +278,7 @@ export const AwsAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
+    const configureInteractive = () =>
       interaction.prompt
         .select({
           message: "AWS authentication method",
@@ -318,8 +305,7 @@ export const AwsAuth = AuthProviderLayer<
                       {
                         value: "device" as const,
                         label: "Device code",
-                        description:
-                          "authorize with a short code on any device",
+                        description: "authorize with a short code on any device",
                       },
                     ],
                   });
@@ -335,7 +321,7 @@ export const AwsAuth = AuthProviderLayer<
                   return config;
                 }),
               ),
-              Match.when("stored", () => loginStored(profileName)),
+              Match.when("stored", () => loginStored()),
               Match.exhaustive,
             ),
           ),
@@ -345,9 +331,7 @@ export const AwsAuth = AuthProviderLayer<
     // (ChildProcessSpawner for `aws sso login`) and `configureWith`'s
     // (FileSystem/Path for ~/.aws/config probing) — the contract shares one
     // ConfigureReq type parameter between the two entry points.
-    const configureCredentials = (
-      profileName: string,
-    ): Effect.Effect<
+    const configureCredentials = (): Effect.Effect<
       AwsAuthConfig,
       AuthError,
       | ChildProcessSpawner
@@ -356,7 +340,7 @@ export const AwsAuth = AuthProviderLayer<
       | Path.Path
       | Interaction.Interaction
     > =>
-      configureInteractive(profileName).pipe(
+      configureInteractive().pipe(
         Effect.mapError((e) =>
           e instanceof AuthError
             ? e
@@ -403,8 +387,7 @@ export const AwsAuth = AuthProviderLayer<
               Effect.mapError(
                 (cause) =>
                   new AuthError({
-                    message:
-                      "AWS: failed to verify credentials via STS GetCallerIdentity.",
+                    message: "AWS: failed to verify credentials via STS GetCallerIdentity.",
                     cause,
                   }),
               ),
@@ -414,10 +397,7 @@ export const AwsAuth = AuthProviderLayer<
               accountId,
               accessKeyId: Redacted.value(accessKeyId),
               secretAccessKey: Redacted.value(secretAccessKey),
-              sessionToken:
-                sessionToken === undefined
-                  ? undefined
-                  : Redacted.value(sessionToken),
+              sessionToken: sessionToken === undefined ? undefined : Redacted.value(sessionToken),
               region,
             };
           }),
@@ -476,12 +456,8 @@ export const AwsAuth = AuthProviderLayer<
                       : Redacted.make(config.sessionToken),
                   region: config.region,
                 };
-                const accountId =
-                  config.accountId ?? (yield* getAccountId(credentials));
-                if (
-                  config.accountId === undefined &&
-                  updateConfig !== undefined
-                ) {
+                const accountId = config.accountId ?? (yield* getAccountId(credentials));
+                if (config.accountId === undefined && updateConfig !== undefined) {
                   yield* updateConfig({ ...config, accountId });
                 }
                 return {
@@ -499,10 +475,7 @@ export const AwsAuth = AuthProviderLayer<
                   .loadProfile(config.ssoProfile)
                   .pipe(Effect.catch(() => Effect.succeed(undefined)));
                 if (profile?.sso_account_id == null) {
-                  const reconfigure = reconfigureHint(
-                    AWS_AUTH_PROVIDER_NAME,
-                    profileName,
-                  );
+                  const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
                   return yield* Effect.fail(
                     new AuthError({
                       message:
@@ -531,29 +504,24 @@ export const AwsAuth = AuthProviderLayer<
                   // consumers (AWSEnvironment), while `details` and other
                   // in-provider consumers match these tags to surface a typed
                   // `NeedsReauth` instead of a generic failure.
-                  credentials: auth
-                    .loadProfileCredentials(config.ssoProfile)
-                    .pipe(
-                      Effect.provideService(
-                        EffectConsole.Console,
-                        silentConsole,
-                      ),
-                      Effect.mapError((error) => {
-                        if (error._tag === "Alchemy::AWS::ExpiredSSOToken") {
-                          return new ExpiredSSOToken({
-                            message: `AWS SSO credentials need to be refreshed. ${reauth}`,
-                            profile: error.profile,
-                          });
-                        }
-                        if (error._tag === "Alchemy::AWS::InvalidSSOToken") {
-                          return new InvalidSSOToken({
-                            message: `AWS SSO credentials need to be refreshed. ${reauth}`,
-                            sso_session: error.sso_session,
-                          });
-                        }
-                        return error;
-                      }),
-                    ),
+                  credentials: auth.loadProfileCredentials(config.ssoProfile).pipe(
+                    Effect.provideService(EffectConsole.Console, silentConsole),
+                    Effect.mapError((error) => {
+                      if (error._tag === "Alchemy::AWS::ExpiredSSOToken") {
+                        return new ExpiredSSOToken({
+                          message: `AWS SSO credentials need to be refreshed. ${reauth}`,
+                          profile: error.profile,
+                        });
+                      }
+                      if (error._tag === "Alchemy::AWS::InvalidSSOToken") {
+                        return new InvalidSSOToken({
+                          message: `AWS SSO credentials need to be refreshed. ${reauth}`,
+                          sso_session: error.sso_session,
+                        });
+                      }
+                      return error;
+                    }),
+                  ),
                   region,
                   source: { type: "sso" as const, details: config.ssoProfile },
                 } satisfies AwsResolvedCredentials;
@@ -594,32 +562,27 @@ export const AwsAuth = AuthProviderLayer<
       updateConfig?: (config: AwsAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
       Effect.gen(function* () {
-        const creds = yield* resolveCredentials(
-          profileName,
-          config,
-          updateConfig,
-        );
+        const creds = yield* resolveCredentials(profileName, config, updateConfig);
         const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
         // Resolve the live credentials. An expired/invalid SSO token only
         // surfaces here (the inner effect is lazy), so convert those tags
         // into a typed NeedsReauth instead of a generic error line.
-        const { accessKeyId, secretAccessKey, sessionToken } =
-          yield* creds.credentials.pipe(
-            Effect.mapError((error) =>
-              error._tag === "Alchemy::AWS::ExpiredSSOToken" ||
-              error._tag === "Alchemy::AWS::InvalidSSOToken"
-                ? new NeedsReauth({
-                    provider: AWS_AUTH_PROVIDER_NAME,
-                    profile: profileName,
-                    message: `AWS SSO credentials need to be refreshed. ${reauth}`,
-                    cause: error,
-                  })
-                : new AuthError({
-                    message: "failed to load AWS credentials",
-                    cause: error,
-                  }),
-            ),
-          );
+        const { accessKeyId, secretAccessKey, sessionToken } = yield* creds.credentials.pipe(
+          Effect.mapError((error) =>
+            error._tag === "Alchemy::AWS::ExpiredSSOToken" ||
+            error._tag === "Alchemy::AWS::InvalidSSOToken"
+              ? new NeedsReauth({
+                  provider: AWS_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `AWS SSO credentials need to be refreshed. ${reauth}`,
+                  cause: error,
+                })
+              : new AuthError({
+                  message: "failed to load AWS credentials",
+                  cause: error,
+                }),
+          ),
+        );
         const lines: Array<ProviderDetailLine> = [
           { key: "accessKeyId", value: displayRedacted(accessKeyId) },
           { key: "secretAccessKey", value: displayRedacted(secretAccessKey) },
@@ -636,10 +599,7 @@ export const AwsAuth = AuthProviderLayer<
         const source = creds.source;
         lines.push({
           key: "source",
-          value:
-            "details" in source
-              ? `${source.type} - ${source.details}`
-              : source.type,
+          value: "details" in source ? `${source.type} - ${source.details}` : source.type,
         });
         return { lines };
       });
@@ -648,19 +608,14 @@ export const AwsAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when({ method: "sso" }, (config) =>
           interaction.output
-            .info(
-              `AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`,
-            )
+            .info(`AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`)
             .pipe(
               Effect.zip(runSsoCommand("logout", config.ssoProfile)),
               Effect.zip(clearDistilledSsoCache(config.ssoProfile)),
               Effect.match({
-                onSuccess: () =>
-                  interaction.output.success("AWS: SSO logout complete"),
+                onSuccess: () => interaction.output.success("AWS: SSO logout complete"),
                 onFailure: (e) =>
-                  interaction.output.warning(
-                    `AWS: SSO logout failed: \`${e.message}\``,
-                  ),
+                  interaction.output.warning(`AWS: SSO logout failed: \`${e.message}\``),
               }),
             ),
         ),
@@ -677,27 +632,18 @@ export const AwsAuth = AuthProviderLayer<
           Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
           Match.exhaustive,
         )
-        .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: "login failed", cause: e }),
-          ),
-        );
+        .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
 
     const readEnvironment = Effect.gen(function* () {
       const accessKeyId = yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");
-      const secretAccessKey = yield* getEnvRedactedRequired(
-        "AWS_SECRET_ACCESS_KEY",
-      );
+      const secretAccessKey = yield* getEnvRedactedRequired("AWS_SECRET_ACCESS_KEY");
       const sessionToken = yield* getEnvRedacted("AWS_SESSION_TOKEN");
       const region = yield* getEnv("AWS_REGION").pipe(
-        Effect.flatMap((value) =>
-          value ? Effect.succeed(value) : getEnv("AWS_DEFAULT_REGION"),
-        ),
+        Effect.flatMap((value) => (value ? Effect.succeed(value) : getEnv("AWS_DEFAULT_REGION"))),
       );
       if (!region) {
         return yield* new AuthError({
-          message:
-            "AWS CI region not found. Set AWS_REGION or AWS_DEFAULT_REGION.",
+          message: "AWS CI region not found. Set AWS_REGION or AWS_DEFAULT_REGION.",
         });
       }
       const accountId = yield* getEnvRequired("AWS_ACCOUNT_ID").pipe(
@@ -726,8 +672,7 @@ export const AwsAuth = AuthProviderLayer<
         cause instanceof AuthError
           ? cause
           : new AuthError({
-              message:
-                "Failed to resolve AWS credentials from the CI environment.",
+              message: "Failed to resolve AWS credentials from the CI environment.",
               cause,
             }),
       ),
@@ -778,16 +723,12 @@ export const AwsAuth = AuthProviderLayer<
 
 const runSsoCommand = (command: "login" | "logout", ssoProfile: string) =>
   Effect.gen(function* () {
-    const handle = yield* ChildProcess.make(
-      "aws",
-      ["sso", command, "--profile", ssoProfile],
-      {
-        shell: false,
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-      },
-    );
+    const handle = yield* ChildProcess.make("aws", ["sso", command, "--profile", ssoProfile], {
+      shell: false,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
     const exit = yield* handle.exitCode;
     if (exit !== 0) {
       return yield* new AuthError({
@@ -808,9 +749,7 @@ const AwsSsoLoginOutput = Schema.Struct({
 
 export const parseAwsSsoLoginOutput = (output: string) => {
   try {
-    const decoded = Schema.decodeUnknownOption(AwsSsoLoginOutput)(
-      JSON.parse(output) as unknown,
-    );
+    const decoded = Schema.decodeUnknownOption(AwsSsoLoginOutput)(JSON.parse(output) as unknown);
     if (Option.isSome(decoded)) {
       const event = decoded.value;
       return {
@@ -870,10 +809,7 @@ const loginSSO = (
         Stream.decodeText(),
         Stream.runForEach((chunk) =>
           Effect.gen(function* () {
-            const combined = yield* Ref.updateAndGet(
-              stdout,
-              (current) => current + chunk,
-            );
+            const combined = yield* Ref.updateAndGet(stdout, (current) => current + chunk);
             const { url, code } = parseAwsSsoLoginOutput(combined);
             if (url !== undefined) {
               yield* Deferred.succeed(authorizationUrl, url);
@@ -886,15 +822,12 @@ const loginSSO = (
       );
       const collectStderr = handle.stderr.pipe(
         Stream.decodeText(),
-        Stream.runForEach((chunk) =>
-          Ref.update(stderr, (current) => current + chunk),
-        ),
+        Stream.runForEach((chunk) => Ref.update(stderr, (current) => current + chunk)),
       );
       const process = Effect.gen(function* () {
-        const [exitCode] = yield* Effect.all(
-          [handle.exitCode, collectStdout, collectStderr],
-          { concurrency: 3 },
-        );
+        const [exitCode] = yield* Effect.all([handle.exitCode, collectStdout, collectStderr], {
+          concurrency: 3,
+        });
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();
           return yield* Effect.fail(
@@ -911,8 +844,7 @@ const loginSSO = (
             Effect.flatMap(() =>
               Effect.fail(
                 new AuthError({
-                  message:
-                    "AWS SSO login completed without providing an authorization URL.",
+                  message: "AWS SSO login completed without providing an authorization URL.",
                 }),
               ),
             ),

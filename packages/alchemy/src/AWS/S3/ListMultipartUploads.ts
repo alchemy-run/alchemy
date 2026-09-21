@@ -1,6 +1,5 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -35,10 +34,7 @@ export interface ListMultipartUploads extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListMultipartUploadsRequest,
-    ) => Effect.Effect<
-      S3.ListMultipartUploadsOutput,
-      S3.ListMultipartUploadsError
-    >
+    ) => Effect.Effect<S3.ListMultipartUploadsOutput, S3.ListMultipartUploadsError>
   >
 > {}
 export const ListMultipartUploads = Binding.Service<ListMultipartUploads>(

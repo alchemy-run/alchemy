@@ -99,9 +99,7 @@ export const makeImageBuilderAccountHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(options.tag)(function* (
-        request?: Omit<I, "clientToken">,
-      ) {
+      return Effect.fn(options.tag)(function* (request?: Omit<I, "clientToken">) {
         return yield* op((request ?? {}) as I);
       });
     });

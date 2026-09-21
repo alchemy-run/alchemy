@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Canary } from "./Canary.ts";
 
-export interface GetCanaryRunsRequest extends Omit<
-  synthetics.GetCanaryRunsRequest,
-  "Name"
-> {}
+export interface GetCanaryRunsRequest extends Omit<synthetics.GetCanaryRunsRequest, "Name"> {}
 
 /**
  * Runtime binding for `synthetics:GetCanaryRuns` — list the run results
@@ -36,13 +33,8 @@ export interface GetCanaryRuns extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetCanaryRunsRequest,
-    ) => Effect.Effect<
-      synthetics.GetCanaryRunsResponse,
-      synthetics.GetCanaryRunsError
-    >
+    ) => Effect.Effect<synthetics.GetCanaryRunsResponse, synthetics.GetCanaryRunsError>
   >
 > {}
 
-export const GetCanaryRuns = Binding.Service<GetCanaryRuns>(
-  "AWS.Synthetics.GetCanaryRuns",
-);
+export const GetCanaryRuns = Binding.Service<GetCanaryRuns>("AWS.Synthetics.GetCanaryRuns");

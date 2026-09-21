@@ -1,16 +1,13 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ClientVpnEndpoint } from "@/AWS/EC2/ClientVpnEndpoint.ts";
-import {
-  ClientVpnRoute,
-  type ClientVpnRouteProps,
-} from "@/AWS/EC2/ClientVpnRoute.ts";
+import { ClientVpnRoute, type ClientVpnRouteProps } from "@/AWS/EC2/ClientVpnRoute.ts";
 import { ClientVpnTargetNetworkAssociation } from "@/AWS/EC2/ClientVpnTargetNetworkAssociation.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   assertClientVpnCertificateDeleted,
   assertClientVpnRouteDeleted,
@@ -28,9 +25,7 @@ describe("Client VPN routes", () => {
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     providers: AWS.providers(),
   });
-  const certificate = beforeAll(
-    importClientVpnCertificate("ClientVpnRoutePrerequisites"),
-  );
+  const certificate = beforeAll(importClientVpnCertificate("ClientVpnRoutePrerequisites"));
   const zones = beforeAll(clientVpnAvailabilityZones);
   const Stack = Alchemy.Stack(
     "ClientVpnRoutePrerequisites",
@@ -43,20 +38,14 @@ describe("Client VPN routes", () => {
         vpcId: network.vpc.vpcId,
         splitTunnel: true,
       });
-      const firstAssociation = yield* ClientVpnTargetNetworkAssociation(
-        "FirstAssociation",
-        {
-          clientVpnEndpointId: endpoint.clientVpnEndpointId,
-          subnetId: network.firstSubnet.subnetId,
-        },
-      );
-      const secondAssociation = yield* ClientVpnTargetNetworkAssociation(
-        "SecondAssociation",
-        {
-          clientVpnEndpointId: endpoint.clientVpnEndpointId,
-          subnetId: network.secondSubnet.subnetId,
-        },
-      );
+      const firstAssociation = yield* ClientVpnTargetNetworkAssociation("FirstAssociation", {
+        clientVpnEndpointId: endpoint.clientVpnEndpointId,
+        subnetId: network.firstSubnet.subnetId,
+      });
+      const secondAssociation = yield* ClientVpnTargetNetworkAssociation("SecondAssociation", {
+        clientVpnEndpointId: endpoint.clientVpnEndpointId,
+        subnetId: network.secondSubnet.subnetId,
+      });
       return { ...network, endpoint, firstAssociation, secondAssociation };
     }),
   );
@@ -65,9 +54,7 @@ describe("Client VPN routes", () => {
   });
   afterAll(
     destroy(Stack).pipe(
-      Effect.andThen(
-        certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
-      ),
+      Effect.andThen(certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted))),
     ),
     { timeout: clientVpnTestTimeout },
   );
@@ -85,8 +72,7 @@ describe("Client VPN routes", () => {
             [firstSubnet.subnetId, secondSubnet.subnetId].every((subnetId) =>
               networks.some(
                 (network) =>
-                  network.TargetNetworkId === subnetId &&
-                  network.Status?.Code === "associated",
+                  network.TargetNetworkId === subnetId && network.Status?.Code === "associated",
               ),
             ),
           "route target networks",
@@ -149,11 +135,7 @@ describe("Client VPN routes", () => {
             targetVpcSubnetId: firstSubnet.subnetId,
           }),
         );
-        yield* deployRoute(
-          "192.168.10.0/24",
-          firstSubnet.subnetId,
-          "Initial route",
-        );
+        yield* deployRoute("192.168.10.0/24", firstSubnet.subnetId, "Initial route");
         expect(
           (yield* readClientVpnRoutes(clientVpnEndpointId)).filter(
             (route) =>
@@ -164,11 +146,7 @@ describe("Client VPN routes", () => {
         ).toHaveLength(1);
 
         // AWS has no modify-route API; description changes replace the route at the same identity.
-        yield* deployRoute(
-          "192.168.10.0/24",
-          firstSubnet.subnetId,
-          "Updated route",
-        );
+        yield* deployRoute("192.168.10.0/24", firstSubnet.subnetId, "Updated route");
         yield* waitForClientVpn(
           readClientVpnRoutes(clientVpnEndpointId),
           (items) =>
@@ -187,10 +165,7 @@ describe("Client VPN routes", () => {
           "192.168.10.0/24",
           firstSubnet.subnetId,
         );
-        const replaced = yield* deployRoute(
-          "192.168.11.0/24",
-          secondSubnet.subnetId,
-        );
+        const replaced = yield* deployRoute("192.168.11.0/24", secondSubnet.subnetId);
         expect(replaced.targetVpcSubnetId).toBe(secondSubnet.subnetId);
         yield* assertClientVpnRouteDeleted(
           clientVpnEndpointId,

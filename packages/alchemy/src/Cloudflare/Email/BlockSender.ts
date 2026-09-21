@@ -2,7 +2,6 @@ import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -103,17 +102,15 @@ export type BlockSender = Resource<
  * @product Email Security
  * @category Email
  */
-export const BlockSender = Resource<BlockSender>(
-  EmailSecurityBlockSenderTypeId,
-  { aliases: ["Cloudflare.EmailSecurity.BlockSender"] },
-);
+export const BlockSender = Resource<BlockSender>(EmailSecurityBlockSenderTypeId, {
+  aliases: ["Cloudflare.EmailSecurity.BlockSender"],
+});
 
 /**
  * Returns true if the given value is an BlockSender resource.
  */
 export const isBlockSender = (value: unknown): value is BlockSender =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSecurityBlockSenderTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === EmailSecurityBlockSenderTypeId;
 
 export const BlockSenderProvider = () =>
   Provider.succeed(BlockSender, {
@@ -167,8 +164,7 @@ export const BlockSenderProvider = () =>
         (observed.pattern ?? "") !== news.pattern ||
         (observed.patternType ?? "") !== news.patternType ||
         (observed.isRegex ?? false) !== (news.isRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (news.comments !== undefined && (observed.comments ?? "") !== news.comments);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -201,20 +197,16 @@ export const BlockSenderProvider = () =>
     // enumerate and yield an empty array.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* emailSecurity.listSettingBlockSenders
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((entry) =>
-                toAttributes(entry, accountId),
-              ),
-            ),
+      return yield* emailSecurity.listSettingBlockSenders.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
-          Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
   });
 

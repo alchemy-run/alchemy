@@ -51,7 +51,6 @@ export interface DescribeCapacityReservation extends Binding.Service<
   >
 > {}
 
-export const DescribeCapacityReservation =
-  Binding.Service<DescribeCapacityReservation>(
-    "AWS.ELBv2.DescribeCapacityReservation",
-  );
+export const DescribeCapacityReservation = Binding.Service<DescribeCapacityReservation>(
+  "AWS.ELBv2.DescribeCapacityReservation",
+);

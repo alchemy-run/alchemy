@@ -362,11 +362,7 @@ export const DBClusterProvider = () =>
           .describeDBClusters({
             DBClusterIdentifier: clusterId,
           })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusters?.[0];
       });
 
@@ -374,11 +370,7 @@ export const DBClusterProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* neptune
           .listTagsForResource({ ResourceName: arn })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return toTagRecord(response?.TagList);
       });
 
@@ -386,22 +378,15 @@ export const DBClusterProvider = () =>
       // follow-on `modifyDBCluster` doesn't hit `InvalidDBClusterStateFault`.
       // Budgets ~10 min (60 * 10s) for slow provisioning.
       const waitForCluster = Effect.fn(function* (clusterId: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
-              return Effect.fail(
-                new Error(`DB cluster '${clusterId}' not found`),
-              );
+              return Effect.fail(new Error(`DB cluster '${clusterId}' not found`));
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
-                ),
+                new Error(`DB cluster '${clusterId}' not available (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -424,9 +409,7 @@ export const DBClusterProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.DBClusters ?? []).map((cluster) =>
-                    toAttrs({ cluster, tags: {} }),
-                  ),
+                  (page.DBClusters ?? []).map((cluster) => toAttrs({ cluster, tags: {} })),
                 ),
               ),
             ),
@@ -464,8 +447,7 @@ export const DBClusterProvider = () =>
           return toAttrs({ cluster, tags });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
+          const identifier = output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // The wire field is whole days.
@@ -491,17 +473,13 @@ export const DBClusterProvider = () =>
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
-                EnableIAMDatabaseAuthentication:
-                  news.enableIAMDatabaseAuthentication,
-                ServerlessV2ScalingConfiguration:
-                  news.serverlessV2ScalingConfiguration
-                    ? {
-                        MinCapacity:
-                          news.serverlessV2ScalingConfiguration.minCapacity,
-                        MaxCapacity:
-                          news.serverlessV2ScalingConfiguration.maxCapacity,
-                      }
-                    : undefined,
+                EnableIAMDatabaseAuthentication: news.enableIAMDatabaseAuthentication,
+                ServerlessV2ScalingConfiguration: news.serverlessV2ScalingConfiguration
+                  ? {
+                      MinCapacity: news.serverlessV2ScalingConfiguration.minCapacity,
+                      MaxCapacity: news.serverlessV2ScalingConfiguration.maxCapacity,
+                    }
+                  : undefined,
                 DeletionProtection: news.deletionProtection,
                 StorageEncrypted: news.storageEncrypted,
                 KmsKeyId: news.kmsKeyId,
@@ -513,12 +491,7 @@ export const DBClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBClusterAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForCluster(identifier);
           } else {
@@ -556,9 +529,7 @@ export const DBClusterProvider = () =>
             setIf("DBClusterParameterGroupName", news.dbClusterParameterGroupName, observed.DBClusterParameterGroup); // prettier-ignore
             if (news.vpcSecurityGroupIds !== undefined) {
               const observedGroups = (observed.VpcSecurityGroups ?? [])
-                .flatMap((g) =>
-                  g.VpcSecurityGroupId ? [g.VpcSecurityGroupId] : [],
-                )
+                .flatMap((g) => (g.VpcSecurityGroupId ? [g.VpcSecurityGroupId] : []))
                 .sort();
               if (
                 JSON.stringify(observedGroups) !==
@@ -573,14 +544,11 @@ export const DBClusterProvider = () =>
               if (
                 observedScaling?.MinCapacity !==
                   news.serverlessV2ScalingConfiguration.minCapacity ||
-                observedScaling?.MaxCapacity !==
-                  news.serverlessV2ScalingConfiguration.maxCapacity
+                observedScaling?.MaxCapacity !== news.serverlessV2ScalingConfiguration.maxCapacity
               ) {
                 core.ServerlessV2ScalingConfiguration = {
-                  MinCapacity:
-                    news.serverlessV2ScalingConfiguration.minCapacity,
-                  MaxCapacity:
-                    news.serverlessV2ScalingConfiguration.maxCapacity,
+                  MinCapacity: news.serverlessV2ScalingConfiguration.minCapacity,
+                  MaxCapacity: news.serverlessV2ScalingConfiguration.maxCapacity,
                 };
                 coreDirty = true;
               }
@@ -612,20 +580,14 @@ export const DBClusterProvider = () =>
           // against desired. Only runs when the prop is set, so clusters
           // that don't manage roles through Alchemy are left untouched.
           if (news.associatedRoles !== undefined) {
-            const roleKey = (
-              roleArn: string | undefined,
-              featureName: string | undefined,
-            ) => `${roleArn ?? ""}|${featureName ?? ""}`;
+            const roleKey = (roleArn: string | undefined, featureName: string | undefined) =>
+              `${roleArn ?? ""}|${featureName ?? ""}`;
             const observedRoles = observed.AssociatedRoles ?? [];
             const observedKeys = new Set(
-              observedRoles.map((role) =>
-                roleKey(role.RoleArn, role.FeatureName),
-              ),
+              observedRoles.map((role) => roleKey(role.RoleArn, role.FeatureName)),
             );
             const desiredKeys = new Set(
-              news.associatedRoles.map((role) =>
-                roleKey(role.roleArn, role.featureName),
-              ),
+              news.associatedRoles.map((role) => roleKey(role.roleArn, role.featureName)),
             );
             for (const role of news.associatedRoles) {
               if (!observedKeys.has(roleKey(role.roleArn, role.featureName))) {
@@ -635,12 +597,7 @@ export const DBClusterProvider = () =>
                     RoleArn: role.roleArn,
                     FeatureName: role.featureName,
                   })
-                  .pipe(
-                    Effect.catchTag(
-                      "DBClusterRoleAlreadyExistsFault",
-                      () => Effect.void,
-                    ),
-                  );
+                  .pipe(Effect.catchTag("DBClusterRoleAlreadyExistsFault", () => Effect.void));
               }
             }
             for (const role of observedRoles) {
@@ -654,12 +611,7 @@ export const DBClusterProvider = () =>
                     RoleArn: role.RoleArn,
                     FeatureName: role.FeatureName,
                   })
-                  .pipe(
-                    Effect.catchTag(
-                      "DBClusterRoleNotFoundFault",
-                      () => Effect.void,
-                    ),
-                  );
+                  .pipe(Effect.catchTag("DBClusterRoleNotFoundFault", () => Effect.void));
               }
             }
             // Re-observe so the returned attributes carry the fresh
@@ -705,15 +657,10 @@ export const DBClusterProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBClusterNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(false)),
               ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

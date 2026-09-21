@@ -1,18 +1,18 @@
-import * as AWS from "@/AWS";
-import { Network } from "@/AWS/EC2/Network.ts";
-import { Cluster } from "@/AWS/EKS/Cluster.ts";
-import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
-import * as Kubernetes from "@/Kubernetes";
-import { readObject } from "@/Kubernetes/internal/client.ts";
-import * as Core from "@/Test/Core";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { Network } from "@/AWS/EC2/Network.ts";
+import { Cluster } from "@/AWS/EKS/Cluster.ts";
+import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
+import * as Kubernetes from "@/Kubernetes";
+import { readObject } from "@/Kubernetes/internal/client.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EksHostApi from "./fixtures/deployment.ts";
 
 const testOptions = {
@@ -27,15 +27,13 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // proves the provider is registered, its record type-checks (a missing /
 // mistyped `list` collapses Provider.of inference), and it runs live —
 // without paying the ~15-minute EKS control-plane create.
-test.provider(
-  "list returns an empty array (composite host, not enumerable)",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Kubernetes.Deployment);
-      const all = yield* provider.list();
-      expect(Array.isArray(all)).toBe(true);
-      expect(all).toEqual([]);
-    }),
+test.provider("list returns an empty array (composite host, not enumerable)", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Kubernetes.Deployment);
+    const all = yield* provider.list();
+    expect(Array.isArray(all)).toBe(true);
+    expect(all).toEqual([]);
+  }),
 );
 
 // Full end-to-end (gated). An EKS Auto Mode cluster takes ~10–15 min to
@@ -152,9 +150,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
         // out-of-band via the control-plane API.
         const got = yield* dynamodb
           .getItem({ TableName: body.table, Key: { pk: { S: itemId } } })
-          .pipe(
-            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-          );
+          .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }));
         expect(got.Item?.pk?.S).toBe(itemId);
       }),
     { timeout: 180_000 },
@@ -174,9 +170,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
 
         // Read the primary ConfigMap back out-of-band through the
         // Kubernetes API and prove the values reached the cluster.
-        const configRef = helmRelease.objects.find((object) =>
-          object.name.endsWith("-config"),
-        )!;
+        const configRef = helmRelease.objects.find((object) => object.name.endsWith("-config"))!;
         expect(configRef).toBeDefined();
         const transport = yield* makeEksTransport({
           clusterName: helmCluster.clusterName,

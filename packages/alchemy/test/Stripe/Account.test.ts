@@ -1,24 +1,17 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
-import {
-  DeleteAccount,
-  GetAccountByAccount,
-  CreateAccount,
-} from "@distilled.cloud/stripe/stripe";
+import { DeleteAccount, GetAccountByAccount, CreateAccount } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /** Opt-in: the testing Stripe account must be a Connect platform. */
 const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
@@ -115,18 +108,12 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       const fetched = yield* GetAccountByAccount({ account: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.email).toEqual(created.email);
-      expect(fetched.business_profile?.name).toEqual(
-        "Alchemy Catalog Merchant",
-      );
+      expect(fetched.business_profile?.name).toEqual("Alchemy Catalog Merchant");
       expect(fetched.business_profile?.url).toEqual("https://alchemy.run");
       expect(fetched.settings?.payouts?.schedule?.interval).toEqual("manual");
       expect(fetched.metadata?.tier).toEqual("gold");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -156,22 +143,14 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       );
 
       expect(updated.id).toEqual(created.id);
-      expect(updated.email).toEqual(
-        "alchemy.catalog.account.updated@example.com",
-      );
-      expect(updated.businessProfileName).toEqual(
-        "Alchemy Catalog Merchant Updated",
-      );
+      expect(updated.email).toEqual("alchemy.catalog.account.updated@example.com");
+      expect(updated.businessProfileName).toEqual("Alchemy Catalog Merchant Updated");
       expect(updated.metadata).toEqual({ tier: "platinum", sku: "acct-1" });
 
       const refetched = yield* GetAccountByAccount({ account: updated.id });
       expect(refetched.email).toEqual(updated.email);
-      expect(refetched.business_profile?.name).toEqual(
-        "Alchemy Catalog Merchant Updated",
-      );
-      expect(refetched.business_profile?.url).toEqual(
-        "https://www.alchemy.run",
-      );
+      expect(refetched.business_profile?.name).toEqual("Alchemy Catalog Merchant Updated");
+      expect(refetched.business_profile?.url).toEqual("https://www.alchemy.run");
       expect(refetched.metadata?.tier).toEqual("platinum");
       expect(refetched.metadata?.sku).toEqual("acct-1");
       expect(refetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();

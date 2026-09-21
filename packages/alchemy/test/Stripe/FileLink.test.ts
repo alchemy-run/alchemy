@@ -1,36 +1,28 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/stripe";
-import {
-  GetFileLink,
-  GetFiles,
-  CreateFile,
-} from "@distilled.cloud/stripe/stripe";
+import { GetFileLink, GetFiles, CreateFile } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const FILES_API_BASE_URL = "https://files.stripe.com";
 
 /** 1×1 PNG — Stripe accepts PNG for `dispute_evidence`. */
 const PNG_1X1 = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
-  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
-  0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44,
-  0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x00, 0x03, 0x00,
-  0x01, 0x18, 0xdd, 0x8d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-  0xae, 0x42, 0x60, 0x82,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+  0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+  0x00, 0x00, 0x03, 0x00, 0x01, 0x18, 0xdd, 0x8d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+  0x44, 0xae, 0x42, 0x60, 0x82,
 ]);
 
 /** 2030-03-17 — Stripe rejects expiries more than five years out. */
@@ -42,9 +34,7 @@ const isMissing = isMissingStripeResource;
 
 const waitUntilExpired = (id: string) =>
   GetFileLink({ link: id }).pipe(
-    Effect.map((link) =>
-      link.expired ? ("expired" as const) : ("active" as const),
-    ),
+    Effect.map((link) => (link.expired ? ("expired" as const) : ("active" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -86,9 +76,7 @@ const ensureFile = Effect.gen(function* () {
   });
   const existing = listed.data.find((file) => file.filename === FILE_NAME);
   if (existing !== undefined) return existing;
-  const png = yield* Effect.sync(
-    () => new File([PNG_1X1], FILE_NAME, { type: "image/png" }),
-  );
+  const png = yield* Effect.sync(() => new File([PNG_1X1], FILE_NAME, { type: "image/png" }));
   return yield* postFile(png);
 });
 
@@ -102,12 +90,9 @@ test.provider(
       if (Result.isSuccess(result)) {
         expect(result.success.id).toMatch(/^file_/);
       } else {
-        expect([
-          "InvalidRequestError",
-          "Forbidden",
-          "Unauthorized",
-          "BadRequest",
-        ]).toContain(result.failure._tag);
+        expect(["InvalidRequestError", "Forbidden", "Unauthorized", "BadRequest"]).toContain(
+          result.failure._tag,
+        );
       }
 
       yield* stack.destroy();
@@ -143,17 +128,11 @@ test.provider(
 
       const fetched = yield* GetFileLink({ link: created.id });
       expect(fetched.id).toEqual(created.id);
-      expect(
-        typeof fetched.file === "string" ? fetched.file : fetched.file.id,
-      ).toEqual(file.id);
+      expect(typeof fetched.file === "string" ? fetched.file : fetched.file.id).toEqual(file.id);
       expect(fetched.expired).toEqual(false);
       expect(fetched.metadata?.kind).toEqual("report");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(

@@ -23,9 +23,7 @@ export interface WriteBucket extends Binding.Service<
   (bucket: Bucket) => Effect.Effect<WriteBucketClient>
 > {}
 
-export const WriteBucket = Binding.Service<WriteBucket>(
-  "Cloudflare.R2.WriteBucket",
-);
+export const WriteBucket = Binding.Service<WriteBucket>("Cloudflare.R2.WriteBucket");
 
 export interface WriteBucketClient {
   put<Err = never>(
@@ -45,13 +43,7 @@ export interface WriteBucketClient {
   ): Effect.Effect<R2Object | null, R2Error | Err, RuntimeContext>;
   put<Err = never>(
     key: string,
-    value:
-      | ReadableStream
-      | ArrayBuffer
-      | ArrayBufferView
-      | string
-      | null
-      | Blob,
+    value: ReadableStream | ArrayBuffer | ArrayBufferView | string | null | Blob,
     options?: PutOptions,
   ): Effect.Effect<R2Object, R2Error | Err, RuntimeContext>;
   put<Err = never>(

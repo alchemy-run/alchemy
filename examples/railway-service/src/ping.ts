@@ -25,10 +25,7 @@ export default class Ping extends Railway.Service<Ping>()(
       fetch: db.execute("select 1 as ok").pipe(
         Effect.flatMap(HttpServerResponse.json),
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

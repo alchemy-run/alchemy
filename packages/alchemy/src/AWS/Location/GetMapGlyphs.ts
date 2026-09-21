@@ -7,10 +7,7 @@ import type { Map as LocationMap } from "./Map.ts";
  * `GetMapGlyphs` request with `MapName` injected from the bound
  * resource.
  */
-export interface GetMapGlyphsRequest extends Omit<
-  location.GetMapGlyphsRequest,
-  "MapName"
-> {}
+export interface GetMapGlyphsRequest extends Omit<location.GetMapGlyphsRequest, "MapName"> {}
 
 /**
  * Retrieves a glyph range (font PBF) used to render map labels.
@@ -41,12 +38,7 @@ export interface GetMapGlyphs extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMapGlyphsRequest,
-    ) => Effect.Effect<
-      location.GetMapGlyphsResponse,
-      location.GetMapGlyphsError
-    >
+    ) => Effect.Effect<location.GetMapGlyphsResponse, location.GetMapGlyphsError>
   >
 > {}
-export const GetMapGlyphs = Binding.Service<GetMapGlyphs>(
-  "AWS.Location.GetMapGlyphs",
-);
+export const GetMapGlyphs = Binding.Service<GetMapGlyphs>("AWS.Location.GetMapGlyphs");

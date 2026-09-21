@@ -4,15 +4,9 @@
 // several namespaces — e.g. a locally-simulated one and an
 // `Alchemy.remote()`-opted one side by side.
 interface KVNamespaceLike {
-  put(
-    key: string,
-    value: string,
-    options?: { metadata?: unknown },
-  ): Promise<void>;
+  put(key: string, value: string, options?: { metadata?: unknown }): Promise<void>;
   get(key: string): Promise<string | null>;
-  getWithMetadata(
-    key: string,
-  ): Promise<{ value: string | null; metadata: unknown }>;
+  getWithMetadata(key: string): Promise<{ value: string | null; metadata: unknown }>;
   list(): Promise<{ keys: Array<{ name: string }> }>;
   delete(key: string): Promise<void>;
 }

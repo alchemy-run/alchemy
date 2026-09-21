@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +6,9 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 import IncidentsTestFunctionLive, { IncidentsTestFunction } from "./handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -37,9 +37,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { planArn } = yield* fakeArns;
-      const error = yield* Effect.flip(
-        incidents.startIncident({ responsePlanArn: planArn }),
-      );
+      const error = yield* Effect.flip(incidents.startIncident({ responsePlanArn: planArn }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
 );
@@ -56,9 +54,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { recordArn } = yield* fakeArns;
-      const error = yield* Effect.flip(
-        incidents.getIncidentRecord({ arn: recordArn }),
-      );
+      const error = yield* Effect.flip(incidents.getIncidentRecord({ arn: recordArn }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
 );
@@ -75,16 +71,12 @@ test.provider(
     }),
 );
 
-test.provider(
-  "deleteIncidentRecord on a nonexistent record is idempotent",
-  () =>
-    Effect.gen(function* () {
-      const { recordArn } = yield* fakeArns;
-      const result = yield* Effect.result(
-        incidents.deleteIncidentRecord({ arn: recordArn }),
-      );
-      expect(Result.isSuccess(result)).toBe(true);
-    }),
+test.provider("deleteIncidentRecord on a nonexistent record is idempotent", () =>
+  Effect.gen(function* () {
+    const { recordArn } = yield* fakeArns;
+    const result = yield* Effect.result(incidents.deleteIncidentRecord({ arn: recordArn }));
+    expect(Result.isSuccess(result)).toBe(true);
+  }),
 );
 
 test.provider(
@@ -104,19 +96,17 @@ test.provider(
     }),
 );
 
-test.provider(
-  "getTimelineEvent on a nonexistent record fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { recordArn } = yield* fakeArns;
-      const error = yield* Effect.flip(
-        incidents.getTimelineEvent({
-          incidentRecordArn: recordArn,
-          eventId: "11111111-1111-1111-1111-111111111111",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getTimelineEvent on a nonexistent record fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { recordArn } = yield* fakeArns;
+    const error = yield* Effect.flip(
+      incidents.getTimelineEvent({
+        incidentRecordArn: recordArn,
+        eventId: "11111111-1111-1111-1111-111111111111",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 test.provider(
@@ -148,28 +138,24 @@ test.provider("deleteTimelineEvent on a nonexistent record is idempotent", () =>
   }),
 );
 
-test.provider(
-  "listTimelineEvents on a nonexistent record returns an empty list",
-  () =>
-    Effect.gen(function* () {
-      const { recordArn } = yield* fakeArns;
-      const listed = yield* incidents.listTimelineEvents({
-        incidentRecordArn: recordArn,
-      });
-      expect(listed.eventSummaries).toHaveLength(0);
-    }),
+test.provider("listTimelineEvents on a nonexistent record returns an empty list", () =>
+  Effect.gen(function* () {
+    const { recordArn } = yield* fakeArns;
+    const listed = yield* incidents.listTimelineEvents({
+      incidentRecordArn: recordArn,
+    });
+    expect(listed.eventSummaries).toHaveLength(0);
+  }),
 );
 
-test.provider(
-  "listRelatedItems on a nonexistent record returns an empty list",
-  () =>
-    Effect.gen(function* () {
-      const { recordArn } = yield* fakeArns;
-      const listed = yield* incidents.listRelatedItems({
-        incidentRecordArn: recordArn,
-      });
-      expect(listed.relatedItems).toHaveLength(0);
-    }),
+test.provider("listRelatedItems on a nonexistent record returns an empty list", () =>
+  Effect.gen(function* () {
+    const { recordArn } = yield* fakeArns;
+    const listed = yield* incidents.listRelatedItems({
+      incidentRecordArn: recordArn,
+    });
+    expect(listed.relatedItems).toHaveLength(0);
+  }),
 );
 
 test.provider(
@@ -245,19 +231,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -296,25 +277,16 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* incidents.getReplicationSet({ arn: probeArn }).pipe(
         Effect.map((r) => r.replicationSet.status),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
-          until: (status): boolean =>
-            status !== "CREATING" && status !== "UPDATING",
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
+          until: (status): boolean => status !== "CREATING" && status !== "UPDATING",
         }),
       );
       yield* incidents.deleteReplicationSet({ arn: probeArn });
       yield* incidents.getReplicationSet({ arn: probeArn }).pipe(
         Effect.map((r) => r.replicationSet.status),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           until: (status): boolean => status === "GONE",
         }),
       );
@@ -346,22 +318,19 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
             : Effect.fail(new Error(`not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
 
-      const bindings = (yield* json(
-        HttpClientRequest.get(`${baseUrl}/bindings`),
-      )) as { bound: string[] };
+      const bindings = (yield* json(HttpClientRequest.get(`${baseUrl}/bindings`))) as {
+        bound: string[];
+      };
       expect(bindings.bound).toHaveLength(14);
 
       // StartIncident
-      const started = (yield* json(
-        HttpClientRequest.post(`${baseUrl}/start`),
-      )) as { incidentRecordArn: string };
+      const started = (yield* json(HttpClientRequest.post(`${baseUrl}/start`))) as {
+        incidentRecordArn: string;
+      };
       expect(started.incidentRecordArn).toContain(":incident-record/");
       const arn = encodeURIComponent(started.incidentRecordArn);
 
@@ -369,36 +338,32 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* json(HttpClientRequest.get(`${baseUrl}/records`)).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
-          until: (r): boolean =>
-            (r as { arns: string[] }).arns.includes(started.incidentRecordArn),
+          until: (r): boolean => (r as { arns: string[] }).arns.includes(started.incidentRecordArn),
           times: 20,
         }),
       );
 
       // GetIncidentRecord
-      const record = (yield* json(
-        HttpClientRequest.get(`${baseUrl}/record?arn=${arn}`),
-      )) as { title: string; status: string };
+      const record = (yield* json(HttpClientRequest.get(`${baseUrl}/record?arn=${arn}`))) as {
+        title: string;
+        status: string;
+      };
       expect(record.title).toBe("alchemy bindings test incident");
       expect(record.status).toBe("OPEN");
 
       // CreateTimelineEvent / GetTimelineEvent / UpdateTimelineEvent /
       // ListTimelineEvents
-      const created = (yield* json(
-        HttpClientRequest.post(`${baseUrl}/timeline?arn=${arn}`),
-      )) as { eventId: string };
+      const created = (yield* json(HttpClientRequest.post(`${baseUrl}/timeline?arn=${arn}`))) as {
+        eventId: string;
+      };
       expect(created.eventId).toBeTruthy();
       const eventId = encodeURIComponent(created.eventId);
       const event = (yield* json(
-        HttpClientRequest.get(
-          `${baseUrl}/timeline?arn=${arn}&eventId=${eventId}`,
-        ),
+        HttpClientRequest.get(`${baseUrl}/timeline?arn=${arn}&eventId=${eventId}`),
       )) as { eventType: string };
       expect(event.eventType).toBe("Custom Event");
       yield* json(
-        HttpClientRequest.post(
-          `${baseUrl}/timeline-update?arn=${arn}&eventId=${eventId}`,
-        ),
+        HttpClientRequest.post(`${baseUrl}/timeline-update?arn=${arn}&eventId=${eventId}`),
       );
       const events = (yield* json(
         HttpClientRequest.get(`${baseUrl}/timeline-events?arn=${arn}`),
@@ -407,22 +372,18 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
 
       // Related items + findings
       yield* json(HttpClientRequest.post(`${baseUrl}/related?arn=${arn}`));
-      const related = (yield* json(
-        HttpClientRequest.get(`${baseUrl}/related?arn=${arn}`),
-      )) as { count: number };
+      const related = (yield* json(HttpClientRequest.get(`${baseUrl}/related?arn=${arn}`))) as {
+        count: number;
+      };
       expect(related.count).toBeGreaterThanOrEqual(1);
-      const findings = (yield* json(
-        HttpClientRequest.get(`${baseUrl}/findings?arn=${arn}`),
-      )) as { count: number };
+      const findings = (yield* json(HttpClientRequest.get(`${baseUrl}/findings?arn=${arn}`))) as {
+        count: number;
+      };
       expect(findings.count).toBeGreaterThanOrEqual(0);
 
       // Resolve, clean up the timeline event and the record.
       yield* json(HttpClientRequest.post(`${baseUrl}/resolve?arn=${arn}`));
-      yield* json(
-        HttpClientRequest.delete(
-          `${baseUrl}/timeline?arn=${arn}&eventId=${eventId}`,
-        ),
-      );
+      yield* json(HttpClientRequest.delete(`${baseUrl}/timeline?arn=${arn}&eventId=${eventId}`));
       yield* json(HttpClientRequest.delete(`${baseUrl}/record?arn=${arn}`));
 
       // Destroy — response plan and Lambda first, then offboarding.

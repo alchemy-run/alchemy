@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,12 +5,11 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import WfpPlatformWorker from "./fixtures/platform-worker.ts";
-import {
-  AsyncPlatformWorker,
-  DispatchNs,
-  userWorkerScript,
-} from "./fixtures/shared.ts";
+import { AsyncPlatformWorker, DispatchNs, userWorkerScript } from "./fixtures/shared.ts";
 
 /**
  * End-to-end test for the Workers for Platforms dynamic-dispatch binding
@@ -36,10 +32,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 180_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "WfpDispatchBindingStack",
@@ -71,25 +64,18 @@ class NotReady extends Data.TaggedError("NotReady")<{
 // Fresh workers.dev URLs take a few seconds to start serving 200s; ride out
 // cold-start non-200s with a bounded spaced schedule so a real failure
 // surfaces fast instead of running to the vitest timeout.
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new NotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new NotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
       while: (e): e is NotReady => e instanceof NotReady,
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -160,14 +146,12 @@ test.skipIf(!WFP_ENABLED)(
     // the forwarded fetch surfaces as a 404 from the edge rather than a
     // dispatched 200. Either way it must be an error status, never a real
     // user-worker response.
-    const res = yield* client
-      .get(`${platformUrl}/dispatch/this-script-does-not-exist/x`)
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 8,
-        }),
-      );
+    const res = yield* client.get(`${platformUrl}/dispatch/this-script-does-not-exist/x`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 8,
+      }),
+    );
     expect(res.status).toBeGreaterThanOrEqual(400);
   }).pipe(logLevel),
   { timeout: TEST_TIMEOUT },

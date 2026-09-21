@@ -1,86 +1,64 @@
-import * as AWS from "@/AWS";
-import { Namespace, Workgroup } from "@/AWS/RedshiftServerless";
-import * as Test from "@/Test/Alchemy";
 import * as redshiftserverless from "@distilled.cloud/aws/redshift-serverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Namespace, Workgroup } from "@/AWS/RedshiftServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probes: prove the distilled error union carries the
 // not-found tag the providers' observe/read/delete paths depend on.
-test.provider(
-  "getWorkgroup on a nonexistent workgroup fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        redshiftserverless.getWorkgroup({
-          workgroupName: "alchemy-nonexistent-probe-wg",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getWorkgroup on a nonexistent workgroup fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      redshiftserverless.getWorkgroup({
+        workgroupName: "alchemy-nonexistent-probe-wg",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "getNamespace on a nonexistent namespace fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        redshiftserverless.getNamespace({
-          namespaceName: "alchemy-nonexistent-probe-ns",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getNamespace on a nonexistent namespace fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      redshiftserverless.getNamespace({
+        namespaceName: "alchemy-nonexistent-probe-ns",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertNamespaceGone = (name: string) =>
   Effect.gen(function* () {
-    const status = yield* redshiftserverless
-      .getNamespace({ namespaceName: name })
-      .pipe(
-        Effect.map((r) => (r.namespace?.status ?? "UNKNOWN").toUpperCase()),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* redshiftserverless.getNamespace({ namespaceName: name }).pipe(
+      Effect.map((r) => (r.namespace?.status ?? "UNKNOWN").toUpperCase()),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`Redshift namespace still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Redshift namespace still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
 const assertWorkgroupGone = (name: string) =>
   Effect.gen(function* () {
-    const status = yield* redshiftserverless
-      .getWorkgroup({ workgroupName: name })
-      .pipe(
-        Effect.map((r) => (r.workgroup?.status ?? "UNKNOWN").toUpperCase()),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* redshiftserverless.getWorkgroup({ workgroupName: name }).pipe(
+      Effect.map((r) => (r.workgroup?.status ?? "UNKNOWN").toUpperCase()),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`Redshift workgroup still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Redshift workgroup still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 

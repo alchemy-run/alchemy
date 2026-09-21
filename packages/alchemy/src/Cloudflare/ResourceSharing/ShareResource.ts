@@ -2,7 +2,6 @@ import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -183,11 +182,7 @@ export const ShareResourceProvider = () =>
       }
       const oldOwner = output?.resourceAccountId ?? olds?.resourceAccountId;
       const newOwner = news.resourceAccountId ?? accountId;
-      if (
-        typeof oldOwner === "string" &&
-        typeof newOwner === "string" &&
-        oldOwner !== newOwner
-      ) {
+      if (typeof oldOwner === "string" && typeof newOwner === "string" && oldOwner !== newOwner) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -204,9 +199,7 @@ export const ShareResourceProvider = () =>
       }
       // Cold read — recover from lost state by matching the natural key
       // (resourceType, resourceId) among the share's live entries.
-      const resourceType = olds?.resourceType as
-        | ShareableResourceType
-        | undefined;
+      const resourceType = olds?.resourceType as ShareableResourceType | undefined;
       const resourceId = olds?.resourceId as string | undefined;
       if (resourceType === undefined || resourceId === undefined) {
         return undefined;
@@ -227,8 +220,7 @@ export const ShareResourceProvider = () =>
       const observed =
         (output?.shareResourceId
           ? yield* getEntry(acct, shareId, output.shareResourceId)
-          : undefined) ??
-        (yield* findEntry(acct, shareId, news.resourceType, resourceId));
+          : undefined) ?? (yield* findEntry(acct, shareId, news.resourceType, resourceId));
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete).
@@ -286,25 +278,19 @@ export const ShareResourceProvider = () =>
       const rows = yield* Effect.forEach(
         shares,
         (share) =>
-          resourceSharing.listResources
-            .pages({ accountId, shareId: share.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter(
-                      (r) => r.status !== "deleted" && r.status !== "deleting",
-                    )
-                    .map((entry) => toAttributes(entry, accountId, share.id)),
-                ),
-              ),
-              // A share removed out-of-band between enumeration and the
-              // per-share list surfaces as ShareNotFound — skip it.
-              Effect.catchTag("ShareNotFound", () =>
-                Effect.succeed([] as ShareResourceAttributes[]),
+          resourceSharing.listResources.pages({ accountId, shareId: share.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((r) => r.status !== "deleted" && r.status !== "deleting")
+                  .map((entry) => toAttributes(entry, accountId, share.id)),
               ),
             ),
+            // A share removed out-of-band between enumeration and the
+            // per-share list surfaces as ShareNotFound — skip it.
+            Effect.catchTag("ShareNotFound", () => Effect.succeed([] as ShareResourceAttributes[])),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -318,11 +304,7 @@ type ObservedEntry = resourceSharing.GetResourceResponse;
  * (`ShareResourceNotFound`, HTTP 404) and the terminal `deleted` status to
  * `undefined`.
  */
-const getEntry = (
-  accountId: string,
-  shareId: string,
-  shareResourceId: string,
-) =>
+const getEntry = (accountId: string, shareId: string, shareResourceId: string) =>
   resourceSharing.getResource({ accountId, shareId, shareResourceId }).pipe(
     Effect.map((entry): ObservedEntry | undefined =>
       entry.status === "deleted" ? undefined : entry,
@@ -340,19 +322,14 @@ const findEntry = (
   resourceType: ShareableResourceType,
   resourceId: string,
 ) =>
-  resourceSharing
-    .listResources({ accountId, shareId, resourceType, perPage: 50 })
-    .pipe(
-      Effect.map((list) =>
-        list.result.find(
-          (r) =>
-            r.resourceId === resourceId &&
-            r.status !== "deleted" &&
-            r.status !== "deleting",
-        ),
+  resourceSharing.listResources({ accountId, shareId, resourceType, perPage: 50 }).pipe(
+    Effect.map((list) =>
+      list.result.find(
+        (r) => r.resourceId === resourceId && r.status !== "deleted" && r.status !== "deleting",
       ),
-      Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
-    );
+    ),
+    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+  );
 
 const toAttributes = (
   entry:

@@ -1,8 +1,8 @@
-import { makePostgresState } from "@/State/PostgresState";
-import { StateStoreError, type StateService } from "@/State/State";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { makePostgresState } from "@/State/PostgresState";
+import { StateStoreError, type StateService } from "@/State/State";
 
 /**
  * Live counterpart of `PostgresState.test.ts`. The hermetic suite answers the
@@ -39,10 +39,7 @@ const withLiveStore = <A, E>(
 ): Effect.Effect<A, E | StateStoreError> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
-    const store = yield* makePostgresState(
-      { url: Redacted.make(liveUrl!) },
-      scope,
-    );
+    const store = yield* makePostgresState({ url: Redacted.make(liveUrl!) }, scope);
     return yield* use(store);
   }).pipe(Effect.scoped);
 
@@ -80,31 +77,25 @@ describe.skipIf(!runLive)("Postgres state store against real Postgres", () => {
     ),
   );
 
-  it.effect(
-    "refuses a second deploy while the stage advisory lock is held",
-    () =>
-      withLiveStore((holder) =>
-        Effect.gen(function* () {
-          // The first operation acquires the session advisory lock for the
-          // (stack, stage) and keeps it for the life of the holder's scope.
-          yield* holder.set({ ...request, value: sampleState });
+  it.effect("refuses a second deploy while the stage advisory lock is held", () =>
+    withLiveStore((holder) =>
+      Effect.gen(function* () {
+        // The first operation acquires the session advisory lock for the
+        // (stack, stage) and keeps it for the life of the holder's scope.
+        yield* holder.set({ ...request, value: sampleState });
 
-          const error = yield* withLiveStore((contender) =>
-            contender.get(request),
-          ).pipe(Effect.flip);
-          expect(error).toBeInstanceOf(StateStoreError);
-          expect(error.message).toContain("holds the Postgres state lock");
+        const error = yield* withLiveStore((contender) => contender.get(request)).pipe(Effect.flip);
+        expect(error).toBeInstanceOf(StateStoreError);
+        expect(error.message).toContain("holds the Postgres state lock");
 
-          yield* holder.deleteStack({ stack });
-        }),
-      ),
+        yield* holder.deleteStack({ stack });
+      }),
+    ),
   );
 
   it.effect("releases the lock when the store's scope closes", () =>
     Effect.gen(function* () {
-      yield* withLiveStore((store) =>
-        store.set({ ...request, value: sampleState }),
-      );
+      yield* withLiveStore((store) => store.set({ ...request, value: sampleState }));
       // The previous store's scope has closed, so a fresh deploy proceeds.
       yield* withLiveStore((store) =>
         Effect.gen(function* () {
@@ -121,12 +112,8 @@ describe.skipIf(!runLive)("Postgres state store against real Postgres", () => {
     // concurrency that fails on real Postgres without the advisory lock.
     Effect.all(
       [
-        withLiveStore((store) =>
-          store.deleteStack({ stack: `${stack}-migrate-a` }),
-        ),
-        withLiveStore((store) =>
-          store.deleteStack({ stack: `${stack}-migrate-b` }),
-        ),
+        withLiveStore((store) => store.deleteStack({ stack: `${stack}-migrate-a` })),
+        withLiveStore((store) => store.deleteStack({ stack: `${stack}-migrate-b` })),
       ],
       { concurrency: 2 },
     ),

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 /**
  * Raw (non-distilled) HTTP helpers against the floci emulator gateway —
  * out-of-band proof that a resource exists IN THE EMULATOR, not the real
@@ -9,7 +10,6 @@ import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 export const FLOCI_ENDPOINT = "http://localhost:4566";
 
@@ -20,10 +20,7 @@ export const FLOCI_ENDPOINT = "http://localhost:4566";
  */
 export const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -46,9 +43,7 @@ export const rawAwsJson = Effect.fn(function* (options: {
         "x-amz-date": "20260101T000000Z",
         authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
       }),
-      HttpClientRequest.setBody(
-        HttpBody.text(JSON.stringify(options.body), options.contentType),
-      ),
+      HttpClientRequest.setBody(HttpBody.text(JSON.stringify(options.body), options.contentType)),
     ),
   );
 });
@@ -92,10 +87,7 @@ export const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
 });
 
 /** Path-style S3 object GET against the gateway. */
-export const rawS3GetObject = Effect.fn(function* (
-  bucketName: string,
-  key: string,
-) {
+export const rawS3GetObject = Effect.fn(function* (bucketName: string, key: string) {
   const client = yield* HttpClient.HttpClient;
   return yield* client.execute(
     HttpClientRequest.get(`${FLOCI_ENDPOINT}/${bucketName}/${key}`).pipe(

@@ -8,10 +8,7 @@ import { theme } from "./Theme.ts";
 export type OutputChannel = "stdout" | "stderr";
 
 /** Sigil-themed resource attribution shared by every append-only log path. */
-export const formatResourceTag = (
-  id: string,
-  colors = colorsEnabled(),
-): string =>
+export const formatResourceTag = (id: string, colors = colorsEnabled()): string =>
   colors ? `${ansiFg(theme.color.info)}[${id}]${ANSI_RESET}` : `[${id}]`;
 
 const EFFECT_LOG_PREFIX =
@@ -29,6 +26,7 @@ export const stripChildEffectPrefix = (line: string): string => {
   let offset = 0;
   while (offset < line.length && visible < match[0].length) {
     if (line[offset] === "\x1b") {
+      // oxlint-disable-next-line no-control-regex
       const ansi = line.slice(offset).match(/^\x1b\[[0-?]*[ -/]*[@-~]/);
       if (ansi !== null) {
         offset += ansi[0].length;
@@ -46,18 +44,14 @@ export const stripChildEffectPrefix = (line: string): string => {
  * servers, local workers, and deploy-time builders all use the same line
  * splitting, resource prefix, color policy, and stdout/stderr severity.
  */
-export const makeResourceOutput = (
-  id: string,
-  console: Pick<ConsoleService.Console, "log">,
-) => {
+export const makeResourceOutput = (id: string, console: Pick<ConsoleService.Console, "log">) => {
   const prefix = formatResourceTag(id);
   // stderr is a process transport, not a semantic failure: Vite and many
   // other tools write warnings, progress, and ordinary diagnostics there.
   // Sending it through Console.error makes CLIKit prepend an error glyph to
   // every line. Both streams therefore enter the renderer as plain resource
   // output; the child text retains its own ANSI severity styling.
-  const writeLine = (line: string) =>
-    console.log(`${prefix} ${stripChildEffectPrefix(line)}`);
+  const writeLine = (line: string) => console.log(`${prefix} ${stripChildEffectPrefix(line)}`);
   return {
     stdout: makeLineBuffer(writeLine),
     stderr: makeLineBuffer(writeLine),

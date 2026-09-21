@@ -34,6 +34,4 @@ export interface DeleteBackup extends Binding.Service<
     ) => Effect.Effect<DynamoDB.DeleteBackupOutput, DynamoDB.DeleteBackupError>
   >
 > {}
-export const DeleteBackup = Binding.Service<DeleteBackup>(
-  "AWS.DynamoDB.DeleteBackup",
-);
+export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.DynamoDB.DeleteBackup");

@@ -1,22 +1,17 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
-import TimestreamSinkFunctionLive, {
-  TimestreamSinkFunction,
-} from "./sink-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import TimestreamSinkFunctionLive, { TimestreamSinkFunction } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const postJson = (baseUrl: string, pathname: string, body: unknown) =>
   HttpClient.execute(
-    HttpClientRequest.post(`${baseUrl}${pathname}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${pathname}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(
     Effect.flatMap((response) =>
       response.status === 200
@@ -25,10 +20,7 @@ const postJson = (baseUrl: string, pathname: string, body: unknown) =>
     ),
     // Retry through function-URL cold start / IAM propagation.
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -41,8 +33,8 @@ const countForHost = (baseUrl: string, host: string) =>
     ),
     Effect.map((body) =>
       Number(
-        (body as { rows: Array<{ Data: Array<{ ScalarValue?: string }> }> })
-          .rows[0]?.Data[0]?.ScalarValue ?? "0",
+        (body as { rows: Array<{ Data: Array<{ ScalarValue?: string }> }> }).rows[0]?.Data[0]
+          ?.ScalarValue ?? "0",
       ),
     ),
   );
@@ -79,10 +71,7 @@ describe("AWS.Timestream.RecordsSink", () => {
               : Effect.fail(new Error(`only ${count} rows counted yet`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("2 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
           }),
         );
         expect(bulkCount).toBe(150);
@@ -99,10 +88,7 @@ describe("AWS.Timestream.RecordsSink", () => {
               : Effect.fail(new Error(`only ${count} rows counted yet`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("2 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
           }),
         );
         expect(rejectsCount).toBe(2);

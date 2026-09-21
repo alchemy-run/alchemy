@@ -2,8 +2,7 @@ import type * as TSW from "@distilled.cloud/aws/timestream-write";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListBatchLoadTasksRequest
-  extends TSW.ListBatchLoadTasksRequest {}
+export interface ListBatchLoadTasksRequest extends TSW.ListBatchLoadTasksRequest {}
 
 /**
  * Runtime binding for `timestream-write:ListBatchLoadTasks` — enumerate the

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Function } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Function } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -37,8 +37,8 @@ test.provider(
       });
       expect(current.FunctionSummary?.Name).toEqual(deployed.fn.functionName);
       expect(
-        current.FunctionSummary?.FunctionConfig.KeyValueStoreAssociations
-          ?.Items?.[0]?.KeyValueStoreARN,
+        current.FunctionSummary?.FunctionConfig.KeyValueStoreAssociations?.Items?.[0]
+          ?.KeyValueStoreARN,
       ).toEqual(deployed.store.keyValueStoreArn);
 
       yield* stack.destroy();
@@ -72,9 +72,7 @@ test.provider(
       const provider = yield* Provider.findProvider(Function);
       const all = yield* provider.list();
 
-      expect(all.some((fn) => fn.functionName === deployed.functionName)).toBe(
-        true,
-      );
+      expect(all.some((fn) => fn.functionName === deployed.functionName)).toBe(true);
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(deployed.functionName);
@@ -92,11 +90,7 @@ const assertFunctionDeleted = (name: string) =>
       Effect.flatMap(() => Effect.fail(new Error("FunctionStillExists"))),
       Effect.catchTag("NoSuchFunctionExists", () => Effect.void),
       Effect.retry({
-        while: (error) =>
-          error instanceof Error && error.message === "FunctionStillExists",
-        schedule: Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(24),
-        ]),
+        while: (error) => error instanceof Error && error.message === "FunctionStillExists",
+        schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
       }),
     );

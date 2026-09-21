@@ -1,3 +1,4 @@
+import * as https from "node:https";
 /**
  * Internal Kubernetes API client: transport-agnostic server-side apply and
  * kind discovery for arbitrary (CRD) manifests. Powers
@@ -13,11 +14,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as https from "node:https";
-import {
-  findClusterAdapter,
-  type ClusterTransport,
-} from "../ClusterAdapter.ts";
+import { findClusterAdapter, type ClusterTransport } from "../ClusterAdapter.ts";
 import type { Connection } from "../Connection.ts";
 import {
   buildKubernetesObjectPathWithSpec,
@@ -93,10 +90,7 @@ const requestJson = Effect.fn(function* ({
             },
             ...(transport.certificateAuthorityData
               ? {
-                  ca: Buffer.from(
-                    transport.certificateAuthorityData,
-                    "base64",
-                  ).toString("utf8"),
+                  ca: Buffer.from(transport.certificateAuthorityData, "base64").toString("utf8"),
                 }
               : {}),
             ...(transport.clientCert
@@ -105,9 +99,7 @@ const requestJson = Effect.fn(function* ({
                   key: transport.clientCert.key,
                 }
               : {}),
-            ...(transport.insecureSkipTlsVerify
-              ? { rejectUnauthorized: false }
-              : {}),
+            ...(transport.insecureSkipTlsVerify ? { rejectUnauthorized: false } : {}),
           },
           (response) => {
             const chunks: Buffer[] = [];
@@ -165,10 +157,7 @@ const requestJson = Effect.fn(function* ({
     // callers.
     Effect.retry({
       while: (e): boolean => !(e instanceof KubernetesApiError),
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
     }),
   );
 });
@@ -253,8 +242,7 @@ const buildPath = Effect.fn(function* ({
   const spec = yield* resolveKindSpec({ transport, input: object });
   return yield* Effect.try({
     try: () => buildKubernetesObjectPathWithSpec(object, spec),
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 });
 
@@ -304,10 +292,7 @@ export const applyObject = Effect.fn(function* ({
           e.statusCode === 429 ||
           e.statusCode === 401 ||
           e.statusCode === 403),
-      schedule: Schedule.max([
-        Schedule.spaced("6 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(10)]),
     }),
   );
 });
@@ -328,8 +313,7 @@ export const deleteObject = Effect.fn(function* ({
       }),
     ),
     Effect.catchIf(
-      (error): error is KubernetesApiError =>
-        error instanceof KubernetesApiError,
+      (error): error is KubernetesApiError => error instanceof KubernetesApiError,
       (error) => (error.statusCode === 404 ? Effect.void : Effect.fail(error)),
     ),
   );

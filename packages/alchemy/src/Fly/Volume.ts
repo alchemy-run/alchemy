@@ -31,9 +31,7 @@ const backoff = Schedule.min([
 ]);
 
 export const destroying = (state: string | undefined) =>
-  state === "destroyed" ||
-  state === "pending_destroy" ||
-  state === "scheduled_for_destruction";
+  state === "destroyed" || state === "pending_destroy" || state === "scheduled_for_destruction";
 
 const transientState = (state: string | undefined) =>
   state === "creating" || state === "pending" || state === "extending";
@@ -46,24 +44,17 @@ export const getVolumeById = (appName: string, volumeId: string) =>
 
 export const listVolumesByApp = (appName: string) =>
   machines.listVolumes({ app_name: appName }).pipe(
-    Effect.map((volumes) =>
-      volumes.filter((volume) => !destroying(volume.state)),
-    ),
+    Effect.map((volumes) => volumes.filter((volume) => !destroying(volume.state))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
 
 const newestFirst = (left: FlyVolume, right: FlyVolume) => {
-  const byCreated =
-    Date.parse(left.created_at ?? "") - Date.parse(right.created_at ?? "");
+  const byCreated = Date.parse(left.created_at ?? "") - Date.parse(right.created_at ?? "");
   if (byCreated !== 0) return byCreated;
   return (left.id ?? "").localeCompare(right.id ?? "");
 };
 
-export const listVolumeGroup = (
-  appName: string,
-  name: string,
-  region: string,
-) =>
+export const listVolumeGroup = (appName: string, name: string, region: string) =>
   listVolumesByApp(appName).pipe(
     Effect.map((volumes) =>
       volumes
@@ -91,9 +82,7 @@ export const waitUntilVolumeReady = (appName: string, volumeId: string) =>
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.VolumePending", () =>
-      getVolumeById(appName, volumeId),
-    ),
+    Effect.catchTag("Fly.VolumePending", () => getVolumeById(appName, volumeId)),
   );
 
 export const waitUntilVolumeGone = (appName: string, volumeId: string) =>
@@ -114,10 +103,7 @@ export const pathKey = (path: string): string => {
   return key.length === 0 ? "data" : key;
 };
 
-export const volumeGroupName = (
-  id: string,
-  disk: Pick<DiskSpec, "path" | "name">,
-) =>
+export const volumeGroupName = (id: string, disk: Pick<DiskSpec, "path" | "name">) =>
   Effect.gen(function* () {
     if (disk.name !== undefined) return sanitizeFlyVolumeName(disk.name);
     return yield* createFlyVolumeName(`${id}/${pathKey(disk.path)}`);
@@ -159,11 +145,7 @@ export const createVolume = Effect.fn(function* (input: {
   return (yield* waitUntilVolumeReady(input.appName, hit.id)) ?? hit;
 });
 
-export const syncVolume = Effect.fn(function* (
-  appName: string,
-  volume: FlyVolume,
-  disk: DiskSpec,
-) {
+export const syncVolume = Effect.fn(function* (appName: string, volume: FlyVolume, disk: DiskSpec) {
   const volumeId = volume.id;
   if (volumeId === undefined || volumeId.length === 0) return volume;
   let current = volume;
@@ -175,18 +157,13 @@ export const syncVolume = Effect.fn(function* (
       volume_id: volumeId,
       size_gb: sizeGb,
     });
-    current =
-      extended.volume ??
-      (yield* waitUntilVolumeReady(appName, volumeId)) ??
-      current;
+    current = extended.volume ?? (yield* waitUntilVolumeReady(appName, volumeId)) ?? current;
   }
 
   const backupChanged =
-    disk.autoBackupEnabled !== undefined &&
-    disk.autoBackupEnabled !== current.auto_backup_enabled;
+    disk.autoBackupEnabled !== undefined && disk.autoBackupEnabled !== current.auto_backup_enabled;
   const retentionChanged =
-    disk.snapshotRetention !== undefined &&
-    disk.snapshotRetention !== current.snapshot_retention;
+    disk.snapshotRetention !== undefined && disk.snapshotRetention !== current.snapshot_retention;
   if (backupChanged || retentionChanged) {
     current = yield* machines.updateVolume({
       app_name: appName,
@@ -213,12 +190,8 @@ export const ensureVolumeGroup = Effect.fn(function* (input: {
 }) {
   const prefer = new Set((input.preferIds ?? []).filter((id) => id.length > 0));
   let group = yield* listVolumeGroup(input.appName, input.name, input.region);
-  const preferred = group.filter(
-    (volume) => volume.id !== undefined && prefer.has(volume.id),
-  );
-  const rest = group.filter(
-    (volume) => volume.id === undefined || !prefer.has(volume.id),
-  );
+  const preferred = group.filter((volume) => volume.id !== undefined && prefer.has(volume.id));
+  const rest = group.filter((volume) => volume.id === undefined || !prefer.has(volume.id));
   group = [...preferred, ...rest];
 
   let attempts = 0;
@@ -230,10 +203,7 @@ export const ensureVolumeGroup = Effect.fn(function* (input: {
       region: input.region,
       disk: input.disk,
     });
-    if (
-      created.id !== undefined &&
-      !group.some((volume) => volume.id === created.id)
-    ) {
+    if (created.id !== undefined && !group.some((volume) => volume.id === created.id)) {
       group.push(created);
     } else {
       group = yield* listVolumeGroup(input.appName, input.name, input.region);
@@ -255,10 +225,7 @@ export const ensureVolumeGroup = Effect.fn(function* (input: {
   return { volumes: synced, extras };
 });
 
-export const deleteVolume = Effect.fn(function* (
-  appName: string,
-  volumeId: string,
-) {
+export const deleteVolume = Effect.fn(function* (appName: string, volumeId: string) {
   if (appName.length === 0 || volumeId.length === 0) return;
   yield* machines
     .deleteVolume({

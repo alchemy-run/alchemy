@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as NeptuneGraph from "@/AWS/NeptuneGraph";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as NeptuneGraph from "@/AWS/NeptuneGraph";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -103,10 +103,7 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
             language: "OPEN_CYPHER",
             parameters: body.parameters,
           });
-          const payload = yield* response.payload.pipe(
-            Stream.decodeText,
-            Stream.mkString,
-          );
+          const payload = yield* response.payload.pipe(Stream.decodeText, Stream.mkString);
           return yield* HttpServerResponse.json(JSON.parse(payload));
         }
 

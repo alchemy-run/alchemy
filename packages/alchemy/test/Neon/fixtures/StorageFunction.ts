@@ -1,19 +1,15 @@
-import { Function as NeonFunction } from "@/Neon/Function";
-import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
-import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
-import { ReadObject } from "@/Neon/ReadObject";
-import { ReadObjectHttp } from "@/Neon/ReadObjectHttp";
-import { WriteObject } from "@/Neon/WriteObject";
-import { WriteObjectHttp } from "@/Neon/WriteObjectHttp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import {
-  StorageBranch,
-  StorageBucket,
-  StorageSettings,
-} from "./StorageResources.ts";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Function as NeonFunction } from "@/Neon/Function";
+import { ReadObject } from "@/Neon/ReadObject";
+import { ReadObjectHttp } from "@/Neon/ReadObjectHttp";
+import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
+import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
+import { WriteObject } from "@/Neon/WriteObject";
+import { WriteObjectHttp } from "@/Neon/WriteObjectHttp";
+import { StorageBranch, StorageBucket, StorageSettings } from "./StorageResources.ts";
 
 export default class StorageFunction extends NeonFunction<StorageFunction>()(
   "StorageFunction",
@@ -58,11 +54,9 @@ export default class StorageFunction extends NeonFunction<StorageFunction>()(
           );
         }
         if (request.url === "/invalid") {
-          yield* files.put(
-            "settings.json",
-            '{"theme":"dark","pageSize":"bad"}',
-            { ContentType: "application/json" },
-          );
+          yield* files.put("settings.json", '{"theme":"dark","pageSize":"bad"}', {
+            ContentType: "application/json",
+          });
           return yield* settings.get().pipe(
             Effect.as(HttpServerResponse.text("accepted", { status: 500 })),
             Effect.catchTag("ObjectDecodeError", () =>
@@ -73,15 +67,9 @@ export default class StorageFunction extends NeonFunction<StorageFunction>()(
         return yield* HttpServerResponse.json(yield* settings.get());
       }).pipe(
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Storage request failed", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Storage request failed", { status: 500 })),
         ),
       ),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(ReadWriteBucketHttp, ReadObjectHttp, WriteObjectHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(ReadWriteBucketHttp, ReadObjectHttp, WriteObjectHttp))),
 ) {}

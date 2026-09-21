@@ -7,9 +7,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { apiKeyArn, syncTags } from "./common.ts";
 
 export interface ApiKeyProps {
@@ -129,11 +128,7 @@ export const ApiKeyProvider = () =>
           if (!output?.id) return undefined;
           const k = yield* ag
             .getApiKey({ apiKey: output.id, includeValue: false })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!k?.id) return undefined;
           return {
             id: k.id,
@@ -175,11 +170,7 @@ export const ApiKeyProvider = () =>
           let observed = output?.id
             ? yield* ag
                 .getApiKey({ apiKey: output.id, includeValue: false })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
           if (!observed?.id) {
             observed = yield* readByName(id, name);
@@ -216,8 +207,7 @@ export const ApiKeyProvider = () =>
                   }),
                 ),
               );
-            if (!created.id)
-              return yield* Effect.die("createApiKey missing id");
+            if (!created.id) return yield* Effect.die("createApiKey missing id");
             yield* session.note(`Created API key ${created.id}`);
             observed = yield* ag.getApiKey({
               apiKey: created.id,
@@ -236,10 +226,7 @@ export const ApiKeyProvider = () =>
               value: news.name,
             });
           }
-          if (
-            news.description !== undefined &&
-            news.description !== observed.description
-          ) {
+          if (news.description !== undefined && news.description !== observed.description) {
             patches.push({
               op: "replace",
               path: "/description",

@@ -1,27 +1,21 @@
-import * as AWS from "@/AWS";
-import { ContactInformation } from "@/AWS/Account";
-import * as Test from "@/Test/Alchemy";
 import * as account from "@distilled.cloud/aws/account";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ContactInformation } from "@/AWS/Account";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const captureContact = () =>
   account.getContactInformation({}).pipe(
     Effect.map((r) => r.ContactInformation),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 // getContactInformation is eventually consistent after putContactInformation,
@@ -30,8 +24,7 @@ const captureContactUntil = (expectedCompany: string | undefined) =>
   captureContact().pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (contact): boolean =>
-        unwrap(contact?.CompanyName) === expectedCompany,
+      until: (contact): boolean => unwrap(contact?.CompanyName) === expectedCompany,
       times: 10,
     }),
   );
@@ -110,8 +103,7 @@ describe.sequential("Account ContactInformation", () => {
         const restored = yield* captureContact().pipe(
           Effect.repeat({
             schedule: Schedule.spaced("3 seconds"),
-            until: (contact): boolean =>
-              unwrap(contact?.FullName) === unwrap(original?.FullName),
+            until: (contact): boolean => unwrap(contact?.FullName) === unwrap(original?.FullName),
             times: 10,
           }),
         );

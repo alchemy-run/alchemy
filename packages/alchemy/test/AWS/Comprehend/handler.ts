@@ -1,7 +1,3 @@
-import * as Comprehend from "@/AWS/Comprehend";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,6 +5,10 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Comprehend from "@/AWS/Comprehend";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -93,87 +93,61 @@ export default ComprehendTestFunction.make(
     const classifyDocument = yield* Comprehend.ClassifyDocument();
 
     // --- batch real-time analysis bindings ---
-    const batchDetectDominantLanguage =
-      yield* Comprehend.BatchDetectDominantLanguage();
+    const batchDetectDominantLanguage = yield* Comprehend.BatchDetectDominantLanguage();
     const batchDetectEntities = yield* Comprehend.BatchDetectEntities();
     const batchDetectKeyPhrases = yield* Comprehend.BatchDetectKeyPhrases();
     const batchDetectSentiment = yield* Comprehend.BatchDetectSentiment();
     const batchDetectSyntax = yield* Comprehend.BatchDetectSyntax();
-    const batchDetectTargetedSentiment =
-      yield* Comprehend.BatchDetectTargetedSentiment();
+    const batchDetectTargetedSentiment = yield* Comprehend.BatchDetectTargetedSentiment();
 
     // --- async job bindings (role injection + PassRole grant) ---
     const startDocumentClassificationJob =
       yield* Comprehend.StartDocumentClassificationJob(dataAccessRole);
     const startDominantLanguageDetectionJob =
       yield* Comprehend.StartDominantLanguageDetectionJob(dataAccessRole);
-    const startEntitiesDetectionJob =
-      yield* Comprehend.StartEntitiesDetectionJob(dataAccessRole);
-    const startEventsDetectionJob =
-      yield* Comprehend.StartEventsDetectionJob(dataAccessRole);
+    const startEntitiesDetectionJob = yield* Comprehend.StartEntitiesDetectionJob(dataAccessRole);
+    const startEventsDetectionJob = yield* Comprehend.StartEventsDetectionJob(dataAccessRole);
     const startKeyPhrasesDetectionJob =
       yield* Comprehend.StartKeyPhrasesDetectionJob(dataAccessRole);
     const startPiiEntitiesDetectionJob =
       yield* Comprehend.StartPiiEntitiesDetectionJob(dataAccessRole);
-    const startSentimentDetectionJob =
-      yield* Comprehend.StartSentimentDetectionJob(dataAccessRole);
+    const startSentimentDetectionJob = yield* Comprehend.StartSentimentDetectionJob(dataAccessRole);
     const startTargetedSentimentDetectionJob =
       yield* Comprehend.StartTargetedSentimentDetectionJob(dataAccessRole);
-    const startTopicsDetectionJob =
-      yield* Comprehend.StartTopicsDetectionJob(dataAccessRole);
+    const startTopicsDetectionJob = yield* Comprehend.StartTopicsDetectionJob(dataAccessRole);
 
-    const describeDocumentClassificationJob =
-      yield* Comprehend.DescribeDocumentClassificationJob();
+    const describeDocumentClassificationJob = yield* Comprehend.DescribeDocumentClassificationJob();
     const describeDominantLanguageDetectionJob =
       yield* Comprehend.DescribeDominantLanguageDetectionJob();
-    const describeEntitiesDetectionJob =
-      yield* Comprehend.DescribeEntitiesDetectionJob();
-    const describeEventsDetectionJob =
-      yield* Comprehend.DescribeEventsDetectionJob();
-    const describeKeyPhrasesDetectionJob =
-      yield* Comprehend.DescribeKeyPhrasesDetectionJob();
-    const describePiiEntitiesDetectionJob =
-      yield* Comprehend.DescribePiiEntitiesDetectionJob();
-    const describeSentimentDetectionJob =
-      yield* Comprehend.DescribeSentimentDetectionJob();
+    const describeEntitiesDetectionJob = yield* Comprehend.DescribeEntitiesDetectionJob();
+    const describeEventsDetectionJob = yield* Comprehend.DescribeEventsDetectionJob();
+    const describeKeyPhrasesDetectionJob = yield* Comprehend.DescribeKeyPhrasesDetectionJob();
+    const describePiiEntitiesDetectionJob = yield* Comprehend.DescribePiiEntitiesDetectionJob();
+    const describeSentimentDetectionJob = yield* Comprehend.DescribeSentimentDetectionJob();
     const describeTargetedSentimentDetectionJob =
       yield* Comprehend.DescribeTargetedSentimentDetectionJob();
-    const describeTopicsDetectionJob =
-      yield* Comprehend.DescribeTopicsDetectionJob();
+    const describeTopicsDetectionJob = yield* Comprehend.DescribeTopicsDetectionJob();
 
-    const listDocumentClassificationJobs =
-      yield* Comprehend.ListDocumentClassificationJobs();
-    const listDominantLanguageDetectionJobs =
-      yield* Comprehend.ListDominantLanguageDetectionJobs();
-    const listEntitiesDetectionJobs =
-      yield* Comprehend.ListEntitiesDetectionJobs();
+    const listDocumentClassificationJobs = yield* Comprehend.ListDocumentClassificationJobs();
+    const listDominantLanguageDetectionJobs = yield* Comprehend.ListDominantLanguageDetectionJobs();
+    const listEntitiesDetectionJobs = yield* Comprehend.ListEntitiesDetectionJobs();
     const listEventsDetectionJobs = yield* Comprehend.ListEventsDetectionJobs();
-    const listKeyPhrasesDetectionJobs =
-      yield* Comprehend.ListKeyPhrasesDetectionJobs();
-    const listPiiEntitiesDetectionJobs =
-      yield* Comprehend.ListPiiEntitiesDetectionJobs();
-    const listSentimentDetectionJobs =
-      yield* Comprehend.ListSentimentDetectionJobs();
+    const listKeyPhrasesDetectionJobs = yield* Comprehend.ListKeyPhrasesDetectionJobs();
+    const listPiiEntitiesDetectionJobs = yield* Comprehend.ListPiiEntitiesDetectionJobs();
+    const listSentimentDetectionJobs = yield* Comprehend.ListSentimentDetectionJobs();
     const listTargetedSentimentDetectionJobs =
       yield* Comprehend.ListTargetedSentimentDetectionJobs();
     const listTopicsDetectionJobs = yield* Comprehend.ListTopicsDetectionJobs();
 
-    const stopDominantLanguageDetectionJob =
-      yield* Comprehend.StopDominantLanguageDetectionJob();
-    const stopEntitiesDetectionJob =
-      yield* Comprehend.StopEntitiesDetectionJob();
+    const stopDominantLanguageDetectionJob = yield* Comprehend.StopDominantLanguageDetectionJob();
+    const stopEntitiesDetectionJob = yield* Comprehend.StopEntitiesDetectionJob();
     const stopEventsDetectionJob = yield* Comprehend.StopEventsDetectionJob();
-    const stopKeyPhrasesDetectionJob =
-      yield* Comprehend.StopKeyPhrasesDetectionJob();
-    const stopPiiEntitiesDetectionJob =
-      yield* Comprehend.StopPiiEntitiesDetectionJob();
-    const stopSentimentDetectionJob =
-      yield* Comprehend.StopSentimentDetectionJob();
-    const stopTargetedSentimentDetectionJob =
-      yield* Comprehend.StopTargetedSentimentDetectionJob();
+    const stopKeyPhrasesDetectionJob = yield* Comprehend.StopKeyPhrasesDetectionJob();
+    const stopPiiEntitiesDetectionJob = yield* Comprehend.StopPiiEntitiesDetectionJob();
+    const stopSentimentDetectionJob = yield* Comprehend.StopSentimentDetectionJob();
+    const stopTargetedSentimentDetectionJob = yield* Comprehend.StopTargetedSentimentDetectionJob();
 
-    const PII_TEXT =
-      "My name is Jane Doe and my email address is jane@example.com.";
+    const PII_TEXT = "My name is Jane Doe and my email address is jane@example.com.";
     const REVIEW_TEXT = "I love this product, it works wonderfully!";
     const BATCH_TEXTS = [
       "I love this product, it works wonderfully!",
@@ -248,9 +222,7 @@ export default ComprehendTestFunction.make(
             keyPhraseCount: (keyPhrases.KeyPhrases ?? []).length,
             piiTypes: (pii.Entities ?? []).map((e) => e.Type),
             sentiment: sentiment.Sentiment,
-            syntaxTags: (syntax.SyntaxTokens ?? []).map(
-              (t) => t.PartOfSpeech?.Tag,
-            ),
+            syntaxTags: (syntax.SyntaxTokens ?? []).map((t) => t.PartOfSpeech?.Tag),
             targetedEntityCount: (targeted.Entities ?? []).length,
             toxicity: toxic.ResultList?.[0]?.Toxicity,
             piiLabels: (piiLabels.Labels ?? []).map((l) => l.Name),
@@ -284,8 +256,7 @@ export default ComprehendTestFunction.make(
           });
           return yield* HttpServerResponse.json({
             languageResults: (language.ResultList ?? []).length,
-            firstLanguage:
-              language.ResultList?.[0]?.Languages?.[0]?.LanguageCode,
+            firstLanguage: language.ResultList?.[0]?.Languages?.[0]?.LanguageCode,
             entityResults: (entities.ResultList ?? []).length,
             keyPhraseResults: (keyPhrases.ResultList ?? []).length,
             sentimentResults: (sentiment.ResultList ?? []).length,
@@ -308,11 +279,7 @@ export default ComprehendTestFunction.make(
           }).pipe(
             Effect.map(() => "Classified"),
             Effect.catchTag(
-              [
-                "ResourceUnavailableException",
-                "InvalidRequestException",
-                "NotAuthorizedException",
-              ],
+              ["ResourceUnavailableException", "InvalidRequestException", "NotAuthorizedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -364,72 +331,46 @@ export default ComprehendTestFunction.make(
 
         // One route drives all nine Describe*Job bindings through their
         // typed JobNotFoundException path.
-        if (
-          request.method === "GET" &&
-          pathname === "/jobs/describe-not-found-all"
-        ) {
+        if (request.method === "GET" && pathname === "/jobs/describe-not-found-all") {
           const probe = { JobId: BOGUS_JOB_ID };
           const tags = {
-            documentClassification: yield* describeDocumentClassificationJob(
-              probe,
-            ).pipe(
+            documentClassification: yield* describeDocumentClassificationJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
-            dominantLanguage: yield* describeDominantLanguageDetectionJob(
-              probe,
-            ).pipe(
+            dominantLanguage: yield* describeDominantLanguageDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             entities: yield* describeEntitiesDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             events: yield* describeEventsDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag(
-                ["JobNotFoundException", "NotAuthorizedException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["JobNotFoundException", "NotAuthorizedException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             keyPhrases: yield* describeKeyPhrasesDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             piiEntities: yield* describePiiEntitiesDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             sentiment: yield* describeSentimentDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
-            targetedSentiment: yield* describeTargetedSentimentDetectionJob(
-              probe,
-            ).pipe(
+            targetedSentiment: yield* describeTargetedSentimentDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             topics: yield* describeTopicsDetectionJob(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
           };
           return yield* HttpServerResponse.json(tags);
@@ -437,61 +378,41 @@ export default ComprehendTestFunction.make(
 
         // One route drives all seven Stop*Job bindings through their typed
         // JobNotFoundException path.
-        if (
-          request.method === "POST" &&
-          pathname === "/jobs/stop-not-found-all"
-        ) {
+        if (request.method === "POST" && pathname === "/jobs/stop-not-found-all") {
           const probe = { JobId: BOGUS_JOB_ID };
           const tags = {
-            dominantLanguage: yield* stopDominantLanguageDetectionJob(
-              probe,
-            ).pipe(
+            dominantLanguage: yield* stopDominantLanguageDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             entities: yield* stopEntitiesDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             // Events detection is closed to new customers — the account
             // surfaces the (patched) typed NotAuthorizedException instead of
             // JobNotFoundException.
             events: yield* stopEventsDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag(
-                ["JobNotFoundException", "NotAuthorizedException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["JobNotFoundException", "NotAuthorizedException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             keyPhrases: yield* stopKeyPhrasesDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             piiEntities: yield* stopPiiEntitiesDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
             sentiment: yield* stopSentimentDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
-            targetedSentiment: yield* stopTargetedSentimentDetectionJob(
-              probe,
-            ).pipe(
+            targetedSentiment: yield* stopTargetedSentimentDetectionJob(probe).pipe(
               Effect.map(() => "Stopped"),
-              Effect.catchTag("JobNotFoundException", (e) =>
-                Effect.succeed(e._tag),
-              ),
+              Effect.catchTag("JobNotFoundException", (e) => Effect.succeed(e._tag)),
             ),
           };
           return yield* HttpServerResponse.json(tags);
@@ -501,10 +422,7 @@ export default ComprehendTestFunction.make(
         // Comprehend's server-side ValidationException (invalid S3 URI) —
         // a real runtime call proving role injection + IAM without paying
         // for eight async jobs. Sentiment gets the real lifecycle below.
-        if (
-          request.method === "POST" &&
-          pathname === "/jobs/start-invalid-all"
-        ) {
+        if (request.method === "POST" && pathname === "/jobs/start-invalid-all") {
           const region = yield* Effect.sync(() => process.env.AWS_REGION);
           const account = (yield* roleArn).split(":")[4];
           const tags = {
@@ -514,21 +432,14 @@ export default ComprehendTestFunction.make(
             }).pipe(
               Effect.map(() => "Started"),
               Effect.catchTag(
-                [
-                  "ValidationException",
-                  "InvalidRequestException",
-                  "ResourceNotFoundException",
-                ],
+                ["ValidationException", "InvalidRequestException", "ResourceNotFoundException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
-            dominantLanguage: yield* startDominantLanguageDetectionJob(
-              invalidJobInput,
-            ).pipe(
+            dominantLanguage: yield* startDominantLanguageDetectionJob(invalidJobInput).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             entities: yield* startEntitiesDetectionJob({
@@ -536,9 +447,8 @@ export default ComprehendTestFunction.make(
               LanguageCode: "en",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             events: yield* startEventsDetectionJob({
@@ -548,11 +458,7 @@ export default ComprehendTestFunction.make(
             }).pipe(
               Effect.map(() => "Started"),
               Effect.catchTag(
-                [
-                  "ValidationException",
-                  "InvalidRequestException",
-                  "NotAuthorizedException",
-                ],
+                ["ValidationException", "InvalidRequestException", "NotAuthorizedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
@@ -561,9 +467,8 @@ export default ComprehendTestFunction.make(
               LanguageCode: "en",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             piiEntities: yield* startPiiEntitiesDetectionJob({
@@ -572,9 +477,8 @@ export default ComprehendTestFunction.make(
               LanguageCode: "en",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             targetedSentiment: yield* startTargetedSentimentDetectionJob({
@@ -582,16 +486,14 @@ export default ComprehendTestFunction.make(
               LanguageCode: "en",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
             topics: yield* startTopicsDetectionJob(invalidJobInput).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                ["ValidationException", "InvalidRequestException"],
-                (e) => Effect.succeed(e._tag),
+              Effect.catchTag(["ValidationException", "InvalidRequestException"], (e) =>
+                Effect.succeed(e._tag),
               ),
             ),
           };
@@ -600,10 +502,7 @@ export default ComprehendTestFunction.make(
 
         // Full real lifecycle for the sentiment job family: seed the input
         // object, start a real async job, describe it, then stop it.
-        if (
-          request.method === "POST" &&
-          pathname === "/jobs/sentiment/lifecycle"
-        ) {
+        if (request.method === "POST" && pathname === "/jobs/sentiment/lifecycle") {
           yield* putObject({
             Key: "comprehend-input/reviews.txt",
             Body: "I love this product, it works wonderfully!\nThe delivery was late and the box arrived damaged.\n",
@@ -631,8 +530,7 @@ export default ComprehendTestFunction.make(
           return yield* HttpServerResponse.json({
             jobId,
             startStatus: started.JobStatus,
-            describedStatus:
-              described.SentimentDetectionJobProperties?.JobStatus,
+            describedStatus: described.SentimentDetectionJobProperties?.JobStatus,
             stopStatus: stopped.JobStatus,
           });
         }

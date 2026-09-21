@@ -38,18 +38,13 @@ export const makeKVNamespaceBinding = <Client>(options: {
   });
 
 /** Primitives shared by the read and write halves of the binding client. */
-export const makeKVNamespaceHelpers = (
-  env: Record<string, any>,
-  namespace: Namespace,
-) => {
+export const makeKVNamespaceHelpers = (env: Record<string, any>, namespace: Namespace) => {
   const raw = Effect.sync(
     // Lazy — the WorkerEnvironment binding is not populated until runtime.
     () => (env as Record<string, runtime.KVNamespace>)[namespace.LogicalId]!,
   );
 
-  const tryPromise = <T>(
-    fn: () => Promise<T>,
-  ): Effect.Effect<T, NamespaceError> =>
+  const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, NamespaceError> =>
     Effect.tryPromise({
       try: fn,
       catch: (error: any) =>

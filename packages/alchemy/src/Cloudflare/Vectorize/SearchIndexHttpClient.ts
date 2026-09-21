@@ -44,13 +44,9 @@ export const makeHttpSearchIndexClient = (
 ): SearchIndexClient => {
   const { accountId } = auth;
   const local = <A, E>(
-    fn: (
-      name: string,
-    ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+    fn: (name: string) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A> =>
-    Effect.flatMap(indexName, (name) => auth.authorize(fn(name))).pipe(
-      Effect.orDie,
-    );
+    Effect.flatMap(indexName, (name) => auth.authorize(fn(name))).pipe(Effect.orDie);
 
   return {
     raw: Effect.die(
@@ -60,9 +56,7 @@ export const makeHttpSearchIndexClient = (
     ),
     describe: () =>
       local((name) =>
-        vectorize
-          .getIndexInfo({ accountId, indexName: name })
-          .pipe(Effect.map(toIndexInfo)),
+        vectorize.getIndexInfo({ accountId, indexName: name }).pipe(Effect.map(toIndexInfo)),
       ),
     query: (vector, options) =>
       local((name) =>
@@ -114,9 +108,7 @@ export const makeHttpSearchIndexClient = (
       local((name) =>
         vectorize
           .getByIdsIndex({ accountId, indexName: name, ids })
-          .pipe(
-            Effect.map((result) => (result ?? []) as runtime.VectorizeVector[]),
-          ),
+          .pipe(Effect.map((result) => (result ?? []) as runtime.VectorizeVector[])),
       ),
   } satisfies SearchIndexClient;
 };
@@ -127,8 +119,7 @@ export const makeHttpSearchIndexClient = (
  * Serialize vectors to an ndjson Blob — the raw `application/x-ndjson` request
  * body of the Vectorize v2 insert/upsert endpoints.
  */
-const toNdjsonBlob = (vectors: runtime.VectorizeVector[]): Blob =>
-  new Blob([toNdjson(vectors)]);
+const toNdjsonBlob = (vectors: runtime.VectorizeVector[]): Blob => new Blob([toNdjson(vectors)]);
 
 /** Serialize vectors to ndjson — one JSON vector per line. */
 const toNdjson = (vectors: runtime.VectorizeVector[]): string =>
@@ -148,21 +139,13 @@ const toNdjson = (vectors: runtime.VectorizeVector[]): string =>
 const toReturnMetadata = (
   value: runtime.VectorizeQueryOptions["returnMetadata"],
 ): "none" | "indexed" | "all" | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "boolean"
-      ? value
-        ? "all"
-        : "none"
-      : value;
+  value === undefined ? undefined : typeof value === "boolean" ? (value ? "all" : "none") : value;
 
-const toMutation = (r: {
-  mutationId?: string | null;
-}): runtime.VectorizeAsyncMutation => ({ mutationId: r.mutationId ?? "" });
+const toMutation = (r: { mutationId?: string | null }): runtime.VectorizeAsyncMutation => ({
+  mutationId: r.mutationId ?? "",
+});
 
-const toIndexInfo = (
-  r: vectorize.GetIndexInfoResponse,
-): runtime.VectorizeIndexInfo =>
+const toIndexInfo = (r: vectorize.GetIndexInfoResponse): runtime.VectorizeIndexInfo =>
   ({
     vectorCount: r.vectorCount ?? 0,
     dimensions: r.dimensions ?? 0,

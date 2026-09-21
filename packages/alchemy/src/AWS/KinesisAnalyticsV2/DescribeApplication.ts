@@ -32,10 +32,7 @@ export interface DescribeApplication extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeApplicationRequest,
-    ) => Effect.Effect<
-      SVC.DescribeApplicationResponse,
-      SVC.DescribeApplicationError
-    >
+    ) => Effect.Effect<SVC.DescribeApplicationResponse, SVC.DescribeApplicationError>
   >
 > {}
 export const DescribeApplication = Binding.Service<DescribeApplication>(

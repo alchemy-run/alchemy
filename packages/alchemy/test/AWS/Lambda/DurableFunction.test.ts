@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { encodeDurableEnvelope } from "@/AWS/Lambda/DurableBridge.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { encodeDurableEnvelope } from "@/AWS/Lambda/DurableBridge.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DurableFlowLive, { DurableFlow } from "./fixtures/durable-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -17,11 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "LambdaDurable");
 const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 describe("Lambda DurableFunction", () => {
   // Ungated typed-error probe: proves the durable-execution management API is
@@ -55,9 +51,7 @@ describe("Lambda DurableFunction", () => {
       Effect.gen(function* () {
         yield* Effect.logInfo("Durable test setup: destroying previous stack");
         yield* sharedStack.destroy();
-        yield* Effect.logInfo(
-          "Durable test setup: deploying the DurableFunction",
-        );
+        yield* Effect.logInfo("Durable test setup: deploying the DurableFunction");
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const flow = yield* DurableFlow;
@@ -113,9 +107,7 @@ describe("Lambda DurableFunction", () => {
                 FunctionName: functionName,
                 DurableExecutionName: "durable-test-flow-1",
               }).pipe(
-                Effect.map(
-                  (r) => r.DurableExecutions?.[0]?.DurableExecutionArn,
-                ),
+                Effect.map((r) => r.DurableExecutions?.[0]?.DurableExecutionArn),
                 Effect.repeat({
                   schedule: Schedule.spaced("2 seconds"),
                   until: (arn) => arn !== undefined,

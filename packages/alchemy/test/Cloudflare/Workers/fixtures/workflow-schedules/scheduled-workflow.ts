@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Cron that will not fire during a test run (midnight UTC on 1 January).
@@ -18,10 +18,7 @@ export default class ScheduledWorkflow extends Cloudflare.Workflow<ScheduledWork
   { schedules: [YEARLY_CRON] },
   Effect.gen(function* () {
     return Effect.fn(function* () {
-      return yield* Cloudflare.Workflows.task(
-        "noop",
-        Effect.succeed({ ok: true }),
-      );
+      return yield* Cloudflare.Workflows.task("noop", Effect.succeed({ ok: true }));
     });
   }),
 ) {}

@@ -97,9 +97,7 @@ export interface ModelManifest extends Resource<
  *
  * @resource
  */
-export const ModelManifest = Resource<ModelManifest>(
-  "AWS.IoTFleetWise.ModelManifest",
-);
+export const ModelManifest = Resource<ModelManifest>("AWS.IoTFleetWise.ModelManifest");
 
 const nodeFqn = (node: iotfleetwise.Node): string =>
   node.branch?.fullyQualifiedName ??
@@ -122,20 +120,16 @@ export const ModelManifestProvider = () =>
       const readManifest = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getModelManifest({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const readNodeFqns = Effect.fn(function* (name: string) {
-        const nodes = yield* iotfleetwise.listModelManifestNodes
-          .items({ name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            inFleetWiseRegion,
-          );
+        const nodes = yield* iotfleetwise.listModelManifestNodes.items({ name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          inFleetWiseRegion,
+        );
         return nodes.map(nodeFqn);
       });
 
@@ -161,8 +155,7 @@ export const ModelManifestProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.modelManifestName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.modelManifestName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readManifest(name);
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -212,20 +205,14 @@ export const ModelManifestProvider = () =>
           const nodesToAdd = news.nodes.filter((n) => !observedSet.has(n));
           const nodesToRemove = observedFqns.filter((n) => !desiredSet.has(n));
           const descriptionChanged =
-            news.description !== undefined &&
-            news.description !== observed.description;
-          if (
-            nodesToAdd.length > 0 ||
-            nodesToRemove.length > 0 ||
-            descriptionChanged
-          ) {
+            news.description !== undefined && news.description !== observed.description;
+          if (nodesToAdd.length > 0 || nodesToRemove.length > 0 || descriptionChanged) {
             yield* iotfleetwise
               .updateModelManifest({
                 name,
                 description: descriptionChanged ? news.description : undefined,
                 nodesToAdd: nodesToAdd.length > 0 ? nodesToAdd : undefined,
-                nodesToRemove:
-                  nodesToRemove.length > 0 ? nodesToRemove : undefined,
+                nodesToRemove: nodesToRemove.length > 0 ? nodesToRemove : undefined,
               })
               .pipe(inFleetWiseRegion);
             observed = yield* readManifest(name).pipe(
@@ -264,13 +251,11 @@ export const ModelManifestProvider = () =>
           // Idempotent: deleting a missing manifest succeeds. Decoder
           // manifests still detaching surface as ConflictException — retry
           // through the window (bounded).
-          yield* iotfleetwise
-            .deleteModelManifest({ name: output.modelManifestName })
-            .pipe(
-              inFleetWiseRegion,
-              retryWhileConflict,
-              Effect.catchTag("ConflictException", () => Effect.void),
-            );
+          yield* iotfleetwise.deleteModelManifest({ name: output.modelManifestName }).pipe(
+            inFleetWiseRegion,
+            retryWhileConflict,
+            Effect.catchTag("ConflictException", () => Effect.void),
+          );
         }),
 
         list: () =>

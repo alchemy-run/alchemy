@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { PhoneNumber } from "@/AWS/PinpointSMSVoiceV2";
-import * as Test from "@/Test/Alchemy";
 import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { PhoneNumber } from "@/AWS/PinpointSMSVoiceV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,9 +27,7 @@ test.provider(
 const getById = (phoneNumberId: string) =>
   smsvoice.describePhoneNumbers({ PhoneNumberIds: [phoneNumberId] }).pipe(
     Effect.map((r) => r.PhoneNumbers?.[0]),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertPhoneNumberGone = (phoneNumberId: string) =>
@@ -38,9 +36,7 @@ const assertPhoneNumberGone = (phoneNumberId: string) =>
     // A released number lingers briefly in DISASSOCIATING before vanishing.
     if (found !== undefined && found.Status !== "DISASSOCIATING") {
       return yield* Effect.fail(
-        new Error(
-          `phone number '${phoneNumberId}' still exists (status: ${found.Status})`,
-        ),
+        new Error(`phone number '${phoneNumberId}' still exists (status: ${found.Status})`),
       );
     }
   }).pipe(
@@ -72,9 +68,7 @@ test.provider.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
       expect(created.phoneNumberArn).toContain(":phone-number/");
       expect(created.phoneNumber).toMatch(/^\+1/);
       expect(created.numberType).toBe("SIMULATOR");
-      expect(created.status === "ACTIVE" || created.status === "PENDING").toBe(
-        true,
-      );
+      expect(created.status === "ACTIVE" || created.status === "PENDING").toBe(true);
 
       // Out-of-band verification via distilled.
       const observed = yield* getById(created.phoneNumberId);
@@ -82,9 +76,7 @@ test.provider.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
       const tags = yield* smsvoice.listTagsForResource({
         ResourceArn: created.phoneNumberArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("smsvoice-phone-number");
       expect(tagRecord["alchemy::id"]).toBe("TestNumber");
 

@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -87,13 +86,7 @@ export interface DeploymentAttributes {
   createdOn: string;
 }
 
-export type Deployment = Resource<
-  TypeId,
-  DeploymentProps,
-  DeploymentAttributes,
-  never,
-  Providers
->;
+export type Deployment = Resource<TypeId, DeploymentProps, DeploymentAttributes, never, Providers>;
 
 /**
  * A direct-upload deployment on a Cloudflare Pages project.
@@ -193,9 +186,7 @@ export const DeploymentProvider = () =>
         output.projectName,
         output.deploymentId,
       );
-      return observed
-        ? toAttributes(observed, output.accountId, output.projectName)
-        : undefined;
+      return observed ? toAttributes(observed, output.accountId, output.projectName) : undefined;
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -205,27 +196,23 @@ export const DeploymentProvider = () =>
       // deployments, paginating exhaustively.
       const projects = yield* pages.listProjects.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
         // Account without a Pages entitlement can't list projects → nothing.
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       );
       const rows = yield* Effect.forEach(
         projects,
         (project) =>
-          pages.listProjectDeployments
-            .pages({ accountId, projectName: project.name })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((deployment) =>
-                    toAttributes(deployment, accountId, project.name),
-                  ),
+          pages.listProjectDeployments.pages({ accountId, projectName: project.name }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((deployment) =>
+                  toAttributes(deployment, accountId, project.name),
                 ),
               ),
             ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -299,11 +286,7 @@ type ObservedDeployment =
  * deployment was deleted (`DeploymentNotFound`, code 8000009) or the whole
  * project no longer exists (`ProjectNotFound`, code 8000007).
  */
-const getDeployment = (
-  accountId: string,
-  projectName: string,
-  deploymentId: string,
-) =>
+const getDeployment = (accountId: string, projectName: string, deploymentId: string) =>
   pages.getProjectDeployment({ accountId, projectName, deploymentId }).pipe(
     Effect.catchTag("DeploymentNotFound", () => Effect.succeed(undefined)),
     Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),
@@ -319,11 +302,7 @@ const isTerminalStage = (stage: ObservedDeployment["latestStage"]): boolean =>
  * bounded so a stuck deployment fails fast instead of hanging the engine.
  * Anything other than a successful `deploy` stage is a typed failure.
  */
-const awaitDeployment = (
-  accountId: string,
-  projectName: string,
-  created: ObservedDeployment,
-) =>
+const awaitDeployment = (accountId: string, projectName: string, created: ObservedDeployment) =>
   Effect.gen(function* () {
     const observed: ObservedDeployment = isTerminalStage(created.latestStage)
       ? created
@@ -340,10 +319,7 @@ const awaitDeployment = (
               times: 25,
             }),
           );
-    if (
-      observed.latestStage.status !== "success" ||
-      observed.latestStage.name !== "deploy"
-    ) {
+    if (observed.latestStage.status !== "success" || observed.latestStage.name !== "deploy") {
       return yield* Effect.fail(
         new DeploymentFailed({
           projectName,

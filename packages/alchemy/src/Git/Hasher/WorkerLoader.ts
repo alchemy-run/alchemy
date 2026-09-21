@@ -28,16 +28,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type { Worker, WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
 import { WorkerLoader } from "../../Cloudflare/Workers/WorkerLoader.ts";
-import type {
-  Worker,
-  WorkerEnvironment,
-} from "../../Cloudflare/Workers/Worker.ts";
-import {
-  hashBounds,
-  resolveDeltas,
-  scanPart,
-} from "../Protocol/PartialScan.ts";
+import { hashBounds, resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 import { Hasher, type HasherShape } from "./Hasher.ts";
 import {
   decodeDeltaResults,
@@ -68,22 +61,14 @@ export const HasherWorkerLoader = (
   Layer.effect(
     Hasher,
     Effect.gen(function* () {
-      const loader = yield* WorkerLoader(
-        options.binding ?? "GIT_HASHER_LOADER",
-      );
+      const loader = yield* WorkerLoader(options.binding ?? "GIT_HASHER_LOADER");
       const concurrency = Math.max(
         1,
-        Math.min(
-          options.concurrency ?? LOADER_MAX_CONCURRENCY,
-          LOADER_MAX_CONCURRENCY,
-        ),
+        Math.min(options.concurrency ?? LOADER_MAX_CONCURRENCY, LOADER_MAX_CONCURRENCY),
       );
       // Fixed names: the runtime caches an isolate per name, so a slot is
       // warm across pushes; distinct names are what makes them parallel.
-      const idle: Array<string> = Array.from(
-        { length: concurrency },
-        (_, i) => `git-hasher-${i}`,
-      );
+      const idle: Array<string> = Array.from({ length: concurrency }, (_, i) => `git-hasher-${i}`);
       const gate = yield* Semaphore.make(concurrency);
       const code = () => ({
         compatibilityDate: options.compatibilityDate ?? "2026-03-17",
@@ -138,10 +123,7 @@ export const HasherWorkerLoader = (
             (slot) => Effect.sync(() => void idle.push(slot)),
           ),
         );
-      const remote = (
-        payload: Uint8Array,
-        opts: Parameters<HasherShape["hashPart"]>[1],
-      ) =>
+      const remote = (payload: Uint8Array, opts: Parameters<HasherShape["hashPart"]>[1]) =>
         call(
           `${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}`,
           payload,
@@ -155,10 +137,7 @@ export const HasherWorkerLoader = (
             Effect.catchTag("HashError", (error) => {
               console.warn(`[hasher] ${error.reason}; hashing inline`);
               const skip = opts.skip ?? 0;
-              return scanPart(
-                skip > 0 ? payload.subarray(skip) : payload,
-                opts,
-              );
+              return scanPart(skip > 0 ? payload.subarray(skip) : payload, opts);
             }),
           ),
         resolveDeltas: (bases, jobs, opts) =>
@@ -172,8 +151,7 @@ export const HasherWorkerLoader = (
               return resolveDeltas(bases, jobs, opts);
             }),
           ),
-        hashBoundsPart: (payload, bounds, opts) =>
-          hashBounds(payload, bounds, opts),
+        hashBoundsPart: (payload, bounds, opts) => hashBounds(payload, bounds, opts),
       } satisfies HasherShape;
     }),
   );

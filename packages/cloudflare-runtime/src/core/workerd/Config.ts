@@ -182,9 +182,7 @@ export interface Worker_Binding_WrappedBinding {
   innerBindings?: Array<Worker_Binding>;
 }
 
-export type Worker_Binding_CryptoKey_Algorithm =
-  | { name?: string }
-  | { json?: string };
+export type Worker_Binding_CryptoKey_Algorithm = { name?: string } | { json?: string };
 
 export interface Worker_Binding_Hyperdrive {
   designator?: ServiceDesignator;

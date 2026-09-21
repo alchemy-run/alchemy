@@ -109,9 +109,7 @@ export const RootProvider = () =>
             const roots = yield* retryOrganizations(
               organizations.listRoots.pages({}).pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Roots ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Roots ?? [])),
               ),
             ).pipe(
               Effect.catchTags({
@@ -130,29 +128,24 @@ export const RootProvider = () =>
               } => root.Id != null && root.Arn != null && root.Name != null,
             );
 
-            const attrs: (Root["Attributes"] | undefined)[] =
-              yield* Effect.forEach(
-                valid,
-                Effect.fn(function* (root) {
-                  if (!root.Id || !root.Arn || !root.Name) return undefined;
-                  const tags = yield* readResourceTags(root.Id).pipe(
-                    Effect.catchTag("TargetNotFoundException", () =>
-                      Effect.succeed({}),
-                    ),
-                  );
-                  return {
-                    rootId: root.Id,
-                    rootArn: root.Arn,
-                    rootName: root.Name,
-                    policyTypes: root.PolicyTypes ?? [],
-                    tags,
-                  };
-                }),
-                { concurrency: 10 },
-              );
-            return attrs.filter(
-              (attr): attr is Root["Attributes"] => attr !== undefined,
+            const attrs: (Root["Attributes"] | undefined)[] = yield* Effect.forEach(
+              valid,
+              Effect.fn(function* (root) {
+                if (!root.Id || !root.Arn || !root.Name) return undefined;
+                const tags = yield* readResourceTags(root.Id).pipe(
+                  Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+                );
+                return {
+                  rootId: root.Id,
+                  rootArn: root.Arn,
+                  rootName: root.Name,
+                  policyTypes: root.PolicyTypes ?? [],
+                  tags,
+                };
+              }),
+              { concurrency: 10 },
             );
+            return attrs.filter((attr): attr is Root["Attributes"] => attr !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -214,18 +207,11 @@ const listRoots = () =>
     (page) => page.Roots,
   );
 
-const readRoot = Effect.fn(function* ({
-  rootId,
-  name,
-}: {
-  rootId?: string;
-  name?: string;
-}) {
+const readRoot = Effect.fn(function* ({ rootId, name }: { rootId?: string; name?: string }) {
   const roots = yield* retryOrganizations(listRoots());
   const root = roots.find(
     (candidate) =>
-      (rootId ? candidate.Id === rootId : true) &&
-      (name ? candidate.Name === name : true),
+      (rootId ? candidate.Id === rootId : true) && (name ? candidate.Name === name : true),
   );
 
   if (!root?.Id || !root.Arn || !root.Name) {

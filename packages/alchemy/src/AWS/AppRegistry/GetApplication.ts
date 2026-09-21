@@ -29,13 +29,8 @@ export interface GetApplication extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      appregistry.GetApplicationResponse,
-      appregistry.GetApplicationError
-    >
+    () => Effect.Effect<appregistry.GetApplicationResponse, appregistry.GetApplicationError>
   >
 > {}
 
-export const GetApplication = Binding.Service<GetApplication>(
-  "AWS.AppRegistry.GetApplication",
-);
+export const GetApplication = Binding.Service<GetApplication>("AWS.AppRegistry.GetApplication");

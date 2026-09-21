@@ -89,14 +89,8 @@ export const flociServices = () => (flociServicesLayer ??= makeFlociServices());
  * flociDual(S3.Bucket, () => S3.BucketProvider()),
  * ```
  */
-export const flociDual = <
-  R extends ResourceLike,
-  L extends Layer.Layer<any, any, any>,
->(
-  cls:
-    | ResourceClassLike<R>
-    | Platform<R, any, any, any, any>
-    | { Type: R["Type"] },
+export const flociDual = <R extends ResourceLike, L extends Layer.Layer<any, any, any>>(
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any> | { Type: R["Type"] },
   live: () => L,
 ) =>
   ProviderLayer.dual(cls, {

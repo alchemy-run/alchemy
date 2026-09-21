@@ -74,9 +74,7 @@ export interface OrganizationApiKey extends Resource<
  *
  * @resource
  */
-export const OrganizationApiKey = Resource<OrganizationApiKey>(
-  "Neon.OrganizationApiKey",
-);
+export const OrganizationApiKey = Resource<OrganizationApiKey>("Neon.OrganizationApiKey");
 
 export class OrganizationApiKeyRecoveryError extends Data.TaggedError(
   "OrganizationApiKeyRecoveryError",
@@ -96,8 +94,7 @@ const recoveryError = () =>
       "Organization API key identity or reveal-once secret cannot be recovered. Restore the original Alchemy state, or explicitly revoke the recorded key and replace the resource; names do not authorize adoption or recreation.",
   });
 
-const sameScope = (a: KeyScope, b: KeyScope) =>
-  a.orgId === b.orgId && a.projectId === b.projectId;
+const sameScope = (a: KeyScope, b: KeyScope) => a.orgId === b.orgId && a.projectId === b.projectId;
 
 const validScope = (scope: KeyScope) =>
   typeof scope.orgId === "string" &&
@@ -113,10 +110,7 @@ export const recoverOrganizationApiKey = (
   scope: KeyScope,
   observed: KeyMetadata | undefined,
   cached: OrganizationApiKeyAttributes | undefined,
-): Effect.Effect<
-  OrganizationApiKeyAttributes,
-  OrganizationApiKeyRecoveryError
-> => {
+): Effect.Effect<OrganizationApiKeyAttributes, OrganizationApiKeyRecoveryError> => {
   if (
     !validScope(scope) ||
     !observed ||
@@ -149,12 +143,8 @@ const observeKey = Effect.fn(function* (
 ) {
   yield* validateScope(scope);
   // This endpoint returns one complete array, with no pagination or cursor.
-  const keys = yield* Neon.listOrgApiKeys({ org_id: scope.orgId }).pipe(
-    Neon.Retry.none,
-  );
-  const matches = keys.filter((key) =>
-    cached ? key.id === cached.keyId : key.name === name,
-  );
+  const keys = yield* Neon.listOrgApiKeys({ org_id: scope.orgId }).pipe(Neon.Retry.none);
+  const matches = keys.filter((key) => (cached ? key.id === cached.keyId : key.name === name));
   if (matches.length > 1) return yield* recoveryError();
   return matches[0];
 });
@@ -168,9 +158,7 @@ export const OrganizationApiKeyProvider = () =>
         return {
           action: "replace",
           deleteFirst:
-            output !== undefined &&
-            news.orgId === output.orgId &&
-            news.name === output.name,
+            output !== undefined && news.orgId === output.orgId && news.name === output.name,
         };
       }
     }),
@@ -178,9 +166,7 @@ export const OrganizationApiKeyProvider = () =>
       if (!output && !olds) return undefined;
       const scope = output ?? olds!;
       const name =
-        output?.name ??
-        olds?.name ??
-        (yield* createPhysicalName({ id, maxLength: 100 }));
+        output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       const observed = yield* observeKey(scope, name, output);
       if (!observed && !output) return undefined;
       return yield* recoverOrganizationApiKey(scope, observed, output);
@@ -189,25 +175,17 @@ export const OrganizationApiKeyProvider = () =>
       yield* validateScope(news);
       if (
         (output &&
-          (!sameScope(news, output) ||
-            (news.name !== undefined && news.name !== output.name))) ||
+          (!sameScope(news, output) || (news.name !== undefined && news.name !== output.name))) ||
         (olds && news.name !== olds.name) ||
         (!output && olds)
       ) {
         return yield* recoveryError();
       }
-      const name =
-        news.name ??
-        output?.name ??
-        (yield* createPhysicalName({ id, maxLength: 100 }));
+      const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       if (!name.trim()) return yield* recoveryError();
       const observed = yield* observeKey(news, name, output);
       if (observed || output) {
-        const recovered = yield* recoverOrganizationApiKey(
-          news,
-          observed,
-          output,
-        );
+        const recovered = yield* recoverOrganizationApiKey(news, observed, output);
         if (recovered.name !== name) return yield* recoveryError();
         return recovered;
       }
@@ -225,9 +203,7 @@ export const OrganizationApiKeyProvider = () =>
         projectId: news.projectId,
         keyId: created.id,
         name: created.name,
-        key: Redacted.isRedacted(created.key)
-          ? created.key
-          : Redacted.make(created.key),
+        key: Redacted.isRedacted(created.key) ? created.key : Redacted.make(created.key),
         createdAt: created.created_at,
       });
     }),
@@ -236,8 +212,7 @@ export const OrganizationApiKeyProvider = () =>
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       if (!observed) return;
-      if (observed.project_id !== output.projectId)
-        return yield* recoveryError();
+      if (observed.project_id !== output.projectId) return yield* recoveryError();
       yield* Neon.revokeOrgApiKey({
         org_id: output.orgId,
         key_id: output.keyId,

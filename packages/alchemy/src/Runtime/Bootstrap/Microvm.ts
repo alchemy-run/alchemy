@@ -11,12 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackConstant,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
 
 export interface MicrovmBootstrapOptions {
   /** Port to serve on when the VM does not inject `PORT`. */
@@ -51,14 +46,10 @@ export const bootstrapMicrovm = (
   const program = resolveProgram("default", { telemetry: true }).pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
-        Layer.provideMerge(
-          stackConstant(options.stack.name, options.stack.stage),
-        ),
+        Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
         Layer.provideMerge(runtime.httpServer),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info"),
-        ),
+        Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),
     Effect.scoped,

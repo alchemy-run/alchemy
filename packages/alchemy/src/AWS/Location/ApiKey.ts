@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -154,17 +149,13 @@ const createKeyName = (id: string, props: { keyName?: string | undefined }) =>
 const unredact = (value: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const toRestrictions = (
-  restrictions: location.ApiKeyRestrictions,
-): ApiKeyRestrictions => ({
+const toRestrictions = (restrictions: location.ApiKeyRestrictions): ApiKeyRestrictions => ({
   allowActions: [...restrictions.AllowActions],
   allowResources: [...restrictions.AllowResources],
   allowReferers:
     restrictions.AllowReferers === undefined
       ? undefined
-      : (
-          restrictions.AllowReferers as (string | Redacted.Redacted<string>)[]
-        ).map(unredact),
+      : (restrictions.AllowReferers as (string | Redacted.Redacted<string>)[]).map(unredact),
 });
 
 /** Order-insensitive structural comparison of key restrictions. */
@@ -181,11 +172,7 @@ const sameRestrictions = (a: ApiKeyRestrictions, b: ApiKeyRestrictions) => {
 const readKey = Effect.fn(function* (keyName: string) {
   const found = yield* location
     .describeKey({ KeyName: keyName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     keyName: found.KeyName,
@@ -214,23 +201,16 @@ export const ApiKeyProvider = () =>
                 ),
               ),
             );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readKey(name),
-              { concurrency: 10 },
-            );
-            return hydrated.filter(
-              (attrs): attrs is ApiKey["Attributes"] => attrs !== undefined,
-            );
+            const hydrated = yield* Effect.forEach(names, (name) => readKey(name), {
+              concurrency: 10,
+            });
+            return hydrated.filter((attrs): attrs is ApiKey["Attributes"] => attrs !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const keyName =
-            output?.keyName ?? (yield* createKeyName(id, olds ?? {}));
+          const keyName = output?.keyName ?? (yield* createKeyName(id, olds ?? {}));
           const state = yield* readKey(keyName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -258,18 +238,14 @@ export const ApiKeyProvider = () =>
                 KeyName: keyName,
                 Restrictions: desiredRestrictions,
                 Description: news.description,
-                ExpireTime: news.expireTime
-                  ? new Date(news.expireTime)
-                  : undefined,
+                ExpireTime: news.expireTime ? new Date(news.expireTime) : undefined,
                 NoExpiry: news.expireTime ? undefined : (news.noExpiry ?? true),
                 Tags: desiredTags,
               })
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readKey(keyName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created API key ${keyName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created API key ${keyName}`));
             }
           }
 
@@ -279,16 +255,13 @@ export const ApiKeyProvider = () =>
           if (
             state.description !== (news.description ?? undefined) ||
             !sameRestrictions(state.restrictions, news.restrictions) ||
-            (desiredExpireTime !== undefined &&
-              state.expireTime !== desiredExpireTime)
+            (desiredExpireTime !== undefined && state.expireTime !== desiredExpireTime)
           ) {
             yield* location.updateKey({
               KeyName: keyName,
               Description: news.description,
               Restrictions: desiredRestrictions,
-              ExpireTime: desiredExpireTime
-                ? new Date(desiredExpireTime)
-                : undefined,
+              ExpireTime: desiredExpireTime ? new Date(desiredExpireTime) : undefined,
               NoExpiry: desiredExpireTime ? undefined : true,
               // Required to update a key that has been used recently.
               ForceUpdate: true,
@@ -313,18 +286,14 @@ export const ApiKeyProvider = () =>
 
           const final = yield* readKey(keyName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled API key ${keyName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled API key ${keyName}`));
           }
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* location
             .deleteKey({ KeyName: output.keyName, ForceDelete: true })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

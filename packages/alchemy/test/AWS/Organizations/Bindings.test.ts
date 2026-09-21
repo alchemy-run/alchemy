@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,9 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import OrganizationsTestFunctionLive, {
-  OrganizationsTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import OrganizationsTestFunctionLive, { OrganizationsTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "OrganizationsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -41,19 +36,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -66,8 +56,7 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (response): boolean =>
-        (response as { tag?: string }).tag !== "AccessDeniedException",
+      until: (response): boolean => (response as { tag?: string }).tag !== "AccessDeniedException",
       times: 10,
     }),
   );
@@ -79,9 +68,7 @@ const getJson = (path: string) =>
 describe.sequential("Organizations Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Organizations test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Organizations test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Organizations test setup: deploying fixture");
@@ -96,9 +83,7 @@ describe.sequential("Organizations Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Organizations test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Organizations test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -106,9 +91,7 @@ describe.sequential("Organizations Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Organizations test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Organizations test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -185,9 +168,7 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(0);
         } else {
-          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(
-            response.tag,
-          );
+          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(response.tag);
         }
       }),
     );
@@ -202,9 +183,7 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(0);
         } else {
-          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(
-            response.tag,
-          );
+          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(response.tag);
         }
       }),
     );
@@ -219,9 +198,7 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(0);
         } else {
-          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(
-            response.tag,
-          );
+          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(response.tag);
         }
       }),
     );
@@ -236,10 +213,7 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(1);
         } else {
-          expect([
-            "AWSOrganizationsNotInUseException",
-            "NoOrganization",
-          ]).toContain(response.tag);
+          expect(["AWSOrganizationsNotInUseException", "NoOrganization"]).toContain(response.tag);
         }
       }),
     );
@@ -270,9 +244,7 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(0);
         } else {
-          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(
-            response.tag,
-          );
+          expect(["AWSOrganizationsNotInUseException", "NoRoot"]).toContain(response.tag);
         }
       }),
     );
@@ -287,83 +259,75 @@ describe.sequential("Organizations Bindings", () => {
         if (response.ok) {
           expect(response.count).toBeGreaterThanOrEqual(0);
         } else {
-          expect(["AWSOrganizationsNotInUseException", "NoPolicy"]).toContain(
-            response.tag,
-          );
+          expect(["AWSOrganizationsNotInUseException", "NoPolicy"]).toContain(response.tag);
         }
       }),
     );
   });
 
   describe("DescribeEffectivePolicy", () => {
-    test.provider(
-      "yields the effective tag policy or the typed not-found tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/effective-policy")) as
-            | { ok: true; policyType: string | null }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.policyType).toBe("TAG_POLICY");
-          } else {
-            // No tag policies exist in the standing organization — the typed
-            // tag proves the grant.
-            expect([
-              "AWSOrganizationsNotInUseException",
-              "ConstraintViolationException",
-              "EffectivePolicyNotFoundException",
-              "TargetNotFoundException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields the effective tag policy or the typed not-found tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/effective-policy")) as
+          | { ok: true; policyType: string | null }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.policyType).toBe("TAG_POLICY");
+        } else {
+          // No tag policies exist in the standing organization — the typed
+          // tag proves the grant.
+          expect([
+            "AWSOrganizationsNotInUseException",
+            "ConstraintViolationException",
+            "EffectivePolicyNotFoundException",
+            "TargetNotFoundException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
   describe("ListAccountsWithInvalidEffectivePolicy", () => {
-    test.provider(
-      "yields a count or the policy-type-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/invalid-effective-policy-accounts",
-          )) as { ok: true; count: number } | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect([
-              "AWSOrganizationsNotInUseException",
-              "ConstraintViolationException",
-              "EffectivePolicyNotFoundException",
-              "InvalidInputException",
-              "UnsupportedAPIEndpointException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields a count or the policy-type-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/invalid-effective-policy-accounts")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect([
+            "AWSOrganizationsNotInUseException",
+            "ConstraintViolationException",
+            "EffectivePolicyNotFoundException",
+            "InvalidInputException",
+            "UnsupportedAPIEndpointException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
   describe("ListEffectivePolicyValidationErrors", () => {
-    test.provider(
-      "yields a count or the policy-type-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/effective-policy-validation-errors",
-          )) as { ok: true; count: number } | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect([
-              "AWSOrganizationsNotInUseException",
-              "AccountNotFoundException",
-              "ConstraintViolationException",
-              "EffectivePolicyNotFoundException",
-              "InvalidInputException",
-              "UnsupportedAPIEndpointException",
-              "NoOrganization",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields a count or the policy-type-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/effective-policy-validation-errors")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect([
+            "AWSOrganizationsNotInUseException",
+            "AccountNotFoundException",
+            "ConstraintViolationException",
+            "EffectivePolicyNotFoundException",
+            "InvalidInputException",
+            "UnsupportedAPIEndpointException",
+            "NoOrganization",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
@@ -383,25 +347,23 @@ describe.sequential("Organizations Bindings", () => {
   });
 
   describe("ListDelegatedServicesForAccount", () => {
-    test.provider(
-      "surfaces the typed not-registered tag for the management account",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/delegated-services")) as
-            | { ok: true; count: number }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            // The management account is never a delegated administrator —
-            // the typed tag proves the grant.
-            expect([
-              "AWSOrganizationsNotInUseException",
-              "AccountNotRegisteredException",
-              "NoOrganization",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("surfaces the typed not-registered tag for the management account", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/delegated-services")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          // The management account is never a delegated administrator —
+          // the typed tag proves the grant.
+          expect([
+            "AWSOrganizationsNotInUseException",
+            "AccountNotRegisteredException",
+            "NoOrganization",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
@@ -462,9 +424,7 @@ describe.sequential("Organizations Bindings", () => {
       "surfaces a typed error for a nonexistent request (proving the grant)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/create-account-status-not-found",
-          )) as { tag: string };
+          const response = (yield* getJson("/create-account-status-not-found")) as { tag: string };
           expect([
             "AWSOrganizationsNotInUseException",
             "CreateAccountStatusNotFoundException",
@@ -516,10 +476,7 @@ describe.sequential("Organizations Bindings", () => {
           const response = (yield* getJson("/handshake-not-found")) as {
             tag: string;
           };
-          expect([
-            "HandshakeNotFoundException",
-            "InvalidInputException",
-          ]).toContain(response.tag);
+          expect(["HandshakeNotFoundException", "InvalidInputException"]).toContain(response.tag);
         }),
     );
   });
@@ -549,10 +506,7 @@ describe.sequential("Organizations Bindings", () => {
           const response = (yield* getJson("/decline-handshake-not-found")) as {
             tag: string;
           };
-          expect([
-            "HandshakeNotFoundException",
-            "InvalidInputException",
-          ]).toContain(response.tag);
+          expect(["HandshakeNotFoundException", "InvalidInputException"]).toContain(response.tag);
         }),
     );
   });
@@ -565,47 +519,40 @@ describe.sequential("Organizations Bindings", () => {
           const response = (yield* getJson("/cancel-handshake-not-found")) as {
             tag: string;
           };
-          expect([
-            "HandshakeNotFoundException",
-            "InvalidInputException",
-          ]).toContain(response.tag);
+          expect(["HandshakeNotFoundException", "InvalidInputException"]).toContain(response.tag);
         }),
     );
   });
 
   describe("InviteAccountToOrganization", () => {
-    test.provider(
-      "surfaces a typed error for an invalid target (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/invite-invalid")) as {
-            tag: string;
-          };
-          expect([
-            "AWSOrganizationsNotInUseException",
-            "ConstraintViolationException",
-            "HandshakeConstraintViolationException",
-            "InvalidInputException",
-          ]).toContain(response.tag);
-        }),
+    test.provider("surfaces a typed error for an invalid target (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/invite-invalid")) as {
+          tag: string;
+        };
+        expect([
+          "AWSOrganizationsNotInUseException",
+          "ConstraintViolationException",
+          "HandshakeConstraintViolationException",
+          "InvalidInputException",
+        ]).toContain(response.tag);
+      }),
     );
   });
 
   describe("consumeOrganizationsEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's
-          // consumeOrganizationsEvents must have materialized as a rule on
-          // the default bus with the Lambda as target. (Runtime firing needs
-          // a real organization change surfaced through CloudTrail in
-          // us-east-1, far slower than the speed doctrine allows.)
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's
+        // consumeOrganizationsEvents must have materialized as a rule on
+        // the default bus with the Lambda as target. (Runtime firing needs
+        // a real organization change surfaced through CloudTrail in
+        // us-east-1, far slower than the speed doctrine allows.)
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

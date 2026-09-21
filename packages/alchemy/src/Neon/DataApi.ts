@@ -3,15 +3,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Input } from "../Input.ts";
-import {
-  authPlanScope,
-  authRequest,
-  authSettingsMatch,
-  removedAuthSettings,
-} from "./Auth.ts";
+import { authPlanScope, authRequest, authSettingsMatch, removedAuthSettings } from "./Auth.ts";
 import { resolveBranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -86,17 +81,11 @@ export interface DataApi extends Resource<
  */
 export const DataApi = Resource<DataApi>("Neon.DataApi");
 
-export class InvalidDataApiConfiguration extends Data.TaggedError(
-  "InvalidDataApiConfiguration",
-)<{
+export class InvalidDataApiConfiguration extends Data.TaggedError("InvalidDataApiConfiguration")<{
   message: string;
 }> {}
 
-const observe = (scope: {
-  projectId: string;
-  branchId: string;
-  database: string;
-}) =>
+const observe = (scope: { projectId: string; branchId: string; database: string }) =>
   Neon.getProjectBranchDataAPI({
     ...authRequest(scope),
     database_name: scope.database,
@@ -132,10 +121,7 @@ const validateDataApi = (news: DataApiProps) =>
       )
     : Effect.void;
 
-const validateDataApiRemoval = (
-  olds: DataApiProps | undefined,
-  news: Input<DataApiProps>,
-) => {
+const validateDataApiRemoval = (olds: DataApiProps | undefined, news: Input<DataApiProps>) => {
   const removed = removedAuthSettings(olds, news, [...immutable, "settings"]);
   return removed.length === 0
     ? Effect.void
@@ -146,10 +132,7 @@ const validateDataApiRemoval = (
       );
 };
 
-const resolveDatabase = Effect.fn(function* (
-  news: DataApiProps,
-  scope: ResolvedBranchScope,
-) {
+const resolveDatabase = Effect.fn(function* (news: DataApiProps, scope: ResolvedBranchScope) {
   const database = news.database ?? (news.branch ?? news.project)?.databaseName;
   if (database !== undefined) {
     if (!database)
@@ -158,13 +141,10 @@ const resolveDatabase = Effect.fn(function* (
       });
     return database;
   }
-  const { databases } = yield* Neon.listProjectBranchDatabases(
-    authRequest(scope),
-  );
+  const { databases } = yield* Neon.listProjectBranchDatabases(authRequest(scope));
   if (databases.length !== 1) {
     return yield* new InvalidDataApiConfiguration({
-      message:
-        "Set database explicitly when the branch has no unambiguous selected database",
+      message: "Set database explicitly when the branch has no unambiguous selected database",
     });
   }
   return databases[0]!.name;
@@ -179,9 +159,7 @@ export const DataApiProvider = () =>
       const scope = yield* authPlanScope(news);
       if (
         output &&
-        (!scope ||
-          scope.projectId !== output.projectId ||
-          scope.branchId !== output.branchId)
+        (!scope || scope.projectId !== output.projectId || scope.branchId !== output.branchId)
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
@@ -192,8 +170,7 @@ export const DataApiProvider = () =>
       if (
         resolved.projectId !== previous.projectId ||
         resolved.branchId !== previous.branchId ||
-        database !==
-          (output?.database ?? (yield* resolveDatabase(olds, previous))) ||
+        database !== (output?.database ?? (yield* resolveDatabase(olds, previous))) ||
         immutable.some((key) => news[key] !== olds[key])
       ) {
         return { action: "replace", deleteFirst: true } as const;
@@ -202,8 +179,7 @@ export const DataApiProvider = () =>
         const current = yield* observe({ ...resolved, database });
         if (
           !current ||
-          (news.settings !== undefined &&
-            !authSettingsMatch(current.settings ?? {}, news.settings))
+          (news.settings !== undefined && !authSettingsMatch(current.settings ?? {}, news.settings))
         )
           return { action: "update" } as const;
       }
@@ -251,11 +227,7 @@ export const DataApiProvider = () =>
           message: "Existing Data API requires explicit adoption",
           resourceType: "Neon.DataApi",
         });
-      if (
-        current &&
-        olds === undefined &&
-        immutable.some((key) => news[key] !== undefined)
-      ) {
+      if (current && olds === undefined && immutable.some((key) => news[key] !== undefined)) {
         return yield* new InvalidDataApiConfiguration({
           message:
             "Neon does not expose existing Data API authentication settings; adopt without creation-only settings, then replace to configure authentication",
@@ -275,8 +247,7 @@ export const DataApiProvider = () =>
           Effect.catchTag("Conflict", () =>
             Effect.fail(
               new OwnedBySomeoneElse({
-                message:
-                  "Data API appeared during creation; explicit adoption is required",
+                message: "Data API appeared during creation; explicit adoption is required",
                 resourceType: "Neon.DataApi",
               }),
             ),

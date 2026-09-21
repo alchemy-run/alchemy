@@ -1,10 +1,10 @@
-import { applyMigrations } from "@/SQL/Migrations/index.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Database } from "bun:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate as drizzleMigrate } from "drizzle-orm/bun-sqlite/migrator";
 import * as Effect from "effect/Effect";
+import { applyMigrations } from "@/SQL/Migrations/index.ts";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 /**
@@ -27,41 +27,36 @@ const rowsOf = (db: Database, table: string) =>
   }>;
 
 describe("drizzle adoption (one-way conversion)", (it) => {
-  it.effect(
-    "converts drizzle-kit history into __alchemy_migrations without replaying",
-    () =>
-      Effect.gen(function* () {
-        const db = new Database(":memory:");
-        // The user's pre-Alchemy state, produced by drizzle's own migrator.
-        yield* Effect.sync(() =>
-          drizzleMigrate(drizzle({ client: db }), {
-            migrationsFolder: fixturesDir,
-          }),
-        );
-        const drizzleRows = rowsOf(db, "__drizzle_migrations");
-        expect(drizzleRows.length).toBe(2);
+  it.effect("converts drizzle-kit history into __alchemy_migrations without replaying", () =>
+    Effect.gen(function* () {
+      const db = new Database(":memory:");
+      // The user's pre-Alchemy state, produced by drizzle's own migrator.
+      yield* Effect.sync(() =>
+        drizzleMigrate(drizzle({ client: db }), {
+          migrationsFolder: fixturesDir,
+        }),
+      );
+      const drizzleRows = rowsOf(db, "__drizzle_migrations");
+      expect(drizzleRows.length).toBe(2);
 
-        // First Alchemy deploy: adopt. A replay would throw on the bare
-        // CREATE TABLEs, so passing proves conversion-not-reapplication.
-        const executor = makeSqliteExecutor(db);
-        yield* applyMigrations({
-          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
-          executor,
-        });
+      // First Alchemy deploy: adopt. A replay would throw on the bare
+      // CREATE TABLEs, so passing proves conversion-not-reapplication.
+      const executor = makeSqliteExecutor(db);
+      yield* applyMigrations({
+        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+        executor,
+      });
 
-        const ours = rowsOf(db, "__alchemy_migrations");
-        expect(ours.map((r) => r.name)).toEqual([
-          "20240101000000_init",
-          "20240102000000_add_posts",
-        ]);
-        // drizzle's hashes are sha256 of migration.sql — carried verbatim.
-        expect(ours.map((r) => r.hash)).toEqual(drizzleRows.map((r) => r.hash));
-        // The drizzle table is frozen, not dropped.
-        expect(rowsOf(db, "__drizzle_migrations")).toEqual(drizzleRows);
-        expect(tableNames(db)).toEqual(
-          expect.arrayContaining(["users", "posts", "__drizzle_migrations"]),
-        );
-      }),
+      const ours = rowsOf(db, "__alchemy_migrations");
+      expect(ours.map((r) => r.name)).toEqual(["20240101000000_init", "20240102000000_add_posts"]);
+      // drizzle's hashes are sha256 of migration.sql — carried verbatim.
+      expect(ours.map((r) => r.hash)).toEqual(drizzleRows.map((r) => r.hash));
+      // The drizzle table is frozen, not dropped.
+      expect(rowsOf(db, "__drizzle_migrations")).toEqual(drizzleRows);
+      expect(tableNames(db)).toEqual(
+        expect.arrayContaining(["users", "posts", "__drizzle_migrations"]),
+      );
+    }),
   );
 
   it.effect("after conversion, drizzle's table is never written again", () =>

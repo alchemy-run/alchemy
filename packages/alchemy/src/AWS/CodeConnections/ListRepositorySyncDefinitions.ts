@@ -48,7 +48,6 @@ export interface ListRepositorySyncDefinitions extends Binding.Service<
   >
 > {}
 
-export const ListRepositorySyncDefinitions =
-  Binding.Service<ListRepositorySyncDefinitions>(
-    "AWS.CodeConnections.ListRepositorySyncDefinitions",
-  );
+export const ListRepositorySyncDefinitions = Binding.Service<ListRepositorySyncDefinitions>(
+  "AWS.CodeConnections.ListRepositorySyncDefinitions",
+);

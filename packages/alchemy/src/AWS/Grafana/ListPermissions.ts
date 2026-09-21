@@ -32,12 +32,7 @@ export interface ListPermissions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<grafana.ListPermissionsRequest, "workspaceId">,
-    ) => Effect.Effect<
-      grafana.ListPermissionsResponse,
-      grafana.ListPermissionsError
-    >
+    ) => Effect.Effect<grafana.ListPermissionsResponse, grafana.ListPermissionsError>
   >
 > {}
-export const ListPermissions = Binding.Service<ListPermissions>(
-  "AWS.Grafana.ListPermissions",
-);
+export const ListPermissions = Binding.Service<ListPermissions>("AWS.Grafana.ListPermissions");

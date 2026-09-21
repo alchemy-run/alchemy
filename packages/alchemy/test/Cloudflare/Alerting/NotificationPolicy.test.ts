@@ -1,19 +1,16 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const EMAIL = "test@alchemy.run";
 
@@ -120,9 +117,7 @@ test.provider("list enumerates the deployed notification policy", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Alerting.NotificationPolicy,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Alerting.NotificationPolicy);
     const all = yield* provider.list();
 
     expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
@@ -137,9 +132,6 @@ const waitForPolicyDeleted = (accountId: string, policyId: string) =>
     Effect.catchTag("PolicyNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PolicyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

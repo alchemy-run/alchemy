@@ -1,11 +1,11 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { assert, describe, expect, it } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import {
   assertPidExited,
   killPid,
@@ -13,20 +13,14 @@ import {
   waitForExit,
 } from "./fixtures/process-effect.ts";
 
-const FIXTURE_DIR = fileURLToPath(
-  new URL("./fixtures/dev-cli/", import.meta.url),
-);
-const ALCHEMY_BIN = fileURLToPath(
-  new URL("../../bin/alchemy.js", import.meta.url),
-);
+const FIXTURE_DIR = fileURLToPath(new URL("./fixtures/dev-cli/", import.meta.url));
+const ALCHEMY_BIN = fileURLToPath(new URL("../../bin/alchemy.js", import.meta.url));
 
 /** Every live pid on the system with its parent and command (POSIX). */
 const processTable = ChildProcess.make("ps", ["-Ao", "pid=,ppid=,comm="], {
   stdout: "pipe",
 }).pipe(
-  Effect.flatMap((handle) =>
-    handle.stdout.pipe(Stream.decodeText, Stream.mkString),
-  ),
+  Effect.flatMap((handle) => handle.stdout.pipe(Stream.decodeText, Stream.mkString)),
   Effect.map((stdout) =>
     stdout.split("\n").flatMap((line) => {
       const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
@@ -142,9 +136,7 @@ describe.skipIf(process.platform === "win32" || process.env.FAST)(
           // Reap survivors unconditionally so the expected failure never
           // leaks processes into the rest of the suite.
           yield* Effect.addFinalizer(() =>
-            Effect.forEach(tracked, (entry) =>
-              killPid(entry.pid, "SIGKILL"),
-            ).pipe(Effect.asVoid),
+            Effect.forEach(tracked, (entry) => killPid(entry.pid, "SIGKILL")).pipe(Effect.asVoid),
           );
 
           yield* killPid(child.pid, "SIGKILL");

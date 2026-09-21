@@ -44,13 +44,8 @@ export interface PutSecretValue extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutSecretValueRequest,
-    ) => Effect.Effect<
-      secretsmanager.PutSecretValueResponse,
-      secretsmanager.PutSecretValueError
-    >
+    ) => Effect.Effect<secretsmanager.PutSecretValueResponse, secretsmanager.PutSecretValueError>
   >
 > {}
 
-export const PutSecretValue = Binding.Service<PutSecretValue>(
-  "AWS.SecretsManager.PutSecretValue",
-);
+export const PutSecretValue = Binding.Service<PutSecretValue>("AWS.SecretsManager.PutSecretValue");

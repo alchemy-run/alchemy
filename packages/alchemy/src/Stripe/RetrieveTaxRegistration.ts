@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TaxRegistration } from "./TaxRegistration.ts";
 
-export interface RetrieveTaxRegistrationRequest extends Omit<
-  GetTaxRegistrationRequest,
-  "id"
-> {}
+export interface RetrieveTaxRegistrationRequest extends Omit<GetTaxRegistrationRequest, "id"> {}
 
 /**
  * Retrieve a bound Stripe Tax Registration over HTTP.
@@ -33,11 +30,7 @@ export interface RetrieveTaxRegistration extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveTaxRegistrationRequest,
-    ) => Effect.Effect<
-      StripeTaxRegistration,
-      GetTaxRegistrationError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeTaxRegistration, GetTaxRegistrationError, RuntimeContext>
   >
 > {}
 

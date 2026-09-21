@@ -85,9 +85,7 @@ export interface ParameterGroup extends Resource<
  *
  * @resource
  */
-export const ParameterGroup = Resource<ParameterGroup>(
-  "AWS.MemoryDB.ParameterGroup",
-);
+export const ParameterGroup = Resource<ParameterGroup>("AWS.MemoryDB.ParameterGroup");
 
 export const ParameterGroupProvider = () =>
   Provider.effect(
@@ -101,30 +99,24 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeParameterGroups({ ParameterGroupName: name })
-          .pipe(
-            Effect.catchTag("ParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ParameterGroups?.[0];
       });
 
       // Observed engine parameters (name → value), paginated.
       const readParameters = Effect.fn(function* (name: string) {
         const parameters = new Map<string, string>();
-        yield* memorydb.describeParameters
-          .pages({ ParameterGroupName: name })
-          .pipe(
-            Stream.runForEach((page) =>
-              Effect.sync(() => {
-                for (const parameter of page.Parameters ?? []) {
-                  if (parameter.Name !== undefined) {
-                    parameters.set(parameter.Name, parameter.Value ?? "");
-                  }
+        yield* memorydb.describeParameters.pages({ ParameterGroupName: name }).pipe(
+          Stream.runForEach((page) =>
+            Effect.sync(() => {
+              for (const parameter of page.Parameters ?? []) {
+                if (parameter.Name !== undefined) {
+                  parameters.set(parameter.Name, parameter.Value ?? "");
                 }
-              }),
-            ),
-          );
+              }
+            }),
+          ),
+        );
         return parameters;
       });
 
@@ -163,15 +155,11 @@ export const ParameterGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.parameterGroupName ??
-            (yield* toName(id, olds ?? { family: "" }));
+          const name = output?.parameterGroupName ?? (yield* toName(id, olds ?? { family: "" }));
           const group = yield* readGroup(name);
           if (!group?.ARN) return undefined;
           const attrs = yield* toAttrs(group);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
@@ -196,12 +184,7 @@ export const ParameterGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
@@ -220,17 +203,13 @@ export const ParameterGroupProvider = () =>
           if (changed.length > 0) {
             yield* memorydb.updateParameterGroup({
               ParameterGroupName: name,
-              ParameterNameValues: changed.map(
-                ([ParameterName, ParameterValue]) => ({
-                  ParameterName,
-                  ParameterValue,
-                }),
-              ),
+              ParameterNameValues: changed.map(([ParameterName, ParameterValue]) => ({
+                ParameterName,
+                ParameterValue,
+              })),
             });
           }
-          const removed = Object.keys(olds?.parameters ?? {}).filter(
-            (key) => !(key in desired),
-          );
+          const removed = Object.keys(olds?.parameters ?? {}).filter((key) => !(key in desired));
           if (removed.length > 0) {
             yield* memorydb
               .resetParameterGroup({
@@ -241,12 +220,8 @@ export const ParameterGroupProvider = () =>
                 // A parameter already at its default resets to a no-op; a
                 // group busy applying the previous update settles quickly.
                 Effect.retry({
-                  while: (e): boolean =>
-                    e._tag === "InvalidParameterGroupStateFault",
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(8),
-                  ]),
+                  while: (e): boolean => e._tag === "InvalidParameterGroupStateFault",
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(8)]),
                 }),
               );
           }
@@ -255,10 +230,7 @@ export const ParameterGroupProvider = () =>
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
-            const { removed: removedTags, upsert } = diffTags(
-              observedTags,
-              desiredTags,
-            );
+            const { removed: removedTags, upsert } = diffTags(observedTags, desiredTags);
             if (upsert.length > 0) {
               yield* memorydb.tagResource({ ResourceArn: arn, Tags: upsert });
             }
@@ -285,12 +257,8 @@ export const ParameterGroupProvider = () =>
             .pipe(
               Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.void),
               Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "InvalidParameterGroupStateFault",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
+                while: (e): boolean => e._tag === "InvalidParameterGroupStateFault",
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
               }),
             );
         }),
@@ -310,9 +278,7 @@ export const ParameterGroupProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((group) => toAttrs(group), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((group) => toAttrs(group), { concurrency: 4 })),
           ),
       };
     }),

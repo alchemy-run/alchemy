@@ -1,22 +1,18 @@
-import * as AWS from "@/AWS";
-import { Stream } from "@/AWS/DSQL";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Stream } from "@/AWS/DSQL";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getStream = (clusterIdentifier: string, streamIdentifier: string) =>
   dsql
     .getStream({ clusterIdentifier, streamIdentifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class StreamStillPresent extends Data.TaggedError("StreamStillPresent")<{
   readonly streamId: string;
@@ -102,9 +98,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // out-of-band verification via distilled
       const observed = yield* getStream(created.clusterId, created.streamId);
       expect(observed?.status).toBe("ACTIVE");
-      expect(observed?.targetDefinition?.kinesis.streamArn).toEqual(
-        created.kinesisStreamArn,
-      );
+      expect(observed?.targetDefinition?.kinesis.streamArn).toEqual(created.kinesisStreamArn);
       expect(observed?.tags?.app).toEqual("alchemy-test");
 
       // destroy everything; typed wait-until-gone on the CDC stream
@@ -122,10 +116,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         ),
         Effect.retry({
           while: (e): boolean => e._tag === "StreamStillPresent",
-          schedule: Schedule.max([
-            Schedule.spaced("5 seconds"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
         }),
       );
     }),

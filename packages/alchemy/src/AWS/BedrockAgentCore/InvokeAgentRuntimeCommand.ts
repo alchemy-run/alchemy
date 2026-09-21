@@ -53,7 +53,6 @@ export interface InvokeAgentRuntimeCommand extends Binding.Service<
     >
   >
 > {}
-export const InvokeAgentRuntimeCommand =
-  Binding.Service<InvokeAgentRuntimeCommand>(
-    "AWS.BedrockAgentCore.InvokeAgentRuntimeCommand",
-  );
+export const InvokeAgentRuntimeCommand = Binding.Service<InvokeAgentRuntimeCommand>(
+  "AWS.BedrockAgentCore.InvokeAgentRuntimeCommand",
+);

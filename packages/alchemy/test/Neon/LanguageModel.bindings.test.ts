@@ -1,15 +1,15 @@
-import type { AIGateway } from "@/Neon/AIGateway.ts";
-import { backendEnvKey } from "@/Neon/BackendConnection.ts";
-import { QueryAIGateway, QueryAIGatewayHttp } from "@/Neon/QueryAIGateway.ts";
-import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
-import * as Output from "@/Output.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 import { expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import type { AIGateway } from "@/Neon/AIGateway.ts";
+import { backendEnvKey } from "@/Neon/BackendConnection.ts";
+import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
+import { QueryAIGateway, QueryAIGatewayHttp } from "@/Neon/QueryAIGateway.ts";
+import * as Output from "@/Output.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const gateway: AIGateway = {
   FQN: "Gateway",
@@ -45,18 +45,12 @@ const services = (injected: boolean, environment?: Record<string, string>) =>
         Layer.succeed(
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown({
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]:
-              "https://branch.invalid",
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]:
-              "managed-scoped-token",
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED")]: injected
-              ? "yes"
-              : "no",
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]: "https://branch.invalid",
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]: "managed-scoped-token",
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED")]: injected ? "yes" : "no",
           }),
         ),
-        environment
-          ? Layer.succeed(FunctionEnvironment, environment)
-          : Layer.empty,
+        environment ? Layer.succeed(FunctionEnvironment, environment) : Layer.empty,
       ),
     ),
   );
@@ -68,22 +62,14 @@ for (const mode of ["injected", "managed", "managed-with-injection"] as const) {
       runtimeMode(
         Effect.gen(function* () {
           const client = yield* QueryAIGateway(gateway);
-          expect(Layer.isLayer(client.model({ model: "gpt-5-mini" }))).toBe(
-            true,
-          );
+          expect(Layer.isLayer(client.model({ model: "gpt-5-mini" }))).toBe(true);
           expect(yield* client.chatBaseUrl).toBe("https://branch.invalid/v1");
-          expect(yield* client.responsesBaseUrl).toBe(
-            "https://branch.invalid/openai/v1",
-          );
-          expect(yield* client.anthropicBaseUrl).toBe(
-            "https://branch.invalid/anthropic",
-          );
+          expect(yield* client.responsesBaseUrl).toBe("https://branch.invalid/openai/v1");
+          expect(yield* client.anthropicBaseUrl).toBe("https://branch.invalid/anthropic");
           const token = yield* client.token;
           expect(Redacted.isRedacted(token)).toBe(true);
           expect(Redacted.value(token)).toBe(
-            mode === "injected"
-              ? "injected-scoped-token"
-              : "managed-scoped-token",
+            mode === "injected" ? "injected-scoped-token" : "managed-scoped-token",
           );
           expect(JSON.stringify(token)).not.toContain("scoped-token");
         }).pipe(
@@ -134,9 +120,7 @@ for (const [name, environment, message] of [
           expect(Result.isFailure(result)).toBe(true);
           if (Result.isFailure(result)) {
             expect(String(result.failure)).toContain(message);
-            expect(String(result.failure)).not.toContain(
-              "DO_NOT_BIND_ACCOUNT_KEY",
-            );
+            expect(String(result.failure)).not.toContain("DO_NOT_BIND_ACCOUNT_KEY");
           }
         }).pipe(Effect.provide(services(true, environment))),
       ),

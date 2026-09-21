@@ -1,19 +1,12 @@
-import * as AWS from "@/AWS";
-import {
-  Application,
-  ApplicationCloudWatchLoggingOption,
-} from "@/AWS/KinesisAnalyticsV2";
-import * as Test from "@/Test/Alchemy";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  codeKey,
-  deleteCodeBucketIdempotent,
-  provisionCodeBucket,
-} from "./code-bucket.ts";
+import * as AWS from "@/AWS";
+import { Application, ApplicationCloudWatchLoggingOption } from "@/AWS/KinesisAnalyticsV2";
+import * as Test from "@/Test/Alchemy";
+import { codeKey, deleteCodeBucketIdempotent, provisionCodeBucket } from "./code-bucket.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,24 +15,17 @@ const { test } = Test.make({ providers: AWS.providers() });
 // the state.
 const loggingCodeBucket = "alchemy-test-kav2-logging-code";
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-) {}
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists") {}
 
 const assertApplicationDeleted = Effect.fn(function* (applicationName: string) {
-  yield* analytics
-    .describeApplication({ ApplicationName: applicationName })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new ApplicationStillExists())),
-      Effect.retry({
-        while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(40),
-        ]),
-      }),
-      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    );
+  yield* analytics.describeApplication({ ApplicationName: applicationName }).pipe(
+    Effect.flatMap(() => Effect.fail(new ApplicationStillExists())),
+    Effect.retry({
+      while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+  );
 });
 
 describe.skipIf(!!process.env.FAST)(
@@ -70,20 +56,15 @@ describe.skipIf(!!process.env.FAST)(
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
               const base = yield* makeBase;
-              const logging = yield* ApplicationCloudWatchLoggingOption(
-                "FlinkLogging",
-                {
-                  applicationName: base.app.applicationName,
-                  logStreamArn: base.logStream.logStreamArn.as<string>(),
-                },
-              );
+              const logging = yield* ApplicationCloudWatchLoggingOption("FlinkLogging", {
+                applicationName: base.app.applicationName,
+                logStreamArn: base.logStream.logStreamArn.as<string>(),
+              });
               return { ...base, logging };
             }),
           );
 
-          expect(deployed.logging.applicationName).toEqual(
-            deployed.app.applicationName,
-          );
+          expect(deployed.logging.applicationName).toEqual(deployed.app.applicationName);
           expect(deployed.logging.cloudWatchLoggingOptionId).toBeDefined();
           expect(deployed.logging.logStreamArn).toContain(":log-stream:");
 
@@ -91,27 +72,20 @@ describe.skipIf(!!process.env.FAST)(
           const described = yield* analytics.describeApplication({
             ApplicationName: deployed.app.applicationName,
           });
-          const options =
-            described.ApplicationDetail.CloudWatchLoggingOptionDescriptions ??
-            [];
+          const options = described.ApplicationDetail.CloudWatchLoggingOptionDescriptions ?? [];
           expect(options).toHaveLength(1);
-          expect(options[0]?.LogStreamARN).toEqual(
-            deployed.logging.logStreamArn,
-          );
+          expect(options[0]?.LogStreamARN).toEqual(deployed.logging.logStreamArn);
 
           // Remove the option while the application stays deployed — the
           // engine deletes just the sub-resource.
           const detached = yield* stack.deploy(makeBase);
-          expect(detached.app.applicationName).toEqual(
-            deployed.app.applicationName,
-          );
+          expect(detached.app.applicationName).toEqual(deployed.app.applicationName);
 
           const afterDetach = yield* analytics.describeApplication({
             ApplicationName: deployed.app.applicationName,
           });
           expect(
-            afterDetach.ApplicationDetail.CloudWatchLoggingOptionDescriptions ??
-              [],
+            afterDetach.ApplicationDetail.CloudWatchLoggingOptionDescriptions ?? [],
           ).toHaveLength(0);
 
           yield* stack.destroy();

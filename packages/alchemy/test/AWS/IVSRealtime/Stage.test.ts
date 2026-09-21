@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Stage } from "@/AWS/IVSRealtime";
-import * as Test from "@/Test/Alchemy";
 import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Stage } from "@/AWS/IVSRealtime";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,9 +31,7 @@ const assertStageGone = (arn: string) =>
   Effect.gen(function* () {
     const stage = yield* ivsrealtime.getStage({ arn }).pipe(
       Effect.map((r) => r.stage),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (stage !== undefined) {
       return yield* Effect.fail(new Error(`stage '${arn}' still exists`));

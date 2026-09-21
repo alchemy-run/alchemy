@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
-export interface DeleteKeyRequest extends Omit<
-  kvs.DeleteKeyRequest,
-  "KvsARN"
-> {}
+export interface DeleteKeyRequest extends Omit<kvs.DeleteKeyRequest, "KvsARN"> {}
 
 /**
  * Runtime binding for `cloudfront-keyvaluestore:DeleteKey`.
@@ -35,9 +32,7 @@ export interface DeleteKey extends Binding.Service<
   (
     store: KeyValueStore,
   ) => Effect.Effect<
-    (
-      request: DeleteKeyRequest,
-    ) => Effect.Effect<kvs.DeleteKeyResponse, kvs.DeleteKeyError>
+    (request: DeleteKeyRequest) => Effect.Effect<kvs.DeleteKeyResponse, kvs.DeleteKeyError>
   >
 > {}
 

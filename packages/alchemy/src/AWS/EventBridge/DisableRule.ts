@@ -29,12 +29,7 @@ export interface DisableRule extends Binding.Service<
   (
     rule: Rule,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      eventbridge.DisableRuleResponse,
-      eventbridge.DisableRuleError
-    >
+    () => Effect.Effect<eventbridge.DisableRuleResponse, eventbridge.DisableRuleError>
   >
 > {}
-export const DisableRule = Binding.Service<DisableRule>(
-  "AWS.EventBridge.DisableRule",
-);
+export const DisableRule = Binding.Service<DisableRule>("AWS.EventBridge.DisableRule");

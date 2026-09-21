@@ -1,5 +1,3 @@
-import * as IoTSiteWise from "@/AWS/IoTSiteWise";
-import * as Lambda from "@/AWS/Lambda";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IoTSiteWise from "@/AWS/IoTSiteWise";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -45,21 +45,16 @@ export default IoTSiteWiseTestFunction.make(
     const getValue = yield* IoTSiteWise.GetAssetPropertyValue(asset);
     const getHistory = yield* IoTSiteWise.GetAssetPropertyValueHistory(asset);
     const getAggregates = yield* IoTSiteWise.GetAssetPropertyAggregates(asset);
-    const getInterpolated =
-      yield* IoTSiteWise.GetInterpolatedAssetPropertyValues(asset);
+    const getInterpolated = yield* IoTSiteWise.GetInterpolatedAssetPropertyValues(asset);
     const executeQuery = yield* IoTSiteWise.ExecuteQuery();
 
     // Resolve the service-assigned id of the Temperature property by name —
     // exercises the DescribeAsset binding on every data-plane route.
     const temperaturePropertyId = Effect.gen(function* () {
       const described = yield* describeAsset();
-      const property = described.assetProperties.find(
-        (p) => p.name === "Temperature",
-      );
+      const property = described.assetProperties.find((p) => p.name === "Temperature");
       if (!property) {
-        return yield* Effect.fail(
-          new Error("Temperature property not found on the bound asset"),
-        );
+        return yield* Effect.fail(new Error("Temperature property not found on the bound asset"));
       }
       return property.id;
     });
@@ -123,8 +118,7 @@ export default IoTSiteWiseTestFunction.make(
           const result = yield* getValue({ propertyId });
           return yield* HttpServerResponse.json({
             doubleValue: result.propertyValue?.value.doubleValue ?? null,
-            timeInSeconds:
-              result.propertyValue?.timestamp.timeInSeconds ?? null,
+            timeInSeconds: result.propertyValue?.timestamp.timeInSeconds ?? null,
           });
         }
 
@@ -195,10 +189,7 @@ export default IoTSiteWiseTestFunction.make(
         // error carries the real diagnostic instead of an opaque
         // "Internal Server Error".
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

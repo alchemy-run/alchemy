@@ -1,8 +1,8 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class HeadObjectTestFunction extends Lambda.Function<HeadObjectTestFunction>()(
   "HeadObjectTestFunction",
@@ -30,8 +30,7 @@ export default HeadObjectTestFunction.make(
           });
         }
         const key = url.searchParams.get("key");
-        if (!key)
-          return HttpServerResponse.text("Missing key", { status: 400 });
+        if (!key) return HttpServerResponse.text("Missing key", { status: 400 });
         return yield* headObject({
           Key: key,
           VersionId: url.searchParams.get("versionId") ?? undefined,

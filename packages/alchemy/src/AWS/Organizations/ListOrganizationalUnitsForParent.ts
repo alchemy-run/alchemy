@@ -35,7 +35,6 @@ export interface ListOrganizationalUnitsForParent extends Binding.Service<
     >
   >
 > {}
-export const ListOrganizationalUnitsForParent =
-  Binding.Service<ListOrganizationalUnitsForParent>(
-    "AWS.Organizations.ListOrganizationalUnitsForParent",
-  );
+export const ListOrganizationalUnitsForParent = Binding.Service<ListOrganizationalUnitsForParent>(
+  "AWS.Organizations.ListOrganizationalUnitsForParent",
+);

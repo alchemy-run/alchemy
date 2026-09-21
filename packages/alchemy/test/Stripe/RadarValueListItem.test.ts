@@ -1,23 +1,17 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
-import {
-  GetRadarValueListItem,
-  GetRadarValueLists,
-} from "@distilled.cloud/stripe/stripe";
+import { GetRadarValueListItem, GetRadarValueLists } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -38,16 +32,12 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* GetRadarValueLists({ limit: 1 }).pipe(
-        Effect.result,
-      );
+      const result = yield* GetRadarValueLists({ limit: 1 }).pipe(Effect.result);
 
       if (Result.isSuccess(result)) {
         expect(Array.isArray(result.success.data)).toBe(true);
       } else {
-        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(
-          result.failure._tag,
-        );
+        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(result.failure._tag);
       }
 
       yield* stack.destroy();
@@ -149,9 +139,7 @@ test.provider(
       expect(gone).toEqual("gone");
 
       const after = yield* provider.list();
-      expect(
-        after.find((item) => item.id === deployed.item.id),
-      ).toBeUndefined();
+      expect(after.find((item) => item.id === deployed.item.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

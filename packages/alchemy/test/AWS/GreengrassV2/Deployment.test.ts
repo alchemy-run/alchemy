@@ -1,28 +1,26 @@
-import * as AWS from "@/AWS";
-import { ComponentVersion, Deployment } from "@/AWS/GreengrassV2";
-import { Thing } from "@/AWS/IoT";
-import * as Test from "@/Test/Alchemy";
 import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ComponentVersion, Deployment } from "@/AWS/GreengrassV2";
+import { Thing } from "@/AWS/IoT";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag the delete path depends on (deploymentId is a UUID, so a
 // random-looking constant is safely nonexistent).
-test.provider(
-  "getDeployment on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        greengrassv2.getDeployment({
-          deploymentId: "00000000-dead-beef-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getDeployment on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      greengrassv2.getDeployment({
+        deploymentId: "00000000-dead-beef-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const COMPONENT_NAME = "com.alchemy.test.GgDeploy";
@@ -78,9 +76,7 @@ test.provider(
                 // Output-valued reference makes the deployment depend on the
                 // component version being registered first.
                 componentVersion: component.componentVersion,
-                ...(merge === undefined
-                  ? {}
-                  : { configurationUpdate: { merge } }),
+                ...(merge === undefined ? {} : { configurationUpdate: { merge } }),
               },
             },
             tags: { fixture: "greengrass-deployment" },
@@ -92,9 +88,7 @@ test.provider(
       const { core, deployment } = yield* stack.deploy(program());
       expect(deployment.deploymentId).toBeDefined();
       expect(deployment.targetArn).toBe(core.thingArn);
-      expect(deployment.deploymentArn).toContain(
-        `:deployments:${deployment.deploymentId}`,
-      );
+      expect(deployment.deploymentArn).toContain(`:deployments:${deployment.deploymentId}`);
 
       // Out-of-band verification via distilled.
       const observed = yield* greengrassv2.getDeployment({
@@ -102,9 +96,7 @@ test.provider(
       });
       expect(observed.targetArn).toBe(core.thingArn);
       expect(observed.isLatestForTarget).toBe(true);
-      expect(observed.components?.[COMPONENT_NAME]?.componentVersion).toBe(
-        "1.0.0",
-      );
+      expect(observed.components?.[COMPONENT_NAME]?.componentVersion).toBe("1.0.0");
       expect(observed.tags?.["alchemy::id"]).toBe("Rollout");
 
       // 2. UPDATE — changing the component spec creates a NEW deployment
@@ -116,16 +108,13 @@ test.provider(
       const revisedObserved = yield* greengrassv2.getDeployment({
         deploymentId: revised.deploymentId,
       });
-      expect(
-        revisedObserved.components?.[COMPONENT_NAME]?.configurationUpdate
-          ?.merge,
-      ).toBe(JSON.stringify({ interval: 30 }));
+      expect(revisedObserved.components?.[COMPONENT_NAME]?.configurationUpdate?.merge).toBe(
+        JSON.stringify({ interval: 30 }),
+      );
       yield* waitUntilDeploymentGone(deployment.deploymentId);
 
       // 3. NO-OP — re-deploying the same spec keeps the same revision.
-      const { deployment: stable } = yield* stack.deploy(
-        program(JSON.stringify({ interval: 30 })),
-      );
+      const { deployment: stable } = yield* stack.deploy(program(JSON.stringify({ interval: 30 })));
       expect(stable.deploymentId).toBe(revised.deploymentId);
 
       // 4. DESTROY — the deployment is canceled and deleted.

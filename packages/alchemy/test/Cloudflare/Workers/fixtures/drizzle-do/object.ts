@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Drizzle from "@/Drizzle/Cloudflare.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Cause from "effect/Cause";
 import { sql } from "drizzle-orm";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
+import * as Cloudflare from "@/Cloudflare";
+import * as Drizzle from "@/Drizzle/Cloudflare.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 // The exact artifacts `drizzle-kit generate` emits for
 // `driver: "durable-sqlite"` — a `migrations.js` that imports each
 // migration's `.sql` file as a text module. Bare `.sql` imports resolve
@@ -39,8 +39,7 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
 
       return {
         clockName: () => Effect.sync(() => state.id.toString()),
-        sqliteClock: () =>
-          clocks.getByName(state.id.toString()).wait().pipe(Effect.as("ready")),
+        sqliteClock: () => clocks.getByName(state.id.toString()).wait().pipe(Effect.as("ready")),
         sqliteGate: (view: boolean) =>
           Effect.gen(function* () {
             const context = yield* Effect.context<RuntimeContext>();
@@ -58,9 +57,7 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
                 return Effect.runPromise(
                   Effect.gen(function* () {
                     const original = db.$client;
-                    const client = view
-                      ? original.withoutTransforms()
-                      : original;
+                    const client = view ? original.withoutTransforms() : original;
                     const callerScheduler = yield* Scheduler.Scheduler;
                     const enteredAfterOuter = yield* client.withTransaction(
                       Effect.gen(function* () {
@@ -82,12 +79,10 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
                     const restoredScheduler = yield* Scheduler.Scheduler;
                     return {
                       enteredAfterOuter,
-                      sameTransaction:
-                        client.withTransaction === original.withTransaction,
+                      sameTransaction: client.withTransaction === original.withTransaction,
                       samePermit: client.reserve === original.reserve,
                       sameTransactionContext:
-                        client.transactionService ===
-                        original.transactionService,
+                        client.transactionService === original.transactionService,
                       restoredScheduler: restoredScheduler === callerScheduler,
                     };
                   }).pipe(Effect.provideContext(context)),
@@ -115,19 +110,14 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
                 const scope = yield* Effect.scope;
                 yield* Effect.addFinalizer(() =>
                   Effect.sync(() => {
-                    finalized.push(
-                      `${marker}:${value}:${scope !== callerScope}`,
-                    );
+                    finalized.push(`${marker}:${value}:${scope !== callerScope}`);
                   }),
                 );
                 yield* db.insert(users).values({ name: value });
               });
             const failed = yield* client
               .withTransaction(
-                scopedBody("failed").pipe(
-                  Effect.andThen(Effect.fail("rollback")),
-                  Effect.scoped,
-                ),
+                scopedBody("failed").pipe(Effect.andThen(Effect.fail("rollback")), Effect.scoped),
               )
               .pipe(Effect.exit);
             const defect = yield* client
@@ -150,44 +140,34 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
               ),
             );
             yield* Deferred.await(started);
-            const reader = yield* Effect.forkChild(
-              view`SELECT name FROM users`,
-              { startImmediately: true },
-            );
-            const waitingForPermit = yield* Effect.sync(
-              () => reader.pollUnsafe() === undefined,
-            );
+            const reader = yield* Effect.forkChild(view`SELECT name FROM users`, {
+              startImmediately: true,
+            });
+            const waitingForPermit = yield* Effect.sync(() => reader.pollUnsafe() === undefined);
             yield* Fiber.interrupt(writer);
             const interrupted = yield* Fiber.await(writer);
             const rowsAfterRollback = yield* Fiber.join(reader);
-            yield* view.withTransaction(
-              scopedBody("committed").pipe(Effect.scoped),
-            );
+            yield* view.withTransaction(scopedBody("committed").pipe(Effect.scoped));
             const finalRows = yield* view`SELECT name FROM users`;
             return {
               failed:
                 Exit.isFailure(failed) &&
                 failed.cause.reasons.some(
-                  (reason) =>
-                    Cause.isFailReason(reason) && reason.error === "rollback",
+                  (reason) => Cause.isFailReason(reason) && reason.error === "rollback",
                 ),
               defect:
                 Exit.isFailure(defect) &&
                 defect.cause.reasons.some(
-                  (reason) =>
-                    Cause.isDieReason(reason) &&
-                    reason.defect === "rollback defect",
+                  (reason) => Cause.isDieReason(reason) && reason.defect === "rollback defect",
                 ),
               interrupted:
-                Exit.isFailure(interrupted) &&
-                Cause.hasInterruptsOnly(interrupted.cause),
+                Exit.isFailure(interrupted) && Cause.hasInterruptsOnly(interrupted.cause),
               waitingForPermit,
               rowsAfterRollback,
               finalRows,
               finalized,
               callerScopePreserved:
-                (yield* Effect.scope) === callerScope &&
-                callerScope.state._tag !== "Closed",
+                (yield* Effect.scope) === callerScope && callerScope.state._tag !== "Closed",
             };
           }).pipe(Effect.provideService(TransactionMarker, "caller")),
         addUser: (name: string) =>

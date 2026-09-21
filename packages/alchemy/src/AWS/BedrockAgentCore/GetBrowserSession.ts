@@ -40,10 +40,7 @@ export interface GetBrowserSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetBrowserSessionRequest,
-    ) => Effect.Effect<
-      agentcore.GetBrowserSessionResponse,
-      agentcore.GetBrowserSessionError
-    >
+    ) => Effect.Effect<agentcore.GetBrowserSessionResponse, agentcore.GetBrowserSessionError>
   >
 > {}
 export const GetBrowserSession = Binding.Service<GetBrowserSession>(

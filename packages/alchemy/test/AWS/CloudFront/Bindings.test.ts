@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
@@ -10,12 +7,11 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import CloudFrontTestFunctionLive, {
-  CloudFrontTestFunction,
-} from "./handler.ts";
-import CloudFrontKvsTestFunctionLive, {
-  CloudFrontKvsTestFunction,
-} from "./kvs-handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import CloudFrontTestFunctionLive, { CloudFrontTestFunction } from "./handler.ts";
+import CloudFrontKvsTestFunctionLive, { CloudFrontKvsTestFunction } from "./kvs-handler.ts";
 
 // The fixture deploys a CloudFront Distribution, which takes 3-10 minutes to
 // reach `Deployed` — gate the live run per the catalog's slow-test guidance.
@@ -38,14 +34,11 @@ const findFixtureDistributionId = Effect.gen(function* () {
   const match = (response.DistributionList?.Items ?? []).find(
     // Comment is a sensitive field — distilled decodes it as Redacted.
     (item) =>
-      (typeof item.Comment === "string"
-        ? item.Comment
-        : Redacted.value(item.Comment)) === "alchemy-cf-bindings-fixture",
+      (typeof item.Comment === "string" ? item.Comment : Redacted.value(item.Comment)) ===
+      "alchemy-cf-bindings-fixture",
   );
   if (!match) {
-    return yield* Effect.fail(
-      new Error("fixture distribution not found by comment"),
-    );
+    return yield* Effect.fail(new Error("fixture distribution not found by comment"));
   }
   return match.Id;
 }).pipe(
@@ -79,16 +72,11 @@ describe("CloudFront Bindings", () => {
             Effect.flatMap((response) =>
               response.status === 200
                 ? Effect.void
-                : Effect.fail(
-                    new Error(`Function not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`Function not ready: ${response.status}`)),
             ),
             Effect.retry({
               while: (e) => e instanceof Error,
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(60),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
             }),
           );
         })
@@ -152,9 +140,7 @@ describe("CloudFront Bindings", () => {
           };
 
           // GetInvalidation reads its status through the binding.
-          const got = yield* HttpClient.get(
-            `${baseUrl}/invalidation?id=${invalidationId}`,
-          );
+          const got = yield* HttpClient.get(`${baseUrl}/invalidation?id=${invalidationId}`);
           expect(got.status).toBe(200);
           const gotBody = (yield* got.json) as {
             invalidationId: string;
@@ -216,18 +202,13 @@ describe("CloudFront KeyValueStore Bindings", () => {
             ? Effect.void
             : response.text.pipe(
                 Effect.flatMap((body) =>
-                  Effect.fail(
-                    new Error(`KVS not ready: ${response.status}: ${body}`),
-                  ),
+                  Effect.fail(new Error(`KVS not ready: ${response.status}: ${body}`)),
                 ),
               ),
         ),
         Effect.retry({
           while: (e): boolean => e instanceof Error,
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
     }),
@@ -294,13 +275,9 @@ describe("CloudFront KeyValueStore Bindings", () => {
               KvsARN: storeArn,
               Key: "routes:/about",
             })
-            .pipe(
-              Effect.provideService(AwsRegion, Effect.succeed("us-east-1")),
-            );
+            .pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
           expect(
-            typeof observed.Value === "string"
-              ? observed.Value
-              : Redacted.value(observed.Value),
+            typeof observed.Value === "string" ? observed.Value : Redacted.value(observed.Value),
           ).toBe("/about.html");
         }),
       { timeout: 60_000 },

@@ -2,6 +2,11 @@
   "name": "aws-website-vinext",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/aws-website-vinext"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -35,10 +40,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/aws-website-vinext"
   }
 }

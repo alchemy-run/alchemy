@@ -38,7 +38,6 @@ export interface GetRemainingFreeTrialDays extends Binding.Service<
     >
   >
 > {}
-export const GetRemainingFreeTrialDays =
-  Binding.Service<GetRemainingFreeTrialDays>(
-    "AWS.GuardDuty.GetRemainingFreeTrialDays",
-  );
+export const GetRemainingFreeTrialDays = Binding.Service<GetRemainingFreeTrialDays>(
+  "AWS.GuardDuty.GetRemainingFreeTrialDays",
+);

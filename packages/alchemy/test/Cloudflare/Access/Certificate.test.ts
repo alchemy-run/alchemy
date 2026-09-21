@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { CA_CERT_1, CA_CERT_2 } from "../MtlsCertificate/fixtures/certs.ts";
 
 const { test } = Test.make({
@@ -13,10 +13,7 @@ const { test } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The standard testing account has an Access mTLS certificate quota of zero:
 // `POST /accounts/{id}/access/certificates` fails with code 12130
@@ -49,11 +46,7 @@ test.provider.skipIf(entitled)(
           accountId,
           certificateId: "00000000-0000-0000-0000-000000000000",
         })
-        .pipe(
-          Effect.catchTag("AccessCertificateNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
       expect(direct).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -97,9 +90,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(updated.certificateId).toEqual(cert.certificateId);
-      expect(updated.associatedHostnames).toEqual([
-        "access-cert.alchemy-test-2.us",
-      ]);
+      expect(updated.associatedHostnames).toEqual(["access-cert.alchemy-test-2.us"]);
 
       // Replace — a different PEM is immutable on the API, so the resource
       // is replaced with a new certificate id and fingerprint.
@@ -120,11 +111,7 @@ test.provider.skipIf(!entitled)(
           accountId,
           certificateId: replaced.certificateId,
         })
-        .pipe(
-          Effect.catchTag("AccessCertificateNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.id ?? undefined).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -141,9 +128,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.Certificate,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.Certificate);
 
       if (entitled) {
         const deployed = yield* stack.deploy(
@@ -155,9 +140,7 @@ test.provider(
         );
 
         const all = yield* provider.list();
-        expect(
-          all.some((c) => c.certificateId === deployed.certificateId),
-        ).toBe(true);
+        expect(all.some((c) => c.certificateId === deployed.certificateId)).toBe(true);
 
         yield* stack.destroy();
       } else {

@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { ResourcePolicy } from "@/AWS/XRay";
-import * as Test from "@/Test/Alchemy";
 import * as xray from "@distilled.cloud/aws/xray";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { ResourcePolicy } from "@/AWS/XRay";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,9 +25,7 @@ class PolicyStillExists extends Data.TaggedError("PolicyStillExists")<{
 const assertPolicyDeleted = (policyName: string) =>
   findPolicy(policyName).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined
-        ? Effect.void
-        : Effect.fail(new PolicyStillExists({ policyName })),
+      policy === undefined ? Effect.void : Effect.fail(new PolicyStillExists({ policyName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "PolicyStillExists",
@@ -73,10 +71,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ResourcePolicy("TestResourcePolicy", {
-            policyDocument: policyDocument([
-              "xray:PutTraceSegments",
-              "xray:GetSamplingRules",
-            ]),
+            policyDocument: policyDocument(["xray:PutTraceSegments", "xray:GetSamplingRules"]),
           });
         }),
       );
@@ -90,10 +85,7 @@ test.provider(
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ResourcePolicy("TestResourcePolicy", {
-            policyDocument: policyDocument([
-              "xray:PutTraceSegments",
-              "xray:GetSamplingRules",
-            ]),
+            policyDocument: policyDocument(["xray:PutTraceSegments", "xray:GetSamplingRules"]),
           });
         }),
       );
@@ -101,10 +93,6 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertPolicyDeleted(created.policyName);
-    }).pipe(
-      Effect.ensuring(
-        stack.destroy().pipe(Effect.catchCause(() => Effect.void)),
-      ),
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.catchCause(() => Effect.void)))),
   { timeout: 120_000 },
 );

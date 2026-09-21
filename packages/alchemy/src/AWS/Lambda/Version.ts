@@ -96,14 +96,8 @@ const VersionResource = Resource<VersionResource>("AWS.Lambda.Version", {
 });
 
 export interface VersionClass extends ResourceClassLike<Version> {
-  (
-    id: string,
-    props: { function: Function },
-  ): Effect.Effect<Version, never, Providers>;
-  ref(
-    id: string,
-    options?: { stage?: string; stack?: string },
-  ): Effect.Effect<Version>;
+  (id: string, props: { function: Function }): Effect.Effect<Version, never, Providers>;
+  ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<Version>;
 }
 
 /**
@@ -175,12 +169,9 @@ interface VersionMarker {
   sourceHash: string;
 }
 
-const MARKER_RE =
-  /^\[alchemy:v=1;o=([a-f0-9]{64});i=([a-f0-9]{64});s=([a-f0-9]{64})\]$/;
+const MARKER_RE = /^\[alchemy:v=1;o=([a-f0-9]{64});i=([a-f0-9]{64});s=([a-f0-9]{64})\]$/;
 
-const parseMarker = (
-  description: string | undefined,
-): VersionMarker | undefined => {
+const parseMarker = (description: string | undefined): VersionMarker | undefined => {
   const match = description?.match(MARKER_RE);
   return match
     ? {
@@ -198,11 +189,7 @@ export const VersionProvider = () =>
   Provider.effect(
     VersionResource,
     Effect.gen(function* () {
-      const ownerIdentity = Effect.fn(function* (
-        id: string,
-        fqn: string,
-        instanceId: string,
-      ) {
+      const ownerIdentity = Effect.fn(function* (id: string, fqn: string, instanceId: string) {
         const stack = yield* Stack;
         const stage = yield* Stage;
         return {
@@ -216,11 +203,7 @@ export const VersionProvider = () =>
         };
       });
 
-      const sourceHashOf = (
-        functionArn: string,
-        codeSha256: string,
-        configSha256: string,
-      ) =>
+      const sourceHashOf = (functionArn: string, codeSha256: string, configSha256: string) =>
         sha256Object({
           functionArn,
           codeSha256,
@@ -241,9 +224,7 @@ export const VersionProvider = () =>
         };
       });
 
-      const publishableConfiguration = (
-        configuration: Lambda.FunctionConfiguration,
-      ) => ({
+      const publishableConfiguration = (configuration: Lambda.FunctionConfiguration) => ({
         runtime: configuration.Runtime,
         role: configuration.Role,
         handler: configuration.Handler,
@@ -252,21 +233,16 @@ export const VersionProvider = () =>
         vpc: configuration.VpcConfig
           ? {
               subnetIds: [...(configuration.VpcConfig.SubnetIds ?? [])].sort(),
-              securityGroupIds: [
-                ...(configuration.VpcConfig.SecurityGroupIds ?? []),
-              ].sort(),
-              ipv6AllowedForDualStack:
-                configuration.VpcConfig.Ipv6AllowedForDualStack,
+              securityGroupIds: [...(configuration.VpcConfig.SecurityGroupIds ?? [])].sort(),
+              ipv6AllowedForDualStack: configuration.VpcConfig.Ipv6AllowedForDualStack,
             }
           : undefined,
         deadLetterConfig: configuration.DeadLetterConfig,
         environment: Object.fromEntries(
-          Object.entries(configuration.Environment?.Variables ?? {}).map(
-            ([key, value]) => [
-              key,
-              Redacted.isRedacted(value) ? Redacted.value(value) : value,
-            ],
-          ),
+          Object.entries(configuration.Environment?.Variables ?? {}).map(([key, value]) => [
+            key,
+            Redacted.isRedacted(value) ? Redacted.value(value) : value,
+          ]),
         ),
         kmsKeyArn: configuration.KMSKeyArn,
         tracingConfig: configuration.TracingConfig,
@@ -297,21 +273,14 @@ export const VersionProvider = () =>
           );
         }
         return {
-          functionArn: configuration.FunctionArn.replace(
-            /:(?:\$LATEST|[1-9]\d*)$/,
-            "",
-          ),
+          functionArn: configuration.FunctionArn.replace(/:(?:\$LATEST|[1-9]\d*)$/, ""),
           functionName: configuration.FunctionName,
           codeSha256: configuration.CodeSha256,
-          configSha256: yield* sha256Object(
-            publishableConfiguration(configuration),
-          ),
+          configSha256: yield* sha256Object(publishableConfiguration(configuration)),
         };
       });
 
-      const snapshot = Effect.fn(function* (
-        configuration: Lambda.FunctionConfiguration,
-      ) {
+      const snapshot = Effect.fn(function* (configuration: Lambda.FunctionConfiguration) {
         if (!isNumberedVersion(configuration.Version)) return undefined;
         const complete = yield* completeConfiguration(
           configuration.FunctionName ?? "unknown",
@@ -334,26 +303,16 @@ export const VersionProvider = () =>
         Lambda.getFunctionConfiguration({
           FunctionName: functionName,
           Qualifier: version,
-        }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const listVersions = (functionName: string) =>
-        Lambda.listVersionsByFunction
-          .items({ FunctionName: functionName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).filter((version) =>
-                isNumberedVersion(version.Version),
-              ),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([]),
-            ),
-          );
+        Lambda.listVersionsByFunction.items({ FunctionName: functionName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).filter((version) => isNumberedVersion(version.Version)),
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+        );
 
       const waitForLatest = Effect.fn(function* (functionName: string) {
         const configuration = yield* Lambda.getFunctionConfiguration({
@@ -390,28 +349,19 @@ export const VersionProvider = () =>
         return configuration;
       });
 
-      const findOwnedVersion = Effect.fn(function* (
-        functionName: string,
-        marker: VersionMarker,
-      ) {
+      const findOwnedVersion = Effect.fn(function* (functionName: string, marker: VersionMarker) {
         const versions = yield* listVersions(functionName);
         const matches = versions
           .flatMap((version) => {
             const parsed = parseMarker(version.Description);
-            return parsed?.ownerHash === marker.ownerHash &&
-              parsed.sourceHash === marker.sourceHash
+            return parsed?.ownerHash === marker.ownerHash && parsed.sourceHash === marker.sourceHash
               ? [version]
               : [];
           })
-          .sort(
-            (a, b) =>
-              Number.parseInt(b.Version!, 10) - Number.parseInt(a.Version!, 10),
-          );
+          .sort((a, b) => Number.parseInt(b.Version!, 10) - Number.parseInt(a.Version!, 10));
         return (
           matches.find(
-            (version) =>
-              parseMarker(version.Description)?.instanceHash ===
-              marker.instanceHash,
+            (version) => parseMarker(version.Description)?.instanceHash === marker.instanceHash,
           ) ?? matches[0]
         );
       });
@@ -440,10 +390,7 @@ export const VersionProvider = () =>
           const resolvedNews = resolvedProps(news);
           if (!output) return undefined;
           if (
-            !Object.prototype.hasOwnProperty.call(
-              resolvedNews.function,
-              "code",
-            ) ||
+            !Object.prototype.hasOwnProperty.call(resolvedNews.function, "code") ||
             !deepEqual(resolvedOlds.function, resolvedNews.function)
           ) {
             return { action: "update" } as const;
@@ -452,10 +399,7 @@ export const VersionProvider = () =>
         }),
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
           if (output) {
-            const observed = yield* getVersion(
-              output.functionName,
-              output.version,
-            );
+            const observed = yield* getVersion(output.functionName, output.version);
             if (!observed) return undefined;
             const attrs = yield* snapshot(observed);
             if (!attrs) return undefined;
@@ -467,9 +411,7 @@ export const VersionProvider = () =>
               : Unowned(attrs);
           }
 
-          const functionName = olds
-            ? resolvedProps(olds).function.functionName
-            : undefined;
+          const functionName = olds ? resolvedProps(olds).function.functionName : undefined;
           if (!functionName) return undefined;
           const latest = yield* waitForLatest(functionName);
           const complete = yield* completeConfiguration(functionName, latest);
@@ -496,32 +438,19 @@ export const VersionProvider = () =>
               functionNames,
               (functionName) =>
                 listVersions(functionName).pipe(
-                  Effect.flatMap((items) =>
-                    Effect.forEach(items, snapshot, { concurrency: 10 }),
-                  ),
+                  Effect.flatMap((items) => Effect.forEach(items, snapshot, { concurrency: 10 })),
                   Effect.map((items) =>
-                    items.filter(
-                      (item): item is Version["Attributes"] =>
-                        item !== undefined,
-                    ),
+                    items.filter((item): item is Version["Attributes"] => item !== undefined),
                   ),
                 ),
               { concurrency: 10 },
             );
             return versions.flat();
           }),
-        reconcile: Effect.fn(function* ({
-          id,
-          fqn,
-          instanceId,
-          news,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, session }) {
           const resolvedNews = resolvedProps(news);
           const ensure = Effect.gen(function* () {
-            const latest = yield* waitForLatest(
-              resolvedNews.function.functionName,
-            );
+            const latest = yield* waitForLatest(resolvedNews.function.functionName);
             const complete = yield* completeConfiguration(
               resolvedNews.function.functionName,
               latest,
@@ -532,10 +461,7 @@ export const VersionProvider = () =>
               complete.configSha256,
             );
             const marker = yield* markerFor(id, fqn, instanceId, sourceHash);
-            const existing = yield* findOwnedVersion(
-              complete.functionName,
-              marker,
-            );
+            const existing = yield* findOwnedVersion(complete.functionName, marker);
             if (existing) {
               const attrs = yield* snapshot(existing);
               if (attrs) return attrs;
@@ -565,10 +491,7 @@ export const VersionProvider = () =>
               while: (error) =>
                 error._tag === "PreconditionFailedException" ||
                 error._tag === "ResourceConflictException",
-              schedule: Schedule.max([
-                Schedule.exponential("250 millis"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
             }),
           );
 
@@ -580,9 +503,7 @@ export const VersionProvider = () =>
           yield* Lambda.deleteFunction({
             FunctionName: output.functionName,
             Qualifier: output.version,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

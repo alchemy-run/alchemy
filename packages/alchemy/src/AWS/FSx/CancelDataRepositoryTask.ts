@@ -30,11 +30,9 @@ export interface CancelDataRepositoryTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: fsx.CancelDataRepositoryTaskRequest,
-    ) => Effect.Effect<
-      fsx.CancelDataRepositoryTaskResponse,
-      fsx.CancelDataRepositoryTaskError
-    >
+    ) => Effect.Effect<fsx.CancelDataRepositoryTaskResponse, fsx.CancelDataRepositoryTaskError>
   >
 > {}
-export const CancelDataRepositoryTask =
-  Binding.Service<CancelDataRepositoryTask>("AWS.FSx.CancelDataRepositoryTask");
+export const CancelDataRepositoryTask = Binding.Service<CancelDataRepositoryTask>(
+  "AWS.FSx.CancelDataRepositoryTask",
+);

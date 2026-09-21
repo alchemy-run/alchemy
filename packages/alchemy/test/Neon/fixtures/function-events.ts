@@ -1,3 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Bucket } from "@/Neon/Bucket";
 import { BucketEventSource } from "@/Neon/BucketEventSource";
 import { BucketEventSourceHttp } from "@/Neon/BucketEventSourceHttp";
@@ -8,11 +13,6 @@ import { Project } from "@/Neon/Project";
 import { WriteBucket } from "@/Neon/WriteBucket";
 import { WriteBucketHttp } from "@/Neon/WriteBucketHttp";
 import { Postgres } from "@/SQL/Postgres";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export const project = Project("EventProject", { region: "aws-us-east-2" });
 export const bucket = Bucket(
@@ -42,16 +42,13 @@ export default class EventFunction extends Function<EventFunction>()(
         Effect.asVoid,
       ),
     );
-    yield* BucketEventSource(
-      uploads,
-      { name: "Uploads", prefix: "incoming/" },
-      (event) =>
-        prepare.pipe(
-          Effect.andThen(
-            sql`INSERT INTO alchemy_function_events (id, kind, object_key) VALUES (${event.invocationId}, 'upload', ${event.objectKey}) ON CONFLICT DO NOTHING`,
-          ),
-          Effect.asVoid,
+    yield* BucketEventSource(uploads, { name: "Uploads", prefix: "incoming/" }, (event) =>
+      prepare.pipe(
+        Effect.andThen(
+          sql`INSERT INTO alchemy_function_events (id, kind, object_key) VALUES (${event.invocationId}, 'upload', ${event.objectKey}) ON CONFLICT DO NOTHING`,
         ),
+        Effect.asVoid,
+      ),
     );
     return {
       fetch: Effect.gen(function* () {
@@ -71,12 +68,6 @@ export default class EventFunction extends Function<EventFunction>()(
       }),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        WriteBucketHttp,
-        CronEventSourceHttp,
-        BucketEventSourceHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(WriteBucketHttp, CronEventSourceHttp, BucketEventSourceHttp)),
   ),
 ) {}

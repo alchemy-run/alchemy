@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import type { ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
-import { createInternalTags, createTagsList } from "@/Tags.ts";
-import { withProviders } from "@/Test/Core.ts";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
@@ -11,6 +6,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import type { ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
+import { createInternalTags, createTagsList } from "@/Tags.ts";
+import { withProviders } from "@/Test/Core.ts";
 import {
   CLIENT_VPN_CA_PEM,
   CLIENT_VPN_CERTIFICATE_PEM,
@@ -21,14 +21,12 @@ import {
 export const clientVpnTestTimeout =
   Number(process.env.AWS_CLIENT_VPN_TEST_TIMEOUT_MINUTES ?? 60) * 60_000;
 if (!Number.isFinite(clientVpnTestTimeout) || clientVpnTestTimeout <= 0) {
-  throw new RangeError(
-    "AWS_CLIENT_VPN_TEST_TIMEOUT_MINUTES must be positive and finite",
-  );
+  throw new RangeError("AWS_CLIENT_VPN_TEST_TIMEOUT_MINUTES must be positive and finite");
 }
 
-class ClientVpnFixtureNotReady extends Data.TaggedError(
-  "ClientVpnFixtureNotReady",
-)<{ readonly resource: string }> {}
+class ClientVpnFixtureNotReady extends Data.TaggedError("ClientVpnFixtureNotReady")<{
+  readonly resource: string;
+}> {}
 
 // ACM.Certificate only requests public certificates; VPN mutual auth needs an imported CA chain.
 export const importClientVpnCertificate = (stackName: string) =>
@@ -40,9 +38,7 @@ export const importClientVpnCertificate = (stackName: string) =>
           const encoder = new TextEncoder();
           return {
             Certificate: encoder.encode(CLIENT_VPN_CERTIFICATE_PEM),
-            PrivateKey: Redacted.make(
-              encoder.encode(CLIENT_VPN_PRIVATE_KEY_PEM),
-            ),
+            PrivateKey: Redacted.make(encoder.encode(CLIENT_VPN_PRIVATE_KEY_PEM)),
             CertificateChain: encoder.encode(CLIENT_VPN_CA_PEM),
           };
         });
@@ -78,18 +74,14 @@ export const importClientVpnCertificate = (stackName: string) =>
 export const assertClientVpnCertificateDeleted = (certificateArn: string) =>
   withProviders(
     acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new ClientVpnFixtureNotReady({ resource: certificateArn })),
-      ),
+      Effect.flatMap(() => Effect.fail(new ClientVpnFixtureNotReady({ resource: certificateArn }))),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     ),
     { providers: AWS.providers() },
     "ClientVpnCertificateCleanup",
   );
 
-export const clientVpnEndpointProps = (
-  certificateArn: string,
-): ClientVpnEndpointProps => ({
+export const clientVpnEndpointProps = (certificateArn: string): ClientVpnEndpointProps => ({
   clientCidrBlock: "172.20.0.0/22",
   serverCertificateArn: certificateArn,
   authenticationOptions: [
@@ -183,9 +175,7 @@ export const readClientVpnEndpoint = (clientVpnEndpointId: string) =>
           (endpoint) => endpoint.ClientVpnEndpointId === clientVpnEndpointId,
         ),
       ),
-      Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.succeed(undefined)),
     );
 
 export const assertClientVpnEndpointDeleted = (clientVpnEndpointId: string) =>
@@ -218,9 +208,7 @@ export const assertClientVpnAuthorizationDeleted = (
     readClientVpnAuthorizationRules(clientVpnEndpointId),
     (rules) =>
       !rules.some(
-        (rule) =>
-          rule.DestinationCidr === targetNetworkCidr &&
-          rule.Status?.Code !== "revoked",
+        (rule) => rule.DestinationCidr === targetNetworkCidr && rule.Status?.Code !== "revoked",
       ),
     `authorization ${targetNetworkCidr}`,
   );
@@ -234,8 +222,7 @@ export const assertClientVpnAssociationDeleted = (
     (networks) =>
       !networks.some(
         (network) =>
-          network.AssociationId === associationId &&
-          network.Status?.Code !== "disassociated",
+          network.AssociationId === associationId && network.Status?.Code !== "disassociated",
       ),
     associationId,
   );

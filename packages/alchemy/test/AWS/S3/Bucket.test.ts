@@ -1,3 +1,17 @@
+import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
+import * as KMS from "@distilled.cloud/aws/kms";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as AWS from "@/AWS";
@@ -10,22 +24,8 @@ import * as Provider from "@/Provider";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { inMemoryState } from "@/State";
-import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as KMS from "@distilled.cloud/aws/kms";
-import * as S3 from "@distilled.cloud/aws/s3";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -87,9 +87,10 @@ test.provider(
         const plan = yield* stack.plan(discovery);
         expect(plan.resources.DiscoveryProbe?.action).toBe("adopted");
         yield* stack.deploy(definition("updated"));
-        expect(
-          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-        ).toContainEqual({ Key: "revision", Value: "updated" });
+        expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
+          Key: "revision",
+          Value: "updated",
+        });
 
         const wrongOwner = `${accountId.slice(0, -1)}${accountId.endsWith("0") ? "1" : "0"}`;
         const mismatch = yield* S3.getBucketLocation({
@@ -172,9 +173,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
           tags: { revision: "before" },
           encryption: { sseAlgorithm: "AES256" as const },
         };
-        const bucket = yield* stack.deploy(
-          Bucket("ReadFailureBucket", initialProps),
-        );
+        const bucket = yield* stack.deploy(Bucket("ReadFailureBucket", initialProps));
         const tagging = yield* S3.getBucketTagging({
           Bucket: bucket.bucketName,
         });
@@ -208,9 +207,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
                   Effect: "Deny",
                   Principal: "*",
                   Action:
-                    aspect === "tagging"
-                      ? "s3:GetBucketTagging"
-                      : "s3:GetEncryptionConfiguration",
+                    aspect === "tagging" ? "s3:GetBucketTagging" : "s3:GetEncryptionConfiguration",
                   Resource: bucket.bucketArn,
                 },
               ],
@@ -218,9 +215,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
           });
           const denied = yield* read.pipe(
             Effect.as(false),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
             Effect.repeat({
               until: Boolean,
               schedule: Schedule.spaced("1 second"),
@@ -237,8 +232,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
           } else {
             yield* S3.putBucketEncryption({
               Bucket: bucket.bucketName,
-              ServerSideEncryptionConfiguration:
-                encryption.ServerSideEncryptionConfiguration!,
+              ServerSideEncryptionConfiguration: encryption.ServerSideEncryptionConfiguration!,
             });
           }
           const planningFailure = yield* stack.plan(desired).pipe(Effect.flip);
@@ -255,9 +249,9 @@ for (const aspect of ["tagging", "encryption"] as const) {
           }),
         );
         if (aspect === "tagging") {
-          expect(
-            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-          ).toEqual(tagging.TagSet);
+          expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toEqual(
+            tagging.TagSet,
+          );
         } else {
           expect(
             (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
@@ -266,14 +260,14 @@ for (const aspect of ["tagging", "encryption"] as const) {
         }
         yield* stack.deploy(desired);
         if (aspect === "tagging") {
-          expect(
-            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-          ).toContainEqual({ Key: "revision", Value: "after" });
+          expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual(
+            { Key: "revision", Value: "after" },
+          );
         } else {
           expect(
             (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
-              .ServerSideEncryptionConfiguration?.Rules[0]
-              ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+              .ServerSideEncryptionConfiguration?.Rules[0]?.ApplyServerSideEncryptionByDefault
+              ?.SSEAlgorithm,
           ).toBe("aws:kms");
         }
         yield* stack.destroy();
@@ -293,12 +287,10 @@ test.provider(
         Bucket: bucket.bucketName,
       }).pipe(Effect.flip);
       expect(absent._tag).toBe("NoSuchTagSet");
-      yield* stack.deploy(
-        Bucket("UntaggedBucket", { tags: { initialized: "yes" } }),
-      );
-      expect(
-        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-      ).toEqual([{ Key: "initialized", Value: "yes" }]);
+      yield* stack.deploy(Bucket("UntaggedBucket", { tags: { initialized: "yes" } }));
+      expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toEqual([
+        { Key: "initialized", Value: "yes" },
+      ]);
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
     }),
@@ -331,8 +323,7 @@ test.provider(
                 ? undefined
                 : {
                     sseAlgorithm: "aws:kms",
-                    kmsMasterKeyId:
-                      key === "first" ? first.keyArn : second.keyArn,
+                    kmsMasterKeyId: key === "first" ? first.keyArn : second.keyArn,
                     bucketKeyEnabled,
                   },
           });
@@ -344,16 +335,13 @@ test.provider(
         Bucket: bucket.bucketName,
       });
       const decoded =
-        observed.ServerSideEncryptionConfiguration!.Rules[0]!
-          .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
+        observed.ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault!
+          .KMSMasterKeyID;
       expect(Redacted.isRedacted(decoded)).toBe(true);
-      expect(
-        Redacted.isRedacted(decoded) ? Redacted.value(decoded) : decoded,
-      ).toBe(first.keyArn);
+      expect(Redacted.isRedacted(decoded) ? Redacted.value(decoded) : decoded).toBe(first.keyArn);
       const probeWrite = S3.putBucketEncryption({
         Bucket: bucket.bucketName,
-        ServerSideEncryptionConfiguration:
-          observed.ServerSideEncryptionConfiguration!,
+        ServerSideEncryptionConfiguration: observed.ServerSideEncryptionConfiguration!,
       }).pipe(
         Effect.as(false),
         Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
@@ -381,29 +369,23 @@ test.provider(
             }),
           ),
         ).toBe(true);
-        const plan = yield* stack.plan(
-          definition("after", "first", false, deny),
-        );
+        const plan = yield* stack.plan(definition("after", "first", false, deny));
         expect(plan.resources.KmsIdentityBucket?.action).toBe("update");
         // Tags force reconcile; an encryption PUT would fail under the proven deny.
         yield* stack.deploy(definition("after", "first", false, deny));
-        expect(
-          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-        ).toContainEqual({ Key: "revision", Value: "after" });
+        expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
+          Key: "revision",
+          Value: "after",
+        });
         expect(yield* probeWrite).toBe(true);
       }).pipe(
-        Effect.ensuring(
-          S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(
-            Effect.orDie,
-          ),
-        ),
+        Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
       );
 
       // Wait for removal using the original configuration, never the desired next key.
       yield* S3.putBucketEncryption({
         Bucket: bucket.bucketName,
-        ServerSideEncryptionConfiguration:
-          observed.ServerSideEncryptionConfiguration!,
+        ServerSideEncryptionConfiguration: observed.ServerSideEncryptionConfiguration!,
       }).pipe(
         Effect.retry({
           while: (error) => error._tag === "AccessDeniedException",
@@ -414,11 +396,9 @@ test.provider(
       yield* stack.deploy(definition("different-key", "second"));
       const changed = (yield* S3.getBucketEncryption({
         Bucket: bucket.bucketName,
-      })).ServerSideEncryptionConfiguration!.Rules[0]!
-        .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
-      expect(
-        Redacted.isRedacted(changed) ? Redacted.value(changed) : changed,
-      ).toBe(second.keyArn);
+      })).ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault!
+        .KMSMasterKeyID;
+      expect(Redacted.isRedacted(changed) ? Redacted.value(changed) : changed).toBe(second.keyArn);
       yield* stack.deploy(definition("bucket-key", "second", true));
       expect(
         (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
@@ -429,24 +409,17 @@ test.provider(
       const defaults = (yield* S3.getBucketEncryption({
         Bucket: bucket.bucketName,
       })).ServerSideEncryptionConfiguration!.Rules[0]!;
-      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-        "AES256",
-      );
-      expect(
-        defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-      ).toBeUndefined();
+      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+      expect(defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
       expect(defaults.BucketKeyEnabled ?? false).toBe(false);
       expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
-      expect(
-        (yield* stack.plan(defaultsProgram)).resources.KmsIdentityBucket
-          ?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(defaultsProgram)).resources.KmsIdentityBucket?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
       for (const key of [first, second]) {
-        expect(
-          (yield* KMS.describeKey({ KeyId: key.keyId })).KeyMetadata?.KeyState,
-        ).toBe("PendingDeletion");
+        expect((yield* KMS.describeKey({ KeyId: key.keyId })).KeyMetadata?.KeyState).toBe(
+          "PendingDeletion",
+        );
       }
     }),
   { timeout: 120_000 },
@@ -462,8 +435,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
         const bucket = yield* stack.deploy(desired);
         expect(
           (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
-            .ServerSideEncryptionConfiguration?.Rules[0]?.BlockedEncryptionTypes
-            ?.EncryptionType,
+            .ServerSideEncryptionConfiguration?.Rules[0]?.BlockedEncryptionTypes?.EncryptionType,
         ).toEqual(["NONE"]);
         yield* S3.putBucketEncryption({
           Bucket: bucket.bucketName,
@@ -479,29 +451,19 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
         const before = (yield* S3.getBucketEncryption({
           Bucket: bucket.bucketName,
         })).ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([
-          blocked,
-        ]);
-        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "aws:kms",
-        );
+        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([blocked]);
+        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
         const plan = yield* stack.plan(desired);
         expect(plan.resources.EncryptionBlocksBucket?.action).toBe("update");
         yield* stack.deploy(desired);
         const after = (yield* S3.getBucketEncryption({
           Bucket: bucket.bucketName,
         })).ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "AES256",
-        );
-        expect(
-          after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-        ).toBeUndefined();
+        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+        expect(after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
         expect(after.BucketKeyEnabled ?? false).toBe(false);
         expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
-        expect(
-          (yield* stack.plan(desired)).resources.EncryptionBlocksBucket?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(desired)).resources.EncryptionBlocksBucket?.action).toBe("noop");
         yield* stack.destroy();
         yield* assertBucketDeleted(bucket.bucketName);
       }),
@@ -527,14 +489,8 @@ test.provider(
       const bucket = yield* stack.deploy(program([], "managed"));
       const readRule = S3.getBucketEncryption({
         Bucket: bucket.bucketName,
-      }).pipe(
-        Effect.map(
-          (result) => result.ServerSideEncryptionConfiguration!.Rules[0]!,
-        ),
-      );
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
+      }).pipe(Effect.map((result) => result.ServerSideEncryptionConfiguration!.Rules[0]!));
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       const deny: AWS.IAM.PolicyStatement[] = [
         {
           Effect: "Deny",
@@ -563,16 +519,13 @@ test.provider(
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
         );
         const desired = program(types, "managed");
-        expect(
-          (yield* stack.plan(desired)).resources.ManagedEncryptionBlocks
-            ?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe(
+          "update",
+        );
         const updated = yield* stack.deploy(desired);
         expect(updated.bucketName).toBe(bucket.bucketName);
         const expected = types.length ? ["SSE-C"] : ["NONE"];
-        expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(expected);
+        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
         yield* Effect.gen(function* () {
           yield* S3.putBucketPolicy({
             Bucket: bucket.bucketName,
@@ -593,15 +546,9 @@ test.provider(
             yield* stack.deploy(program(undefined, "omitted", deny));
           }
           expect(yield* probeWrite).toBe(true);
-          expect(
-            (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-          ).toEqual(expected);
+          expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
         }).pipe(
-          Effect.ensuring(
-            S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(
-              Effect.orDie,
-            ),
-          ),
+          Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
         );
         expect(
           yield* probeWrite.pipe(
@@ -613,9 +560,7 @@ test.provider(
           ),
         ).toBe(false);
         yield* stack.deploy(program(undefined, "default"));
-        expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(["NONE"]);
+        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       }
       const desired = program([], "repair");
       yield* stack.deploy(desired);
@@ -630,16 +575,11 @@ test.provider(
           ],
         },
       });
-      expect(
-        (yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe("update");
       yield* stack.deploy(desired);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       expect(
-        (yield* stack.plan(program([], "repair"))).resources
-          .ManagedEncryptionBlocks?.action,
+        (yield* stack.plan(program([], "repair"))).resources.ManagedEncryptionBlocks?.action,
       ).toBe("noop");
       yield* stack.destroy();
       const absent = yield* S3.getBucketLocation({
@@ -746,9 +686,7 @@ test.provider("create bucket with custom name", (stack) =>
     );
 
     expect(bucket.bucketName).toEqual("alchemy-test-bucket-custom-name");
-    expect(bucket.bucketArn).toEqual(
-      "arn:aws:s3:::alchemy-test-bucket-custom-name",
-    );
+    expect(bucket.bucketArn).toEqual("arn:aws:s3:::alchemy-test-bucket-custom-name");
 
     yield* S3.headBucket({ Bucket: bucket.bucketName });
 
@@ -844,9 +782,7 @@ test.provider("create bucket with objectLockEnabled", (stack) =>
     const objectLockConfig = yield* S3.getObjectLockConfiguration({
       Bucket: bucket.bucketName,
     });
-    expect(objectLockConfig.ObjectLockConfiguration?.ObjectLockEnabled).toEqual(
-      "Enabled",
-    );
+    expect(objectLockConfig.ObjectLockConfiguration?.ObjectLockEnabled).toEqual("Enabled");
 
     yield* stack.destroy();
 
@@ -901,8 +837,7 @@ test.provider("create and remove bucket policy from bindings", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const distributionArn =
-      "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
+    const distributionArn = "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
     const bucketArn = "arn:aws:s3:::alchemy-test-bucket-policy-bindings";
 
     const bucket = yield* stack.deploy(
@@ -965,9 +900,7 @@ test.provider("create and remove bucket policy from bindings", (stack) =>
       Bucket: bucket.bucketName,
     }).pipe(
       Effect.map(() => "has-policy" as const),
-      Effect.catchTag("NoSuchBucketPolicy", () =>
-        Effect.succeed("no-policy" as const),
-      ),
+      Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed("no-policy" as const)),
     );
 
     expect(policyAfterRemoval).toEqual("no-policy");
@@ -983,87 +916,79 @@ test.provider("create and remove bucket policy from bindings", (stack) =>
 // `headBucket`, which only succeeds when the bucket is owned by *this AWS
 // account*). So a name match means we own it at the account level — silent
 // adoption is correct for the cold-start case.
-test.provider(
-  "owned bucket (account-level) is silently adopted without --adopt",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("owned bucket (account-level) is silently adopted without --adopt", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      // Deterministic name: the state wipe below intentionally makes the
-      // bucket invisible to the scratch stack's auto-destroy for a window, so
-      // the name must be stable across runs — a re-run then reclaims any
-      // orphan left by a previously-killed run instead of minting a new one.
-      const bucketName = "alchemy-test-s3-adopt-bucket";
+    // Deterministic name: the state wipe below intentionally makes the
+    // bucket invisible to the scratch stack's auto-destroy for a window, so
+    // the name must be stable across runs — a re-run then reclaims any
+    // orphan left by a previously-killed run instead of minting a new one.
+    const bucketName = "alchemy-test-s3-adopt-bucket";
 
-      // Idempotent pre-clean: reclaim a leftover from a prior interrupted run.
-      yield* deleteBucketIfExists(bucketName);
+    // Idempotent pre-clean: reclaim a leftover from a prior interrupted run.
+    yield* deleteBucketIfExists(bucketName);
 
-      yield* Effect.gen(function* () {
-        const initial = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Bucket("AdoptableBucket", {
-              bucketName,
-              forceDestroy: true,
-            });
-          }),
-        );
-        expect(initial.bucketName).toEqual(bucketName);
-        yield* S3.putBucketEncryption({
-          Bucket: bucketName,
-          ServerSideEncryptionConfiguration: {
-            Rules: [
-              {
-                ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "aws:kms" },
-                BucketKeyEnabled: true,
-                BlockedEncryptionTypes: { EncryptionType: ["NONE"] },
-              },
-            ],
-          },
-        });
-
-        // Wipe state — bucket stays in S3.
-        yield* Effect.gen(function* () {
-          const state = yield* yield* State;
-          yield* state.delete({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "AdoptableBucket",
+    yield* Effect.gen(function* () {
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Bucket("AdoptableBucket", {
+            bucketName,
+            forceDestroy: true,
           });
-        }).pipe(Effect.provide(stack.state));
-
-        const adopted = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Bucket("AdoptableBucket", {
-              bucketName,
-              forceDestroy: true,
-            });
-          }),
-        );
-
-        expect(adopted.bucketArn).toEqual(initial.bucketArn);
-        const defaults = (yield* S3.getBucketEncryption({ Bucket: bucketName }))
-          .ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "AES256",
-        );
-        expect(
-          defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-        ).toBeUndefined();
-        expect(defaults.BucketKeyEnabled ?? false).toBe(false);
-        expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual([
-          "NONE",
-        ]);
-
-        yield* stack.destroy();
-        yield* assertBucketDeleted(bucketName);
-      }).pipe(
-        // Guaranteed out-of-band cleanup: while state is wiped the bucket is
-        // outside the scratch stack, so the framework's ensuring-destroy can't
-        // see it. This finalizer runs on success, failure, AND interruption;
-        // it's a no-op when stack.destroy already deleted the bucket.
-        Effect.ensuring(deleteBucketIfExists(bucketName).pipe(Effect.ignore)),
+        }),
       );
-    }),
+      expect(initial.bucketName).toEqual(bucketName);
+      yield* S3.putBucketEncryption({
+        Bucket: bucketName,
+        ServerSideEncryptionConfiguration: {
+          Rules: [
+            {
+              ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "aws:kms" },
+              BucketKeyEnabled: true,
+              BlockedEncryptionTypes: { EncryptionType: ["NONE"] },
+            },
+          ],
+        },
+      });
+
+      // Wipe state — bucket stays in S3.
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "AdoptableBucket",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Bucket("AdoptableBucket", {
+            bucketName,
+            forceDestroy: true,
+          });
+        }),
+      );
+
+      expect(adopted.bucketArn).toEqual(initial.bucketArn);
+      const defaults = (yield* S3.getBucketEncryption({ Bucket: bucketName }))
+        .ServerSideEncryptionConfiguration!.Rules[0]!;
+      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+      expect(defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
+      expect(defaults.BucketKeyEnabled ?? false).toBe(false);
+      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
+    }).pipe(
+      // Guaranteed out-of-band cleanup: while state is wiped the bucket is
+      // outside the scratch stack, so the framework's ensuring-destroy can't
+      // see it. This finalizer runs on success, failure, AND interruption;
+      // it's a no-op when stack.destroy already deleted the bucket.
+      Effect.ensuring(deleteBucketIfExists(bucketName).pipe(Effect.ignore)),
+    );
+  }),
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
@@ -1141,8 +1066,8 @@ test.provider("encryption SSE-S3 set and update bucketKey", (stack) =>
 
     const e1 = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
     expect(
-      e1.ServerSideEncryptionConfiguration?.Rules?.[0]
-        ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+      e1.ServerSideEncryptionConfiguration?.Rules?.[0]?.ApplyServerSideEncryptionByDefault
+        ?.SSEAlgorithm,
     ).toEqual("AES256");
 
     yield* stack.deploy(
@@ -1154,9 +1079,7 @@ test.provider("encryption SSE-S3 set and update bucketKey", (stack) =>
     );
 
     const e2 = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
-    expect(
-      e2.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled,
-    ).toEqual(true);
+    expect(e2.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled).toEqual(true);
 
     yield* stack.destroy();
     yield* assertBucketDeleted(bucket.bucketName);
@@ -1183,9 +1106,7 @@ test.provider("public access block set, update, remove", (stack) =>
 
     const p1 = yield* S3.getPublicAccessBlock({ Bucket: bucket.bucketName });
     expect(p1.PublicAccessBlockConfiguration?.BlockPublicAcls).toEqual(true);
-    expect(p1.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(
-      true,
-    );
+    expect(p1.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(true);
 
     yield* stack.deploy(
       Bucket("PabBucket", {
@@ -1201,9 +1122,7 @@ test.provider("public access block set, update, remove", (stack) =>
     );
 
     const p2 = yield* S3.getPublicAccessBlock({ Bucket: bucket.bucketName });
-    expect(p2.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(
-      false,
-    );
+    expect(p2.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(false);
 
     yield* stack.destroy();
     yield* assertBucketDeleted(bucket.bucketName);
@@ -1265,9 +1184,7 @@ test.provider("cors add rule then remove all", (stack) =>
 
     const removed = yield* S3.getBucketCors({ Bucket: bucket.bucketName }).pipe(
       Effect.map(() => "has-cors" as const),
-      Effect.catchTag("NoSuchCORSConfiguration", () =>
-        Effect.succeed("no-cors" as const),
-      ),
+      Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed("no-cors" as const)),
     );
     expect(removed).toEqual("no-cors");
 
@@ -1377,9 +1294,7 @@ test.provider(
       const own = yield* S3.getBucketOwnershipControls({
         Bucket: bucket.bucketName,
       });
-      expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual(
-        "BucketOwnerPreferred",
-      );
+      expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual("BucketOwnerPreferred");
 
       const web = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
       expect(web.IndexDocument?.Suffix).toEqual("index.html");
@@ -1401,15 +1316,10 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? response.text
-            : Effect.fail(
-                new Error(`website endpoint returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`website endpoint returned ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(1000),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(1000), Schedule.recurs(8)]),
         }),
       );
       expect(body).toContain(marker);
@@ -1579,12 +1489,8 @@ test.provider("object lock default retention", (stack) =>
     const cfg = yield* S3.getObjectLockConfiguration({
       Bucket: bucket.bucketName,
     });
-    expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode).toEqual(
-      "GOVERNANCE",
-    );
-    expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Days).toEqual(
-      1,
-    );
+    expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode).toEqual("GOVERNANCE");
+    expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Days).toEqual(1);
 
     yield* stack.destroy();
     yield* assertBucketDeleted(bucket.bucketName);
@@ -1629,9 +1535,7 @@ test.provider("intelligent tiering add and remove id", (stack) =>
       Id: "archive",
     }).pipe(
       Effect.map(() => "has-config" as const),
-      Effect.catchTag("NoSuchConfiguration", () =>
-        Effect.succeed("no-config" as const),
-      ),
+      Effect.catchTag("NoSuchConfiguration", () => Effect.succeed("no-config" as const)),
     );
     expect(removed).toEqual("no-config");
 
@@ -1722,11 +1626,7 @@ test.provider(
                   },
                   {
                     Effect: "Allow",
-                    Action: [
-                      "s3:ReplicateObject",
-                      "s3:ReplicateDelete",
-                      "s3:ReplicateTags",
-                    ],
+                    Action: ["s3:ReplicateObject", "s3:ReplicateDelete", "s3:ReplicateTags"],
                     Resource: [`arn:aws:s3:::${dest}/*`],
                   },
                 ],
@@ -1817,10 +1717,7 @@ type Recorded = { method: string; url: string };
 /** Fetch transport that records every request and answers from `respond`. */
 const recordingTransport = (respond: (call: Recorded) => Response) => {
   const calls: Recorded[] = [];
-  const fetch = async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     calls.push({
       method: (input instanceof Request ? input.method : init?.method) ?? "GET",
       url: input instanceof Request ? input.url : String(input),
@@ -1830,9 +1727,7 @@ const recordingTransport = (respond: (call: Recorded) => Response) => {
   return {
     calls,
     layer: FetchHttpClient.layer.pipe(
-      Layer.provide(
-        Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch),
-      ),
+      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch)),
     ),
   };
 };
@@ -1925,10 +1820,7 @@ const stubResponse = (call: Recorded) =>
       });
 
 /** Run the real provider delete; return every request it made. */
-const recordDelete = (
-  props: { forceDestroy?: boolean },
-  options?: { force?: boolean },
-) =>
+const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boolean }) =>
   Effect.gen(function* () {
     const transport = recordingTransport(stubResponse);
     yield* Effect.gen(function* () {
@@ -1947,10 +1839,7 @@ const recordDelete = (
         },
         force: options?.force,
       });
-    }).pipe(
-      Effect.provide(BucketProvider()),
-      Effect.provide(stubbedEnv(transport.layer)),
-    );
+    }).pipe(Effect.provide(BucketProvider()), Effect.provide(stubbedEnv(transport.layer)));
     return transport.calls;
   });
 

@@ -43,7 +43,6 @@ export interface StartCelebrityRecognition extends Binding.Service<
     >
   >
 > {}
-export const StartCelebrityRecognition =
-  Binding.Service<StartCelebrityRecognition>(
-    "AWS.Rekognition.StartCelebrityRecognition",
-  );
+export const StartCelebrityRecognition = Binding.Service<StartCelebrityRecognition>(
+  "AWS.Rekognition.StartCelebrityRecognition",
+);

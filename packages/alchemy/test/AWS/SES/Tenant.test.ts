@@ -1,12 +1,12 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
-import * as AWS from "@/AWS";
-import { Tenant } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
+import * as AWS from "@/AWS";
+import { Tenant } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,9 +22,7 @@ const getTenant = (name: string) =>
 
 const assertTenantDeleted = (name: string) =>
   getTenant(name).pipe(
-    Effect.flatMap((found) =>
-      found ? Effect.fail(new TenantStillExists({ name })) : Effect.void,
-    ),
+    Effect.flatMap((found) => (found ? Effect.fail(new TenantStillExists({ name })) : Effect.void)),
     Effect.retry({
       while: (e) => e._tag === "TenantStillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -52,12 +50,8 @@ test.provider(
 
       // out-of-band verification via distilled
       const observed = yield* getTenant(tenant.tenantName);
-      expect(observed?.SuppressionAttributes?.SuppressedReasons).toEqual([
-        "BOUNCE",
-      ]);
-      const tags = Object.fromEntries(
-        (observed?.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect(observed?.SuppressionAttributes?.SuppressedReasons).toEqual(["BOUNCE"]);
+      const tags = Object.fromEntries((observed?.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("CustomerA");
 
@@ -71,12 +65,11 @@ test.provider(
         }),
       );
       const updated = yield* getTenant(tenant.tenantName);
-      expect(
-        [...(updated?.SuppressionAttributes?.SuppressedReasons ?? [])].sort(),
-      ).toEqual(["BOUNCE", "COMPLAINT"]);
-      const updatedTags = Object.fromEntries(
-        (updated?.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect([...(updated?.SuppressionAttributes?.SuppressedReasons ?? [])].sort()).toEqual([
+        "BOUNCE",
+        "COMPLAINT",
+      ]);
+      const updatedTags = Object.fromEntries((updated?.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.Extra).toBe("1");
 
       yield* stack.destroy();
@@ -164,9 +157,7 @@ test.provider(
       expect(adopted.tenantName).toBe(FOREIGN_TENANT);
 
       const branded = yield* getTenant(FOREIGN_TENANT);
-      const tags = Object.fromEntries(
-        (branded?.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((branded?.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags["alchemy::id"]).toBe("ForeignTenant");
 
       yield* stack.destroy();

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { MultiRegionAccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { MultiRegionAccessPoint } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,15 +13,11 @@ const ACCOUNT_ID = "391965393224";
 
 // Multi-Region Access Point control-plane requests route through us-west-2.
 const findMrap = (name: string) =>
-  s3control
-    .getMultiRegionAccessPoint({ AccountId: ACCOUNT_ID, Name: name })
-    .pipe(
-      Effect.map((r) => r.AccessPoint),
-      Effect.catchTag("NoSuchMultiRegionAccessPoint", () =>
-        Effect.succeed(undefined),
-      ),
-      Effect.provideService(Region, Effect.succeed("us-west-2")),
-    );
+  s3control.getMultiRegionAccessPoint({ AccountId: ACCOUNT_ID, Name: name }).pipe(
+    Effect.map((r) => r.AccessPoint),
+    Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.succeed(undefined)),
+    Effect.provideService(Region, Effect.succeed("us-west-2")),
+  );
 
 test.provider(
   "typed NoSuchMultiRegionAccessPoint tag on a nonexistent access point",
@@ -35,9 +31,7 @@ test.provider(
         .pipe(
           Effect.map(() => "found" as const),
           // proves the patched typed union — no cast, no catch-all
-          Effect.catchTag("NoSuchMultiRegionAccessPoint", () =>
-            Effect.succeed("missing" as const),
-          ),
+          Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.succeed("missing" as const)),
           Effect.provideService(Region, Effect.succeed("us-west-2")),
         );
       expect(result).toBe("missing");
@@ -77,9 +71,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
 
-      const afterDestroy = yield* findMrap(
-        deployed.mrap.multiRegionAccessPointName,
-      );
+      const afterDestroy = yield* findMrap(deployed.mrap.multiRegionAccessPointName);
       expect(afterDestroy).toBeUndefined();
     }),
   { timeout: 240_000 },

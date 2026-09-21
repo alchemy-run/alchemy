@@ -1,22 +1,18 @@
-import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/Sources/Prebuilt";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/Sources/Prebuilt";
 
 const decode = (content: string | Uint8Array<ArrayBufferLike>) =>
-  typeof content === "string"
-    ? content
-    : new TextDecoder().decode(content as Uint8Array);
+  typeof content === "string" ? content : new TextDecoder().decode(content as Uint8Array);
 
 /**
  * Write `files` (paths relative to a fresh temp directory) and return
  * the temp directory's absolute path.
  */
-const writeFixture = Effect.fn(function* (
-  files: Record<string, string | Uint8Array>,
-) {
+const writeFixture = Effect.fn(function* (files: Record<string, string | Uint8Array>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prebuilt-" });
@@ -81,9 +77,7 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
       const path = yield* Path.Path;
       // Comments and formatting that any bundler/minifier would strip.
       const entrySource = `// SENTINEL: must survive byte-for-byte 7f1c\nconst kSentinel = "sentinel/7f1c";\nexport default { fetch: () => new Response(kSentinel) };\n`;
-      const wasmBytes = new Uint8Array([
-        0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 42,
-      ]);
+      const wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 42]);
       const root = yield* writeFixture({
         "index.mjs": entrySource,
         "add.wasm": wasmBytes,
@@ -115,10 +109,7 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
         main: path.join(root, "dist/index.mjs"),
       });
 
-      expect(bundle.files.map((file) => file.path)).toEqual([
-        "index.mjs",
-        "chunk.mjs",
-      ]);
+      expect(bundle.files.map((file) => file.path)).toEqual(["index.mjs", "chunk.mjs"]);
 
       yield* fs.remove(root, { recursive: true });
     }),
@@ -141,10 +132,7 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
       });
 
       // The entry is always included, even when it matches no rule.
-      expect(bundle.files.map((file) => file.path)).toEqual([
-        "index.mjs",
-        "data/weights.dat",
-      ]);
+      expect(bundle.files.map((file) => file.path)).toEqual(["index.mjs", "data/weights.dat"]);
 
       yield* fs.remove(root, { recursive: true });
     }),
@@ -164,10 +152,7 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
       const second = yield* readPrebuiltWorkerBundle({ main });
       expect(second.hash).toEqual(first.hash);
 
-      yield* fs.writeFileString(
-        path.join(root, "lib/x.mjs"),
-        `export const x = 2;\n`,
-      );
+      yield* fs.writeFileString(path.join(root, "lib/x.mjs"), `export const x = 2;\n`);
       const changed = yield* readPrebuiltWorkerBundle({ main });
       expect(changed.hash).not.toEqual(first.hash);
 

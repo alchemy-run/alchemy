@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListReceivedLicenses}.
  */
-export interface ListReceivedLicensesRequest
-  extends licensemanager.ListReceivedLicensesRequest {}
+export interface ListReceivedLicensesRequest extends licensemanager.ListReceivedLicensesRequest {}
 
 /**
  * Runtime binding for `license-manager:ListReceivedLicenses` — list the

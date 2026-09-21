@@ -130,9 +130,7 @@ export interface ScheduledAction extends Resource<
  *
  * @resource
  */
-export const ScheduledAction = Resource<ScheduledAction>(
-  "AWS.AutoScaling.ScheduledAction",
-);
+export const ScheduledAction = Resource<ScheduledAction>("AWS.AutoScaling.ScheduledAction");
 
 // A whole AutoScalingGroup resource resolves to its bare Attributes before
 // reaching the provider — narrow on the attributes shape, never on `Type`.
@@ -141,20 +139,16 @@ const toAutoScalingGroupName = (
 ): string | undefined =>
   typeof input === "string"
     ? input
-    : typeof (input as { autoScalingGroupName?: unknown } | undefined)
-          ?.autoScalingGroupName === "string"
-      ? (input as unknown as { autoScalingGroupName: string })
-          .autoScalingGroupName
+    : typeof (input as { autoScalingGroupName?: unknown } | undefined)?.autoScalingGroupName ===
+        "string"
+      ? (input as unknown as { autoScalingGroupName: string }).autoScalingGroupName
       : undefined;
 
 export const ScheduledActionProvider = () =>
   Provider.effect(
     ScheduledAction,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { scheduledActionName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { scheduledActionName?: string } = {}) =>
         props.scheduledActionName
           ? Effect.succeed(props.scheduledActionName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -177,9 +171,7 @@ export const ScheduledActionProvider = () =>
             // `ValidationError: AutoScalingGroup ... not found` (typed
             // `AutoScalingGroupNotFound` via the auto-scaling patch); treat it
             // as "action gone" so refresh/read converge instead of failing.
-            Effect.catchTag("AutoScalingGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
           );
 
       const toAttributes = (
@@ -189,12 +181,8 @@ export const ScheduledActionProvider = () =>
         scheduledActionARN: action.ScheduledActionARN!,
         autoScalingGroupName: action.AutoScalingGroupName!,
         recurrence: action.Recurrence,
-        startTime: action.StartTime
-          ? new Date(action.StartTime).toISOString()
-          : undefined,
-        endTime: action.EndTime
-          ? new Date(action.EndTime).toISOString()
-          : undefined,
+        startTime: action.StartTime ? new Date(action.StartTime).toISOString() : undefined,
+        endTime: action.EndTime ? new Date(action.EndTime).toISOString() : undefined,
         timeZone: action.TimeZone,
         minSize: action.MinSize,
         maxSize: action.MaxSize,
@@ -202,11 +190,7 @@ export const ScheduledActionProvider = () =>
       });
 
       return {
-        stables: [
-          "scheduledActionName",
-          "scheduledActionARN",
-          "autoScalingGroupName",
-        ],
+        stables: ["scheduledActionName", "scheduledActionARN", "autoScalingGroupName"],
         // `describeScheduledActions` enumerates scheduled actions across every
         // Auto Scaling Group in the account/region when no AutoScalingGroupName
         // filter is supplied, so no parent enumeration is needed.
@@ -228,9 +212,7 @@ export const ScheduledActionProvider = () =>
           const newGroup = toAutoScalingGroupName(news.autoScalingGroup);
           if (
             oldName !== newName ||
-            (oldGroup !== undefined &&
-              newGroup !== undefined &&
-              oldGroup !== newGroup)
+            (oldGroup !== undefined && newGroup !== undefined && oldGroup !== newGroup)
           ) {
             return { action: "replace" } as const;
           }
@@ -238,18 +220,13 @@ export const ScheduledActionProvider = () =>
           if (!deepEqual(olds, news)) {
             return {
               action: "update",
-              stables: [
-                "scheduledActionName",
-                "scheduledActionARN",
-                "autoScalingGroupName",
-              ],
+              stables: ["scheduledActionName", "scheduledActionARN", "autoScalingGroupName"],
             } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(olds?.autoScalingGroup);
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(olds?.autoScalingGroup);
           const scheduledActionName =
             output?.scheduledActionName ?? (yield* toName(id, olds ?? {}));
           const action = yield* describeAction({
@@ -260,17 +237,13 @@ export const ScheduledActionProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(news.autoScalingGroup);
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(news.autoScalingGroup);
           if (!autoScalingGroupName) {
             return yield* Effect.die(
-              new Error(
-                "ScheduledAction requires a resolvable autoScalingGroup name",
-              ),
+              new Error("ScheduledAction requires a resolvable autoScalingGroup name"),
             );
           }
-          const scheduledActionName =
-            output?.scheduledActionName ?? (yield* toName(id, news));
+          const scheduledActionName = output?.scheduledActionName ?? (yield* toName(id, news));
 
           // Ensure + Sync — `putScheduledUpdateGroupAction` is the single
           // create-or-update API. It overwrites the whole action, so we issue
@@ -315,10 +288,7 @@ export const ScheduledActionProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceContentionFault",
-                schedule: Schedule.max([
-                  Schedule.recurs(5),
-                  Schedule.exponential("250 millis"),
-                ]),
+                schedule: Schedule.max([Schedule.recurs(5), Schedule.exponential("250 millis")]),
               }),
             );
         }),

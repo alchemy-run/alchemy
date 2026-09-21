@@ -1,6 +1,6 @@
-import { orderedParts } from "@/Git/BlobStore.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { orderedParts } from "@/Git/BlobStore.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { makeMemoryBlobStore } from "./harness/store.ts";
 
@@ -12,9 +12,7 @@ describe("multipart parts", () => {
       partNumber,
       etag: `e${partNumber}`,
     }));
-    expect(orderedParts(parts).map((p) => p.partNumber)).toEqual([
-      1, 2, 3, 4, 5, 6,
-    ]);
+    expect(orderedParts(parts).map((p) => p.partNumber)).toEqual([1, 2, 3, 4, 5, 6]);
   });
   test("the memory store enforces R2's uniform-part rule as R2 does", async () => {
     const blobs = makeMemoryBlobStore();
@@ -28,9 +26,7 @@ describe("multipart parts", () => {
         ];
         // As given: [1, 3, 2] puts the small part in the middle → rejected.
         const unsorted = yield* Effect.result(upload.complete(parts));
-        const sorted = yield* Effect.result(
-          upload.complete(orderedParts(parts)),
-        );
+        const sorted = yield* Effect.result(upload.complete(orderedParts(parts)));
         const head = yield* blobs.head("k");
         return {
           unsorted: unsorted._tag,

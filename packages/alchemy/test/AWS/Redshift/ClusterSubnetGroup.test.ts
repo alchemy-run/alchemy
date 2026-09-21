@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
-import { ClusterSubnetGroup } from "@/AWS/Redshift";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as redshift from "@distilled.cloud/aws/redshift";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
+import { ClusterSubnetGroup } from "@/AWS/Redshift";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -39,9 +39,7 @@ const defaultSubnets = Effect.gen(function* () {
     .filter((id): id is string => id !== undefined)
     .sort();
   if (subnetIds.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-az subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-az subnets"));
   }
   return subnetIds as SubnetId[];
 });
@@ -78,9 +76,7 @@ test.provider(
       const group = observed.ClusterSubnetGroups?.[0];
       expect(group?.SubnetGroupStatus).toBe("Complete");
       expect(
-        group?.Tags?.some(
-          (t) => t.Key === "fixture" && t.Value === "redshift-subnet-group",
-        ),
+        group?.Tags?.some((t) => t.Key === "fixture" && t.Value === "redshift-subnet-group"),
       ).toBe(true);
 
       // Update — expand to two subnets, change description, swap tags.
@@ -94,12 +90,8 @@ test.provider(
         }),
       );
 
-      expect(updated.clusterSubnetGroupName).toBe(
-        created.clusterSubnetGroupName,
-      );
-      expect(updated.description).toBe(
-        "alchemy redshift subnet group (updated)",
-      );
+      expect(updated.clusterSubnetGroupName).toBe(created.clusterSubnetGroupName);
+      expect(updated.description).toBe("alchemy redshift subnet group (updated)");
       expect([...updated.subnetIds].sort()).toEqual(subnetIds.slice(0, 2));
       expect(updated.tags.stage).toBe("updated");
       expect(updated.tags.fixture).toBeUndefined();

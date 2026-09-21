@@ -49,9 +49,7 @@ export interface LayerUsers {
  * );
  * ```
  */
-export const makeLayerUsers = (
-  table: string,
-): Effect.Effect<LayerUsers, never, Sql.SqlClient> =>
+export const makeLayerUsers = (table: string): Effect.Effect<LayerUsers, never, Sql.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* Sql.SqlClient;
     return {
@@ -67,10 +65,7 @@ export interface SqlRoutes {
    */
   readonly handle: (
     request: HttpServerRequest.HttpServerRequest,
-  ) => Effect.Effect<
-    HttpServerResponse.HttpServerResponse | undefined,
-    unknown
-  >;
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse | undefined, unknown>;
 }
 
 export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
@@ -78,10 +73,7 @@ export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
 
   return {
     handle: Effect.fn(function* (request) {
-      const [path, query] = request.url.split("?") as [
-        string,
-        string | undefined,
-      ];
+      const [path, query] = request.url.split("?") as [string, string | undefined];
       const params = new URLSearchParams(query);
 
       // POST /init — `sql.unsafe` (raw DDL, no params).
@@ -128,8 +120,7 @@ export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
           SET ${sql.update(row, ["id"])}
           WHERE id = ${row.id}
         `;
-        const rows =
-          yield* sql`SELECT id, name, email FROM ${sql(table)} WHERE id = ${row.id}`;
+        const rows = yield* sql`SELECT id, name, email FROM ${sql(table)} WHERE id = ${row.id}`;
         return yield* HttpServerResponse.json({ rows });
       }
 
@@ -150,10 +141,7 @@ export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
         const rows = yield* sql`
           SELECT id, name, email FROM ${sql(table)}
           WHERE ${sql.or([
-            sql.and([
-              sql`name = ${params.get("name")}`,
-              sql`email = ${params.get("email")}`,
-            ]),
+            sql.and([sql`name = ${params.get("name")}`, sql`email = ${params.get("email")}`]),
             sql`id = ${Number(params.get("id"))}`,
           ])}
           ORDER BY id

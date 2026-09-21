@@ -1,13 +1,10 @@
+import * as Effect from "effect/Effect";
 import type {
   DurableFunctionProps,
   FunctionImageProps,
   FunctionProps,
 } from "@/AWS/Lambda/index.ts";
-import {
-  DurableFunction as DurableFn,
-  Function as LambdaFunction,
-} from "@/AWS/Lambda/index.ts";
-import * as Effect from "effect/Effect";
+import { DurableFunction as DurableFn, Function as LambdaFunction } from "@/AWS/Lambda/index.ts";
 
 type Assert<T extends true> = T;
 

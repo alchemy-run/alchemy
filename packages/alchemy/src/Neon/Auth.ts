@@ -3,18 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as Redacted from "effect/Redacted";
-import type { Input } from "../Input.ts";
-import { isPlainData } from "../Util/data.ts";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
-import { arrayEquals } from "../Util/equal.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  InvalidBranchScope,
-  resolveBranchScope,
-  type BranchScope,
-} from "./BranchScope.ts";
+import { isPlainData } from "../Util/data.ts";
+import { arrayEquals } from "../Util/equal.ts";
+import { InvalidBranchScope, resolveBranchScope, type BranchScope } from "./BranchScope.ts";
 import type { Providers } from "./Providers.ts";
 
 /** Unspecified settings are preserved. Removing previously managed settings requires an explicit reset value. */
@@ -37,25 +33,13 @@ export type AuthProps = BranchScope & {
         password?: Redacted.Redacted<string>;
       });
   /** Managed magic-link settings. */
-  magicLink?: Omit<
-    Neon.UpdateNeonAuthMagicLinkPluginRequest,
-    "project_id" | "branch_id"
-  >;
+  magicLink?: Omit<Neon.UpdateNeonAuthMagicLinkPluginRequest, "project_id" | "branch_id">;
   /** Managed organization plugin settings; does not configure Neon organizations. */
-  organization?: Omit<
-    Neon.UpdateNeonAuthOrganizationPluginRequest,
-    "project_id" | "branch_id"
-  >;
+  organization?: Omit<Neon.UpdateNeonAuthOrganizationPluginRequest, "project_id" | "branch_id">;
   /** Managed phone-number plugin settings. */
-  phoneNumber?: Omit<
-    Neon.UpdateNeonAuthPhoneNumberPluginRequest,
-    "project_id" | "branch_id"
-  >;
+  phoneNumber?: Omit<Neon.UpdateNeonAuthPhoneNumberPluginRequest, "project_id" | "branch_id">;
   /** Managed webhook settings. */
-  webhook?: Omit<
-    Neon.UpdateNeonAuthWebhookConfigRequest,
-    "project_id" | "branch_id"
-  >;
+  webhook?: Omit<Neon.UpdateNeonAuthWebhookConfigRequest, "project_id" | "branch_id">;
 };
 
 export interface AuthAttributes {
@@ -73,13 +57,7 @@ export interface AuthAttributes {
   name: string | undefined;
 }
 
-export interface Auth extends Resource<
-  "Neon.Auth",
-  AuthProps,
-  AuthAttributes,
-  never,
-  Providers
-> {}
+export interface Auth extends Resource<"Neon.Auth", AuthProps, AuthAttributes, never, Providers> {}
 
 /**
  * Own the managed Better Auth integration on one branch. This is distinct from
@@ -110,10 +88,7 @@ export class InvalidManagedAuth extends Data.TaggedError("InvalidManagedAuth")<{
 }> {}
 
 /** @internal */
-export const authRequest = (scope: {
-  projectId: string;
-  branchId: string;
-}) => ({
+export const authRequest = (scope: { projectId: string; branchId: string }) => ({
   project_id: scope.projectId,
   branch_id: scope.branchId,
 });
@@ -191,10 +166,7 @@ const managedAuthFields = [
   "webhook",
 ] as const;
 
-const validateAuthRemoval = (
-  olds: AuthProps | undefined,
-  news: Input<AuthProps>,
-) => {
+const validateAuthRemoval = (olds: AuthProps | undefined, news: Input<AuthProps>) => {
   const removed = removedAuthSettings(olds, news, managedAuthFields);
   return removed.length === 0
     ? Effect.void
@@ -226,8 +198,7 @@ const attributes = Effect.fn(function* (
 ) {
   if (observed.auth_provider !== "better_auth" || !observed.base_url) {
     return yield* new InvalidManagedAuth({
-      message:
-        "The branch must expose a managed Better Auth integration and base URL",
+      message: "The branch must expose a managed Better Auth integration and base URL",
     });
   }
   return {
@@ -247,9 +218,7 @@ export const AuthProvider = () =>
       const scope = yield* authPlanScope(news);
       if (
         output &&
-        (!scope ||
-          scope.projectId !== output.projectId ||
-          scope.branchId !== output.branchId)
+        (!scope || scope.projectId !== output.projectId || scope.branchId !== output.branchId)
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
@@ -259,8 +228,7 @@ export const AuthProvider = () =>
       if (
         resolved.projectId !== previous.projectId ||
         resolved.branchId !== previous.branchId ||
-        (news.database ?? output?.database ?? olds.database) !==
-          (output?.database ?? olds.database)
+        (news.database ?? output?.database ?? olds.database) !== (output?.database ?? olds.database)
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
@@ -272,8 +240,7 @@ export const AuthProvider = () =>
         return { action: "update" } as const;
       if (
         news.allowLocalhost !== undefined &&
-        (yield* Neon.getNeonAuthAllowLocalhost(request)).allow_localhost !==
-          news.allowLocalhost
+        (yield* Neon.getNeonAuthAllowLocalhost(request)).allow_localhost !== news.allowLocalhost
       )
         return { action: "update" } as const;
       if (
@@ -286,10 +253,7 @@ export const AuthProvider = () =>
         return { action: "update" } as const;
       if (
         news.emailProvider !== undefined &&
-        !authSettingsMatch(
-          yield* Neon.getNeonAuthEmailProvider(request),
-          news.emailProvider,
-        )
+        !authSettingsMatch(yield* Neon.getNeonAuthEmailProvider(request), news.emailProvider)
       )
         return { action: "update" } as const;
       if (
@@ -302,10 +266,7 @@ export const AuthProvider = () =>
           (news.magicLink !== undefined &&
             !authSettingsMatch(current.magic_link ?? {}, news.magicLink)) ||
           (news.organization !== undefined &&
-            !authSettingsMatch(
-              current.organization ?? {},
-              news.organization,
-            )) ||
+            !authSettingsMatch(current.organization ?? {}, news.organization)) ||
           (news.phoneNumber !== undefined &&
             !authSettingsMatch(current.phone_number ?? {}, news.phoneNumber))
         )
@@ -313,10 +274,7 @@ export const AuthProvider = () =>
       }
       if (
         news.webhook !== undefined &&
-        !authSettingsMatch(
-          yield* Neon.getNeonAuthWebhookConfig(request),
-          news.webhook,
-        )
+        !authSettingsMatch(yield* Neon.getNeonAuthWebhookConfig(request), news.webhook)
       )
         return { action: "update" } as const;
     }),
@@ -382,8 +340,7 @@ export const AuthProvider = () =>
       yield* attributes(scope, observed);
       if (news.database !== undefined && observed.db_name !== news.database) {
         return yield* new InvalidManagedAuth({
-          message:
-            "Existing Auth uses a different database; replace the integration explicitly",
+          message: "Existing Auth uses a different database; replace the integration explicitly",
         });
       }
       if (news.name !== undefined && news.name !== observed.name) {
@@ -411,8 +368,7 @@ export const AuthProvider = () =>
         const current = yield* Neon.getNeonAuthEmailProvider(request);
         // SMTP passwords may be masked on read, so reassert an explicitly managed secret.
         if (
-          (news.emailProvider.type === "standard" &&
-            news.emailProvider.password !== undefined) ||
+          (news.emailProvider.type === "standard" && news.emailProvider.password !== undefined) ||
           !authSettingsMatch(current, news.emailProvider)
         ) {
           yield* Neon.updateNeonAuthEmailProvider({

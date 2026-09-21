@@ -1,3 +1,8 @@
+import * as notifications from "@distilled.cloud/aws/notifications";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import {
   ChannelAssociation,
@@ -5,14 +10,9 @@ import {
   NotificationConfiguration,
   NotificationHub,
 } from "@/AWS/Notifications";
-import { EmailContact } from "@/AWS/NotificationsContacts";
 import { pinNotificationsRegion } from "@/AWS/Notifications/internal.ts";
+import { EmailContact } from "@/AWS/NotificationsContacts";
 import * as Test from "@/Test/Alchemy";
-import * as notifications from "@distilled.cloud/aws/notifications";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,22 +22,16 @@ const CONFIG_NAME_RENAMED = "alchemy-test-notif-config-renamed";
 const getConfig = (arn: string) =>
   pinNotificationsRegion(notifications.getNotificationConfiguration({ arn }));
 
-const getRule = (arn: string) =>
-  pinNotificationsRegion(notifications.getEventRule({ arn }));
+const getRule = (arn: string) => pinNotificationsRegion(notifications.getEventRule({ arn }));
 
 const assertConfigGone = (arn: string) =>
   pinNotificationsRegion(
     notifications.getNotificationConfiguration({ arn }).pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new Error(`configuration ${arn} still exists`)),
-      ),
+      Effect.flatMap(() => Effect.fail(new Error(`configuration ${arn} still exists`))),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e instanceof Error,
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(10),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
       }),
     ),
   );
@@ -49,10 +43,7 @@ const assertRuleGone = (arn: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e instanceof Error,
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(10),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
       }),
     ),
   );
@@ -60,9 +51,7 @@ const assertRuleGone = (arn: string) =>
 const listHubRegions = pinNotificationsRegion(
   notifications.listNotificationHubs.items({}).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).map((hub) => hub.notificationHubRegion),
-    ),
+    Effect.map((chunk) => Array.from(chunk).map((hub) => hub.notificationHubRegion)),
   ),
 );
 
@@ -93,8 +82,7 @@ describe("AWS.Notifications", () => {
                 tags: props.tags,
               });
               const rule = yield* EventRule("Rule", {
-                notificationConfigurationArn:
-                  config.notificationConfigurationArn,
+                notificationConfigurationArn: config.notificationConfigurationArn,
                 source: "aws.s3",
                 eventType: props.rule.eventType,
                 eventPattern: props.rule.eventPattern,
@@ -157,10 +145,7 @@ describe("AWS.Notifications", () => {
         expect(afterUpdate.description).toBe("updated by alchemy test");
         expect(afterUpdate.aggregationDuration).toBe("LONG");
         const ruleAfterUpdate = yield* getRule(created.ruleArn);
-        expect([...ruleAfterUpdate.regions].sort()).toEqual([
-          "us-east-2",
-          "us-west-2",
-        ]);
+        expect([...ruleAfterUpdate.regions].sort()).toEqual(["us-east-2", "us-west-2"]);
         expect(ruleAfterUpdate.eventPattern).toContain("alchemy-test");
         const tagsAfterUpdate = yield* pinNotificationsRegion(
           notifications.listTagsForResource({ arn: created.configArn }),
@@ -208,8 +193,7 @@ describe("AWS.Notifications", () => {
                 emailAddress: "alchemy-test-notif-channel@example.com",
               });
               const association = yield* ChannelAssociation("Assoc", {
-                notificationConfigurationArn:
-                  config.notificationConfigurationArn,
+                notificationConfigurationArn: config.notificationConfigurationArn,
                 channelArn: contact.emailContactArn,
               });
               return {

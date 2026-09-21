@@ -1,6 +1,5 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -33,9 +32,7 @@ export interface PutObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
+    (request: PutObjectRequest) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
   >
 > {}
 export const PutObject = Binding.Service<PutObject>("AWS.S3.PutObject");

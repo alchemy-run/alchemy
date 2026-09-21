@@ -32,12 +32,7 @@ export interface DescribeServer extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<transfer.DescribeServerRequest, "ServerId">,
-    ) => Effect.Effect<
-      transfer.DescribeServerResponse,
-      transfer.DescribeServerError
-    >
+    ) => Effect.Effect<transfer.DescribeServerResponse, transfer.DescribeServerError>
   >
 > {}
-export const DescribeServer = Binding.Service<DescribeServer>(
-  "AWS.Transfer.DescribeServer",
-);
+export const DescribeServer = Binding.Service<DescribeServer>("AWS.Transfer.DescribeServer");

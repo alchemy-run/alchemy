@@ -1,17 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Resource Sharing writes are permission-gated and require a *second* account
 // or organization as recipient. On the standard testing account every write
@@ -19,8 +16,7 @@ const logLevel = Effect.provideService(
 // read path (list shares + list recipients per share) succeeds. The deploy
 // test is therefore gated behind an env var pointing at a recipient account;
 // the read-only `list()` assertion always runs.
-const recipientAccountId =
-  process.env.CLOUDFLARE_TEST_SHARE_RECIPIENT_ACCOUNT_ID;
+const recipientAccountId = process.env.CLOUDFLARE_TEST_SHARE_RECIPIENT_ACCOUNT_ID;
 
 test.provider(
   "list() enumerates share recipients across the account's sent shares",
@@ -31,9 +27,7 @@ test.provider(
       // Parent fan-out: list() enumerates the account's sent shares and then
       // every recipient within each share. On a write-blocked account there
       // may be zero shares — the result is still a well-typed array.
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ResourceSharing.ShareRecipient,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ResourceSharing.ShareRecipient);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -71,9 +65,7 @@ test.provider.skipIf(!recipientAccountId)(
         Cloudflare.ResourceSharing.Share("RecipientListShare", {
           name: "alchemy-recipient-list-share",
           recipients: [],
-          resources: [
-            { resourceType: "gateway-policy", resourceId: policy.ruleId },
-          ],
+          resources: [{ resourceType: "gateway-policy", resourceId: policy.ruleId }],
         }),
       );
 
@@ -86,14 +78,10 @@ test.provider.skipIf(!recipientAccountId)(
       expect(deployed.recipientId).toBeTruthy();
       expect(deployed.accountId).toEqual(accountId);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ResourceSharing.ShareRecipient,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ResourceSharing.ShareRecipient);
       const all = yield* provider.list();
 
-      expect(all.some((r) => r.recipientId === deployed.recipientId)).toBe(
-        true,
-      );
+      expect(all.some((r) => r.recipientId === deployed.recipientId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

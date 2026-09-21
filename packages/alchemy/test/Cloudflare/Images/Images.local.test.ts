@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -17,10 +17,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /** 8x4 solid red PNG (checked-in fixture, generated once with Sharp). */
 const PNG_RED_8X4 = Uint8Array.from(
@@ -44,11 +41,7 @@ const postBytesReady = (url: string, bytes: Uint8Array) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     return yield* client
-      .execute(
-        HttpClientRequest.post(url).pipe(
-          HttpClientRequest.bodyUint8Array(bytes),
-        ),
-      )
+      .execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyUint8Array(bytes)))
       .pipe(
         Effect.flatMap((res) =>
           res.status === 200
@@ -62,20 +55,14 @@ const postBytesReady = (url: string, bytes: Uint8Array) =>
         Effect.retry({
           while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
           schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("500 millis"),
-              Schedule.spaced("2 seconds"),
-            ]),
+            Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
             Schedule.recurs(10),
           ]),
         }),
       );
   }).pipe(Effect.orDie);
 
-const fixtureMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/local-worker.ts",
-);
+const fixtureMain = pathe.resolve(import.meta.dirname, "fixtures/local-worker.ts");
 
 interface InfoResponse {
   format: string;
@@ -110,10 +97,7 @@ test.provider(
       expect(deployed.url).toMatch(/^http:\/\/localhost:\d+$/);
 
       // info() reads format and dimensions through the local simulator.
-      const infoRes = yield* postBytesReady(
-        `${deployed.url}/info`,
-        PNG_RED_8X4,
-      );
+      const infoRes = yield* postBytesReady(`${deployed.url}/info`, PNG_RED_8X4);
       const info = (yield* infoRes.json) as unknown as InfoResponse;
       expect(info.format).toBe("image/png");
       expect(info.width).toBe(8);
@@ -127,16 +111,11 @@ test.provider(
       );
       expect(transformRes.headers["content-type"]).toBe("image/png");
       const outputBytes = new Uint8Array(yield* transformRes.arrayBuffer);
-      expect(Array.from(outputBytes.slice(0, 4))).toEqual([
-        0x89, 0x50, 0x4e, 0x47,
-      ]);
+      expect(Array.from(outputBytes.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
 
       // ...and info() on the output confirms the resize (contain-fit keeps
       // the 2:1 aspect ratio: 8x4 -> 4x2).
-      const outputInfoRes = yield* postBytesReady(
-        `${deployed.url}/info`,
-        outputBytes,
-      );
+      const outputInfoRes = yield* postBytesReady(`${deployed.url}/info`, outputBytes);
       const outputInfo = (yield* outputInfoRes.json) as unknown as InfoResponse;
       expect(outputInfo.format).toBe("image/png");
       expect(outputInfo.width).toBe(4);
@@ -154,9 +133,7 @@ test.provider(
       };
       expect(gifBody.error).toBe(true);
       expect(gifBody.code).toBe(9520);
-      expect(gifBody.message).toContain(
-        "GIF output is not supported in local mode",
-      );
+      expect(gifBody.message).toContain("GIF output is not supported in local mode");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -191,10 +168,7 @@ test.provider(
       // Still served locally — only the binding is remote.
       expect(deployed.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const infoRes = yield* postBytesReady(
-        `${deployed.url}/info`,
-        PNG_RED_8X4,
-      );
+      const infoRes = yield* postBytesReady(`${deployed.url}/info`, PNG_RED_8X4);
       const info = (yield* infoRes.json) as unknown as InfoResponse;
       expect(info.format).toBe("image/png");
       expect(info.width).toBe(8);

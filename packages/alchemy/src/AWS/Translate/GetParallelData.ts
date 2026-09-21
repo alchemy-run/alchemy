@@ -26,12 +26,7 @@ export interface GetParallelData extends Binding.Service<
   () => Effect.Effect<
     (
       request: translate.GetParallelDataRequest,
-    ) => Effect.Effect<
-      translate.GetParallelDataResponse,
-      translate.GetParallelDataError
-    >
+    ) => Effect.Effect<translate.GetParallelDataResponse, translate.GetParallelDataError>
   >
 > {}
-export const GetParallelData = Binding.Service<GetParallelData>(
-  "AWS.Translate.GetParallelData",
-);
+export const GetParallelData = Binding.Service<GetParallelData>("AWS.Translate.GetParallelData");

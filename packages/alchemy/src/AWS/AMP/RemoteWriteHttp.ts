@@ -2,11 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeAmpWorkspaceHttpBinding } from "./BindingHttp.ts";
 import { RemoteWrite, type RemoteWriteRequest } from "./RemoteWrite.ts";
-import {
-  encodeWriteRequest,
-  snappyCompress,
-  type EncodableSeries,
-} from "./RemoteWriteCodec.ts";
+import { encodeWriteRequest, snappyCompress, type EncodableSeries } from "./RemoteWriteCodec.ts";
 
 export const RemoteWriteHttp = Layer.effect(
   RemoteWrite,
@@ -17,15 +13,13 @@ export const RemoteWriteHttp = Layer.effect(
       Effect.gen(function* () {
         const body = yield* Effect.sync(() => {
           const now = Date.now();
-          const timeseries: EncodableSeries[] = request.timeseries.map(
-            (series) => ({
-              labels: { ...series.labels, __name__: series.name },
-              samples: series.samples.map((sample) => ({
-                value: sample.value,
-                timestamp: sample.timestamp ?? now,
-              })),
-            }),
-          );
+          const timeseries: EncodableSeries[] = request.timeseries.map((series) => ({
+            labels: { ...series.labels, __name__: series.name },
+            samples: series.samples.map((sample) => ({
+              value: sample.value,
+              timestamp: sample.timestamp ?? now,
+            })),
+          }));
           return snappyCompress(encodeWriteRequest(timeseries));
         });
         yield* send({

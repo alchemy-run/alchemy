@@ -1,7 +1,5 @@
+import { createHash } from "node:crypto";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import { sameStopConfig } from "@/Fly/replicas.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -10,7 +8,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { createHash } from "node:crypto";
+import * as Fly from "@/Fly";
+import { sameStopConfig } from "@/Fly/replicas.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {
   assertAppGone,
@@ -24,10 +24,7 @@ import {
 } from "./fixtures/deployment.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 type ResponseRecord = {
   event: string;
@@ -71,20 +68,14 @@ for (const policy of [
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const rootDir = yield* cloneFixture(
-          path.resolve(
-            import.meta.dirname,
-            "../../AWS/Website/fixtures/sveltekit-app",
-          ),
+          path.resolve(import.meta.dirname, "../../AWS/Website/fixtures/sveltekit-app"),
           {
             prefix: "alchemy-sveltekit-fly-",
             tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
             entries: [".gitignore", "package.json", "src", "static"],
           },
         );
-        const route = path.join(
-          rootDir,
-          "src/routes/api/deployment/[operation]",
-        );
+        const route = path.join(rootDir, "src/routes/api/deployment/[operation]");
         yield* fs.makeDirectory(route, { recursive: true });
         for (const file of ["+server.ts", "state.ts", "version.ts"]) {
           yield* fs.writeFileString(
@@ -101,10 +92,7 @@ for (const policy of [
         yield* fs.writeFileString(
           path.join(rootDir, "src/hooks.server.ts"),
           yield* fs.readFileString(
-            path.join(
-              import.meta.dirname,
-              "fixtures/sveltekit/src/hooks.server.ts",
-            ),
+            path.join(import.meta.dirname, "fixtures/sveltekit/src/hooks.server.ts"),
           ),
         );
         const pagePath = path.join(rootDir, "src/routes/+page.server.ts");
@@ -117,10 +105,7 @@ for (const policy of [
             );
             yield* fs.writeFileString(
               pagePath,
-              page.replace(
-                "SVELTEKIT_AWS_PAGE_MARKER",
-                `SVELTEKIT_AWS_PAGE_MARKER ${version}`,
-              ),
+              page.replace("SVELTEKIT_AWS_PAGE_MARKER", `SVELTEKIT_AWS_PAGE_MARKER ${version}`),
             );
           });
         const deploy = (next: boolean) =>
@@ -136,9 +121,7 @@ for (const policy of [
                 checks: websiteChecks("/api/deployment/ready"),
                 services: websiteServices("/api/deployment/ready"),
                 env: {
-                  WEBSITE_SHUTDOWN_MS: String(
-                    next ? policy.nextMs : policy.oldMs,
-                  ),
+                  WEBSITE_SHUTDOWN_MS: String(next ? policy.nextMs : policy.oldMs),
                   WEBSITE_AFTER_SIGNAL_MS: String(next ? 1000 : policy.delay),
                 },
                 memo: { include: ["src/**", "static/**", "package.json"] },
@@ -154,25 +137,21 @@ for (const policy of [
           const oldId = first.site.service!.machineId;
           const url = first.site.url!;
           expect(url).toBe(`https://${appName}.fly.dev`);
-          expect(yield* initialText(`${url}/`)).toContain(
-            "SVELTEKIT_AWS_PAGE_MARKER v1",
-          );
+          expect(yield* initialText(`${url}/`)).toContain("SVELTEKIT_AWS_PAGE_MARKER v1");
           expect(yield* getText(`${url}/api/hello?echo=roundtrip`)).toContain(
             "SVELTEKIT_AWS_API_MARKER",
           );
-          expect(
-            JSON.parse(yield* getText(`${url}/api/deployment/version`)),
-          ).toEqual({ version: "v1", machine: oldId, managedTimeout: null });
+          expect(JSON.parse(yield* getText(`${url}/api/deployment/version`))).toEqual({
+            version: "v1",
+            machine: oldId,
+            managedTimeout: null,
+          });
           const oldMachine = yield* machines.getMachine({
             app_name: appName,
             machine_id: oldId,
           });
-          expect(oldMachine.config?.checks?.website?.path).toBe(
-            "/api/deployment/ready",
-          );
-          expect(oldMachine.config?.services?.[0]?.checks?.[0]?.path).toBe(
-            "/api/deployment/ready",
-          );
+          expect(oldMachine.config?.checks?.website?.path).toBe("/api/deployment/ready");
+          expect(oldMachine.config?.services?.[0]?.checks?.[0]?.path).toBe("/api/deployment/ready");
           expect(oldMachine.config?.stop_config?.signal).toBe(policy.signal);
           expect(
             sameStopConfig(oldMachine.config?.stop_config, {
@@ -180,16 +159,11 @@ for (const policy of [
               timeout: `${policy.oldMs}ms`,
             }),
           ).toBe(true);
-          expect(
-            oldMachine.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS,
-          ).toBeUndefined();
+          expect(oldMachine.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS).toBeUndefined();
 
           const slowStarted = yield* Deferred.make<void>();
           const streamStarted = yield* Deferred.make<void>();
-          const slowRequest = (
-            operation: string,
-            started: Deferred.Deferred<void>,
-          ) =>
+          const slowRequest = (operation: string, started: Deferred.Deferred<void>) =>
             HttpClient.get(`${url}/api/deployment/${operation}`, {
               headers: { connection: "close" },
             }).pipe(
@@ -204,16 +178,11 @@ for (const policy of [
               Effect.flatMap((response) => response.text),
               Effect.timeout("10 minutes"),
             );
-          const slow = yield* slowRequest("slow", slowStarted).pipe(
-            Effect.forkScoped,
-          );
-          const streamed = yield* slowRequest("stream", streamStarted).pipe(
-            Effect.forkScoped,
-          );
-          yield* Effect.all(
-            [Deferred.await(slowStarted), Deferred.await(streamStarted)],
-            { concurrency: "unbounded" },
-          ).pipe(Effect.timeout("20 seconds"));
+          const slow = yield* slowRequest("slow", slowStarted).pipe(Effect.forkScoped);
+          const streamed = yield* slowRequest("stream", streamStarted).pipe(Effect.forkScoped);
+          yield* Effect.all([Deferred.await(slowStarted), Deferred.await(streamStarted)], {
+            concurrency: "unbounded",
+          }).pipe(Effect.timeout("20 seconds"));
           const traffic = yield* startTraffic(`${url}/api/deployment/version`);
           yield* traffic.waitFor((body) => JSON.parse(body).version === "v1");
           yield* writeVersion("v2");
@@ -221,28 +190,20 @@ for (const policy of [
           const newId = second.site.service!.machineId;
           expect(second.site.url).toBe(url);
           expect(newId).not.toBe(oldId);
-          const slowResult = JSON.parse(
-            yield* Fiber.join(slow),
-          ) as ResponseRecord;
+          const slowResult = JSON.parse(yield* Fiber.join(slow)) as ResponseRecord;
           const streamBody = yield* Fiber.join(streamed);
           const records = streamBody
             .trim()
             .split("\n")
             .map((line) => JSON.parse(line) as ResponseRecord);
           expect(records[0].event).toBe("started");
-          expect(
-            records.filter((record) => record.event === "finished"),
-          ).toHaveLength(1);
+          expect(records.filter((record) => record.event === "finished")).toHaveLength(1);
           expect(records[records.length - 1].event).toBe("finished");
           const completed = records[records.length - 1];
-          const payload = records
-            .map((record) => record.payload ?? "")
-            .join("");
+          const payload = records.map((record) => record.payload ?? "").join("");
           const expected = "website-v1\n".repeat(8192);
           const hashes = yield* Effect.sync(() =>
-            [payload, expected].map((value) =>
-              createHash("sha256").update(value).digest("hex"),
-            ),
+            [payload, expected].map((value) => createHash("sha256").update(value).digest("hex")),
           );
           expect(payload.length).toBe(expected.length);
           expect(hashes[0]).toBe(hashes[1]);
@@ -254,16 +215,10 @@ for (const policy of [
             expect(result.shutdownMs).toBe(policy.oldMs);
             expect(result.activeAtSignal).toBe(2);
             expect(result.signaledAt).toBeGreaterThan(result.startedAt);
-            expect(
-              result.completedAt - result.signaledAt,
-            ).toBeGreaterThanOrEqual(policy.delay);
-            expect(result.completedAt - result.signaledAt).toBeLessThan(
-              policy.oldMs,
-            );
+            expect(result.completedAt - result.signaledAt).toBeGreaterThanOrEqual(policy.delay);
+            expect(result.completedAt - result.signaledAt).toBeLessThan(policy.oldMs);
           }
-          expect(yield* getText(`${url}/`)).toContain(
-            "SVELTEKIT_AWS_PAGE_MARKER v2",
-          );
+          expect(yield* getText(`${url}/`)).toContain("SVELTEKIT_AWS_PAGE_MARKER v2");
           yield* traffic.waitFor((body) => JSON.parse(body).version === "v2");
           const samples = yield* traffic.finish;
           for (const body of samples) {
@@ -279,18 +234,14 @@ for (const policy of [
             app_name: appName,
             machine_id: newId,
           });
-          expect(newMachine.config?.stop_config?.signal).toBe(
-            policy.nextSignal,
-          );
+          expect(newMachine.config?.stop_config?.signal).toBe(policy.nextSignal);
           expect(
             sameStopConfig(newMachine.config?.stop_config, {
               signal: policy.nextSignal,
               timeout: `${policy.nextMs}ms`,
             }),
           ).toBe(true);
-          expect(
-            newMachine.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS,
-          ).toBeUndefined();
+          expect(newMachine.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS).toBeUndefined();
           yield* assertMachineGone(appName, oldId);
           yield* assertOnlyMachine(appName, newId);
         }).pipe(

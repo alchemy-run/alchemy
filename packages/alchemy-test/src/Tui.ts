@@ -54,7 +54,6 @@ import {
 } from "@opentui/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
 import type { LogEntry } from "./Model.ts";
 import {
   Reporter,
@@ -169,9 +168,7 @@ const makeCounts = (): Record<Status, number> => ({
 
 const entryLabel = (entry: Entry): string =>
   `${entry.meta.titlePath.join(" > ")}` +
-  (entry.result !== undefined &&
-  entry.status !== "queued" &&
-  entry.status !== "running"
+  (entry.result !== undefined && entry.status !== "queued" && entry.status !== "running"
     ? ` (${formatDuration(entry.result.durationMs)})`
     : "");
 
@@ -187,10 +184,7 @@ const fileSummary = (node: FileNode): string => {
   return parts.join(" · ");
 };
 
-const visibleFileStatus = (
-  node: FileNode,
-  tests: ReadonlyArray<Entry>,
-): Status => {
+const visibleFileStatus = (node: FileNode, tests: ReadonlyArray<Entry>): Status => {
   if (tests.some((test) => test.status === "fail")) return "fail";
   if (
     node.hook !== undefined &&
@@ -292,9 +286,7 @@ class TuiState {
   }
 
   allGroupsShown(): boolean {
-    return (
-      this.show.pass && this.show.fail && this.show.pending && this.show.skipped
-    );
+    return this.show.pass && this.show.fail && this.show.pending && this.show.skipped;
   }
 
   /**
@@ -311,8 +303,7 @@ class TuiState {
   private matches(entry: Entry): boolean {
     if (!this.show[groupOf(entry.status)]) return false;
     if (this.filter === "") return true;
-    const haystack =
-      `${entry.meta.file} ${entry.meta.titlePath.join(" ")}`.toLowerCase();
+    const haystack = `${entry.meta.file} ${entry.meta.titlePath.join(" ")}`.toLowerCase();
     // Every whitespace-separated word must match somewhere (AND semantics).
     return this.filter
       .toLowerCase()
@@ -577,23 +568,20 @@ const makeTui = async (logFile: string): Promise<Tui> => {
 
   // Drag-selected text is copied automatically on release (the terminal's
   // own CMD+C can't see the TUI's selection).
-  renderer.on(
-    CliRenderEvents.SELECTION,
-    (selection: Selection | null | undefined) => {
-      if (disposed || selection == null) return;
-      if (selection.isDragging) return;
-      const text = selection.getSelectedText();
-      // A plain click anchors a zero-width selection — nothing to copy.
-      if (text.trim().length > 1 && copyToClipboard(renderer, text)) {
-        flash("selection copied ✓");
-      }
-      // Clear either way: the copy already happened, and a selection left
-      // behind turns into ghost highlighting as the row pool repaints under
-      // it. Deferred — this event is emitted from inside finishSelection,
-      // which still touches the selection after the emit.
-      setTimeout(clearTextSelection, 0);
-    },
-  );
+  renderer.on(CliRenderEvents.SELECTION, (selection: Selection | null | undefined) => {
+    if (disposed || selection == null) return;
+    if (selection.isDragging) return;
+    const text = selection.getSelectedText();
+    // A plain click anchors a zero-width selection — nothing to copy.
+    if (text.trim().length > 1 && copyToClipboard(renderer, text)) {
+      flash("selection copied ✓");
+    }
+    // Clear either way: the copy already happened, and a selection left
+    // behind turns into ghost highlighting as the row pool repaints under
+    // it. Deferred — this event is emitted from inside finishSelection,
+    // which still touches the selection after the emit.
+    setTimeout(clearTextSelection, 0);
+  });
 
   /**
    * Full-width run of spaces appended to single-line chrome (header/footer):
@@ -628,9 +616,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       ] as Array<[StatusGroup, string]>
     ).flatMap(([group, label], index) => [
       ...(index > 0 ? [dim(" ")] : []),
-      state.show[group]
-        ? stringToStyledText(label).chunks[0]!
-        : strikethrough(dim(label)),
+      state.show[group] ? stringToStyledText(label).chunks[0]! : strikethrough(dim(label)),
     ]);
     // Toggle states lead (before the hints) so they're never clipped on
     // narrow terminals — the footer truncates at the terminal width.
@@ -644,9 +630,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
 
   const updateHeader = (): void => {
     const counts = state.counts;
-    const elapsed = formatDuration(
-      state.summary?.durationMs ?? Date.now() - state.startedAt,
-    );
+    const elapsed = formatDuration(state.summary?.durationMs ?? Date.now() - state.startedAt);
     const done = state.summary !== undefined;
     const collecting =
       !done && state.collectDone < state.collectTotal
@@ -683,17 +667,13 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         state.topIndex = state.selectedIndex - rows.length + 1;
       }
     }
-    state.topIndex = Math.max(
-      0,
-      Math.min(state.topIndex, Math.max(nodes.length - rows.length, 0)),
-    );
+    state.topIndex = Math.max(0, Math.min(state.topIndex, Math.max(nodes.length - rows.length, 0)));
 
     const width = renderer.terminalWidth;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const node = nodes[state.topIndex + i];
-      const isSelected =
-        node !== undefined && state.topIndex + i === state.selectedIndex;
+      const isSelected = node !== undefined && state.topIndex + i === state.selectedIndex;
 
       if (node === undefined) {
         // Empty content emits no cells, so it does not erase whatever this
@@ -761,10 +741,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     const nodes = state.visible();
     if (nodes.length === 0) return;
     state.viewportFollows = true;
-    state.selectedIndex = Math.max(
-      0,
-      Math.min(state.selectedIndex + delta, nodes.length - 1),
-    );
+    state.selectedIndex = Math.max(0, Math.min(state.selectedIndex + delta, nodes.length - 1));
     renderList();
   };
 
@@ -801,8 +778,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     }
   };
 
-  const selectedNode = (): Node | undefined =>
-    state.visible()[state.selectedIndex];
+  const selectedNode = (): Node | undefined => state.visible()[state.selectedIndex];
 
   const setExpanded = (node: FileNode, expanded: boolean): void => {
     node.expanded = expanded;
@@ -813,15 +789,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
   const setAllVisibleExpanded = (expanded: boolean): void => {
     const selected = selectedNode();
     const visibleFiles = new Set(
-      state
-        .visible()
-        .map((node) => (node.kind === "file" ? node.node : node.entry.file)),
+      state.visible().map((node) => (node.kind === "file" ? node.node : node.entry.file)),
     );
     for (const file of visibleFiles) file.expanded = expanded;
 
     const nodes = state.visible();
-    const selectedFile =
-      selected?.kind === "file" ? selected.node : selected?.entry.file;
+    const selectedFile = selected?.kind === "file" ? selected.node : selected?.entry.file;
     const selectedIndex = nodes.findIndex((node) =>
       expanded && selected?.kind === "test"
         ? node.kind === "test" && node.entry === selected.entry
@@ -883,9 +856,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       }
     }
     if (text === undefined || text === "") return;
-    flash(
-      copyToClipboard(renderer, text) ? "copied to clipboard ✓" : "copy failed",
-    );
+    flash(copyToClipboard(renderer, text) ? "copied to clipboard ✓" : "copy failed");
   };
 
   const retrySelection = (): void => {
@@ -909,9 +880,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
   const retryFailures = (): void => {
     const controller = state.controller;
     if (controller === undefined) return;
-    const failed = [...state.byId.values()].filter(
-      (entry) => entry.status === "fail",
-    );
+    const failed = [...state.byId.values()].filter((entry) => entry.status === "fail");
     for (const entry of failed) controller.retryTest(entry.meta.id);
     flash(
       failed.length === 0
@@ -1085,9 +1054,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         // On a test row, collapse the parent file and land on it.
         const target = node.kind === "file" ? node.node : node.entry.file;
         setExpanded(target, false);
-        const index = state
-          .visible()
-          .findIndex((n) => n.kind === "file" && n.node === target);
+        const index = state.visible().findIndex((n) => n.kind === "file" && n.node === target);
         if (index >= 0) {
           state.selectedIndex = index;
           renderList();

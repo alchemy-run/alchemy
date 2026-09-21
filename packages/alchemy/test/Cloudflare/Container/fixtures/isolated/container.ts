@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { isolatedProject } from "../../../../IsolatedProject.ts";
 
 /**
@@ -11,10 +11,7 @@ import { isolatedProject } from "../../../../IsolatedProject.ts";
  * bootstrap's own imports (`@effect/platform-bun`, `alchemy/*`, …) must be
  * anchored by the bundler.
  */
-export const project = isolatedProject(
-  "cloudflare-container",
-  import.meta.filename,
-);
+export const project = isolatedProject("cloudflare-container", import.meta.filename);
 
 /**
  * Minimal effectful `Cloudflare.Container` served from an isolated project.

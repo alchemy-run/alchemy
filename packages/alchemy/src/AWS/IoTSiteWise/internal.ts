@@ -9,11 +9,7 @@ import { diffTags } from "../../Tags.ts";
 export const fetchSiteWiseTags = Effect.fn(function* (arn: string) {
   const response = yield* sitewise
     .listTagsForResource({ resourceArn: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;
@@ -54,17 +50,11 @@ const projectLike = (desired: unknown, observed: unknown): unknown => {
     return desired.map((item, index) => projectLike(item, observed[index]));
   }
   if (desired !== null && typeof desired === "object") {
-    if (
-      observed === null ||
-      typeof observed !== "object" ||
-      Array.isArray(observed)
-    ) {
+    if (observed === null || typeof observed !== "object" || Array.isArray(observed)) {
       return observed;
     }
     const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(
-      desired as Record<string, unknown>,
-    )) {
+    for (const [key, value] of Object.entries(desired as Record<string, unknown>)) {
       if (value === undefined) continue;
       out[key] = projectLike(value, (observed as Record<string, unknown>)[key]);
     }

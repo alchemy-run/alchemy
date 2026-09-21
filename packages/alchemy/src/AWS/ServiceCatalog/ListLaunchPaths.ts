@@ -31,10 +31,7 @@ export interface ListLaunchPaths extends Binding.Service<
   () => Effect.Effect<
     (
       request: servicecatalog.ListLaunchPathsInput,
-    ) => Effect.Effect<
-      servicecatalog.ListLaunchPathsOutput,
-      servicecatalog.ListLaunchPathsError
-    >
+    ) => Effect.Effect<servicecatalog.ListLaunchPathsOutput, servicecatalog.ListLaunchPathsError>
   >
 > {}
 export const ListLaunchPaths = Binding.Service<ListLaunchPaths>(

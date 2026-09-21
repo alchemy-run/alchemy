@@ -1,6 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import {
   GetPaymentLink,
   CreatePrice,
@@ -11,22 +8,20 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
   GetPaymentLink({ payment_link: id }).pipe(
-    Effect.map((link) =>
-      link.active ? ("active" as const) : ("inactive" as const),
-    ),
+    Effect.map((link) => (link.active ? ("active" as const) : ("inactive" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -36,9 +31,7 @@ const waitUntilDeactivated = (id: string) =>
   );
 
 const archiveProduct = (id: string) =>
-  UpdateProduct({ id, active: false }).pipe(
-    Effect.catchIf(isMissing, () => Effect.void),
-  );
+  UpdateProduct({ id, active: false }).pipe(Effect.catchIf(isMissing, () => Effect.void));
 
 test.provider(
   "create, update, and deactivate a payment link",
@@ -81,12 +74,8 @@ test.provider(
       expect(fetched.id).toEqual(created.id);
       expect(fetched.active).toEqual(true);
       expect(fetched.metadata?.campaign).toEqual("launch");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -105,9 +94,7 @@ test.provider(
         expect.objectContaining({ price: price.id, quantity: 2 }),
       ]);
       expect(updated.allowPromotionCodes).toEqual(true);
-      expect(updated.inactiveMessage).toEqual(
-        "This link is no longer available.",
-      );
+      expect(updated.inactiveMessage).toEqual("This link is no longer available.");
       expect(updated.metadata).toEqual({ campaign: "spring", sku: "pro" });
       expect(updated.active).toEqual(true);
 
@@ -115,9 +102,7 @@ test.provider(
         payment_link: updated.id,
       });
       expect(refetched.allow_promotion_codes).toEqual(true);
-      expect(refetched.inactive_message).toEqual(
-        "This link is no longer available.",
-      );
+      expect(refetched.inactive_message).toEqual("This link is no longer available.");
       expect(refetched.metadata?.campaign).toEqual("spring");
       expect(refetched.metadata?.sku).toEqual("pro");
       expect(refetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();

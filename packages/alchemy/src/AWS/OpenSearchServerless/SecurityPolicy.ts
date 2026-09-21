@@ -6,20 +6,13 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalizePolicy,
-  retryWhileConflict,
-  stringifyPolicy,
-} from "./internal.ts";
+import { canonicalizePolicy, retryWhileConflict, stringifyPolicy } from "./internal.ts";
 
 /** The kind of security policy — encryption at rest or network access. */
 export type SecurityPolicyType = "encryption" | "network";
 
 /** A security policy document — a JSON object/array or a pre-serialized string. */
-export type SecurityPolicyDocument =
-  | string
-  | Record<string, unknown>
-  | readonly unknown[];
+export type SecurityPolicyDocument = string | Record<string, unknown> | readonly unknown[];
 
 export interface SecurityPolicyProps {
   /**
@@ -124,9 +117,7 @@ export interface SecurityPolicy extends Resource<
  *
  * @resource
  */
-export const SecurityPolicy = Resource<SecurityPolicy>(
-  "AWS.OpenSearchServerless.SecurityPolicy",
-);
+export const SecurityPolicy = Resource<SecurityPolicy>("AWS.OpenSearchServerless.SecurityPolicy");
 
 export const SecurityPolicyProvider = () =>
   Provider.effect(
@@ -137,8 +128,7 @@ export const SecurityPolicyProvider = () =>
         props: { policyName?: string | undefined },
       ) {
         return (
-          props.policyName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.policyName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
@@ -190,15 +180,10 @@ export const SecurityPolicyProvider = () =>
           if (type === undefined) {
             return undefined;
           }
-          const name =
-            output?.policyName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* aoss
             .getSecurityPolicy({ type, name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found?.securityPolicyDetail === undefined) {
             return undefined;
           }
@@ -228,9 +213,7 @@ export const SecurityPolicyProvider = () =>
           // 1. OBSERVE
           let detail = yield* aoss.getSecurityPolicy({ type, name }).pipe(
             Effect.map((r) => r.securityPolicyDetail),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
           // 2. ENSURE — create if missing; tolerate a concurrent create race
@@ -252,11 +235,9 @@ export const SecurityPolicyProvider = () =>
               );
           } else {
             // 3. SYNC — update policy/description when observed drifts from desired
-            const policyDrift =
-              canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
+            const policyDrift = canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== detail.description;
+              news.description !== undefined && news.description !== detail.description;
             if (policyDrift || descriptionDrift) {
               detail = yield* aoss
                 .updateSecurityPolicy({
@@ -287,9 +268,7 @@ export const SecurityPolicyProvider = () =>
               type: output.type,
               name: output.policyName,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

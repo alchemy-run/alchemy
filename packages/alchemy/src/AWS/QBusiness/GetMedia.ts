@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `GetMedia` request with `applicationId` injected from the bound application.
  */
-export interface GetMediaRequest extends Omit<
-  qbusiness.GetMediaRequest,
-  "applicationId"
-> {}
+export interface GetMediaRequest extends Omit<qbusiness.GetMediaRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `GetMedia` operation (IAM action
@@ -36,9 +33,7 @@ export interface GetMedia extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetMediaRequest,
-    ) => Effect.Effect<qbusiness.GetMediaResponse, qbusiness.GetMediaError>
+    (request: GetMediaRequest) => Effect.Effect<qbusiness.GetMediaResponse, qbusiness.GetMediaError>
   >
 > {}
 export const GetMedia = Binding.Service<GetMedia>("AWS.QBusiness.GetMedia");

@@ -8,8 +8,8 @@ import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { durationToSeconds } from "../IAM/common.ts";
-import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 import type { Providers } from "../Providers.ts";
+import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 
 export interface RecordAliasTarget {
   /**
@@ -340,8 +340,7 @@ export const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
 
 /** @internal shared with `Records.ts` — not exported from the barrel. */
-export const normalizeName = (name: string) =>
-  name.endsWith(".") ? name : `${name}.`;
+export const normalizeName = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
 /** @internal shared with `Records.ts` — not exported from the barrel. */
 export const toAliasTarget = (
@@ -355,9 +354,7 @@ export const toAliasTarget = (
       }
     : undefined;
 
-const toGeoLocation = (
-  geo: RecordGeoLocation | undefined,
-): route53.GeoLocation | undefined =>
+const toGeoLocation = (geo: RecordGeoLocation | undefined): route53.GeoLocation | undefined =>
   geo
     ? {
         ContinentCode: geo.continentCode,
@@ -366,9 +363,7 @@ const toGeoLocation = (
       }
     : undefined;
 
-const fromGeoLocation = (
-  geo: route53.GeoLocation | undefined,
-): RecordGeoLocation | undefined =>
+const fromGeoLocation = (geo: route53.GeoLocation | undefined): RecordGeoLocation | undefined =>
   geo
     ? {
         continentCode: geo.ContinentCode,
@@ -414,16 +409,12 @@ const fromGeoProximity = (
 const toCidrRouting = (
   cidr: RecordCidrRoutingConfig | undefined,
 ): route53.CidrRoutingConfig | undefined =>
-  cidr
-    ? { CollectionId: cidr.collectionId, LocationName: cidr.locationName }
-    : undefined;
+  cidr ? { CollectionId: cidr.collectionId, LocationName: cidr.locationName } : undefined;
 
 const fromCidrRouting = (
   cidr: route53.CidrRoutingConfig | undefined,
 ): RecordCidrRoutingConfig | undefined =>
-  cidr
-    ? { collectionId: cidr.CollectionId, locationName: cidr.LocationName }
-    : undefined;
+  cidr ? { collectionId: cidr.CollectionId, locationName: cidr.LocationName } : undefined;
 
 /**
  * Build the full `ResourceRecordSet` wire shape from props. Used for both the
@@ -469,19 +460,14 @@ export const toRecordSet = (
     : (props.records ?? []).map((Value) => ({ Value })),
   AliasTarget: props.aliasTarget
     ? {
-        HostedZoneId: normalizeHostedZoneId(
-          props.aliasTarget.hostedZoneId as string,
-        ),
+        HostedZoneId: normalizeHostedZoneId(props.aliasTarget.hostedZoneId as string),
         DNSName: props.aliasTarget.dnsName as string,
         EvaluateTargetHealth: props.aliasTarget.evaluateTargetHealth ?? false,
       }
     : undefined,
 });
 
-const toAttrs = (
-  recordSet: route53.ResourceRecordSet,
-  hostedZoneId: string,
-) => ({
+const toAttrs = (recordSet: route53.ResourceRecordSet, hostedZoneId: string) => ({
   hostedZoneId: normalizeHostedZoneId(hostedZoneId),
   name: recordSet.Name,
   type: recordSet.Type,
@@ -510,19 +496,14 @@ export const RecordProvider = () =>
       // accepts the bare id — the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53
-          .getChange({ Id: changeId.replace(/^\/change\//, "") })
-          .pipe(
-            Effect.map((response) => response.ChangeInfo.Status),
-            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(60),
-              ]),
-              until: (status) => status === "INSYNC",
-            }),
-          );
+        return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
+          Effect.map((response) => response.ChangeInfo.Status),
+          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
+            until: (status) => status === "INSYNC",
+          }),
+        );
       });
 
       const findRecord = Effect.fn(function* (
@@ -536,11 +517,7 @@ export const RecordProvider = () =>
             StartRecordType: props.type,
             MaxItems: 100,
           })
-          .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
@@ -550,10 +527,7 @@ export const RecordProvider = () =>
         );
       });
 
-      const upsertRecord = Effect.fn(function* (
-        hostedZoneId: string,
-        props: RecordProps,
-      ) {
+      const upsertRecord = Effect.fn(function* (hostedZoneId: string, props: RecordProps) {
         const response = yield* route53.changeResourceRecordSets({
           HostedZoneId: normalizeHostedZoneId(hostedZoneId),
           ChangeBatch: {
@@ -608,9 +582,7 @@ export const RecordProvider = () =>
             // zone with bounded concurrency.
             const zones = yield* route53.listHostedZones.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.HostedZones ?? [])),
             );
 
             const rows = yield* Effect.forEach(
@@ -643,8 +615,7 @@ export const RecordProvider = () =>
               news.hostedZoneId !== undefined &&
               normalizeHostedZoneId(olds.hostedZoneId) !==
                 normalizeHostedZoneId(news.hostedZoneId)) ||
-            (olds.name !== undefined &&
-              normalizeName(olds.name) !== normalizeName(news.name)) ||
+            (olds.name !== undefined && normalizeName(olds.name) !== normalizeName(news.name)) ||
             olds.type !== news.type ||
             olds.setIdentifier !== news.setIdentifier
           ) {
@@ -655,11 +626,7 @@ export const RecordProvider = () =>
           const hostedZoneId = output?.hostedZoneId ?? olds?.hostedZoneId;
           const name = output?.name ?? olds?.name;
           const type = output?.type ?? olds?.type;
-          if (
-            hostedZoneId === undefined ||
-            name === undefined ||
-            type === undefined
-          ) {
+          if (hostedZoneId === undefined || name === undefined || type === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // — without the record's identity we can't look it up. Report
             // "not found" so the engine re-drives the create (the UPSERT in
@@ -698,9 +665,7 @@ export const RecordProvider = () =>
           const recordSet = yield* findRecord(hostedZoneId, news);
 
           if (!recordSet) {
-            return yield* Effect.die(
-              new Error("Route53 record was not found after upsert"),
-            );
+            return yield* Effect.die(new Error("Route53 record was not found after upsert"));
           }
 
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
@@ -739,9 +704,7 @@ export const RecordProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((response) =>
-                waitForChange(response.ChangeInfo.Id),
-              ),
+              Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
               Effect.catchTag("InvalidChangeBatch", () => Effect.void),
             );

@@ -1,9 +1,3 @@
-import * as AWS from "@/AWS";
-import { SecurityGroup } from "@/AWS/EC2";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
@@ -13,6 +7,12 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import { SecurityGroup } from "@/AWS/EC2";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import { Service } from "@/AWS/ECS/Service.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import TestTask from "./fixtures/task.ts";
@@ -30,10 +30,7 @@ const { test } = Test.make({
 // The OTLP sink the task exports to (a workers.dev URL is reachable from
 // Fargate). Declared identically in both deploy steps so the second deploy
 // keeps it.
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-worker.ts",
-);
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collector-worker.ts");
 const collectorWorker = () =>
   Cloudflare.Worker("EcsOtelCollector", {
     main: collectorMain,
@@ -65,18 +62,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       // engine can never see it again. Reclaim those leftovers up front, and
       // guarantee the same sweep runs on success, failure, AND interruption.
       yield* reclaimTaskE2EOrphans;
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskE2EOrphans.pipe(Effect.orDie),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskE2EOrphans.pipe(Effect.orDie));
 
       // Reuse the standing public network. Creating a dedicated VPC here is
       // both unnecessary for the Task regression and races the account's VPC
       // quota during c128 sweeps. An internet-facing ALB needs two AZs.
       const { vpcId, subnetIds } = yield* getDefaultVpcNetwork;
       if (subnetIds.length < 2) {
-        return yield* Effect.die(
-          new Error("default VPC has fewer than 2 subnets"),
-        );
+        return yield* Effect.die(new Error("default VPC has fewer than 2 subnets"));
       }
       const publicSubnetIds = subnetIds.slice(0, 2);
 
@@ -90,13 +83,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       const collected = `${collector.url}/collected`;
 
       const currentConfig = yield* ConfigProvider.ConfigProvider;
-      const {
-        url,
-        targetGroupArn,
-        clusterArn,
-        serviceName,
-        taskDefinitionArn,
-      } = yield* stack
+      const { url, targetGroupArn, clusterArn, serviceName, taskDefinitionArn } = yield* stack
         .deploy(
           Effect.gen(function* () {
             yield* collectorWorker();
@@ -195,9 +182,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         TargetGroupArn: targetGroupArn!,
       });
       expect(
-        (targetHealth.TargetHealthDescriptions ?? []).map(
-          (target) => target.TargetHealth?.State,
-        ),
+        (targetHealth.TargetHealthDescriptions ?? []).map((target) => target.TargetHealth?.State),
       ).toEqual(["healthy"]);
 
       // The ALB has been active for a while now, so its DNS resolves. Probe the
@@ -232,10 +217,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       // fresh tags in case a pair straddles a 5s export window.
       const fetchCollected = HttpClient.get(collected).pipe(
         Effect.flatMap((res) => res.json),
-        Effect.map(
-          (body) =>
-            (body as { items: { signal: string; payload: unknown }[] }).items,
-        ),
+        Effect.map((body) => (body as { items: { signal: string; payload: unknown }[] }).items),
       );
       const attemptBatch = (i: number) =>
         Effect.gen(function* () {
@@ -246,10 +228,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
               items.some((item) => {
                 if (item.signal !== "traces") return false;
                 const payload = JSON.stringify(item.payload);
-                return (
-                  payload.includes(`work:a${i}`) &&
-                  payload.includes(`work:b${i}`)
-                );
+                return payload.includes(`work:a${i}`) && payload.includes(`work:b${i}`);
               }),
             ),
             Effect.repeat({
@@ -271,8 +250,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       expect(
         items.some(
           (item) =>
-            item.signal === "logs" &&
-            JSON.stringify(item.payload).includes("ecs-work-log:"),
+            item.signal === "logs" && JSON.stringify(item.payload).includes("ecs-work-log:"),
         ),
       ).toBe(true);
       // And the process-mode resource attributes are stamped.

@@ -28,13 +28,9 @@ export interface BatchGetDeploymentTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.BatchGetDeploymentTargetsInput,
-    ) => Effect.Effect<
-      SVC.BatchGetDeploymentTargetsOutput,
-      SVC.BatchGetDeploymentTargetsError
-    >
+    ) => Effect.Effect<SVC.BatchGetDeploymentTargetsOutput, SVC.BatchGetDeploymentTargetsError>
   >
 > {}
-export const BatchGetDeploymentTargets =
-  Binding.Service<BatchGetDeploymentTargets>(
-    "AWS.CodeDeploy.BatchGetDeploymentTargets",
-  );
+export const BatchGetDeploymentTargets = Binding.Service<BatchGetDeploymentTargets>(
+  "AWS.CodeDeploy.BatchGetDeploymentTargets",
+);

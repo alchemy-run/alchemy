@@ -30,12 +30,7 @@ export interface GetResourceShares extends Binding.Service<
   () => Effect.Effect<
     (
       request: ram.GetResourceSharesRequest,
-    ) => Effect.Effect<
-      ram.GetResourceSharesResponse,
-      ram.GetResourceSharesError
-    >
+    ) => Effect.Effect<ram.GetResourceSharesResponse, ram.GetResourceSharesError>
   >
 > {}
-export const GetResourceShares = Binding.Service<GetResourceShares>(
-  "AWS.RAM.GetResourceShares",
-);
+export const GetResourceShares = Binding.Service<GetResourceShares>("AWS.RAM.GetResourceShares");

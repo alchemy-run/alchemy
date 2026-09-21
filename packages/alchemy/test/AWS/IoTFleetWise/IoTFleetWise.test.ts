@@ -1,3 +1,8 @@
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import { Region } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   Campaign,
@@ -10,11 +15,6 @@ import {
 } from "@/AWS/IoTFleetWise";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,9 +25,7 @@ const TELEMETRY_BUCKET = "alchemy-test-iotfleetwise-telemetry";
 // AWS IoT FleetWise is offered in us-east-1/eu-central-1 only — pin every
 // out-of-band distilled call to the service's home region (the providers
 // pin themselves the same way).
-const inHomeRegion = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const inHomeRegion = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   effect.pipe(Effect.provideService(Region, Effect.succeed("us-east-1")));
 
 // Ungated typed-error probe: prove the distilled error union carries the
@@ -37,38 +35,30 @@ const inHomeRegion = <A, E, R>(
 // allowlisted accounts observe ResourceNotFoundException for a bogus name.
 // Both are typed tags in the operation's error union; the probe proves the
 // decode path for whichever gate this account is behind.
-test.provider(
-  "getSignalCatalog on a nonexistent catalog fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        iotfleetwise
-          .getSignalCatalog({ name: "alchemy-nonexistent-catalog-probe" })
-          .pipe(inHomeRegion),
-      );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
-    }),
+test.provider("getSignalCatalog on a nonexistent catalog fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      iotfleetwise
+        .getSignalCatalog({ name: "alchemy-nonexistent-catalog-probe" })
+        .pipe(inHomeRegion),
+    );
+    expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
+  }),
 );
 
 // Same ungated probe for the state-template API — proves the typed tags the
 // StateTemplate provider's read path depends on decode on every account.
-test.provider(
-  "getStateTemplate on a nonexistent template fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        iotfleetwise
-          .getStateTemplate({
-            identifier: "alchemy-nonexistent-state-template-probe",
-          })
-          .pipe(inHomeRegion),
-      );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
-    }),
+test.provider("getStateTemplate on a nonexistent template fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      iotfleetwise
+        .getStateTemplate({
+          identifier: "alchemy-nonexistent-state-template-probe",
+        })
+        .pipe(inHomeRegion),
+    );
+    expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
+  }),
 );
 
 // Typed wait-until-gone for the gated lifecycle teardown.
@@ -76,21 +66,14 @@ const assertCatalogGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* iotfleetwise.getSignalCatalog({ name }).pipe(
       inHomeRegion,
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`signal catalog '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`signal catalog '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -207,9 +190,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
               timeBasedCollectionScheme: { period: "10 seconds" },
             },
             signalsToCollect: [{ name: "Vehicle.Speed" }],
-            dataDestinationConfigs: [
-              { s3Config: { bucketArn: bucket.bucketArn } },
-            ],
+            dataDestinationConfigs: [{ s3Config: { bucketArn: bucket.bucketArn } }],
           });
 
           return {
@@ -225,12 +206,8 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
       );
 
       expect(deployed.catalog.signalCatalogArn).toContain(":signal-catalog/");
-      expect(deployed.stateTemplate.stateTemplateArn).toContain(
-        ":state-template/",
-      );
-      expect(deployed.stateTemplate.stateTemplateProperties).toEqual([
-        "Vehicle.Speed",
-      ]);
+      expect(deployed.stateTemplate.stateTemplateArn).toContain(":state-template/");
+      expect(deployed.stateTemplate.stateTemplateProperties).toEqual(["Vehicle.Speed"]);
       expect(deployed.model.status).toBe("ACTIVE");
       expect(deployed.decoder.status).toBe("ACTIVE");
       expect(deployed.fleet.fleetArn).toContain(":fleet/");
@@ -245,9 +222,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
       const observedVehicle = yield* iotfleetwise
         .getVehicle({ vehicleName: deployed.vehicle.vehicleName })
         .pipe(inHomeRegion);
-      expect(observedVehicle.attributes?.["Vehicle.VIN"]).toBe(
-        "1HGBH41JXMN109186",
-      );
+      expect(observedVehicle.attributes?.["Vehicle.VIN"]).toBe("1HGBH41JXMN109186");
 
       yield* stack.destroy();
       yield* assertCatalogGone(deployed.catalog.signalCatalogName);

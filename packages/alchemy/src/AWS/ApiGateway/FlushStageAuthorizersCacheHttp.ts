@@ -26,14 +26,14 @@ export const FlushStageAuthorizersCacheHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/authorizers`,
         ],
       });
-      return Effect.fn(
-        `AWS.ApiGateway.FlushStageAuthorizersCache(${stage.LogicalId})`,
-      )(function* () {
-        return yield* flushStageAuthorizersCache({
-          restApiId: yield* RestApiId,
-          stageName: yield* StageName,
-        });
-      });
+      return Effect.fn(`AWS.ApiGateway.FlushStageAuthorizersCache(${stage.LogicalId})`)(
+        function* () {
+          return yield* flushStageAuthorizersCache({
+            restApiId: yield* RestApiId,
+            stageName: yield* StageName,
+          });
+        },
+      );
     });
   }),
 );

@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import type { Api } from "./fixtures/worker-entrypoint-binding/entrypoint-target-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -16,10 +16,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -81,9 +78,9 @@ test.provider(
       // Local dev URLs — proof no cloud call ran.
       expect(deployed.caller.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const greeting = yield* getReady(
-        `${deployed.caller.url}/greet?name=alice`,
-      ).pipe(Effect.flatMap((res) => res.text));
+      const greeting = yield* getReady(`${deployed.caller.url}/greet?name=alice`).pipe(
+        Effect.flatMap((res) => res.text),
+      );
       expect(greeting).toBe("hello alice from Api");
 
       const props = (yield* getReady(`${deployed.caller.url}/props`).pipe(

@@ -33,9 +33,7 @@ const Website = Cloudflare.Website.StaticSite(
         ? {
             of: previewParent,
             name: stack.stage,
-            message: process.env.PULL_REQUEST
-              ? `PR #${process.env.PULL_REQUEST}`
-              : undefined,
+            message: process.env.PULL_REQUEST ? `PR #${process.env.PULL_REQUEST}` : undefined,
           }
         : undefined,
       workersDev: stack.stage === "prod" ? false : undefined,
@@ -70,9 +68,7 @@ const Website = Cloudflare.Website.StaticSite(
     } satisfies Cloudflare.Website.StaticSiteProps<{}>;
   }),
 ).pipe(
-  RemovalPolicy.retain(
-    Alchemy.Stack.pipe(Effect.map(({ stage }) => !stage.startsWith("pr-"))),
-  ),
+  RemovalPolicy.retain(Alchemy.Stack.pipe(Effect.map(({ stage }) => !stage.startsWith("pr-")))),
 );
 
 export default Alchemy.Stack(

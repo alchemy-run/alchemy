@@ -3,22 +3,14 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
  * How frequently GuardDuty exports updated findings.
  */
-export type FindingPublishingFrequency =
-  | "FIFTEEN_MINUTES"
-  | "ONE_HOUR"
-  | "SIX_HOURS";
+export type FindingPublishingFrequency = "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
 
 export interface DetectorProps {
   /**
@@ -84,16 +76,10 @@ const DetectorResource = Resource<Detector>("AWS.GuardDuty.Detector");
 
 export { DetectorResource as Detector };
 
-export const detectorArn = (
-  region: string,
-  accountId: string,
-  detectorId: string,
-) => `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
+export const detectorArn = (region: string, accountId: string, detectorId: string) =>
+  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
 
-const buildAttrs = Effect.fn(function* (
-  detectorId: string,
-  d: guardduty.GetDetectorResponse,
-) {
+const buildAttrs = Effect.fn(function* (detectorId: string, d: guardduty.GetDetectorResponse) {
   const { accountId, region } = yield* AWSEnvironment.current;
   return {
     detectorId,
@@ -115,11 +101,7 @@ export const DetectorProvider = () =>
       const getDetector = (detectorId: string) =>
         guardduty
           .getDetector({ DetectorId: detectorId })
-          .pipe(
-            Effect.catchTag("BadRequestException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
 
       return {
         read: Effect.fn(function* ({ id, output }) {
@@ -173,8 +155,7 @@ export const DetectorProvider = () =>
             const settingsChanged =
               observedEnabled !== desiredEnable ||
               (news.findingPublishingFrequency !== undefined &&
-                news.findingPublishingFrequency !==
-                  live.FindingPublishingFrequency);
+                news.findingPublishingFrequency !== live.FindingPublishingFrequency);
             if (settingsChanged) {
               yield* guardduty.updateDetector({
                 DetectorId: detectorId,
@@ -184,10 +165,7 @@ export const DetectorProvider = () =>
             }
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
-            const { upsert, removed } = diffTags(
-              tagRecord(live.Tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
             const arn = detectorArn(region, accountId, detectorId);
             if (upsert.length > 0) {
               yield* guardduty.tagResource({

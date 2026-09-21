@@ -7,9 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
-export class RailwayWorkspaceNotFound extends Data.TaggedError(
-  "Railway.WorkspaceNotFound",
-)<{
+export class RailwayWorkspaceNotFound extends Data.TaggedError("Railway.WorkspaceNotFound")<{
   message: string;
 }> {}
 
@@ -72,10 +70,7 @@ export const resolveWorkspace = Effect.fn(function* () {
     } satisfies RailwayWorkspace;
   }
 
-  const token = yield* railway.apiToken(
-    {},
-    { workspaces: { id: true, name: true } },
-  );
+  const token = yield* railway.apiToken({}, { workspaces: { id: true, name: true } });
   const workspace = token.workspaces[0];
   if (workspace === undefined || workspace.id.length === 0) {
     return yield* new RailwayWorkspaceNotFound({

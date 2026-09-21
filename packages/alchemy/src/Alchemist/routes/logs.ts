@@ -47,17 +47,10 @@ const select = Effect.fn(function* (input: LogInput) {
   // store wins where it configures one: a project may only wire a remote
   // store at deploy time, and `alchemy logs` still has to resolve what was
   // deployed.
-  const context = Context.merge(
-    yield* Layer.build(State.localState()),
-    session.context,
-  );
+  const context = Context.merge(yield* Layer.build(State.localState()), session.context);
   const selected = new Set(input.resources ?? []);
   const available = [
-    ...new Set(
-      Object.values(session.stack.resources).map(
-        (resource) => resource.LogicalId,
-      ),
-    ),
+    ...new Set(Object.values(session.stack.resources).map((resource) => resource.LogicalId)),
   ].sort();
   const unknown = [...selected].find((name) => !available.includes(name));
   if (unknown !== undefined) {
@@ -71,42 +64,37 @@ const select = Effect.fn(function* (input: LogInput) {
   const rows = yield* Effect.provide(
     Effect.gen(function* () {
       const state = yield* yield* State.State;
-      return yield* Effect.forEach(
-        Object.entries(session.stack.resources),
-        ([fqn, resource]) =>
-          Effect.gen(function* () {
-            if (selected.size > 0 && !selected.has(resource.LogicalId)) {
-              return [];
-            }
-            const stored = yield* state.get({
-              stack: session.stack.name,
-              stage: session.stack.stage,
-              fqn,
-            });
-            if (!State.isResourceState(stored) || stored.attr === undefined) {
-              return [];
-            }
-            return [
-              {
-                resource: {
-                  fqn,
-                  logicalId: resource.LogicalId,
-                  resourceType: resource.Type,
-                } satisfies ResourceIdentity,
-                provider: yield* findProviderByType(
-                  resource.Type,
-                  stampedMode(stored),
-                ),
-                request: {
-                  id: resource.LogicalId,
-                  fqn,
-                  instanceId: stored.instanceId,
-                  props: stored.props,
-                  output: stored.attr,
-                },
+      return yield* Effect.forEach(Object.entries(session.stack.resources), ([fqn, resource]) =>
+        Effect.gen(function* () {
+          if (selected.size > 0 && !selected.has(resource.LogicalId)) {
+            return [];
+          }
+          const stored = yield* state.get({
+            stack: session.stack.name,
+            stage: session.stack.stage,
+            fqn,
+          });
+          if (!State.isResourceState(stored) || stored.attr === undefined) {
+            return [];
+          }
+          return [
+            {
+              resource: {
+                fqn,
+                logicalId: resource.LogicalId,
+                resourceType: resource.Type,
+              } satisfies ResourceIdentity,
+              provider: yield* findProviderByType(resource.Type, stampedMode(stored)),
+              request: {
+                id: resource.LogicalId,
+                fqn,
+                instanceId: stored.instanceId,
+                props: stored.props,
+                output: stored.attr,
               },
-            ];
-          }),
+            },
+          ];
+        }),
       ).pipe(Effect.map((rows) => rows.flat()));
     }),
     context,
@@ -115,9 +103,7 @@ const select = Effect.fn(function* (input: LogInput) {
 });
 
 /** Every deployed resource, with the log capabilities its provider offers. */
-export const resources = Effect.fn("Alchemist.logs.resources")(function* (
-  target: StackTarget,
-) {
+export const resources = Effect.fn("Alchemist.logs.resources")(function* (target: StackTarget) {
   const { rows } = yield* select({ target });
   return rows.map(({ resource, provider }): LogResource => ({
     ...resource,
@@ -127,9 +113,7 @@ export const resources = Effect.fn("Alchemist.logs.resources")(function* (
 });
 
 /** Query past log entries across the selected resources, oldest first. */
-export const entries = Effect.fn("Alchemist.logs.entries")(function* (
-  input: QueryInput,
-) {
+export const entries = Effect.fn("Alchemist.logs.entries")(function* (input: QueryInput) {
   const { context, rows } = yield* select(input);
   const entries = yield* Effect.provide(
     Effect.forEach(rows, ({ resource, provider, request }) =>
@@ -155,9 +139,7 @@ export const entries = Effect.fn("Alchemist.logs.entries")(function* (
     ),
     context,
   );
-  return entries
-    .flat()
-    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  return entries.flat().sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 });
 
 /** Live-stream log entries from every selected resource that supports it. */

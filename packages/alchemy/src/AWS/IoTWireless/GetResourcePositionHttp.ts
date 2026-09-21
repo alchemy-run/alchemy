@@ -1,10 +1,7 @@
 import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Layer from "effect/Layer";
 import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
-import {
-  GetResourcePosition,
-  type GetResourcePositionRequest,
-} from "./GetResourcePosition.ts";
+import { GetResourcePosition, type GetResourcePositionRequest } from "./GetResourcePosition.ts";
 
 export const GetResourcePositionHttp = Layer.effect(
   GetResourcePosition,
@@ -15,10 +12,7 @@ export const GetResourcePositionHttp = Layer.effect(
     // (…:WirelessDevice/WirelessDevice) — the device ARN never matches.
     resourceScope: "any",
     operation: iotw.getResourcePosition,
-    prepare: (
-      request: GetResourcePositionRequest | undefined,
-      wirelessDeviceId,
-    ) => ({
+    prepare: (request: GetResourcePositionRequest | undefined, wirelessDeviceId) => ({
       ...request,
       ResourceIdentifier: wirelessDeviceId,
       ResourceType: "WirelessDevice" as const,

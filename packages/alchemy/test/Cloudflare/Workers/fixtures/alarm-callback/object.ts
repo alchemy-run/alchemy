@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -12,11 +9,13 @@ import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Scheduler from "effect/Scheduler";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 
-class TransactionMarker extends Context.Service<
-  TransactionMarker,
-  { value: string }
->()("alarm-callback/TransactionMarker") {}
+class TransactionMarker extends Context.Service<TransactionMarker, { value: string }>()(
+  "alarm-callback/TransactionMarker",
+) {}
 
 class Rollback extends Data.TaggedError("Rollback")<{ value: string }> {}
 class RetryArchive extends Data.TaggedError("RetryArchive")<{}> {}
@@ -271,10 +270,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
       });
       const transactionalWrites = Effect.gen(function* () {
         yield* storage.put("application", "uncommitted");
-        yield* storage.sql.exec(
-          "INSERT INTO application_values (value) VALUES (?)",
-          "uncommitted",
-        );
+        yield* storage.sql.exec("INSERT INTO application_values (value) VALUES (?)", "uncommitted");
         yield* onArchive.cancel("keep");
         yield* onArchive.schedule("rolled-back", {
           after: "1 second",
@@ -314,9 +310,10 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             const exec = raw.sql.exec;
             const setAlarm = raw.setAlarm;
             const deleteAlarm = raw.deleteAlarm;
-            raw.sql.exec = function <
-              T extends Record<string, Cloudflare.SqlStorageValue>,
-            >(query: string, ...bindings: Cloudflare.SqlStorageValue[]) {
+            raw.sql.exec = function <T extends Record<string, Cloudflare.SqlStorageValue>>(
+              query: string,
+              ...bindings: Cloudflare.SqlStorageValue[]
+            ) {
               if (
                 query.includes("SELECT name FROM sqlite_master") &&
                 query.includes("alchemy_alarm_schema")
@@ -325,9 +322,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               if (query.includes("SELECT MIN(run_at) AS run_at FROM (")) {
                 counts.reconciliations++;
               }
-              return exec.call(raw.sql, query, ...bindings) as ReturnType<
-                typeof raw.sql.exec<T>
-              >;
+              return exec.call(raw.sql, query, ...bindings) as ReturnType<typeof raw.sql.exec<T>>;
             };
             raw.setAlarm = (at, options) => {
               counts.setAlarm++;
@@ -373,11 +368,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                         at,
                         payload: { value: "nested" },
                       });
-                      yield* Cloudflare.scheduleEvent(
-                        "cancelled-legacy",
-                        new Date(at),
-                        {},
-                      );
+                      yield* Cloudflare.scheduleEvent("cancelled-legacy", new Date(at), {});
                       yield* Cloudflare.cancelEvent("cancelled-legacy");
                     }),
                   );
@@ -391,9 +382,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                   );
                 }),
               )
-              .pipe(
-                Effect.provideService(Cloudflare.DurableObjectState, state),
-              ),
+              .pipe(Effect.provideService(Cloudflare.DurableObjectState, state)),
           );
           const result: BatchResult = { counts, snapshot: yield* snapshot() };
           return result;
@@ -407,8 +396,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             storage.transaction(
               Effect.gen(function* () {
                 yield* onArchive.cancel("cancelled");
-                for (let i = 0; i < 20; i++)
-                  yield* onArchive.cancel(`missing-${i}`);
+                for (let i = 0; i < 20; i++) yield* onArchive.cancel(`missing-${i}`);
               }),
             ),
           );
@@ -433,9 +421,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                     yield* txn.rollback();
                   } else {
                     // A real SQLite failure during deferred reconciliation must roll back the batch.
-                    yield* storage.sql.exec(
-                      "DROP TABLE alchemy_alarm_callbacks",
-                    );
+                    yield* storage.sql.exec("DROP TABLE alchemy_alarm_callbacks");
                   }
                 }),
               )
@@ -443,9 +429,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                 Effect.exit,
                 Effect.tap((exit) =>
                   Effect.sync(() => {
-                    failure = Exit.isFailure(exit)
-                      ? String(Cause.squash(exit.cause))
-                      : null;
+                    failure = Exit.isFailure(exit) ? String(Cause.squash(exit.cause)) : null;
                   }),
                 ),
               ),
@@ -521,10 +505,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         registerLate: Effect.fn(function* () {
           const exit = yield* Effect.exit(
-            Alchemy.makeCallback(
-              "late",
-              (_payload: { value: string }) => Effect.void,
-            ),
+            Alchemy.makeCallback("late", (_payload: { value: string }) => Effect.void),
           );
           const defect = Exit.isFailure(exit)
             ? Result.getOrUndefined(Cause.findDefect(exit.cause))
@@ -586,10 +567,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               Effect.gen(function* () {
                 const { value } = yield* TransactionMarker;
                 yield* storage.put("application", value);
-                yield* storage.sql.exec(
-                  "INSERT INTO application_values (value) VALUES (?)",
-                  value,
-                );
+                yield* storage.sql.exec("INSERT INTO application_values (value) VALUES (?)", value);
                 yield* onArchive.schedule("atomic", {
                   after: "1 second",
                   payload: { value },
@@ -597,22 +575,16 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                 return value;
               }),
             )
-            .pipe(
-              Effect.provideService(TransactionMarker, { value: "committed" }),
-            );
+            .pipe(Effect.provideService(TransactionMarker, { value: "committed" }));
           const legacyOverload = yield* storage
             .transaction(
-              Effect.fn(function* (
-                transaction: Cloudflare.DurableObjectTransaction,
-              ) {
+              Effect.fn(function* (transaction: Cloudflare.DurableObjectTransaction) {
                 const { value } = yield* TransactionMarker;
                 yield* transaction.put("legacyOverload", value);
                 return yield* transaction.get<string>("legacyOverload");
               }),
             )
-            .pipe(
-              Effect.provideService(TransactionMarker, { value: "callback" }),
-            );
+            .pipe(Effect.provideService(TransactionMarker, { value: "callback" }));
           return { marker, legacyOverload, snapshot: yield* snapshot() };
         }),
         transactionalRegistration: Effect.fn(function* () {
@@ -624,9 +596,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         siblingTransaction: Effect.fn(function* () {
           // Native input gates can block timers used for fiber scheduling.
-          const scheduler = yield* Effect.sync(
-            () => new Scheduler.MixedScheduler("sync"),
-          );
+          const scheduler = yield* Effect.sync(() => new Scheduler.MixedScheduler("sync"));
           return yield* Effect.scoped(
             Effect.gen(function* () {
               const ready = yield* Deferred.make<void>();
@@ -642,10 +612,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                 Effect.tap(() => Deferred.succeed(completed, undefined)),
                 Effect.forkScoped,
               );
-              yield* Deferred.await(ready).pipe(
-                Effect.timeout("2 seconds"),
-                Effect.orDie,
-              );
+              yield* Deferred.await(ready).pipe(Effect.timeout("2 seconds"), Effect.orDie);
               const failure = yield* storage
                 .transaction(
                   Effect.gen(function* () {
@@ -659,23 +626,15 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                       Effect.timeout("2 seconds"),
                       Effect.orDie,
                     );
-                    return yield* Effect.fail(
-                      new Rollback({ value: "sibling-rollback" }),
-                    );
+                    return yield* Effect.fail(new Rollback({ value: "sibling-rollback" }));
                   }),
                 )
-                .pipe(
-                  Effect.catchTag("Rollback", (error) =>
-                    Effect.succeed(error.value),
-                  ),
-                );
+                .pipe(Effect.catchTag("Rollback", (error) => Effect.succeed(error.value)));
               const exit = yield* Fiber.join(sibling).pipe(
                 Effect.timeout("2 seconds"),
                 Effect.orDie,
               );
-              const error = Exit.isFailure(exit)
-                ? Cause.squash(exit.cause)
-                : undefined;
+              const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
               const result: SiblingTransactionResult = {
                 failure,
                 siblingAcknowledged: Exit.isSuccess(exit),
@@ -687,8 +646,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                         message: error.message,
                       }
                     : null,
-                siblingValue:
-                  (yield* storage.get<string>("siblingWrite")) ?? null,
+                siblingValue: (yield* storage.get<string>("siblingWrite")) ?? null,
                 snapshot: yield* snapshot(),
               };
               return result;
@@ -700,11 +658,8 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             operation: ExplicitRollbackResult["operations"][number]["operation"],
             exit: Exit.Exit<A, E>,
           ): ExplicitRollbackResult["operations"][number] => {
-            const error = Exit.isFailure(exit)
-              ? Cause.squash(exit.cause)
-              : undefined;
-            const cause =
-              error instanceof Alchemy.CallbackError ? error.cause : error;
+            const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+            const cause = error instanceof Alchemy.CallbackError ? error.cause : error;
             return {
               operation,
               acknowledged: Exit.isSuccess(exit),
@@ -712,10 +667,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                 cause instanceof Cloudflare.DurableObjectStorageError
                   ? {
                       tag: cause._tag,
-                      wrappedBy:
-                        error instanceof Alchemy.CallbackError
-                          ? error._tag
-                          : null,
+                      wrappedBy: error instanceof Alchemy.CallbackError ? error._tag : null,
                       message: cause.message,
                     }
                   : null,
@@ -734,9 +686,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               });
               yield* txn.rollback();
               const repeatedRollback = yield* Effect.exit(txn.rollback());
-              const put = yield* Effect.exit(
-                storage.put("application", "after-rollback"),
-              );
+              const put = yield* Effect.exit(storage.put("application", "after-rollback"));
               const sql = yield* Effect.exit(
                 storage.sql.exec(
                   "INSERT INTO application_values (value) VALUES (?)",
@@ -771,16 +721,10 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             .transaction(
               Effect.gen(function* () {
                 yield* transactionalWrites;
-                return yield* Effect.fail(
-                  new Rollback({ value: "typed-value" }),
-                );
+                return yield* Effect.fail(new Rollback({ value: "typed-value" }));
               }),
             )
-            .pipe(
-              Effect.catchTag("Rollback", (error) =>
-                Effect.succeed(error.value),
-              ),
-            );
+            .pipe(Effect.catchTag("Rollback", (error) => Effect.succeed(error.value)));
           return yield* rollbackResult(failure, alarmBefore);
         }),
         rollbackDefect: Effect.fn(function* () {
@@ -795,8 +739,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             )
             .pipe(Effect.exit);
           const failure =
-            Exit.isFailure(exit) &&
-            Cause.squash(exit.cause) === "rollback-defect"
+            Exit.isFailure(exit) && Cause.squash(exit.cause) === "rollback-defect"
               ? "defect"
               : "unexpected";
           return yield* rollbackResult(failure, alarmBefore);
@@ -816,10 +759,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                     yield* transactionalWrites;
                     yield* storage.getAlarm();
                     yield* Deferred.succeed(entered, undefined);
-                    yield* Effect.never.pipe(
-                      Effect.timeout("5 seconds"),
-                      Effect.orDie,
-                    );
+                    yield* Effect.never.pipe(Effect.timeout("5 seconds"), Effect.orDie);
                   }).pipe(
                     Effect.ensuring(
                       Effect.gen(function* () {
@@ -835,18 +775,12 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
                   ),
                 )
                 .pipe(Effect.forkScoped);
-              yield* Deferred.await(entered).pipe(
-                Effect.timeout("5 seconds"),
-                Effect.orDie,
-              );
+              yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"), Effect.orDie);
               const interrupter = yield* Fiber.interrupt(fiber).pipe(
                 Effect.andThen(Deferred.succeed(interruptFinished, undefined)),
                 Effect.forkScoped,
               );
-              yield* Deferred.await(cleanupStarted).pipe(
-                Effect.timeout("8 seconds"),
-                Effect.orDie,
-              );
+              yield* Deferred.await(cleanupStarted).pipe(Effect.timeout("8 seconds"), Effect.orDie);
               const finishedEarly = yield* Deferred.isDone(interruptFinished);
               yield* Deferred.succeed(releaseCleanup, undefined);
               yield* Fiber.join(interrupter);
@@ -908,10 +842,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           const at = yield* Effect.sync(() => Date.now() + 1_000);
           yield* storage.transaction(
             Effect.gen(function* () {
-              yield* storage.sql.exec(
-                "UPDATE alchemy_alarm_callbacks SET run_at = ?",
-                at,
-              );
+              yield* storage.sql.exec("UPDATE alchemy_alarm_callbacks SET run_at = ?", at);
               yield* storage.setAlarm(at);
             }),
           );

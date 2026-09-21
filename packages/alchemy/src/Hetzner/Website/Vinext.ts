@@ -5,8 +5,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * The framework-integration module that drives vinext's Vite build plus
  * vinext's Node `startProdServer` serve entry.
  */
-export const VINEXT_NODE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/node";
+export const VINEXT_NODE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/node";
 
 export interface VinextProps extends FrameworkSiteProps {}
 

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -122,13 +121,7 @@ export const isShareRecipient = (value: unknown): value is ShareRecipient =>
 
 export const ShareRecipientProvider = () =>
   Provider.succeed(ShareRecipient, {
-    stables: [
-      "recipientId",
-      "accountId",
-      "shareId",
-      "recipientAccountId",
-      "created",
-    ],
+    stables: ["recipientId", "accountId", "shareId", "recipientAccountId", "created"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -150,8 +143,7 @@ export const ShareRecipientProvider = () =>
         (olds?.accountId as string | undefined) ??
         (olds?.organizationId as string | undefined);
       const newTarget =
-        (news.accountId as string | undefined) ??
-        (news.organizationId as string | undefined);
+        (news.accountId as string | undefined) ?? (news.organizationId as string | undefined);
       if (
         typeof oldTarget === "string" &&
         typeof newTarget === "string" &&
@@ -174,8 +166,7 @@ export const ShareRecipientProvider = () =>
       // Cold read — recover from lost state by matching the recipient
       // account/organization id among the share's recipients.
       const target =
-        (olds?.accountId as string | undefined) ??
-        (olds?.organizationId as string | undefined);
+        (olds?.accountId as string | undefined) ?? (olds?.organizationId as string | undefined);
       if (target === undefined) return undefined;
       const match = yield* findRecipient(acct, shareId, target);
       return match ? toAttributes(match, acct, shareId) : undefined;
@@ -195,11 +186,7 @@ export const ShareRecipientProvider = () =>
         (output?.recipientId
           ? yield* getRecipient(acct, shareId, output.recipientId)
           : undefined) ??
-        (yield* findRecipient(
-          acct,
-          shareId,
-          targetAccountId ?? targetOrganizationId ?? "",
-        ));
+        (yield* findRecipient(acct, shareId, targetAccountId ?? targetOrganizationId ?? ""));
 
       if (observed) {
         return toAttributes(observed, acct, shareId);
@@ -235,9 +222,7 @@ export const ShareRecipientProvider = () =>
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((share) => share.id),
-            ),
+            Array.from(chunk).flatMap((page) => (page.result ?? []).map((share) => share.id)),
           ),
           // The account cannot enumerate shares — nothing to list.
           Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
@@ -273,11 +258,7 @@ type ObservedRecipient = resourceSharing.GetRecipientResponse;
  * Read a recipient by id, mapping "gone" (`ShareRecipientNotFound`, HTTP
  * 404) and the terminal `disassociated` status to `undefined`.
  */
-const getRecipient = (
-  accountId: string,
-  shareId: string,
-  recipientId: string,
-) =>
+const getRecipient = (accountId: string, shareId: string, recipientId: string) =>
   resourceSharing.getRecipient({ accountId, shareId, recipientId }).pipe(
     Effect.map((recipient): ObservedRecipient | undefined =>
       recipient.associationStatus === "disassociated" ? undefined : recipient,
@@ -290,17 +271,12 @@ const getRecipient = (
  * surfaces as `ShareNotFound` — treat it as "no recipient".
  */
 const findRecipient = (accountId: string, shareId: string, target: string) =>
-  resourceSharing.listRecipients
-    .items({ accountId, shareId, perPage: 50 })
-    .pipe(
-      Stream.filter(
-        (r) =>
-          r.accountId === target && r.associationStatus !== "disassociated",
-      ),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-      Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
-    );
+  resourceSharing.listRecipients.items({ accountId, shareId, perPage: 50 }).pipe(
+    Stream.filter((r) => r.accountId === target && r.associationStatus !== "disassociated"),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+  );
 
 const toAttributes = (
   recipient:
@@ -315,8 +291,7 @@ const toAttributes = (
   shareId,
   recipientAccountId: recipient.accountId,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  associationStatus:
-    recipient.associationStatus as ShareRecipientAssociationStatus,
+  associationStatus: recipient.associationStatus as ShareRecipientAssociationStatus,
   created: recipient.created,
   modified: recipient.modified,
 });

@@ -16,9 +16,10 @@ import type { Providers } from "../Providers.ts";
  * Raised when the replication set enters a terminal `FAILED` state (or does
  * not become `ACTIVE` within the bounded wait window) while reconciling.
  */
-export class ReplicationSetNotActive extends Data.TaggedError(
-  "ReplicationSetNotActive",
-)<{ message: string; status: string }> {}
+export class ReplicationSetNotActive extends Data.TaggedError("ReplicationSetNotActive")<{
+  message: string;
+  status: string;
+}> {}
 
 export interface ReplicationSetProps {
   /**
@@ -92,9 +93,7 @@ export interface ReplicationSet extends Resource<
  * });
  * ```
  */
-const ReplicationSetResource = Resource<ReplicationSet>(
-  "AWS.SSMIncidents.ReplicationSet",
-);
+const ReplicationSetResource = Resource<ReplicationSet>("AWS.SSMIncidents.ReplicationSet");
 
 export { ReplicationSetResource as ReplicationSet };
 
@@ -145,9 +144,7 @@ const waitForReplicationSetGone = (
 ): Effect.Effect<void, incidents.GetReplicationSetError, IncidentsDeps> =>
   incidents.getReplicationSet({ arn }).pipe(
     Effect.map((r) => r.replicationSet.status),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed("GONE" as const),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
     Effect.repeat({
       schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]),
       until: (status) => status === "GONE",
@@ -167,9 +164,7 @@ export const ReplicationSetProvider = () =>
         if (arn === undefined) return undefined;
         return yield* incidents.getReplicationSet({ arn }).pipe(
           Effect.map((r) => ({ ...r.replicationSet, arn })),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -178,9 +173,7 @@ export const ReplicationSetProvider = () =>
           Effect.map(
             (r) =>
               Object.fromEntries(
-                Object.entries(r.tags).filter(
-                  (e): e is [string, string] => e[1] !== undefined,
-                ),
+                Object.entries(r.tags).filter((e): e is [string, string] => e[1] !== undefined),
               ) as Record<string, string>,
           ),
           Effect.catch(() => Effect.succeed<Record<string, string>>({})),
@@ -216,8 +209,7 @@ export const ReplicationSetProvider = () =>
         }),
 
         // Account/region singleton — report the single replication set, if any.
-        list: () =>
-          observe.pipe(Effect.map((rs) => (rs ? [buildAttrs(rs)] : []))),
+        list: () => observe.pipe(Effect.map((rs) => (rs ? [buildAttrs(rs)] : []))),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
@@ -265,9 +257,7 @@ export const ReplicationSetProvider = () =>
           //    Region change per update). Add first so the set never shrinks
           //    to zero.
           const observedRegions = Object.keys(live.regionMap);
-          const toAdd = Object.keys(regions).filter(
-            (r) => !observedRegions.includes(r),
-          );
+          const toAdd = Object.keys(regions).filter((r) => !observedRegions.includes(r));
           const toRemove = observedRegions.filter((r) => !(r in regions));
           for (const regionName of toAdd) {
             yield* session.note(`adding region ${regionName}`);
@@ -332,9 +322,7 @@ export const ReplicationSetProvider = () =>
               arn: output.arn,
               deletionProtected: false,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* incidents.deleteReplicationSet({ arn: output.arn }).pipe(
             Effect.asVoid,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),

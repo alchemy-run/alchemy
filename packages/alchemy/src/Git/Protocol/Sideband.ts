@@ -14,7 +14,7 @@
  */
 import * as Stream from "effect/Stream";
 import { concatBytes, utf8Encode } from "./ObjectCodec.ts";
-import { flushPkt, pktLine } from "./Pkt.ts";
+import { flushPkt } from "./Pkt.ts";
 
 /**
  * Maximum data bytes per side-band-64k frame (65520 − 4 length − 1 band).
@@ -45,10 +45,7 @@ const sidebandHeader = (band: SidebandBand, dataLength: number): Uint8Array => {
   return out;
 };
 
-export const sidebandFrame = (
-  band: SidebandBand,
-  data: Uint8Array,
-): Uint8Array => {
+export const sidebandFrame = (band: SidebandBand, data: Uint8Array): Uint8Array => {
   // One allocation, one copy: header + band + payload in place.
   const out = new Uint8Array(5 + data.length);
   out.set(sidebandHeader(band, data.length), 0);
@@ -61,15 +58,10 @@ export const sidebandFrame = (
  * most {@link SIDEBAND_DATA_MAX} data bytes). An empty payload produces no
  * frames.
  */
-export const sidebandFrames = (
-  band: SidebandBand,
-  data: Uint8Array,
-): Array<Uint8Array> => {
+export const sidebandFrames = (band: SidebandBand, data: Uint8Array): Array<Uint8Array> => {
   const frames: Array<Uint8Array> = [];
   for (let pos = 0; pos < data.length; pos += SIDEBAND_DATA_MAX) {
-    frames.push(
-      sidebandFrame(band, data.subarray(pos, pos + SIDEBAND_DATA_MAX)),
-    );
+    frames.push(sidebandFrame(band, data.subarray(pos, pos + SIDEBAND_DATA_MAX)));
   }
   return frames;
 };
@@ -81,13 +73,9 @@ export const sidebandFrames = (
  */
 export const wrapSideband =
   (band: SidebandBand) =>
-  <E, R>(
-    stream: Stream.Stream<Uint8Array, E, R>,
-  ): Stream.Stream<Uint8Array, E, R> =>
+  <E, R>(stream: Stream.Stream<Uint8Array, E, R>): Stream.Stream<Uint8Array, E, R> =>
     Stream.flatMap(stream, (chunk) =>
-      chunk.length === 0
-        ? Stream.empty
-        : Stream.fromArray(sidebandFrames(band, chunk)),
+      chunk.length === 0 ? Stream.empty : Stream.fromArray(sidebandFrames(band, chunk)),
     );
 
 /**
@@ -99,11 +87,7 @@ export const progressMessage = (message: string): Uint8Array =>
   concatBytes(
     sidebandFrames(
       2,
-      utf8Encode(
-        message.endsWith("\n") || message.endsWith("\r")
-          ? message
-          : `${message}\n`,
-      ),
+      utf8Encode(message.endsWith("\n") || message.endsWith("\r") ? message : `${message}\n`),
     ),
   );
 
@@ -112,12 +96,7 @@ export const progressMessage = (message: string): Uint8Array =>
  * transfer; the server should end the response after sending it.
  */
 export const sidebandError = (message: string): Uint8Array =>
-  concatBytes(
-    sidebandFrames(
-      3,
-      utf8Encode(message.endsWith("\n") ? message : `${message}\n`),
-    ),
-  );
+  concatBytes(sidebandFrames(3, utf8Encode(message.endsWith("\n") ? message : `${message}\n`)));
 
 /** Target bytes per native write from {@link pumpPackBody}. */
 export const PUMP_READ_BYTES = 1 << 20;
@@ -206,9 +185,7 @@ export const pumpPackBody = (options: {
  * `readAtLeast` (a workerd extension) fills a whole buffer per read on byte
  * streams; other streams are read as they come.
  */
-async function* readBig(
-  source: ReadableStream<Uint8Array>,
-): AsyncGenerator<Uint8Array> {
+async function* readBig(source: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
   let byob: ReadableStreamBYOBReader | undefined;
   try {
     byob = source.getReader({ mode: "byob" });
@@ -224,10 +201,7 @@ async function* readBig(
     }
   }
   const reader = byob as ReadableStreamBYOBReader & {
-    readAtLeast?: (
-      min: number,
-      view: Uint8Array,
-    ) => Promise<ReadableStreamReadResult<Uint8Array>>;
+    readAtLeast?: (min: number, view: Uint8Array) => Promise<ReadableStreamReadResult<Uint8Array>>;
   };
   let buffer = new ArrayBuffer(PUMP_READ_BYTES);
   for (;;) {
@@ -258,31 +232,23 @@ export const sidebandFramedLength = (size: number): number =>
  */
 export const sidebandRechunk =
   (band: SidebandBand) =>
-  <E, R>(
-    stream: Stream.Stream<Uint8Array, E, R>,
-  ): Stream.Stream<Uint8Array, E, R> => {
+  <E, R>(stream: Stream.Stream<Uint8Array, E, R>): Stream.Stream<Uint8Array, E, R> => {
     let carry: Uint8Array = new Uint8Array(0);
     const frames = (chunk: Uint8Array): Array<Uint8Array> => {
       const data = carry.length === 0 ? chunk : concatBytes([carry, chunk]);
       const out: Array<Uint8Array> = [];
       let pos = 0;
       while (data.length - pos >= SIDEBAND_DATA_MAX) {
-        out.push(
-          sidebandFrame(band, data.subarray(pos, pos + SIDEBAND_DATA_MAX)),
-        );
+        out.push(sidebandFrame(band, data.subarray(pos, pos + SIDEBAND_DATA_MAX)));
         pos += SIDEBAND_DATA_MAX;
       }
       carry = data.slice(pos);
       return out;
     };
-    return Stream.flatMap(stream, (chunk) =>
-      Stream.fromArray(frames(chunk)),
-    ).pipe(
+    return Stream.flatMap(stream, (chunk) => Stream.fromArray(frames(chunk))).pipe(
       Stream.concat(
         Stream.suspend(() =>
-          carry.length === 0
-            ? Stream.empty
-            : Stream.succeed(sidebandFrame(band, carry)),
+          carry.length === 0 ? Stream.empty : Stream.succeed(sidebandFrame(band, carry)),
         ),
       ),
     );

@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { IsolatedObject } from "./object.ts";
 
 /**
@@ -36,9 +36,7 @@ export default Cloudflare.Worker(
         // readiness retry treats a container that is still starting as
         // retryable rather than fatal.
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(String(cause), { status: 503 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(String(cause), { status: 503 })),
         ),
       ),
     };

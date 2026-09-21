@@ -5,19 +5,13 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import type { PlatformError } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
-import {
-  type CredentialsRequired,
-  demandPlanCredentials,
-} from "./Auth/Demand.ts";
-import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -25,6 +19,15 @@ import {
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
+import { type CredentialsRequired, demandPlanCredentials } from "./Auth/Demand.ts";
+import { havePropsChanged, stripUnresolved } from "./Diff.ts";
+import type { Input } from "./Input.ts";
+import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import * as Output from "./Output.ts";
+import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
+import { findProviderByType, missingProviderError, tryFindProviderByType } from "./Provider.ts";
+import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import {
   type PlanDisplayOptions,
   type PlanStatusSession,
@@ -33,23 +36,8 @@ import {
   noopSession,
 } from "./Report.ts";
 import type { ApplyStatus } from "./Report.ts";
-import { havePropsChanged, stripUnresolved } from "./Diff.ts";
-import type { Input } from "./Input.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
-import * as Output from "./Output.ts";
-import {
-  type ActionApply,
-  type Apply,
-  type Delete,
-  type Plan,
-} from "./Plan.ts";
-import {
-  findProviderByType,
-  missingProviderError,
-  tryFindProviderByType,
-} from "./Provider.ts";
-import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import {
@@ -74,10 +62,7 @@ import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
 export type AppliedPlan<P extends Plan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends
-    | Delete
-    | undefined
-    | never
+  [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined | never
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
@@ -121,13 +106,7 @@ const provideLifecycleScope =
  * toolchain without touching any individual provider implementation.
  */
 const instrumentLifecycle =
-  (
-    op: ResourceOp,
-    fqn: string,
-    resourceType: string,
-    logicalId: string,
-    instanceId: string,
-  ) =>
+  (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
@@ -207,10 +186,7 @@ export const apply = <P extends Plan>(
           fqn: string;
           id: string;
           type: string;
-          status: Extract<
-            ApplyStatus,
-            "created" | "updated" | "adopted" | "ran" | "skipped"
-          >;
+          status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
           providerMode?: ProviderMode;
         }
       >();
@@ -231,18 +207,14 @@ export const apply = <P extends Plan>(
       // freshly migrated row.
       const migrationTargets = new Set(
         Object.values(plan.resources)
-          .filter(
-            (node) => node.renamedFrom?.length && node.state !== undefined,
-          )
+          .filter((node) => node.renamedFrom?.length && node.state !== undefined)
           .map((node) => node.resource.FQN),
       );
       yield* Effect.forEach(
         Object.values(plan.resources),
         (node) => {
           const { renamedFrom, state: row } = node;
-          return renamedFrom === undefined ||
-            renamedFrom.length === 0 ||
-            row === undefined
+          return renamedFrom === undefined || renamedFrom.length === 0 || row === undefined
             ? Effect.void
             : Effect.gen(function* () {
                 yield* state.set({
@@ -252,11 +224,8 @@ export const apply = <P extends Plan>(
                   value: row,
                 });
                 yield* Effect.forEach(
-                  renamedFrom.filter(
-                    (formerFqn) => !migrationTargets.has(formerFqn),
-                  ),
-                  (formerFqn) =>
-                    state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                  renamedFrom.filter((formerFqn) => !migrationTargets.has(formerFqn)),
+                  (formerFqn) => state.delete({ stack: stackName, stage, fqn: formerFqn }),
                   { concurrency: "unbounded" },
                 );
               });
@@ -264,15 +233,7 @@ export const apply = <P extends Plan>(
         { concurrency: "unbounded" },
       );
 
-      yield* executePlan(
-        plan,
-        tracker,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-      );
+      yield* executePlan(plan, tracker, terminalStatuses, session, state, stackName, stage);
 
       // TODO(sam): support roll back to previous state if errors occur during expansion
       // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
@@ -280,15 +241,7 @@ export const apply = <P extends Plan>(
 
       yield* collectGarbage(plan, session);
 
-      yield* converge(
-        plan,
-        tracker,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-      );
+      yield* converge(plan, tracker, terminalStatuses, session, state, stackName, stage);
 
       yield* Effect.forEach(
         Array.from(terminalStatuses.values()),
@@ -346,11 +299,7 @@ export const apply = <P extends Plan>(
       yield* state.setOutput({ stack: stackName, stage, value: resolved });
 
       return resolved;
-    }).pipe(
-      Effect.onExit((exit) =>
-        session.done(Exit.isSuccess(exit) ? "success" : "failure"),
-      ),
-    );
+    }).pipe(Effect.onExit((exit) => session.done(Exit.isSuccess(exit) ? "success" : "failure")));
   }).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {
@@ -377,10 +326,7 @@ const executePlan = Effect.fn(function* (
       fqn: string;
       id: string;
       type: string;
-      status: Extract<
-        ApplyStatus,
-        "created" | "updated" | "adopted" | "ran" | "skipped"
-      >;
+      status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
       providerMode?: ProviderMode;
     }
   >,
@@ -425,9 +371,7 @@ const executePlan = Effect.fn(function* (
   ) as Record<string, Deferred.Deferred<void>>;
 
   const getOutputs = (): Record<string, any> =>
-    Object.fromEntries(
-      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
-    );
+    Object.fromEntries(Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]));
 
   const waitForDeps = (fqns: string[]) =>
     Effect.all(
@@ -456,9 +400,7 @@ const executePlan = Effect.fn(function* (
 
   const waitForStableDeps = (fqns: string[]) =>
     Effect.all(
-      fqns
-        .filter((fqn) => fqn in readyStable)
-        .map((fqn) => Deferred.await(readyStable[fqn])),
+      fqns.filter((fqn) => fqn in readyStable).map((fqn) => Deferred.await(readyStable[fqn])),
       { concurrency: "unbounded" },
     );
 
@@ -506,9 +448,7 @@ const executePlan = Effect.fn(function* (
     // Aggregate every collected lifecycle failure into a single parallel Cause
     // so the apply ends with one combined error containing every distinct
     // failure / defect that occurred across the concurrent fibers.
-    return yield* Effect.failCause(
-      failures.map((f) => f.cause).reduce(Cause.combine),
-    );
+    return yield* Effect.failCause(failures.map((f) => f.cause).reduce(Cause.combine));
   }
 });
 
@@ -540,8 +480,7 @@ const failureMessage = (cause: Cause.Cause<unknown>): string | undefined => {
         ? error._tag
         : undefined;
     const message =
-      Predicate.hasProperty(error, "message") &&
-      typeof error.message === "string"
+      Predicate.hasProperty(error, "message") && typeof error.message === "string"
         ? error.message
         : String(error);
     const line = message.split("\n", 1)[0]!;
@@ -723,17 +662,9 @@ const executeNode = (
       //    persisted `downstream` of the resource being deleted, so without
       //    this commit a later destroy deletes B concurrently with the
       //    dependent that still references it (and needlessly waits on A).
-      const policyChanged =
-        node.state.removalPolicy !== node.resource.RemovalPolicy;
-      const downstreamChanged = !sameSet(
-        node.state.downstream ?? [],
-        node.downstream,
-      );
-      if (
-        node.state.resourceType !== node.resource.Type ||
-        policyChanged ||
-        downstreamChanged
-      ) {
+      const policyChanged = node.state.removalPolicy !== node.resource.RemovalPolicy;
+      const downstreamChanged = !sameSet(node.state.downstream ?? [], node.downstream);
+      if (node.state.resourceType !== node.resource.Type || policyChanged || downstreamChanged) {
         yield* commit({
           ...node.state,
           resourceType: node.resource.Type,
@@ -787,8 +718,7 @@ const executeNode = (
         return id;
       } else if (node.action === "replace") {
         if (
-          (node.state.status === "replaced" ||
-            node.state.status === "replacing") &&
+          (node.state.status === "replaced" || node.state.status === "replacing") &&
           !node.restart
         ) {
           // Ordinary replacement recovery keeps using the same replacement
@@ -872,15 +802,7 @@ const executeNode = (
               instanceId,
               bindings: excludeDeletedBindings(node.bindings),
             })
-            .pipe(
-              instrumentLifecycle(
-                "precreate",
-                fqn,
-                node.resource.Type,
-                logicalId,
-                instanceId,
-              ),
-            );
+            .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
           yield* commit<CreatingResourceState>({
             status: "creating",
             fqn,
@@ -916,10 +838,7 @@ const executeNode = (
         yield* report("creating");
         const outputs = getOutputs();
 
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<
-          string,
-          any
-        >;
+        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
         const bindingOutputs = excludeDeletedBindings(
           yield* Output.evaluate(node.bindings, outputs),
@@ -952,15 +871,7 @@ const executeNode = (
               olds: news,
               output: undefined,
             })
-            .pipe(
-              instrumentLifecycle(
-                "read",
-                fqn,
-                node.resource.Type,
-                logicalId,
-                instanceId,
-              ),
-            );
+            .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
           if (observed !== undefined) {
             if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
               return yield* new OwnedBySomeoneElse({
@@ -990,15 +901,7 @@ const executeNode = (
             olds: undefined,
             output: attr,
           })
-          .pipe(
-            instrumentLifecycle(
-              "create",
-              fqn,
-              node.resource.Type,
-              logicalId,
-              instanceId,
-            ),
-          );
+          .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
         yield* commit<CreatedResourceState>({
           status: "created",
@@ -1064,10 +967,7 @@ const executeNode = (
         yield* waitForDeps(allUpstreamFqns());
         const outputs = getOutputs();
 
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<
-          string,
-          any
-        >;
+        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
         const adopting =
           node.adopting === true ||
           (node.state.status === "updating" && node.state.adopting === true);
@@ -1094,8 +994,7 @@ const executeNode = (
               providerVersion: node.provider.version ?? 0,
               bindings: excludeDeletedBindings(node.bindings),
               downstream: node.downstream,
-              old:
-                node.state.status === "updating" ? node.state.old : node.state,
+              old: node.state.status === "updating" ? node.state.old : node.state,
               adopting: adopting ? true : undefined,
               removalPolicy: node.resource.RemovalPolicy,
               providerMode: node.mode,
@@ -1128,15 +1027,7 @@ const executeNode = (
             olds: previousProps,
             output: node.state.attr,
           })
-          .pipe(
-            instrumentLifecycle(
-              "update",
-              fqn,
-              node.resource.Type,
-              logicalId,
-              instanceId,
-            ),
-          );
+          .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
         if (node.state.status === "replaced") {
           yield* commit<ReplacedResourceState>({
@@ -1263,10 +1154,7 @@ const executeNode = (
               // runtime's instance. Unstamped rows (legacy or written by a
               // mode-agnostic provider) are physically live, unless their
               // attrs carry the `dev:` identity marker — see stampedMode.
-              const oldProvider = yield* findProviderByType(
-                node.resource.Type,
-                stampedMode(old),
-              );
+              const oldProvider = yield* findProviderByType(node.resource.Type, stampedMode(old));
               yield* oldProvider
                 .delete({
                   id: logicalId,
@@ -1278,13 +1166,7 @@ const executeNode = (
                   bindings: [],
                 })
                 .pipe(
-                  instrumentLifecycle(
-                    "delete",
-                    fqn,
-                    node.resource.Type,
-                    logicalId,
-                    old.instanceId,
-                  ),
+                  instrumentLifecycle("delete", fqn, node.resource.Type, logicalId, old.instanceId),
                 );
             }
             if (old.status === "replacing" || old.status === "replaced") {
@@ -1323,15 +1205,7 @@ const executeNode = (
               instanceId,
               bindings: excludeDeletedBindings(node.bindings),
             })
-            .pipe(
-              instrumentLifecycle(
-                "precreate",
-                fqn,
-                node.resource.Type,
-                logicalId,
-                instanceId,
-              ),
-            );
+            .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
           yield* commit<ReplacingResourceState>({
             status: "replacing",
             fqn,
@@ -1367,10 +1241,7 @@ const executeNode = (
         yield* report("creating replacement");
         const outputs = getOutputs();
 
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<
-          string,
-          any
-        >;
+        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
         const bindingOutputs = excludeDeletedBindings(
           yield* Output.evaluate(node.bindings, outputs),
@@ -1387,15 +1258,7 @@ const executeNode = (
             olds: undefined,
             output: attr,
           })
-          .pipe(
-            instrumentLifecycle(
-              "create",
-              fqn,
-              node.resource.Type,
-              logicalId,
-              instanceId,
-            ),
-          );
+          .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
         if (node.deleteFirst) {
           // The old generation(s) were already torn down above, so there is
@@ -1472,10 +1335,7 @@ const executeNode = (
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
-        yield* Deferred.failCause(
-          readyStable[fqn],
-          cause as Cause.Cause<never>,
-        );
+        yield* Deferred.failCause(readyStable[fqn], cause as Cause.Cause<never>);
         yield* session.emit({
           _tag: "apply.resource.status",
           fqn,
@@ -1535,10 +1395,7 @@ const executeActionNode = (
       fqn: string;
       id: string;
       type: string;
-      status: Extract<
-        ApplyStatus,
-        "created" | "updated" | "adopted" | "ran" | "skipped"
-      >;
+      status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
       providerMode?: ProviderMode;
     }
   >,
@@ -1625,11 +1482,7 @@ const executeActionNode = (
     const inputHashValue = yield* hashInput(resolvedInput);
 
     // Inputs unknown during planning may resolve to the last successful input.
-    if (
-      !node.forced &&
-      node.state?.status === "ran" &&
-      node.state.inputHash === inputHashValue
-    ) {
+    if (!node.forced && node.state?.status === "ran" && node.state.inputHash === inputHashValue) {
       return yield* skip(node.state);
     }
 
@@ -1684,10 +1537,7 @@ const executeActionNode = (
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
-        yield* Deferred.failCause(
-          readyStable[fqn],
-          cause as Cause.Cause<never>,
-        );
+        yield* Deferred.failCause(readyStable[fqn], cause as Cause.Cause<never>);
         yield* session.emit({
           _tag: "apply.resource.status",
           fqn,
@@ -1726,10 +1576,7 @@ const converge = Effect.fn(function* (
       fqn: string;
       id: string;
       type: string;
-      status: Extract<
-        ApplyStatus,
-        "created" | "updated" | "adopted" | "ran" | "skipped"
-      >;
+      status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
       providerMode?: ProviderMode;
     }
   >,
@@ -1752,25 +1599,17 @@ const converge = Effect.fn(function* (
       if (node.action === "noop") continue;
       if (!tracker[fqn]) continue;
 
-      const outputs = Object.fromEntries(
-        Object.entries(tracker).map(([k, t]) => [k, t.output]),
-      );
+      const outputs = Object.fromEntries(Object.entries(tracker).map(([k, t]) => [k, t.output]));
 
-      const newProps = (yield* Output.evaluate(node.props, outputs)) as Record<
-        string,
-        any
-      >;
+      const newProps = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
-      const newBindings = excludeDeletedBindings(
-        yield* Output.evaluate(node.bindings, outputs),
-      );
+      const newBindings = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
       const oldProps = tracker[fqn].props;
       const oldBindings = tracker[fqn].bindings;
 
       const propsChanged = havePropsChanged(oldProps, newProps);
-      const bindingsChanged =
-        JSON.stringify(oldBindings) !== JSON.stringify(newBindings);
+      const bindingsChanged = JSON.stringify(oldBindings) !== JSON.stringify(newBindings);
 
       if (!propsChanged && !bindingsChanged) continue;
 
@@ -1803,15 +1642,7 @@ const converge = Effect.fn(function* (
           olds: oldProps,
           output: tracker[fqn].output,
         })
-        .pipe(
-          instrumentLifecycle(
-            "update",
-            fqn,
-            node.resource.Type,
-            logicalId,
-            instanceId,
-          ),
-        );
+        .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
       tracker[fqn] = {
         output: attr,
@@ -1866,9 +1697,7 @@ const converge = Effect.fn(function* (
       if (node.action !== "run") continue;
       if (!tracker[fqn]) continue;
 
-      const outputs = Object.fromEntries(
-        Object.entries(tracker).map(([k, t]) => [k, t.output]),
-      );
+      const outputs = Object.fromEntries(Object.entries(tracker).map(([k, t]) => [k, t.output]));
       const newInput = (yield* Output.evaluate(node.input, outputs)) as any;
       const newHash = yield* hashInput(newInput);
       const oldInput = tracker[fqn].props?.__input;
@@ -1972,9 +1801,7 @@ export class DestroyError extends Data.TaggedError("DestroyError")<{
           ? ` (${this.blocked.length} more skipped because a dependent's delete failed)`
           : "") +
         ":",
-      ...this.failures.map(
-        (f) => `  ✗ ${f.fqn} (${f.resourceType}): ${Cause.pretty(f.cause)}`,
-      ),
+      ...this.failures.map((f) => `  ✗ ${f.fqn} (${f.resourceType}): ${Cause.pretty(f.cause)}`),
       ...this.blocked.map(
         (b) =>
           `  ⊘ ${b.fqn} (${b.resourceType}): skipped — blocked by failed delete of ${b.blockedBy.join(", ")}`,
@@ -1983,10 +1810,7 @@ export class DestroyError extends Data.TaggedError("DestroyError")<{
   }
 }
 
-const collectGarbage = Effect.fn(function* (
-  plan: Plan,
-  session: PlanStatusSession,
-) {
+const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSession) {
   const state = yield* yield* State;
   const stack = yield* Stack;
   const stackName = stack.name;
@@ -2031,18 +1855,10 @@ const collectGarbage = Effect.fn(function* (
 
   const pendingDeletes = { ...plan.deletions };
   // Pending means this generation drained; deferred means it is still live.
-  type DeleteOutcome =
-    | "deleted"
-    | "pending"
-    | "deferred"
-    | "failed"
-    | "blocked";
+  type DeleteOutcome = "deleted" | "pending" | "deferred" | "failed" | "blocked";
 
   const deleteGraph = Effect.fn(function* (
-    deletionGraph: Record<
-      string,
-      Delete | ReplacementResourceState | undefined
-    >,
+    deletionGraph: Record<string, Delete | ReplacementResourceState | undefined>,
   ) {
     const deletions: {
       [fqn: string]: Effect.Effect<DeleteOutcome, never, ArtifactStore>;
@@ -2053,9 +1869,8 @@ const collectGarbage = Effect.fn(function* (
       ancestors: ReadonlySet<string> = new Set(),
     ): Effect.Effect<DeleteOutcome, never, ArtifactStore> =>
       Effect.gen(function* () {
-        const isDeleteNode = (
-          node: Delete | ReplacementResourceState,
-        ): node is Delete => "action" in node;
+        const isDeleteNode = (node: Delete | ReplacementResourceState): node is Delete =>
+          "action" in node;
 
         const {
           fqn,
@@ -2112,10 +1927,7 @@ const collectGarbage = Effect.fn(function* (
               ).pipe(
                 Effect.flatMap(
                   Option.match({
-                    onNone: () =>
-                      Effect.die(
-                        missingProviderError(node.old.resourceType, node.fqn),
-                      ),
+                    onNone: () => Effect.die(missingProviderError(node.old.resourceType, node.fqn)),
                     onSome: Effect.succeed,
                   }),
                 ),
@@ -2143,9 +1955,7 @@ const collectGarbage = Effect.fn(function* (
               ...value,
               adoptionBlocked:
                 value.adoptionBlocked ??
-                (isDeleteNode(node)
-                  ? node.state.adoptionBlocked
-                  : node.adoptionBlocked),
+                (isDeleteNode(node) ? node.state.adoptionBlocked : node.adoptionBlocked),
               props: stripUnresolved(value.props),
               bindings: stripUnresolved(value.bindings),
               namespace,
@@ -2193,9 +2003,7 @@ const collectGarbage = Effect.fn(function* (
                       // an earlier drain pass of the same destroy.
                       Effect.sync(() => ({
                         dep,
-                        outcome: unresolved.has(dep)
-                          ? ("failed" as const)
-                          : ("deleted" as const),
+                        outcome: unresolved.has(dep) ? ("failed" as const) : ("deleted" as const),
                       }))
                   : Effect.succeed({ dep, outcome: "deleted" as const }),
               ),
@@ -2203,9 +2011,7 @@ const collectGarbage = Effect.fn(function* (
             );
 
             const blockedBy = dependents
-              .filter(
-                ({ outcome }) => outcome === "failed" || outcome === "blocked",
-              )
+              .filter(({ outcome }) => outcome === "failed" || outcome === "blocked")
               .map(({ dep }) => dep);
 
             if (blockedBy.length > 0) {
@@ -2226,8 +2032,7 @@ const collectGarbage = Effect.fn(function* (
             if (
               dependents.some(
                 ({ outcome }) =>
-                  outcome === "deferred" ||
-                  (isDeleteNode(node) && outcome === "pending"),
+                  outcome === "deferred" || (isDeleteNode(node) && outcome === "pending"),
               )
             ) {
               // Even GC must wait when the dependent's physical delete has not run.
@@ -2250,9 +2055,7 @@ const collectGarbage = Effect.fn(function* (
         function deleteResourceBody() {
           return Effect.gen(function* () {
             if (isDeleteNode(node)) {
-              yield* report(
-                node.action === "orphaned" ? "orphaning" : "deleting",
-              );
+              yield* report(node.action === "orphaned" ? "orphaning" : "deleting");
               if (node.action === "orphaned") {
                 yield* state.delete({
                   stack: stackName,
@@ -2270,13 +2073,10 @@ const collectGarbage = Effect.fn(function* (
             // the orphan-delete path above. Delete-node retain is already
             // handled with an early return; this guards the replaced
             // old-generation physical delete.
-            const retainOldGeneration =
-              !isDeleteNode(node) && node.removalPolicy === "retain";
+            const retainOldGeneration = !isDeleteNode(node) && node.removalPolicy === "retain";
 
             if (retainOldGeneration) {
-              yield* scopedSession.note(
-                "Retaining replaced resource (removal policy: retain)...",
-              );
+              yield* scopedSession.note("Retaining replaced resource (removal policy: retain)...");
             }
 
             // A row can reach deletion with `attr === undefined` when a create
@@ -2310,13 +2110,7 @@ const collectGarbage = Effect.fn(function* (
                     output: undefined,
                   })
                   .pipe(
-                    instrumentLifecycle(
-                      "read",
-                      fqn,
-                      resourceType,
-                      logicalId,
-                      instanceId,
-                    ),
+                    instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
                     // The persisted props of an interrupted create can carry
                     // holes where unresolved Outputs were stripped at commit
                     // time (see stripUnresolved) — e.g. a parent reference
@@ -2387,15 +2181,7 @@ const collectGarbage = Effect.fn(function* (
                   session: scopedSession,
                   bindings: [],
                 })
-                .pipe(
-                  instrumentLifecycle(
-                    "delete",
-                    fqn,
-                    resourceType,
-                    logicalId,
-                    instanceId,
-                  ),
-                );
+                .pipe(instrumentLifecycle("delete", fqn, resourceType, logicalId, instanceId));
             }
 
             if (isDeleteNode(node)) {
@@ -2409,10 +2195,7 @@ const collectGarbage = Effect.fn(function* (
               if (!retainOldGeneration) {
                 yield* scopedSession.note("Cleaning up replaced resource...");
               }
-              if (
-                node.old.status === "replacing" ||
-                node.old.status === "replaced"
-              ) {
+              if (node.old.status === "replacing" || node.old.status === "replaced") {
                 const remaining: ReplacementResourceState = {
                   ...node,
                   bindings: excludeDeletedBindings(node.bindings),
@@ -2475,12 +2258,8 @@ const collectGarbage = Effect.fn(function* (
       stack: stackName,
       stage,
     })).filter((replaced) => !unresolved.has(replaced.fqn));
-    const deletionGraph: Record<
-      string,
-      Delete | ReplacementResourceState | undefined
-    > = Object.fromEntries(
-      remainingReplacedResources.map((replaced) => [replaced.fqn, replaced]),
-    );
+    const deletionGraph: Record<string, Delete | ReplacementResourceState | undefined> =
+      Object.fromEntries(remainingReplacedResources.map((replaced) => [replaced.fqn, replaced]));
     for (const [fqn, node] of Object.entries(pendingDeletes)) {
       if (node === undefined || unresolved.has(fqn)) continue;
       const current = yield* state.get({ stack: stackName, stage, fqn });
@@ -2502,18 +2281,14 @@ const collectGarbage = Effect.fn(function* (
     // Every independent delete was still attempted; now surface everything
     // that went wrong (and everything skipped as a consequence) as one
     // typed aggregate. The destroy as a whole still fails.
-    return yield* Effect.fail(
-      new DestroyError({ failures, blocked: blockedDeletes }),
-    );
+    return yield* Effect.fail(new DestroyError({ failures, blocked: blockedDeletes }));
   }
 });
 
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,
 ): ResourceBinding[] =>
-  bindings.flatMap(({ action, sid, data }) =>
-    action === "delete" ? [] : [{ sid, data }],
-  );
+  bindings.flatMap(({ action, sid, data }) => (action === "delete" ? [] : [{ sid, data }]));
 
 /** Order-insensitive equality of two FQN lists. */
 const sameSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => {

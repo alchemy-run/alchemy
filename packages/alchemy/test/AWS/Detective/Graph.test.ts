@@ -1,10 +1,10 @@
+import * as detective from "@distilled.cloud/aws/detective";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Graph } from "@/AWS/Detective/Graph.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as detective from "@distilled.cloud/aws/detective";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeDetectiveTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({
@@ -15,9 +15,7 @@ const testLease = makeDetectiveTestLease();
 beforeAll(testLease.acquire, { timeout: 240_000 });
 afterAll(testLease.release);
 
-const firstGraphArn = detective
-  .listGraphs({})
-  .pipe(Effect.map((r) => r.GraphList?.[0]?.Arn));
+const firstGraphArn = detective.listGraphs({}).pipe(Effect.map((r) => r.GraphList?.[0]?.Arn));
 
 // The Detective behavior graph is an account/region singleton. This test only
 // runs when the account has no graph — it must never delete a graph the user

@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SageMaker from "@/AWS/SageMaker";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SageMaker from "@/AWS/SageMaker";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -35,14 +35,12 @@ export default SageMakerTestFunction.make(
     // Event source: subscribe the host to SageMaker feature-group state
     // changes. The deploy proves the EventBridge rule + invoke permission
     // wiring.
-    yield* SageMaker.consumeSageMakerEvents(
-      { kinds: ["feature-group"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `feature group ${event.detail.FeatureGroupName} -> ${event.detail.FeatureGroupStatus}`,
-          ),
+    yield* SageMaker.consumeSageMakerEvents({ kinds: ["feature-group"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `feature group ${event.detail.FeatureGroupName} -> ${event.detail.FeatureGroupStatus}`,
         ),
+      ),
     );
 
     const putRecord = yield* SageMaker.PutRecord(featureGroup);
@@ -147,10 +145,7 @@ export default SageMakerTestFunction.make(
           return yield* HttpServerResponse.json({ ok: true });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

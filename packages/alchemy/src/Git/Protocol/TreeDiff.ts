@@ -159,9 +159,7 @@ export const diffTrees = (
         const newEntries = yield* readTree(newOid);
         const oldByName = new Map(oldEntries.map((e) => [e.name, e]));
         const newByName = new Map(newEntries.map((e) => [e.name, e]));
-        const names = Array.from(
-          new Set([...oldByName.keys(), ...newByName.keys()]),
-        ).sort(); // deterministic output order
+        const names = Array.from(new Set([...oldByName.keys(), ...newByName.keys()])).sort(); // deterministic output order
         for (const name of names) {
           if (truncated) return;
           const o = oldByName.get(name);
@@ -404,8 +402,7 @@ export const applyTreeChanges = (
       children: Map<string, ChangeNode>,
     ): Effect.Effect<Oid | undefined, StoreError> =>
       Effect.gen(function* () {
-        const baseEntries =
-          baseOid === undefined ? [] : yield* readEntries(baseOid);
+        const baseEntries = baseOid === undefined ? [] : yield* readEntries(baseOid);
         const byName = new Map(baseEntries.map((e) => [e.name, e]));
         for (const [name, node] of children) {
           const base = byName.get(name);
@@ -413,9 +410,7 @@ export const applyTreeChanges = (
           let subtree: Oid | undefined;
           if (node.children !== undefined) {
             const subtreeBase =
-              base !== undefined && treeEntryKind(base.mode) === "tree"
-                ? base.oid
-                : undefined;
+              base !== undefined && treeEntryKind(base.mode) === "tree" ? base.oid : undefined;
             subtree = yield* build(subtreeBase, node.children);
           }
           // 2. the leaf op at this exact name decides the entry.

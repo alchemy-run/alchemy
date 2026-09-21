@@ -6,10 +6,9 @@ import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as Socket from "effect/unstable/socket/Socket";
 import { BrowserRpcs } from "./rpcs.ts";
 
-export class BrowserClient extends Context.Service<BrowserClient>()(
-  "RpcWebSocketBrowserClient",
-  { make: RpcClient.make(BrowserRpcs) },
-) {}
+export class BrowserClient extends Context.Service<BrowserClient>()("RpcWebSocketBrowserClient", {
+  make: RpcClient.make(BrowserRpcs),
+}) {}
 
 export const clientLayer = RpcWebSocketClient.layer(
   BrowserClient,

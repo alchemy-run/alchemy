@@ -2,21 +2,21 @@
   "name": "alchemy",
   "version": "2.0.0-beta.79",
   "description": "Infrastructure as Effects for TypeScript.",
-  "homepage": "https://alchemy.run",
-  "license": "Apache-2.0",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
     "effect",
     "infrastructure-as-code"
   ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/alchemy"
-  },
-  "bugs": {
-    "url": "https://github.com/alchemy-run/alchemy/issues"
   },
   "bin": {
     "alchemy": "./bin/cli.js"
@@ -31,12 +31,6 @@
   ],
   "type": "module",
   "sideEffects": false,
-  "scripts": {
-    "build": "bun scripts/build.ts",
-    "clear:state": "cd ../../ && bun clear:state",
-    "test": "alchemy-test --exclude test/Railway",
-    "nuke": "cd ../../ && bun nuke"
-  },
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
@@ -100,7 +94,6 @@
     "./bin/exec.js": "./bin/exec.js"
   },
   "publishConfig": {
-    "access": "public",
     "exports": {
       ".": {
         "types": "./lib/index.d.ts",
@@ -358,7 +351,14 @@
       },
       "./bin/alchemy.js": "./bin/alchemy.js",
       "./bin/exec.js": "./bin/exec.js"
-    }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "clear:state": "cd ../../ && bun clear:state",
+    "test": "alchemy-test --exclude test/Railway",
+    "nuke": "cd ../../ && bun nuke"
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
@@ -366,7 +366,6 @@
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
-    "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
@@ -378,6 +377,7 @@
     "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
     "@distilled.cloud/stripe": "workspace:*",
+    "@distilled.cloud/zerossl": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
@@ -402,7 +402,6 @@
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "catalog:",
     "@cloudflare/workers-types": "catalog:",
-    "@effect/language-service": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
@@ -470,13 +469,13 @@
     "ws": "catalog:"
   },
   "peerDependencies": {
-    "@prisma/orm-postgres": "catalog:",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "@vercel/nft": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",

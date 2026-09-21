@@ -44,9 +44,7 @@ export interface Connect extends Binding.Service<
   (connection: Connection) => Effect.Effect<ConnectClient>
 > {}
 
-export const Connect = Binding.Service<Connect>(
-  "Cloudflare.Hyperdrive.Connect",
-);
+export const Connect = Binding.Service<Connect>("Cloudflare.Hyperdrive.Connect");
 
 export interface ConnectClient {
   /**
@@ -57,11 +55,7 @@ export interface ConnectClient {
   /**
    * A valid DB connection string for use with a driver/ORM.
    */
-  connectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  connectionString: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
   /**
    * Hostname valid only within the current Worker invocation.
    */

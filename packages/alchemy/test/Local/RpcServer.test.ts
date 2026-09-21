@@ -1,6 +1,4 @@
-import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
-import type { RpcProxyApi } from "@/Local/RpcServer.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { assert, describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
@@ -8,13 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
+import type { RpcProxyApi } from "@/Local/RpcServer.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { openWebSocket, waitForExit } from "./fixtures/process-effect.ts";
 import { runtimes } from "./fixtures/runtimes.ts";
 
-const FIXTURE_TS = fileURLToPath(
-  new URL("./fixtures/rpc-server-entry.ts", import.meta.url),
-);
+const FIXTURE_TS = fileURLToPath(new URL("./fixtures/rpc-server-entry.ts", import.meta.url));
 
 const ADDRESS_RE = /<ALCHEMY_RPC_ADDRESS>(.+?)<\/ALCHEMY_RPC_ADDRESS>/;
 
@@ -84,9 +82,7 @@ describe.concurrent("Local.RpcServer", () => {
             // and let everything above and below stay in Effect.
 
             // TODO(sam): tsc (typescript 7) vomits here, so we cast to any.
-            const stub = (newWebSocketRpcSession as any)(
-              url,
-            ) as RpcStub<RpcProxyApi>;
+            const stub = (newWebSocketRpcSession as any)(url) as RpcStub<RpcProxyApi>;
             const result = yield* Effect.promise(async () => {
               const provider = await stub.getProvider(
                 "Test.Echo",

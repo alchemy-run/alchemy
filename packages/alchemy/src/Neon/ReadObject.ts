@@ -10,9 +10,7 @@ export interface ReadObjectClient<T> {
   /** Decode typed JSON, or return bytes for a raw body/file resource. */
   get(): Effect.Effect<
     ObjectValue<T> | undefined,
-    | Effect.Error<ReturnType<ReadBucketClient["get"]>>
-    | ObjectDecodeError
-    | Error,
+    Effect.Error<ReturnType<ReadBucketClient["get"]>> | ObjectDecodeError | Error,
     RuntimeContext
   >;
   /** Always read exact bytes, including for JSON resources. */
@@ -40,10 +38,7 @@ export interface ReadObjectClient<T> {
 export interface ReadObject extends Binding.Service<
   ReadObject,
   "Neon.ReadObject",
-  <T>(
-    object: Object<T>,
-    options?: StorageBindingOptions,
-  ) => Effect.Effect<ReadObjectClient<T>>
+  <T>(object: Object<T>, options?: StorageBindingOptions) => Effect.Effect<ReadObjectClient<T>>
 > {
   <T>(
     object: Object<T>,

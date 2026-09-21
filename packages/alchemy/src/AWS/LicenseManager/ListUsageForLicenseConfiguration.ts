@@ -46,7 +46,6 @@ export interface ListUsageForLicenseConfiguration extends Binding.Service<
     >
   >
 > {}
-export const ListUsageForLicenseConfiguration =
-  Binding.Service<ListUsageForLicenseConfiguration>(
-    "AWS.LicenseManager.ListUsageForLicenseConfiguration",
-  );
+export const ListUsageForLicenseConfiguration = Binding.Service<ListUsageForLicenseConfiguration>(
+  "AWS.LicenseManager.ListUsageForLicenseConfiguration",
+);

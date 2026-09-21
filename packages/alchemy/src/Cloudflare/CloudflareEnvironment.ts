@@ -8,7 +8,6 @@ import {
   type CloudflareAuthConfig,
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthConfig.ts";
-
 import { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
 
 export { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";

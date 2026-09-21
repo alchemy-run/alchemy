@@ -1,6 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,22 +7,18 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "nextjs-isr-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-isr-app");
 const stampOf = (body: string, prefix: string): string | undefined =>
   body.match(new RegExp(`${prefix}:(?:<!-- -->)?(\\d+)`))?.[1];
 
@@ -45,9 +38,7 @@ const pollStamp = (
           return stamp !== undefined && predicate(stamp)
             ? Effect.succeed(stamp)
             : Effect.fail(
-                new Error(
-                  `stamp not ready (${res.status}): ${stamp ?? body.slice(0, 200)}`,
-                ),
+                new Error(`stamp not ready (${res.status}): ${stamp ?? body.slice(0, 200)}`),
               );
         }),
       ),
@@ -81,22 +72,14 @@ describe.concurrent("Nextjs ISR", () => {
 
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-isr-",
-          entries: [
-            "package.json",
-            "tsconfig.json",
-            "next.config.mjs",
-            "app",
-            "public",
-          ],
+          entries: ["package.json", "tsconfig.json", "next.config.mjs", "app", "public"],
         });
         yield* prepareNextjsFixture(rootDir);
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const nextConfigPath = path.join(rootDir, "next.config.mjs");
         const nextConfig = yield* fs.readFileString(nextConfigPath);
-        expect(
-          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
-        ).toBe(false);
+        expect(yield* fs.exists(path.join(rootDir, "open-next.config.ts"))).toBe(false);
 
         const deploy = () =>
           stack.deploy(
@@ -123,34 +106,20 @@ describe.concurrent("Nextjs ISR", () => {
 
         const { site } = yield* deploy();
         expect(yield* fs.readFileString(nextConfigPath)).toBe(nextConfig);
-        expect(
-          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
-        ).toBe(false);
+        expect(yield* fs.exists(path.join(rootDir, "open-next.config.ts"))).toBe(false);
         expect(site.url).toBeDefined();
 
         // 1. The ISR page caches in KV: the stamp stabilizes across hits.
         // (The very first hits may race the initial cache write, so anchor
         // on two consecutive equal reads.)
         const client = yield* HttpClient.HttpClient;
-        const primed = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
-        const settled = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
+        const primed = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
+        const settled = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
         if (primed === settled) {
           // Cached: consecutive reads agree.
           expect(settled).toBe(primed);
         }
-        const cached = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
+        const cached = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
         expect(cached).toBe(settled);
 
         // 2. On-demand revalidation: revalidatePath purges the KV entry; a
@@ -167,31 +136,21 @@ describe.concurrent("Nextjs ISR", () => {
                 ? Effect.succeed(res)
                 : Effect.flatMap(res.text, (body) =>
                     Effect.fail(
-                      new Error(
-                        `revalidate not ready (${res.status}): ${body.slice(0, 200)}`,
-                      ),
+                      new Error(`revalidate not ready (${res.status}): ${body.slice(0, 200)}`),
                     ),
                   ),
             ),
             Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
           );
         expect(revalidateRes.status).toBe(200);
-        const fresh = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          (s) => s !== cached,
-        );
+        const fresh = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", (s) => s !== cached);
         expect(fresh).not.toBe(cached);
 
         // 3. Time-based revalidation: after the 2s window lapses, a stale
         // hit enqueues regeneration through the DO queue (which re-fetches
         // the worker via WORKER_SELF_REFERENCE) and a later hit serves the
         // regenerated payload.
-        const fastPrimed = yield* pollStamp(
-          `${site.url!}/fast-isr`,
-          "fast-isr-stamp",
-          () => true,
-        );
+        const fastPrimed = yield* pollStamp(`${site.url!}/fast-isr`, "fast-isr-stamp", () => true);
         yield* Effect.sleep("3 seconds");
         const fastFresh = yield* pollStamp(
           `${site.url!}/fast-isr`,

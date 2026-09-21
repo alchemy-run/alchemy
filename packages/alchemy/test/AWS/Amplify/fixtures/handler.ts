@@ -1,5 +1,3 @@
-import * as Amplify from "@/AWS/Amplify";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Amplify from "@/AWS/Amplify";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -49,14 +49,12 @@ export default AmplifyTestFunction.make(
     // (best-effort — a different instance may serve /events) and exposed on
     // the /events route.
     const deploymentEvents: Amplify.DeploymentStatusChangeDetail[] = [];
-    yield* Amplify.consumeDeploymentStatusChanges(
-      { id: "BindingsTestApp" },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.sync(() => {
-            deploymentEvents.push(event.detail);
-          }),
-        ),
+    yield* Amplify.consumeDeploymentStatusChanges({ id: "BindingsTestApp" }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.sync(() => {
+          deploymentEvents.push(event.detail);
+        }),
+      ),
     );
 
     return {
@@ -156,13 +154,8 @@ export default AmplifyTestFunction.make(
               status: r.jobSummary.status,
             })),
             Effect.catchTag(
-              [
-                "BadRequestException",
-                "NotFoundException",
-                "LimitExceededException",
-              ],
-              (e) =>
-                Effect.succeed({ stopped: false as const, errorTag: e._tag }),
+              ["BadRequestException", "NotFoundException", "LimitExceededException"],
+              (e) => Effect.succeed({ stopped: false as const, errorTag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -250,10 +243,7 @@ export default AmplifyTestFunction.make(
         // Lambda has no CloudWatch logs permission, so the HTTP body is the
         // only diagnostic channel the test can observe.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: "unhandled", cause: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: "unhandled", cause: String(cause) }, { status: 500 }),
         ),
       ),
     };

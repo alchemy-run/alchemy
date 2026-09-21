@@ -29,10 +29,7 @@ export interface GetBootstrapBrokers extends Binding.Service<
   (
     cluster: ServerlessCluster,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kafka.GetBootstrapBrokersResponse,
-      kafka.GetBootstrapBrokersError
-    >
+    () => Effect.Effect<kafka.GetBootstrapBrokersResponse, kafka.GetBootstrapBrokersError>
   >
 > {}
 export const GetBootstrapBrokers = Binding.Service<GetBootstrapBrokers>(

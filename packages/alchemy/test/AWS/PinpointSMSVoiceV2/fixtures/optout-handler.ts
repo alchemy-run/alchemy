@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as PinpointSMSVoiceV2 from "@/AWS/PinpointSMSVoiceV2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as PinpointSMSVoiceV2 from "@/AWS/PinpointSMSVoiceV2";
 
 const main = path.resolve(import.meta.dirname, "optout-handler.ts");
 
@@ -31,10 +31,8 @@ export default SmsVoiceOptOutTestFunction.make(
     });
 
     const putOptedOut = yield* PinpointSMSVoiceV2.PutOptedOutNumber(optOuts);
-    const describeOptedOut =
-      yield* PinpointSMSVoiceV2.DescribeOptedOutNumbers(optOuts);
-    const deleteOptedOut =
-      yield* PinpointSMSVoiceV2.DeleteOptedOutNumber(optOuts);
+    const describeOptedOut = yield* PinpointSMSVoiceV2.DescribeOptedOutNumbers(optOuts);
+    const deleteOptedOut = yield* PinpointSMSVoiceV2.DeleteOptedOutNumber(optOuts);
     const carrierLookup = yield* PinpointSMSVoiceV2.CarrierLookup();
     const putFeedback = yield* PinpointSMSVoiceV2.PutMessageFeedback();
 

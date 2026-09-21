@@ -28,8 +28,7 @@ describe("workerd/Config", () => {
               modules: [
                 {
                   name: "main.js",
-                  esModule:
-                    "export default { fetch: () => new Response('ok') };",
+                  esModule: "export default { fetch: () => new Response('ok') };",
                 },
               ],
             },
@@ -68,9 +67,7 @@ describe("workerd/Config", () => {
                 { name: "main.js", esModule: "export default {}" },
               ],
               bindings: [{ name: "EVAL", unsafeEval: WorkerdConfig.kVoid }],
-              durableObjectNamespaces: [
-                { className: "Foo", ephemeralLocal: WorkerdConfig.kVoid },
-              ],
+              durableObjectNamespaces: [{ className: "Foo", ephemeralLocal: WorkerdConfig.kVoid }],
             },
           },
         ],
@@ -97,8 +94,7 @@ describe("workerd/Config", () => {
               containerEngine: {
                 localDocker: {
                   socketPath: "unix:///var/run/docker.sock",
-                  containerEgressInterceptorImage:
-                    "cloudflare/proxy-everything:latest",
+                  containerEgressInterceptorImage: "cloudflare/proxy-everything:latest",
                 },
               },
             },
@@ -172,8 +168,7 @@ describe("workerd/Config", () => {
               containerEngine: {
                 localDocker: {
                   socketPath: "unix:///var/run/docker.sock",
-                  containerEgressInterceptorImage:
-                    "cloudflare/proxy-everything:test",
+                  containerEgressInterceptorImage: "cloudflare/proxy-everything:test",
                 },
               },
             },
@@ -185,18 +180,14 @@ describe("workerd/Config", () => {
       const decoded = new Message(buffer, false).getRoot(CapnpConfig);
       const worker = decoded.services.get(0).worker;
 
-      expect(worker.containerEngine.localDocker.socketPath).toBe(
-        "unix:///var/run/docker.sock",
+      expect(worker.containerEngine.localDocker.socketPath).toBe("unix:///var/run/docker.sock");
+      expect(worker.containerEngine.localDocker.containerEgressInterceptorImage).toBe(
+        "cloudflare/proxy-everything:test",
       );
-      expect(
-        worker.containerEngine.localDocker.containerEgressInterceptorImage,
-      ).toBe("cloudflare/proxy-everything:test");
 
       const namespace = worker.durableObjectNamespaces.get(0);
       expect(namespace.className).toBe("MyContainer");
-      expect(namespace.container.imageName).toBe(
-        "cloudflare-dev/mycontainer:abc12345",
-      );
+      expect(namespace.container.imageName).toBe("cloudflare-dev/mycontainer:abc12345");
     });
 
     it("throws a useful error when a key does not exist on the capnp struct", () => {

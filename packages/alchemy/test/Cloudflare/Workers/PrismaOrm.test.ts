@@ -1,7 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Neon from "@/Neon";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,20 +5,17 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Neon from "@/Neon";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/prisma-orm/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(
-    Cloudflare.providers(),
-    Neon.providers(),
-    Prisma.providers(),
-  ),
+  providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers(), Prisma.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack), { timeout: 120_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -53,8 +46,7 @@ const getOk = (url: string) =>
       Effect.timeout("15 seconds"),
       Effect.retry({
         while: (error) =>
-          error._tag === "WorkerNotReady" &&
-          (error.status === 404 || error.status === 503),
+          error._tag === "WorkerNotReady" && (error.status === 404 || error.status === 503),
         schedule: Schedule.exponential("500 millis"),
         times: 6,
       }),

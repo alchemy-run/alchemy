@@ -1,34 +1,26 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
-import {
-  GetIssuingCardholders,
-  GetIssuingCardholder,
-} from "@distilled.cloud/stripe/stripe";
+import { GetIssuingCardholders, GetIssuingCardholder } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
 const ISSUING_ENABLED = process.env.STRIPE_TEST_ISSUING === "1";
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
   GetIssuingCardholder({ cardholder: id }).pipe(
     Effect.map((cardholder) =>
-      cardholder.status === "inactive"
-        ? ("inactive" as const)
-        : ("active" as const),
+      cardholder.status === "inactive" ? ("inactive" as const) : ("active" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
@@ -54,17 +46,13 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* GetIssuingCardholders({ limit: 1 }).pipe(
-        Effect.result,
-      );
+      const result = yield* GetIssuingCardholders({ limit: 1 }).pipe(Effect.result);
 
       if (Result.isSuccess(result)) {
         expect(Array.isArray(result.success.data)).toBe(true);
       } else {
         expect(result.failure._tag).not.toEqual("UnknownStripeError");
-        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(
-          result.failure._tag,
-        );
+        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(result.failure._tag);
         if (result.failure._tag === "InvalidRequestError") {
           expect(result.failure.message).toContain("not set up to use Issuing");
         }
@@ -120,12 +108,8 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(fetched.phone_number).toEqual("+15555550100");
       expect(fetched.status).toEqual("active");
       expect(fetched.metadata?.team).toEqual("ops");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -153,9 +137,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       );
 
       expect(updated.id).toEqual(created.id);
-      expect(updated.email).toEqual(
-        "alchemy.issuing.holder.updated@example.com",
-      );
+      expect(updated.email).toEqual("alchemy.issuing.holder.updated@example.com");
       expect(updated.phoneNumber).toEqual("+15555550199");
       expect(updated.billing.address.line1).toEqual("456 Market Street");
       expect(updated.preferredLocales).toEqual(["en", "es"]);
@@ -169,9 +151,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       const refetched = yield* GetIssuingCardholder({
         cardholder: updated.id,
       });
-      expect(refetched.email).toEqual(
-        "alchemy.issuing.holder.updated@example.com",
-      );
+      expect(refetched.email).toEqual("alchemy.issuing.holder.updated@example.com");
       expect(refetched.phone_number).toEqual("+15555550199");
       expect(refetched.billing.address.line1).toEqual("456 Market Street");
       expect(refetched.preferred_locales).toEqual(["en", "es"]);
@@ -221,9 +201,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(inactive).toEqual("inactive");
 
       const after = yield* provider.list();
-      expect(
-        after.find((cardholder) => cardholder.id === deployed.id),
-      ).toBeUndefined();
+      expect(after.find((cardholder) => cardholder.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

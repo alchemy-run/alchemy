@@ -1,6 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import {
   GetTerminalConfiguration,
   type DeletedTerminalConfiguration,
@@ -10,21 +7,20 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const isDeletedConfiguration = (
   value: StripeTerminalConfiguration | DeletedTerminalConfiguration,
-): value is DeletedTerminalConfiguration =>
-  "deleted" in value && value.deleted === true;
+): value is DeletedTerminalConfiguration => "deleted" in value && value.deleted === true;
 
 const waitUntilGone = (id: string) =>
   GetTerminalConfiguration({ configuration: id }).pipe(
@@ -156,13 +152,9 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Stripe.TerminalConfiguration,
-      );
+      const provider = yield* Provider.findProvider(Stripe.TerminalConfiguration);
       const all = yield* provider.list();
-      const found = all.find(
-        (configuration) => configuration.id === deployed.id,
-      );
+      const found = all.find((configuration) => configuration.id === deployed.id);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(deployed.name);
       expect(found?.isAccountDefault).toEqual(false);
@@ -174,9 +166,7 @@ test.provider(
       expect(gone).toEqual("gone");
 
       const after = yield* provider.list();
-      expect(
-        after.find((configuration) => configuration.id === deployed.id),
-      ).toBeUndefined();
+      expect(after.find((configuration) => configuration.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

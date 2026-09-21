@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
-import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
+import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -17,17 +17,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // returns an empty list once deletion completes (bounded poll — the provider's
 // delete already waits, this is a cheap final confirmation).
 const assertGroupGone = (name: string) =>
-  autoscaling
-    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
-    .pipe(
-      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
-      Effect.repeat({
-        until: (count) => count === 0,
-        schedule: Schedule.spaced("3 seconds"),
-        times: 10,
-      }),
-      Effect.map((count) => expect(count).toBe(0)),
-    );
+  autoscaling.describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any).pipe(
+    Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+    Effect.repeat({
+      until: (count) => count === 0,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
+    Effect.map((count) => expect(count).toBe(0)),
+  );
 
 const launchTemplateName = "alchemy-test-asg-lt-oob";
 
@@ -84,9 +82,7 @@ test.provider(
       const provider = yield* Provider.findProvider(AutoScalingGroup);
       const all = yield* provider.list();
 
-      expect(
-        all.some((g) => g.autoScalingGroupName === group.autoScalingGroupName),
-      ).toBe(true);
+      expect(all.some((g) => g.autoScalingGroupName === group.autoScalingGroupName)).toBe(true);
 
       yield* stack.destroy();
       yield* assertGroupGone("alchemy-test-asg-list");
@@ -157,9 +153,7 @@ test.provider(
       // The group is wired to the template by ID with the version pinned to
       // the template's resolved default version (not "$Default").
       expect(deployed.group.launchTemplateId).toEqual(deployed.templateId);
-      expect(deployed.group.launchTemplateVersion).toEqual(
-        String(deployed.templateDefaultVersion),
-      );
+      expect(deployed.group.launchTemplateVersion).toEqual(String(deployed.templateDefaultVersion));
 
       // Duration.Input props round-trip as whole seconds in the attributes.
       expect(deployed.group.defaultCooldown).toEqual(45);
@@ -171,9 +165,7 @@ test.provider(
         AutoScalingGroupNames: [wholeAsgName],
       } as any);
       const live = described.AutoScalingGroups?.[0];
-      expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(
-        deployed.templateId,
-      );
+      expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(deployed.templateId);
       expect(live?.DefaultCooldown).toEqual(45);
       expect(live?.HealthCheckGracePeriod).toEqual(120);
 

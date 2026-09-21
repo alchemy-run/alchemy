@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListConnections}.
  */
-export interface ListConnectionsRequest
-  extends codeconnections.ListConnectionsInput {}
+export interface ListConnectionsRequest extends codeconnections.ListConnectionsInput {}
 
 /**
  * Runtime binding for `codeconnections:ListConnections`.
@@ -35,10 +34,7 @@ export interface ListConnections extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListConnectionsRequest,
-    ) => Effect.Effect<
-      codeconnections.ListConnectionsOutput,
-      codeconnections.ListConnectionsError
-    >
+    ) => Effect.Effect<codeconnections.ListConnectionsOutput, codeconnections.ListConnectionsError>
   >
 > {}
 

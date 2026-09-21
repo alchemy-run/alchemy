@@ -11,8 +11,7 @@ type ErrorEnvelope = typeof ErrorEnvelope.Type;
 const encodeErrorResponse = Schema.encodeSync(ErrorEnvelope);
 const decodeErrorResponse = Schema.decodeUnknownResult(ErrorEnvelope);
 
-export const makeErrorEnvelope = (error: RuntimeError) =>
-  encodeErrorResponse({ ok: false, error });
+export const makeErrorEnvelope = (error: RuntimeError) => encodeErrorResponse({ ok: false, error });
 
 export const makeErrorResponse = (
   error: RuntimeError,

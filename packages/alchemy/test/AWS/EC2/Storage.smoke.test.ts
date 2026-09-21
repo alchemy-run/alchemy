@@ -1,3 +1,9 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   amazonLinux2023,
@@ -11,19 +17,10 @@ import {
   Vpc,
 } from "@/AWS/EC2";
 import * as Test from "./VpcTest.ts";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const AZ = "us-west-2a";
 
@@ -69,27 +66,21 @@ test.provider(
             size: 1,
             volumeType: "gp3",
           });
-          const volumeAttachment = yield* VolumeAttachment(
-            "StorageVolumeAttachment",
-            {
-              volumeId: volume.volumeId,
-              instanceId: instance.instanceId,
-              device: "/dev/sdf",
-            },
-          );
+          const volumeAttachment = yield* VolumeAttachment("StorageVolumeAttachment", {
+            volumeId: volume.volumeId,
+            instanceId: instance.instanceId,
+            device: "/dev/sdf",
+          });
           const eni = yield* NetworkInterface("StorageEni", {
             subnetId: subnet.subnetId,
             description: "alchemy storage smoke test secondary eni",
             securityGroupIds: [sg.groupId],
           });
-          const eniAttachment = yield* NetworkInterfaceAttachment(
-            "StorageEniAttachment",
-            {
-              networkInterfaceId: eni.networkInterfaceId,
-              instanceId: instance.instanceId,
-              deviceIndex: 1,
-            },
-          );
+          const eniAttachment = yield* NetworkInterfaceAttachment("StorageEniAttachment", {
+            networkInterfaceId: eni.networkInterfaceId,
+            instanceId: instance.instanceId,
+            deviceIndex: 1,
+          });
           return {
             instance,
             volume,
@@ -100,8 +91,7 @@ test.provider(
         }),
       );
 
-      const { instance, volume, volumeAttachment, eni, eniAttachment } =
-        deployed;
+      const { instance, volume, volumeAttachment, eni, eniAttachment } = deployed;
 
       // Volume attachment reached 'attached'.
       expect(volumeAttachment.state).toBe("attached");

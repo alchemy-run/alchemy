@@ -6,8 +6,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 
 /** The AWS Lambda deploy target for the Waku build. */
-export const WAKU_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/waku/aws";
+export const WAKU_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/aws";
 
 export interface WakuProps extends FrameworkSiteProps {
   /**

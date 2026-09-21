@@ -1,18 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import AcmTestFunctionLive, {
-  AcmTestFunction,
-  FIXTURE_DOMAIN,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import AcmTestFunctionLive, { AcmTestFunction, FIXTURE_DOMAIN } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -26,10 +23,7 @@ const withUsEast1 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -48,19 +42,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -84,9 +73,7 @@ describe.sequential("ACM Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/describe`;
 
-      yield* Effect.logInfo(
-        `ACM test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ACM test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -104,9 +91,9 @@ describe.sequential("ACM Bindings", () => {
   describe("DescribeCertificate", () => {
     test.provider("reads the bound certificate's metadata", (_stack) =>
       Effect.gen(function* () {
-        const body = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/describe`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const body = (yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
         expect(body.arn).toContain("arn:aws:acm:us-east-1:");
         expect(body.domainName).toBe(FIXTURE_DOMAIN);
@@ -118,31 +105,27 @@ describe.sequential("ACM Bindings", () => {
   });
 
   describe("GetCertificate", () => {
-    test.provider(
-      "fails with the typed RequestInProgressException while pending",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/get`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+    test.provider("fails with the typed RequestInProgressException while pending", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(HttpClientRequest.get(`${baseUrl}/get`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
-          expect(body.errorTag).toBe("RequestInProgressException");
-        }),
+        expect(body.errorTag).toBe("RequestInProgressException");
+      }),
     );
   });
 
   describe("ListCertificates", () => {
     test.provider("lists the bound certificate", (_stack) =>
       Effect.gen(function* () {
-        const described = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/describe`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const described = (yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
         // ListCertificates is eventually consistent for fresh requests.
         const body = yield* fetchUntil(
-          send(HttpClientRequest.get(`${baseUrl}/list`)).pipe(
-            Effect.flatMap((r) => r.json),
-          ),
+          send(HttpClientRequest.get(`${baseUrl}/list`)).pipe(Effect.flatMap((r) => r.json)),
           (b) => Array.isArray(b?.arns) && b.arns.includes(described.arn),
         );
 
@@ -154,14 +137,12 @@ describe.sequential("ACM Bindings", () => {
   describe("SearchCertificates", () => {
     test.provider("finds the bound certificate by ARN filter", (_stack) =>
       Effect.gen(function* () {
-        const described = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/describe`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const described = (yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
         const body = yield* fetchUntil(
-          send(HttpClientRequest.get(`${baseUrl}/search`)).pipe(
-            Effect.flatMap((r) => r.json),
-          ),
+          send(HttpClientRequest.get(`${baseUrl}/search`)).pipe(Effect.flatMap((r) => r.json)),
           (b) => Array.isArray(b?.arns) && b.arns.includes(described.arn),
         );
 
@@ -171,69 +152,61 @@ describe.sequential("ACM Bindings", () => {
   });
 
   describe("ExportCertificate", () => {
-    test.provider(
-      "fails with a typed error on a non-exportable pending certificate",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/export`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+    test.provider("fails with a typed error on a non-exportable pending certificate", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(HttpClientRequest.post(`${baseUrl}/export`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
-          // The fixture certificate is pending and was not requested with
-          // `export: "ENABLED"` — the export must be rejected with a TYPED
-          // tag (an untyped catch-all would crash the handler into a 500).
-          expect(typeof body.errorTag).toBe("string");
-          expect(body.errorTag.length).toBeGreaterThan(0);
-        }),
+        // The fixture certificate is pending and was not requested with
+        // `export: "ENABLED"` — the export must be rejected with a TYPED
+        // tag (an untyped catch-all would crash the handler into a 500).
+        expect(typeof body.errorTag).toBe("string");
+        expect(body.errorTag.length).toBeGreaterThan(0);
+      }),
     );
   });
 
   describe("RenewCertificate", () => {
-    test.provider(
-      "fails with a typed error on a pending certificate",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/renew`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+    test.provider("fails with a typed error on a pending certificate", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(HttpClientRequest.post(`${baseUrl}/renew`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
-          expect(typeof body.errorTag).toBe("string");
-          expect(body.errorTag.length).toBeGreaterThan(0);
-        }),
+        expect(typeof body.errorTag).toBe("string");
+        expect(body.errorTag.length).toBeGreaterThan(0);
+      }),
     );
   });
 
   describe("ResendValidationEmail", () => {
-    test.provider(
-      "fails with a typed error on a DNS-validated certificate",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/resend-email`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+    test.provider("fails with a typed error on a DNS-validated certificate", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(HttpClientRequest.post(`${baseUrl}/resend-email`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
-          // Email validation cannot be (re)sent for a DNS-validated
-          // certificate; ACM reports the invalid state with a typed tag.
-          expect(typeof body.errorTag).toBe("string");
-          expect(body.errorTag.length).toBeGreaterThan(0);
-        }),
+        // Email validation cannot be (re)sent for a DNS-validated
+        // certificate; ACM reports the invalid state with a typed tag.
+        expect(typeof body.errorTag).toBe("string");
+        expect(body.errorTag.length).toBeGreaterThan(0);
+      }),
     );
   });
 
   describe("RevokeCertificate", () => {
-    test.provider(
-      "fails with a typed error on a never-exported certificate",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/revoke`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+    test.provider("fails with a typed error on a never-exported certificate", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(HttpClientRequest.post(`${baseUrl}/revoke`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
-          // Only previously exported certificates can be revoked — the
-          // pending fixture must be rejected with a typed tag.
-          expect(typeof body.errorTag).toBe("string");
-          expect(body.errorTag.length).toBeGreaterThan(0);
-        }),
+        // Only previously exported certificates can be revoked — the
+        // pending fixture must be rejected with a typed tag.
+        expect(typeof body.errorTag).toBe("string");
+        expect(body.errorTag.length).toBeGreaterThan(0);
+      }),
     );
   });
 
@@ -243,10 +216,7 @@ describe.sequential("ACM Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const imported = (yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/import`),
-              {},
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/import`), {}),
           ).pipe(Effect.flatMap((r) => r.json))) as any;
 
           expect(imported.arn).toContain("arn:aws:acm:us-east-1:");
@@ -255,17 +225,16 @@ describe.sequential("ACM Bindings", () => {
           // The imported certificate is created outside IaC management —
           // reclaim it even if the assertions below fail.
           yield* Effect.addFinalizer(() =>
-            withUsEast1(
-              acm.deleteCertificate({ CertificateArn: imported.arn }),
-            ).pipe(Effect.ignore),
+            withUsEast1(acm.deleteCertificate({ CertificateArn: imported.arn })).pipe(
+              Effect.ignore,
+            ),
           );
 
           // Rotation path: re-importing over the existing ARN keeps the ARN.
           const reimported = (yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/import`),
-              { reimportArn: imported.arn },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/import`), {
+              reimportArn: imported.arn,
+            }),
           ).pipe(Effect.flatMap((r) => r.json))) as any;
 
           expect(reimported.arn).toBe(imported.arn);
@@ -276,10 +245,7 @@ describe.sequential("ACM Bindings", () => {
             acm.deleteCertificate({ CertificateArn: imported.arn }).pipe(
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             ),
@@ -300,15 +266,10 @@ const fetchUntil = <A>(
 ) =>
   fetch.pipe(
     Effect.flatMap((body) =>
-      ready(body)
-        ? Effect.succeed(body as A)
-        : Effect.fail(new BindingNotConsistent()),
+      ready(body) ? Effect.succeed(body as A) : Effect.fail(new BindingNotConsistent()),
     ),
     Effect.retry({
       while: (e) => e._tag === "BindingNotConsistent",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );

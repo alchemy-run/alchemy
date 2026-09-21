@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Stripe from "@/Stripe/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Stripe from "@/Stripe/index.ts";
 
 export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEventSourceWorker>()(
   "StripeEventSourceWorker",
@@ -41,10 +41,7 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
           const customer = yield* createCustomer({
             email: "event-source@example.com",
           }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { id: customer.id },
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json({ id: customer.id }, { status: 201 });
         }
         return HttpServerResponse.text("ok");
       }),

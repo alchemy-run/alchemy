@@ -20,11 +20,8 @@ export const inferredLayer = RpcWebSocketClient.layer(
   "wss://example.com/rpc",
 );
 
-const constructorRequired: Layer.Layer<
-  BrowserClient,
-  never,
-  Socket.WebSocketConstructor
-> = inferredLayer;
+const constructorRequired: Layer.Layer<BrowserClient, never, Socket.WebSocketConstructor> =
+  inferredLayer;
 // @ts-expect-error The browser WebSocket constructor must be supplied explicitly.
 const missingConstructor: Layer.Layer<BrowserClient> = inferredLayer;
 
@@ -37,8 +34,7 @@ export const ordinaryCall = Effect.gen(function* () {
   const client = yield* BrowserClient;
   return yield* client.echo({ value: "hello" });
 }).pipe(Effect.provide(browserLayer));
-const ordinaryWithoutScope: Effect.Effect<string, RpcClientError | "Rejected"> =
-  ordinaryCall;
+const ordinaryWithoutScope: Effect.Effect<string, RpcClientError | "Rejected"> = ordinaryCall;
 // @ts-expect-error The declared RPC error remains in the caller's error channel.
 const missingRpcError: Effect.Effect<string, RpcClientError> = ordinaryCall;
 
@@ -46,10 +42,7 @@ export const streamingCall = Effect.gen(function* () {
   const client = yield* BrowserClient;
   return yield* client.numbers({ count: 3 }).pipe(Stream.runCollect);
 }).pipe(Effect.provide(browserLayer));
-const streamWithoutScope: Effect.Effect<
-  ReadonlyArray<number>,
-  RpcClientError
-> = streamingCall;
+const streamWithoutScope: Effect.Effect<ReadonlyArray<number>, RpcClientError> = streamingCall;
 
 export const queueCall = Effect.gen(function* () {
   const client = yield* BrowserClient;
@@ -81,11 +74,8 @@ const middlewareRequired: Layer.Layer<
   Socket.WebSocketConstructor | RpcMiddleware.ForClient<ClientMiddleware>
 > = middlewareLayer;
 // @ts-expect-error Supplying the constructor does not supply client middleware.
-const missingMiddleware: Layer.Layer<
-  MiddlewareClient,
-  never,
-  Socket.WebSocketConstructor
-> = middlewareLayer;
+const missingMiddleware: Layer.Layer<MiddlewareClient, never, Socket.WebSocketConstructor> =
+  middlewareLayer;
 // @ts-expect-error Supplying client middleware does not supply the constructor.
 const middlewareMissingConstructor: Layer.Layer<
   MiddlewareClient,
@@ -97,9 +87,7 @@ export const middlewareCall = Effect.gen(function* () {
   const client = yield* MiddlewareClient;
   return yield* client.echo({ value: "authorized" });
 }).pipe(
-  Effect.provide(
-    middlewareLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
-  ),
+  Effect.provide(middlewareLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))),
 );
 const callRequiresMiddleware: Effect.Effect<
   string,
@@ -107,22 +95,12 @@ const callRequiresMiddleware: Effect.Effect<
   RpcMiddleware.ForClient<ClientMiddleware>
 > = middlewareCall;
 // @ts-expect-error Client middleware remains required when the layer is provided.
-const callMissingMiddleware: Effect.Effect<
-  string,
-  RpcClientError | "Rejected"
-> = middlewareCall;
+const callMissingMiddleware: Effect.Effect<string, RpcClientError | "Rejected"> = middlewareCall;
 
 export const authorizedCall = middlewareCall.pipe(
-  Effect.provide(
-    RpcMiddleware.layerClient(ClientMiddleware, ({ request, next }) =>
-      next(request),
-    ),
-  ),
+  Effect.provide(RpcMiddleware.layerClient(ClientMiddleware, ({ request, next }) => next(request))),
 );
-const authorizedWithoutScope: Effect.Effect<
-  string,
-  RpcClientError | "Rejected"
-> = authorizedCall;
+const authorizedWithoutScope: Effect.Effect<string, RpcClientError | "Rejected"> = authorizedCall;
 
 export const options = {
   socket: {
@@ -161,10 +139,9 @@ export const explicitLayer = RpcWebSocketClient.layer(
   "wss://example.com/rpc",
 );
 
-export class FlatClient extends Context.Service<FlatClient>()(
-  "FlatRpcWebSocketClient",
-  { make: RpcClient.make(BrowserRpcs, { flatten: true }) },
-) {}
+export class FlatClient extends Context.Service<FlatClient>()("FlatRpcWebSocketClient", {
+  make: RpcClient.make(BrowserRpcs, { flatten: true }),
+}) {}
 // @ts-expect-error The helper exposes grouped methods, not a flattened callable client.
 RpcWebSocketClient.layer(FlatClient, BrowserRpcs, "wss://example.com/rpc");
 RpcWebSocketClient.layer(BrowserClient, BrowserRpcs, "wss://example.com/rpc", {

@@ -96,27 +96,19 @@ export interface Destination extends Resource<
  *
  * @resource
  */
-export const Destination = Resource<Destination>(
-  "AWS.IoTManagedIntegrations.Destination",
-);
+export const Destination = Resource<Destination>("AWS.IoTManagedIntegrations.Destination");
 
 export const DestinationProvider = () =>
   Provider.effect(
     Destination,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string } = {}) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 128 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
       const observe = (name: string) =>
         mi
           .getDestination({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // GetDestination does not return an ARN; the tag APIs need one, so
       // construct it from the ambient account/region.
@@ -125,18 +117,14 @@ export const DestinationProvider = () =>
         return `arn:aws:iotmanagedintegrations:${region}:${accountId}:destination/${name}`;
       });
 
-      const toAttributes = Effect.fn(function* (
-        destination: mi.GetDestinationResponse,
-      ) {
+      const toAttributes = Effect.fn(function* (destination: mi.GetDestinationResponse) {
         if (
           destination.Name === undefined ||
           destination.DeliveryDestinationArn === undefined ||
           destination.DeliveryDestinationType === undefined ||
           destination.RoleArn === undefined
         ) {
-          return yield* Effect.fail(
-            new Error("destination response is missing required fields"),
-          );
+          return yield* Effect.fail(new Error("destination response is missing required fields"));
         }
         return {
           destinationName: destination.Name,
@@ -152,21 +140,16 @@ export const DestinationProvider = () =>
         stables: ["destinationName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.destinationName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.destinationName ?? (yield* toName(id, olds ?? {}));
           const destination = yield* observe(name);
           if (destination === undefined) return undefined;
           const attrs = yield* toAttributes(destination);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.destinationName ?? (yield* toName(id, news));
@@ -191,20 +174,16 @@ export const DestinationProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             destination = yield* observe(name);
             if (destination === undefined) {
-              return yield* Effect.fail(
-                new Error(`destination '${name}' vanished after create`),
-              );
+              return yield* Effect.fail(new Error(`destination '${name}' vanished after create`));
             }
           }
 
           // Sync mutable settings — apply only the delta.
           if (
-            destination.DeliveryDestinationArn !==
-              news.deliveryDestinationArn ||
+            destination.DeliveryDestinationArn !== news.deliveryDestinationArn ||
             destination.DeliveryDestinationType !== desiredType ||
             destination.RoleArn !== news.roleArn ||
-            (destination.Description ?? undefined) !==
-              (news.description ?? undefined)
+            (destination.Description ?? undefined) !== (news.description ?? undefined)
           ) {
             yield* mi.updateDestination({
               Name: name,
@@ -225,9 +204,7 @@ export const DestinationProvider = () =>
           // Return fresh attributes.
           const final = yield* observe(name);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`destination '${name}' vanished during reconcile`),
-            );
+            return yield* Effect.fail(new Error(`destination '${name}' vanished during reconcile`));
           }
           const attrs = yield* toAttributes(final);
           yield* session.note(attrs.destinationName);
@@ -243,25 +220,20 @@ export const DestinationProvider = () =>
             );
             const destinations = yield* Effect.forEach(
               summaries.filter(
-                (s): s is mi.DestinationSummary & { Name: string } =>
-                  s.Name !== undefined,
+                (s): s is mi.DestinationSummary & { Name: string } => s.Name !== undefined,
               ),
               (summary) => observe(summary.Name),
               { concurrency: 5 },
             );
             return yield* Effect.forEach(
-              destinations.filter(
-                (d): d is mi.GetDestinationResponse => d !== undefined,
-              ),
+              destinations.filter((d): d is mi.GetDestinationResponse => d !== undefined),
               toAttributes,
             );
           }),
         delete: Effect.fn(function* ({ output }) {
           yield* mi
             .deleteDestination({ Name: output.destinationName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

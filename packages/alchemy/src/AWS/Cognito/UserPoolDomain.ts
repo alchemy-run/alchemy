@@ -89,9 +89,7 @@ export interface UserPoolDomain extends Resource<
  *
  * @resource
  */
-export const UserPoolDomain = Resource<UserPoolDomain>(
-  "AWS.Cognito.UserPoolDomain",
-);
+export const UserPoolDomain = Resource<UserPoolDomain>("AWS.Cognito.UserPoolDomain");
 
 class DomainNotActive extends Data.TaggedError("DomainNotActive")<{
   readonly domain: string;
@@ -142,9 +140,7 @@ const waitUntilActive = (domain: string) =>
         ) {
           return Effect.succeed(description);
         }
-        return Effect.fail(
-          new DomainNotActive({ domain, status: description?.Status }),
-        );
+        return Effect.fail(new DomainNotActive({ domain, status: description?.Status }));
       }),
     ),
   );
@@ -196,8 +192,7 @@ export const UserPoolDomainProvider = () =>
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const domain =
-            output?.domain ?? (yield* createDomain(id, olds ?? {}));
+          const domain = output?.domain ?? (yield* createDomain(id, olds ?? {}));
           const observed = yield* describeDomain(domain);
           return observed === undefined ? undefined : attributesOf(observed);
         }),
@@ -236,8 +231,7 @@ export const UserPoolDomainProvider = () =>
               (news.managedLoginVersion !== undefined &&
                 observed.ManagedLoginVersion !== news.managedLoginVersion) ||
               (news.certificateArn !== undefined &&
-                observed.CustomDomainConfig?.CertificateArn !==
-                  news.certificateArn);
+                observed.CustomDomainConfig?.CertificateArn !== news.certificateArn);
             if (drift) {
               yield* cip.updateUserPoolDomain({
                 Domain: domain,
@@ -282,7 +276,6 @@ const retryWhileTransitioning = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "InvalidParameterException" ||
-      e._tag === "ConcurrentModificationException",
+      e._tag === "InvalidParameterException" || e._tag === "ConcurrentModificationException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });

@@ -16,12 +16,7 @@ export const StartTransformerJobHttp = Layer.effect(
     companionStatements: [
       {
         Effect: "Allow",
-        Action: [
-          "s3:GetObject",
-          "s3:GetObjectAttributes",
-          "s3:PutObject",
-          "s3:ListBucket",
-        ],
+        Action: ["s3:GetObject", "s3:GetObjectAttributes", "s3:PutObject", "s3:ListBucket"],
         Resource: ["*"],
       },
     ],

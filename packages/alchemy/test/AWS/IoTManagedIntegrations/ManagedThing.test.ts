@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { CredentialLocker, ManagedThing } from "@/AWS/IoTManagedIntegrations";
-import { Region } from "@/AWS/Region.ts";
-import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CredentialLocker, ManagedThing } from "@/AWS/IoTManagedIntegrations";
+import { Region } from "@/AWS/Region.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,15 +23,13 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getManagedThing on a nonexistent thing fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        pin(mi.getManagedThing({ Identifier: "alchemynonexistentthingprobe" })),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getManagedThing on a nonexistent thing fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      pin(mi.getManagedThing({ Identifier: "alchemynonexistentthingprobe" })),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
@@ -41,8 +39,7 @@ class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
 const assertThingGone = (managedThingId: string) =>
   mi.getManagedThing({ Identifier: managedThingId }).pipe(
     Effect.flatMap((thing) =>
-      thing.ProvisioningStatus === "DELETED" ||
-      thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
+      thing.ProvisioningStatus === "DELETED" || thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
         ? Effect.void
         : Effect.fail(new ThingStillExists({ managedThingId })),
     ),

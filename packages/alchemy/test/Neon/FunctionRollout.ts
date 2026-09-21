@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { expect } from "alchemy-test";
 
 export const functionRolloutTimeout = 900_000;
 
@@ -63,10 +63,7 @@ export const functionRolloutSamples = <A, E, R>(
   });
 
 /** Compare the shared HTTP client with a fresh, proxy-bypassing connection. */
-export const functionTextSamples = (
-  url: string,
-  isCurrent: (body: string) => boolean,
-) =>
+export const functionTextSamples = (url: string, isCurrent: (body: string) => boolean) =>
   functionRolloutSamples(
     Effect.gen(function* () {
       const response = yield* HttpClient.get(url, {

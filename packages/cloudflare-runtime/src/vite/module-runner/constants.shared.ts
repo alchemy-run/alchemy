@@ -10,8 +10,7 @@ export const WORKER_ENTRY_PATH_HEADER = "distilled-worker-entry-path";
  * This runs over the module runner channel rather than an HTTP endpoint so it
  * cannot be intercepted by the asset router that sits in front of the Worker.
  */
-export const REQUEST_EXPORT_TYPES_EVENT =
-  "distilled-cloudflare:request-export-types";
+export const REQUEST_EXPORT_TYPES_EVENT = "distilled-cloudflare:request-export-types";
 
 /** Reply to {@link REQUEST_EXPORT_TYPES_EVENT}, carrying an `ExportTypes` payload. */
 export const EXPORT_TYPES_EVENT = "distilled-cloudflare:export-types";

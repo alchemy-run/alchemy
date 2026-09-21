@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { PermissionSet } from "@/AWS/IdentityCenter";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { PermissionSet } from "@/AWS/IdentityCenter";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -53,9 +53,7 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
       const provider = yield* Provider.findProvider(PermissionSet);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (p) => p.permissionSetArn === permissionSet.permissionSetArn,
-      );
+      const found = all.find((p) => p.permissionSetArn === permissionSet.permissionSetArn);
       expect(found).toBeDefined();
       expect(found?.name).toBe(permissionSet.name);
       expect(found?.instanceArn).toBe(permissionSet.instanceArn);

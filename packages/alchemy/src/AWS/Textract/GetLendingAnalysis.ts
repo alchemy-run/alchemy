@@ -26,10 +26,7 @@ export interface GetLendingAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.GetLendingAnalysisRequest,
-    ) => Effect.Effect<
-      textract.GetLendingAnalysisResponse,
-      textract.GetLendingAnalysisError
-    >
+    ) => Effect.Effect<textract.GetLendingAnalysisResponse, textract.GetLendingAnalysisError>
   >
 > {}
 export const GetLendingAnalysis = Binding.Service<GetLendingAnalysis>(

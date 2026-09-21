@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Redshift from "@/AWS/Redshift";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Redshift from "@/AWS/Redshift";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -72,9 +72,7 @@ export default RedshiftBindingsTestFunction.make(
             ClusterIdentifier: NONEXISTENT_CLUSTER_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -107,9 +105,7 @@ export default RedshiftBindingsTestFunction.make(
             SnapshotIdentifier: NONEXISTENT_SNAPSHOT_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("ClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -122,9 +118,7 @@ export default RedshiftBindingsTestFunction.make(
             TargetSnapshotIdentifier: `${NONEXISTENT_SNAPSHOT_ID}-copy`,
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag("ClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

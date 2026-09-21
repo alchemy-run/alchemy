@@ -1,21 +1,17 @@
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
-import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { convertPathToPattern, glob } from "tinyglobby";
 import path from "pathe";
+import { convertPathToPattern, glob } from "tinyglobby";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { exec } from "../../../Util/exec.ts";
+import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import { sha256 } from "../../../Util/sha256.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
-import {
-  bundleSource,
-  resolveMainPath,
-  watchBundleDirectory,
-} from "./shared.ts";
+import { bundleSource, resolveMainPath, watchBundleDirectory } from "./shared.ts";
 
 /**
  * Whether a Worker `main` entry points at a Python module. Python Workers
@@ -100,8 +96,7 @@ export interface PythonWorkerBundleOptions {
   };
 }
 
-const uvError = (message: string) => (cause: unknown) =>
-  new Bundle.BundleError({ message, cause });
+const uvError = (message: string) => (cause: unknown) => new Bundle.BundleError({ message, cause });
 
 /**
  * Run a `uv` command, failing with a {@link Bundle.BundleError} that
@@ -175,9 +170,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
         .readFileString(pyproject)
         .pipe(Effect.mapError(uvError(`Failed to read "${pyproject}"`)))
     : "";
-  const inputHash = yield* sha256(
-    `${pythonVersion}\0${target.index}\0${pyprojectContent}`,
-  );
+  const inputHash = yield* sha256(`${pythonVersion}\0${target.index}\0${pyprojectContent}`);
 
   const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
@@ -236,18 +229,10 @@ const resolvePythonModulesDir = Effect.fn(function* (
   yield* runUv(["venv", venv, "--python", target.interpreter], {
     cwd: options.root,
   });
-  yield* runUv(
-    [
-      "pip",
-      "install",
-      "--no-build",
-      "-r",
-      lockfile,
-      "--preview-features",
-      "pylock",
-    ],
-    { cwd: options.root, env: { VIRTUAL_ENV: venv } },
-  );
+  yield* runUv(["pip", "install", "--no-build", "-r", lockfile, "--preview-features", "pylock"], {
+    cwd: options.root,
+    env: { VIRTUAL_ENV: venv },
+  });
 
   // 3. The venv's site-packages IS the vendored python_modules directory.
   const sitePackages =
@@ -257,11 +242,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
   yield* orDefault(fs.remove(vendorDir, { recursive: true }), undefined);
   yield* fs
     .copy(sitePackages, vendorDir)
-    .pipe(
-      Effect.mapError(
-        uvError(`Failed to copy "${sitePackages}" to "${vendorDir}"`),
-      ),
-    );
+    .pipe(Effect.mapError(uvError(`Failed to copy "${sitePackages}" to "${vendorDir}"`)));
   // Mark the directory as a virtual environment (pywrangler parity).
   yield* fs
     .writeFileString(path.join(vendorDir, "pyvenv.cfg"), "")
@@ -276,8 +257,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
 const orDefault = <A, B, R>(
   effect: Effect.Effect<A, unknown, R>,
   fallback: B,
-): Effect.Effect<A | B, never, R> =>
-  Effect.catchCause(effect, () => Effect.succeed(fallback));
+): Effect.Effect<A | B, never, R> => Effect.catchCause(effect, () => Effect.succeed(fallback));
 
 const globFiles = (
   patterns: string[],
@@ -297,11 +277,7 @@ const globFiles = (
         message: `Failed to list Python worker files in "${options.cwd}"`,
         cause: error,
       }),
-  }).pipe(
-    Effect.map((names) =>
-      names.map((name) => name.replaceAll("\\", "/")).sort(),
-    ),
-  );
+  }).pipe(Effect.map((names) => names.map((name) => name.replaceAll("\\", "/")).sort()));
 
 /**
  * Read a Python Worker "bundle" from disk. There is no compilation step —
@@ -314,9 +290,7 @@ const globFiles = (
  *    Wrangler's vendored-module layout, which both the upload API and
  *    workerd resolve at runtime.
  */
-export const readPythonWorkerBundle = Effect.fn(function* (
-  options: PythonWorkerBundleOptions,
-) {
+export const readPythonWorkerBundle = Effect.fn(function* (options: PythonWorkerBundleOptions) {
   const fs = yield* FileSystem.FileSystem;
   const main = yield* resolveMainPath(options.main);
   const root = path.dirname(main);
@@ -328,11 +302,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
     const content = yield* fs
       .readFileString(path.join(root, name))
       .pipe(
-        Effect.mapError(
-          uvError(
-            `Failed to read Python worker module "${path.join(root, name)}"`,
-          ),
-        ),
+        Effect.mapError(uvError(`Failed to read Python worker module "${path.join(root, name)}"`)),
       );
     const hash = yield* sha256(content);
     return { path: name, content, hash } satisfies Bundle.BundleFile;
@@ -352,13 +322,10 @@ export const readPythonWorkerBundle = Effect.fn(function* (
     Effect.map((names) =>
       names.filter(
         (name) =>
-          name !== entryName &&
-          !isPathWithin(dotAlchemy, path.join(root, name), runtimeBase),
+          name !== entryName && !isPathWithin(dotAlchemy, path.join(root, name), runtimeBase),
       ),
     ),
-    Effect.flatMap(
-      Effect.forEach(readTextModule, { concurrency: "unbounded" }),
-    ),
+    Effect.flatMap(Effect.forEach(readTextModule, { concurrency: "unbounded" })),
   );
 
   const vendored = resolvePythonModulesDir({ ...options, root }).pipe(
@@ -371,9 +338,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
           .readFile(path.join(vendorDir, name))
           .pipe(
             Effect.mapError(
-              uvError(
-                `Failed to read vendored module "${path.join(vendorDir, name)}"`,
-              ),
+              uvError(`Failed to read vendored module "${path.join(vendorDir, name)}"`),
             ),
           );
         const hash = yield* sha256(content);
@@ -388,11 +353,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
         dot: true,
         // Compiled bytecode is host-specific and excluded by Wrangler too.
         ignore: ["**/*.pyc", "**/__pycache__/**"],
-      }).pipe(
-        Effect.flatMap(
-          Effect.forEach(readVendoredModule, { concurrency: "unbounded" }),
-        ),
-      );
+      }).pipe(Effect.flatMap(Effect.forEach(readVendoredModule, { concurrency: "unbounded" })));
     }),
   );
 
@@ -400,11 +361,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
     [readTextModule(entryName), sources, vendored],
     { concurrency: "unbounded" },
   );
-  return yield* Bundle.bundleOutputFromFiles([
-    entry,
-    ...additional,
-    ...vendoredFiles,
-  ]);
+  return yield* Bundle.bundleOutputFromFiles([entry, ...additional, ...vendoredFiles]);
 });
 
 /**
@@ -417,8 +374,7 @@ export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
   watchBundleDirectory({
     main: options.main,
     read: readPythonWorkerBundle(options),
-    ignore: (path) =>
-      path.includes("__pycache__") || path.includes("/python_modules/"),
+    ignore: (path) => path.includes("__pycache__") || path.includes("/python_modules/"),
   });
 
 /**
@@ -435,10 +391,7 @@ export const makePythonSource = (main: string): SourceProvider => {
     compatibility: ctx.compatibility,
   });
   return bundleSource({
-    build: (ctx) =>
-      readPythonWorkerBundle(pythonOptions(ctx)).pipe(
-        Artifacts.cached("build"),
-      ),
+    build: (ctx) => readPythonWorkerBundle(pythonOptions(ctx)).pipe(Artifacts.cached("build")),
     watch: (ctx) => Effect.succeed(watchPythonWorkerBundle(pythonOptions(ctx))),
   });
 };

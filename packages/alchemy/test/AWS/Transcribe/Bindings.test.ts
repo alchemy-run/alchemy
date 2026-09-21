@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
@@ -10,6 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import TranscribeTestFunctionLive, { TranscribeTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -45,19 +45,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -82,9 +77,7 @@ const getJson = (path: string) =>
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(
     Effect.flatMap((r) => r.json),
     Effect.map((r) => r as RouteResult),
@@ -106,9 +99,7 @@ const untilAuthorized = <E, R>(effect: Effect.Effect<RouteResult, E, R>) =>
 describe.sequential("Transcribe Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Transcribe test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Transcribe test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Transcribe test setup: deploying fixture");
@@ -130,10 +121,7 @@ describe.sequential("Transcribe Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),
@@ -168,8 +156,7 @@ describe.sequential("Transcribe Bindings", () => {
           // + grant end-to-end — an IAM gap would be AccessDeniedException.
           const scribe = yield* getJson("/scribeJobs");
           expect(
-            scribe.error === undefined ||
-              scribe.error === "BadRequestException",
+            scribe.error === undefined || scribe.error === "BadRequestException",
             `/scribeJobs: ${scribe.error}`,
           ).toBe(true);
         }),
@@ -252,18 +239,13 @@ describe.sequential("Transcribe Bindings", () => {
             "/medicalVocabulary/create",
             "/languageModel/create",
           ]) {
-            const body = yield* untilAuthorized(
-              postJson(path, { name: BOGUS }),
-            );
+            const body = yield* untilAuthorized(postJson(path, { name: BOGUS }));
             expect(body.ok, path).toBe(false);
             expect(body.error, path).toBe("BadRequestException");
           }
 
           // Updating a nonexistent vocabulary surfaces its typed tag.
-          for (const path of [
-            "/vocabulary/update",
-            "/medicalVocabulary/update",
-          ]) {
+          for (const path of ["/vocabulary/update", "/medicalVocabulary/update"]) {
             const body = yield* postJson(path, { name: BOGUS });
             expect(NOT_FOUND_TAGS, path).toContain(body.error);
           }

@@ -40,7 +40,6 @@ export interface UpdateWorkspaceConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateWorkspaceConfiguration =
-  Binding.Service<UpdateWorkspaceConfiguration>(
-    "AWS.Grafana.UpdateWorkspaceConfiguration",
-  );
+export const UpdateWorkspaceConfiguration = Binding.Service<UpdateWorkspaceConfiguration>(
+  "AWS.Grafana.UpdateWorkspaceConfiguration",
+);

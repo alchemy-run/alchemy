@@ -3,10 +3,7 @@ import type { BundleConfig } from "../Bundle/Bundle.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import type { Resource } from "../Resource.ts";
 import type { BranchScope } from "./BranchScope.ts";
-import type {
-  FunctionEnvironment,
-  FunctionRequest,
-} from "./FunctionEnvironment.ts";
+import type { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import {
   makeFunctionRuntimeContext,
   type FunctionRuntimeContext,
@@ -60,9 +57,7 @@ export interface FunctionAttributes {
   /** Observed display name. */ name: string;
   /** Public invocation URL. Authenticate callers in the handler. */ url: string;
   /** Latest deployment identifier. */ currentDeploymentId: number | undefined;
-  /** Deployment currently serving traffic. */ activeDeploymentId:
-    | number
-    | undefined;
+  /** Deployment currently serving traffic. */ activeDeploymentId: number | undefined;
   /** Latest deployment build status. */ status: string | undefined;
   /** Digest of the last successfully applied artifact, not a remote code attestation. */ codeHash:
     | string

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface BatchStopJobRunRequest extends Omit<
-  glue.BatchStopJobRunRequest,
-  "JobName"
-> {}
+export interface BatchStopJobRunRequest extends Omit<glue.BatchStopJobRunRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:BatchStopJobRun`.
@@ -42,6 +39,4 @@ export interface BatchStopJobRun extends Binding.Service<
   >
 > {}
 
-export const BatchStopJobRun = Binding.Service<BatchStopJobRun>(
-  "AWS.Glue.BatchStopJobRun",
-);
+export const BatchStopJobRun = Binding.Service<BatchStopJobRun>("AWS.Glue.BatchStopJobRun");

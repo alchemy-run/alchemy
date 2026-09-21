@@ -15,10 +15,8 @@ export type Reference = string | { zoneId: string; name?: string };
 
 export const isId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
 
-export const matchesZoneHostname = (
-  zoneName: string,
-  hostname: string,
-): boolean => hostname === zoneName || hostname.endsWith(`.${zoneName}`);
+export const matchesZoneHostname = (zoneName: string, hostname: string): boolean =>
+  hostname === zoneName || hostname.endsWith(`.${zoneName}`);
 
 export const resolveZoneId = ({
   accountId,
@@ -38,9 +36,7 @@ export const resolveZoneId = ({
       const match = yield* findZoneByName({ accountId, name: candidate });
       if (match) return match.id;
     }
-    return yield* Effect.fail(
-      new Error(`Cloudflare zone not found for ${lookup}`),
-    );
+    return yield* Effect.fail(new Error(`Cloudflare zone not found for ${lookup}`));
   });
 
 type ZoneListItem = {
@@ -70,8 +66,7 @@ export const findZoneByName = ({
       perPage: 1,
     });
     const match = (page.result ?? []).find(
-      (candidate) =>
-        candidate.name === name && candidate.account.id === accountId,
+      (candidate) => candidate.name === name && candidate.account.id === accountId,
     );
     if (match === undefined) return undefined;
     return {

@@ -72,9 +72,7 @@ function bucketIdOf(p: string | undefined): number {
 // segment, purely for display.
 const rel = (p: string | undefined) => {
   if (!p) return "?";
-  const m = p.match(
-    /(?:packages|submodules|distilled|node_modules|examples|scripts)\/.*$/,
-  );
+  const m = p.match(/(?:packages|submodules|distilled|node_modules|examples|scripts)\/.*$/);
   return m ? m[0] : p;
 };
 
@@ -87,9 +85,7 @@ interface TraceEvent {
   args?: { path?: string; sourceId?: number; targetId?: number };
 }
 
-const trace: TraceEvent[] = JSON.parse(
-  fs.readFileSync(path.join(traceDir, "trace.json"), "utf8"),
-);
+const trace: TraceEvent[] = JSON.parse(fs.readFileSync(path.join(traceDir, "trace.json"), "utf8"));
 
 const stack: { p: string | undefined; start: number; child: number }[] = [];
 const fileSelf = new Map<string, number>();
@@ -169,16 +165,16 @@ interface TypeDescriptor {
 
 const typesPath = path.join(traceDir, "types.json");
 const rl = readline.createInterface({
-  input: fs.createReadStream(typesPath, { encoding: "utf8", highWaterMark: 1 << 22 }),
+  input: fs.createReadStream(typesPath, {
+    encoding: "utf8",
+    highWaterMark: 1 << 22,
+  }),
   crlfDelay: Infinity,
 });
 
 const MAX = 16_000_000;
 const bucketById = new Uint8Array(MAX);
-const idInfo = new Map<
-  number,
-  { sym?: string; path?: string; line?: number; flags?: string }
->();
+const idInfo = new Map<number, { sym?: string; path?: string; line?: number; flags?: string }>();
 const compositeByBucket = new Map<string, number>();
 const symCount = new Map<string, number>();
 const locatedByBucket = new Map<string, number>();

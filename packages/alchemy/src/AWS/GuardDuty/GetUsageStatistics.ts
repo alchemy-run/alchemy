@@ -33,10 +33,7 @@ export interface GetUsageStatistics extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.GetUsageStatisticsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.GetUsageStatisticsResponse,
-      guardduty.GetUsageStatisticsError
-    >
+    ) => Effect.Effect<guardduty.GetUsageStatisticsResponse, guardduty.GetUsageStatisticsError>
   >
 > {}
 export const GetUsageStatistics = Binding.Service<GetUsageStatistics>(

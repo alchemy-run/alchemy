@@ -28,10 +28,7 @@ export const InvokeFunctionHttp = Layer.effect(
   InvokeFunction,
   Effect.gen(function* () {
     const host = yield* CurrentRuntimeContext;
-    if (!host)
-      return yield* Effect.die(
-        new Error("Neon.InvokeFunction requires a Platform host"),
-      );
+    if (!host) return yield* Effect.die(new Error("Neon.InvokeFunction requires a Platform host"));
     return Effect.fn(function* (fn: Function) {
       const key = sanitizeKey(
         `NEON_FUNCTION_${Array.from(fn.FQN, (character) => character.codePointAt(0)!.toString(16)).join("_")}_URL`,
@@ -41,9 +38,7 @@ export const InvokeFunctionHttp = Layer.effect(
         .get<string>(key)
         .pipe(
           Effect.flatMap((url) =>
-            url
-              ? Effect.succeed(url)
-              : Effect.die(new Error("Missing Neon Function URL binding")),
+            url ? Effect.succeed(url) : Effect.die(new Error("Missing Neon Function URL binding")),
           ),
         );
       return {
@@ -66,9 +61,7 @@ export const InvokeFunctionHttp = Layer.effect(
               try: (signal) =>
                 fetch(target, {
                   ...init,
-                  signal: init?.signal
-                    ? AbortSignal.any([signal, init.signal])
-                    : signal,
+                  signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,
                 }),
               catch: () =>
                 new InvokeFunctionError({

@@ -14,9 +14,7 @@ import * as Vite from "./Vite.ts";
  * the default when `e2e.config.ts` names no framework. Framework packages
  * (waku/astro/sveltekit/nextjs) provide their own layers with the same shape.
  */
-export const makeViteFramework = (
-  options: Options.Options,
-): Options.Options.FrameworkLayer =>
+export const makeViteFramework = (options: Options.Options): Options.Options.FrameworkLayer =>
   Layer.effect(
     Framework,
     Effect.gen(function* () {
@@ -33,17 +31,13 @@ export const makeViteFramework = (
           vite
             .build(
               worker,
-              buildOptions?.root !== undefined
-                ? { root: buildOptions.root }
-                : undefined,
+              buildOptions?.root !== undefined ? { root: buildOptions.root } : undefined,
             )
             .pipe(Effect.mapError(wrapError)),
         dev: (devOptions) =>
           vite
             .dev(worker, {
-              ...(devOptions?.root !== undefined
-                ? { root: devOptions.root }
-                : undefined),
+              ...(devOptions?.root !== undefined ? { root: devOptions.root } : undefined),
               ...(devOptions?.port !== undefined
                 ? { server: { port: devOptions.port } }
                 : undefined),
@@ -79,17 +73,9 @@ const toFrameworkLayer: (
   Options.Options.FrameworkLayer,
   FrameworkError | unknown,
   Options.Options.FrameworkServices
-> = Effect.fn(function* (
-  candidate: unknown,
-  options: Options.Options,
-  specifier: string,
-) {
+> = Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
   const resolved = Effect.isEffect(candidate)
-    ? yield* candidate as Effect.Effect<
-        unknown,
-        unknown,
-        Options.Options.FrameworkServices
-      >
+    ? yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
     : candidate;
   if (Layer.isLayer(resolved)) {
     return resolved as Options.Options.FrameworkLayer;
@@ -138,11 +124,7 @@ export const resolve = Effect.fn(function* (options: Options.Options) {
     }
     return yield* toFrameworkLayer(candidate, options, input);
   }
-  return yield* toFrameworkLayer(
-    input,
-    options,
-    "e2e.config.ts framework option",
-  );
+  return yield* toFrameworkLayer(input, options, "e2e.config.ts framework option");
 });
 
 /**
@@ -151,13 +133,10 @@ export const resolve = Effect.fn(function* (options: Options.Options) {
  * implementation). Everything downstream (`Cli`, `Server`) dispatches through
  * the `Framework` service and never talks to Vite directly.
  */
-export const layer: Layer.Layer<
-  Framework,
-  unknown,
-  Options.Options.FrameworkServices
-> = Layer.unwrap(
-  Effect.gen(function* () {
-    const options = yield* Options.load();
-    return yield* resolve(options);
-  }),
-);
+export const layer: Layer.Layer<Framework, unknown, Options.Options.FrameworkServices> =
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const options = yield* Options.load();
+      return yield* resolve(options);
+    }),
+  );

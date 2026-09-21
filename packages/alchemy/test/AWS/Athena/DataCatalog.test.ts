@@ -1,25 +1,21 @@
+import * as athena from "@distilled.cloud/aws/athena";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DataCatalog } from "@/AWS/Athena/DataCatalog.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as athena from "@distilled.cloud/aws/athena";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const catalogName = "alchemy_test_catalog";
-const fnA =
-  "arn:aws:lambda:us-west-2:391965393224:function:alchemy-athena-cat-a";
-const fnB =
-  "arn:aws:lambda:us-west-2:391965393224:function:alchemy-athena-cat-b";
+const fnA = "arn:aws:lambda:us-west-2:391965393224:function:alchemy-athena-cat-a";
+const fnB = "arn:aws:lambda:us-west-2:391965393224:function:alchemy-athena-cat-b";
 
-const getCatalog = athena
-  .getDataCatalog({ Name: catalogName, WorkGroup: "primary" })
-  .pipe(
-    Effect.map((res) => res.DataCatalog),
-    Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
-  );
+const getCatalog = athena.getDataCatalog({ Name: catalogName, WorkGroup: "primary" }).pipe(
+  Effect.map((res) => res.DataCatalog),
+  Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
+);
 
 test.provider(
   "lifecycle: create LAMBDA catalog, update params/description, destroy",
@@ -53,9 +49,7 @@ test.provider(
       const tags = yield* athena.listTagsForResource({
         ResourceARN: created.dataCatalogArn,
       });
-      expect(
-        tags.Tags?.some((t) => t.Key === "env" && t.Value === "test"),
-      ).toBe(true);
+      expect(tags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(true);
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(DataCatalog);

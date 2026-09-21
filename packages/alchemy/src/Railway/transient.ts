@@ -5,15 +5,9 @@ import * as Semaphore from "effect/Semaphore";
 
 /** Known throttling responses and transport failures safe for read-only callers to retry. */
 export const isRailwayTransient = (error: unknown): boolean =>
-  railway.isErrorTag(error, [
-    "RailwayRateLimited",
-    "RailwayOperationInProgress",
-  ]) ||
+  railway.isErrorTag(error, ["RailwayRateLimited", "RailwayOperationInProgress"]) ||
   (error instanceof railway.GraphQLTransportError &&
-    (error.status === 429 ||
-      error.status === 502 ||
-      error.status === 503 ||
-      error.status === 504));
+    (error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504));
 
 /** Space bulk read retries without exceeding the factory retry window. */
 export const conservativeSpacing = Schedule.spaced("5 seconds");

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ForecastTestFunctionLive, { ForecastTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -14,10 +14,7 @@ const sharedStack = Core.scratchStack(testOptions, "ForecastBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -56,10 +53,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -72,9 +66,7 @@ const probeTag = (path: string, arn: string) =>
 describe.sequential("Forecast Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Forecast test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Forecast test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Forecast test setup: deploying fixture");
@@ -225,10 +217,7 @@ describe.sequential("Forecast Bindings", () => {
     test.provider("rejects a nonexistent forecast with a typed tag", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const tag = yield* probeTag(
-          "/whatif-analysis-create-probe",
-          arns.forecast,
-        );
+        const tag = yield* probeTag("/whatif-analysis-create-probe", arns.forecast);
         expect(EXPECTED_PROBE_TAGS).toContain(tag);
       }),
     );
@@ -238,10 +227,7 @@ describe.sequential("Forecast Bindings", () => {
     test.provider("surfaces a typed tag for a nonexistent analysis", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const tag = yield* probeTag(
-          "/whatif-analysis-probe",
-          arns.whatIfAnalysis,
-        );
+        const tag = yield* probeTag("/whatif-analysis-probe", arns.whatIfAnalysis);
         expect(EXPECTED_PROBE_TAGS).toContain(tag);
       }),
     );
@@ -251,42 +237,29 @@ describe.sequential("Forecast Bindings", () => {
     test.provider("rejects a nonexistent analysis with a typed tag", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const tag = yield* probeTag(
-          "/whatif-create-probe",
-          arns.whatIfAnalysis,
-        );
+        const tag = yield* probeTag("/whatif-create-probe", arns.whatIfAnalysis);
         expect(EXPECTED_PROBE_TAGS).toContain(tag);
       }),
     );
   });
 
   describe("DescribeWhatIfForecast", () => {
-    test.provider(
-      "surfaces a typed tag for a nonexistent scenario forecast",
-      () =>
-        Effect.gen(function* () {
-          const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/whatif-forecast-probe",
-            arns.whatIfForecast,
-          );
-          expect(EXPECTED_PROBE_TAGS).toContain(tag);
-        }),
+    test.provider("surfaces a typed tag for a nonexistent scenario forecast", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag("/whatif-forecast-probe", arns.whatIfForecast);
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
     );
   });
 
   describe("CreateWhatIfForecastExport", () => {
-    test.provider(
-      "rejects a nonexistent scenario forecast with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/whatif-export-create-probe",
-            arns.whatIfForecast,
-          );
-          expect(EXPECTED_PROBE_TAGS).toContain(tag);
-        }),
+    test.provider("rejects a nonexistent scenario forecast with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag("/whatif-export-create-probe", arns.whatIfForecast);
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
     );
   });
 
@@ -294,10 +267,7 @@ describe.sequential("Forecast Bindings", () => {
     test.provider("surfaces a typed tag for a nonexistent export", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const tag = yield* probeTag(
-          "/whatif-export-probe",
-          arns.whatIfForecastExport,
-        );
+        const tag = yield* probeTag("/whatif-export-probe", arns.whatIfForecastExport);
         expect(EXPECTED_PROBE_TAGS).toContain(tag);
       }),
     );

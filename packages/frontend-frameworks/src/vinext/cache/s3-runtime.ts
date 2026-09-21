@@ -16,8 +16,8 @@ import * as Stream from "effect/Stream";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
-import { readEnvString } from "./shared.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
+import { readEnvString } from "./shared.ts";
 
 export interface S3AdapterOptions extends Record<string, unknown> {
   /** Env var holding the bucket name. @default "CACHE_BUCKET_NAME" */
@@ -101,11 +101,7 @@ const createS3DataCacheAdapter = ({
     async get(key: string, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).get(key, ctx);
     },
-    async set(
-      key: string,
-      data: Record<string, unknown> | null,
-      ctx?: Record<string, unknown>,
-    ) {
+    async set(key: string, data: Record<string, unknown> | null, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).set(key, data, ctx);
     },
     async revalidateTag(tags: string | Array<string>) {

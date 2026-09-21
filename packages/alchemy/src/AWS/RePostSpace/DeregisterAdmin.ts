@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface DeregisterAdminRequest extends Omit<
-  repostspace.DeregisterAdminInput,
-  "spaceId"
-> {}
+export interface DeregisterAdminRequest extends Omit<repostspace.DeregisterAdminInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `DeregisterAdmin` operation (IAM action
@@ -34,12 +31,7 @@ export interface DeregisterAdmin extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeregisterAdminRequest,
-    ) => Effect.Effect<
-      repostspace.DeregisterAdminResponse,
-      repostspace.DeregisterAdminError
-    >
+    ) => Effect.Effect<repostspace.DeregisterAdminResponse, repostspace.DeregisterAdminError>
   >
 > {}
-export const DeregisterAdmin = Binding.Service<DeregisterAdmin>(
-  "AWS.RePostSpace.DeregisterAdmin",
-);
+export const DeregisterAdmin = Binding.Service<DeregisterAdmin>("AWS.RePostSpace.DeregisterAdmin");

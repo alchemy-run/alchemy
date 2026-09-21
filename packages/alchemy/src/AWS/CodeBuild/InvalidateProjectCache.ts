@@ -22,10 +22,7 @@ export interface InvalidateProjectCache extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      SVC.InvalidateProjectCacheOutput,
-      SVC.InvalidateProjectCacheError
-    >
+    () => Effect.Effect<SVC.InvalidateProjectCacheOutput, SVC.InvalidateProjectCacheError>
   >
 > {}
 export const InvalidateProjectCache = Binding.Service<InvalidateProjectCache>(

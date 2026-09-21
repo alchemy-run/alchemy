@@ -38,15 +38,10 @@ export interface CreateBillingPortalSession extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateBillingPortalSessionRequest,
-    ) => Effect.Effect<
-      BillingPortalSession,
-      CreateBillingPortalSessionError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<BillingPortalSession, CreateBillingPortalSessionError, RuntimeContext>
   >
 > {}
 
-export const CreateBillingPortalSession =
-  Binding.Service<CreateBillingPortalSession>(
-    "Stripe.CreateBillingPortalSession",
-  );
+export const CreateBillingPortalSession = Binding.Service<CreateBillingPortalSession>(
+  "Stripe.CreateBillingPortalSession",
+);

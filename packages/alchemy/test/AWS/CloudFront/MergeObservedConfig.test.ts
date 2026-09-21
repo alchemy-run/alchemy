@@ -1,6 +1,6 @@
-import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect, test } from "alchemy-test";
+import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 
 /**
  * A live distribution config as returned by `GetDistributionConfig` for a
@@ -157,9 +157,7 @@ describe("mergeWithObservedConfig", () => {
   test("desired values win over observed ones", () => {
     expect(merged.Enabled).toBe(false);
     expect(merged.IsIPV6Enabled).toBe(true);
-    expect(merged.Origins?.Items?.[0]?.OriginAccessControlId).toBe(
-      "OAC_DESIRED",
-    );
+    expect(merged.Origins?.Items?.[0]?.OriginAccessControlId).toBe("OAC_DESIRED");
     expect(merged.DefaultCacheBehavior?.FunctionAssociations?.Quantity).toBe(1);
   });
 
@@ -185,10 +183,7 @@ describe("mergeWithObservedConfig", () => {
   });
 
   test("nested members inside behaviors are filled (default + by PathPattern)", () => {
-    for (const behavior of [
-      merged.DefaultCacheBehavior,
-      merged.CacheBehaviors?.Items?.[0],
-    ]) {
+    for (const behavior of [merged.DefaultCacheBehavior, merged.CacheBehaviors?.Items?.[0]]) {
       expect(behavior?.TrustedSigners).toEqual({ Enabled: false, Quantity: 0 });
       expect(behavior?.TrustedKeyGroups).toEqual({
         Enabled: false,

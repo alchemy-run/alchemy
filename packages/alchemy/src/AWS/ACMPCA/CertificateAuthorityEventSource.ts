@@ -21,15 +21,10 @@ export interface CertificateAuthorityEventDetail {
 }
 
 /** An AWS Private CA EventBridge event delivered to the handler. */
-export type CertificateAuthorityEvent =
-  EventRecord<CertificateAuthorityEventDetail>;
+export type CertificateAuthorityEvent = EventRecord<CertificateAuthorityEventDetail>;
 
 /** Which AWS Private CA notifications to subscribe to. */
-export type CertificateAuthorityEventKind =
-  | "issuance"
-  | "revocation"
-  | "crl"
-  | "auditReport";
+export type CertificateAuthorityEventKind = "issuance" | "revocation" | "crl" | "auditReport";
 
 const DETAIL_TYPES: Record<CertificateAuthorityEventKind, string> = {
   issuance: "ACM Private CA Certificate Issuance",
@@ -94,10 +89,7 @@ export interface CertificateAuthorityEventSourceProps extends EventRouteProps {
  * );
  * ```
  */
-export const consumeCertificateAuthorityEvents = <
-  StreamReq = never,
-  Req = never,
->(
+export const consumeCertificateAuthorityEvents = <StreamReq = never, Req = never>(
   props: CertificateAuthorityEventSourceProps,
   process: (
     events: Stream.Stream<CertificateAuthorityEvent, never, StreamReq>,
@@ -107,9 +99,7 @@ export const consumeCertificateAuthorityEvents = <
     props.id ?? "ACMPCAEvents",
     {
       source: ["aws.acm-pca"],
-      "detail-type": (props.kinds ?? (["issuance"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["issuance"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(props.certificateAuthorityArns !== undefined
         ? { resources: [...props.certificateAuthorityArns] }
         : {}),

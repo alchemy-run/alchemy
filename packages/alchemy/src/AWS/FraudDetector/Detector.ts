@@ -107,24 +107,16 @@ export const DetectorProvider = () =>
   Provider.effect(
     Detector,
     Effect.gen(function* () {
-      const createId = Effect.fn(function* (
-        id: string,
-        props: Partial<DetectorProps>,
-      ) {
+      const createId = Effect.fn(function* (id: string, props: Partial<DetectorProps>) {
         return (
-          props.detectorId ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
+          props.detectorId ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
         );
       });
 
       const get = Effect.fn(function* (detectorId: string) {
         const response = yield* frauddetector
           .getDetectors({ detectorId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.detectors?.[0];
       });
 
@@ -143,16 +135,14 @@ export const DetectorProvider = () =>
           const newId = yield* createId(id, news);
           if (
             oldId !== newId ||
-            (olds.eventTypeName ?? undefined) !==
-              (news.eventTypeName ?? undefined)
+            (olds.eventTypeName ?? undefined) !== (news.eventTypeName ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const detectorId =
-            output?.detectorId ?? (yield* createId(id, olds ?? {}));
+          const detectorId = output?.detectorId ?? (yield* createId(id, olds ?? {}));
           const detector = yield* get(detectorId);
           if (detector === undefined) return undefined;
           const attrs = toAttrs(detector);
@@ -190,9 +180,7 @@ export const DetectorProvider = () =>
           frauddetector.getDetectors.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.detectors ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.detectors ?? []).map(toAttrs)),
             ),
           ),
       };

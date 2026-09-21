@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Job, JobTemplate, Preset, Queue } from "@/AWS/MediaConvert";
-import * as Test from "@/Test/Alchemy";
 import * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Job, JobTemplate, Preset, Queue } from "@/AWS/MediaConvert";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -45,9 +45,7 @@ const PRESET_SETTINGS: mediaconvert.PresetSettings = {
 
 // A minimal, valid single-output file-group job template.
 const TEMPLATE_SETTINGS: mediaconvert.JobTemplateSettings = {
-  Inputs: [
-    { TimecodeSource: "ZEROBASED", VideoSelector: {}, AudioSelectors: {} },
-  ],
+  Inputs: [{ TimecodeSource: "ZEROBASED", VideoSelector: {}, AudioSelectors: {} }],
   OutputGroups: [
     {
       Name: "File Group",
@@ -87,13 +85,9 @@ test.provider(
   "getQueue/getPreset/getJobTemplate on a missing name fail with NotFoundException",
   () =>
     Effect.gen(function* () {
-      const q = yield* Effect.flip(
-        mediaconvert.getQueue({ Name: "alchemy-does-not-exist-000" }),
-      );
+      const q = yield* Effect.flip(mediaconvert.getQueue({ Name: "alchemy-does-not-exist-000" }));
       expect(q._tag).toBe("NotFoundException");
-      const p = yield* Effect.flip(
-        mediaconvert.getPreset({ Name: "alchemy-does-not-exist-000" }),
-      );
+      const p = yield* Effect.flip(mediaconvert.getPreset({ Name: "alchemy-does-not-exist-000" }));
       expect(p._tag).toBe("NotFoundException");
       const t = yield* Effect.flip(
         mediaconvert.getJobTemplate({ Name: "alchemy-does-not-exist-000" }),
@@ -102,30 +96,26 @@ test.provider(
     }),
 );
 
-test.provider(
-  "createJob with an invalid role is rejected with a typed BadRequestException",
-  () =>
-    Effect.gen(function* () {
-      // Proves Job's create path has a typed error union (no untyped catch-all)
-      // without submitting a billable transcode.
-      const error = yield* Effect.flip(
-        mediaconvert.createJob({
-          Role: "arn:aws:iam::000000000000:role/does-not-exist",
-          Settings: {
-            Inputs: [{ FileInput: "s3://alchemy-nonexistent/in.mp4" }],
-            OutputGroups: TEMPLATE_SETTINGS.OutputGroups,
-          },
-        }),
-      );
-      // A bad role surfaces as a typed tag (AccessDenied/BadRequest/Forbidden),
-      // never the untyped catch-all — that is the point of the probe.
-      expect(error._tag).not.toBe("UnknownAwsError");
-      expect([
-        "AccessDeniedException",
-        "BadRequestException",
-        "ForbiddenException",
-      ]).toContain(error._tag);
-    }),
+test.provider("createJob with an invalid role is rejected with a typed BadRequestException", () =>
+  Effect.gen(function* () {
+    // Proves Job's create path has a typed error union (no untyped catch-all)
+    // without submitting a billable transcode.
+    const error = yield* Effect.flip(
+      mediaconvert.createJob({
+        Role: "arn:aws:iam::000000000000:role/does-not-exist",
+        Settings: {
+          Inputs: [{ FileInput: "s3://alchemy-nonexistent/in.mp4" }],
+          OutputGroups: TEMPLATE_SETTINGS.OutputGroups,
+        },
+      }),
+    );
+    // A bad role surfaces as a typed tag (AccessDenied/BadRequest/Forbidden),
+    // never the untyped catch-all — that is the point of the probe.
+    expect(error._tag).not.toBe("UnknownAwsError");
+    expect(["AccessDeniedException", "BadRequestException", "ForbiddenException"]).toContain(
+      error._tag,
+    );
+  }),
 );
 
 // ---------------------------------------------------------------------------
@@ -290,9 +280,7 @@ test.provider(
       const observed2 = yield* mediaconvert.getJobTemplate({
         Name: TEMPLATE_NAME,
       });
-      expect(observed2.JobTemplate?.Description).toBe(
-        "alchemy test template v2",
-      );
+      expect(observed2.JobTemplate?.Description).toBe("alchemy test template v2");
       expect(observed2.JobTemplate?.Priority).toBe(10);
 
       yield* stack.destroy();
@@ -312,8 +300,7 @@ test.provider(
 // only asserts submission + a terminal-or-progressing status, then cancels.
 // ---------------------------------------------------------------------------
 
-const runJob =
-  process.env.AWS_TEST_SLOW === "1" && !!process.env.MEDIACONVERT_ROLE_ARN;
+const runJob = process.env.AWS_TEST_SLOW === "1" && !!process.env.MEDIACONVERT_ROLE_ARN;
 
 test.provider.skipIf(!runJob)(
   "Job: submit a transcode and cancel it (gated AWS_TEST_SLOW=1)",
@@ -322,11 +309,8 @@ test.provider.skipIf(!runJob)(
       yield* stack.destroy();
 
       const roleArn = process.env.MEDIACONVERT_ROLE_ARN!;
-      const input =
-        process.env.MEDIACONVERT_TEST_INPUT ??
-        "s3://alchemy-nonexistent/in.mp4";
-      const output =
-        process.env.MEDIACONVERT_TEST_OUTPUT ?? "s3://alchemy-nonexistent/out/";
+      const input = process.env.MEDIACONVERT_TEST_INPUT ?? "s3://alchemy-nonexistent/in.mp4";
+      const output = process.env.MEDIACONVERT_TEST_OUTPUT ?? "s3://alchemy-nonexistent/out/";
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -361,9 +345,7 @@ test.provider.skipIf(!runJob)(
       const observed = yield* mediaconvert.getJob({ Id: created.jobId });
       expect(observed.Job).toBeDefined();
       expect(
-        ["SUBMITTED", "PROGRESSING", "COMPLETE", "ERROR"].includes(
-          observed.Job!.Status!,
-        ),
+        ["SUBMITTED", "PROGRESSING", "COMPLETE", "ERROR"].includes(observed.Job!.Status!),
       ).toBe(true);
 
       // destroy() cancels the job if still in flight.
@@ -382,10 +364,7 @@ const assertQueueDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -395,10 +374,7 @@ const assertPresetDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -408,9 +384,6 @@ const assertJobTemplateDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );

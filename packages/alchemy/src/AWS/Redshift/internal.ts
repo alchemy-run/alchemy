@@ -36,11 +36,7 @@ export const sameStringSet = (
 export const redshiftArn = (
   region: string,
   accountId: string,
-  resourceType:
-    | "cluster"
-    | "subnetgroup"
-    | "parametergroup"
-    | "eventsubscription",
+  resourceType: "cluster" | "subnetgroup" | "parametergroup" | "eventsubscription",
   name: string,
 ): string => `arn:aws:redshift:${region}:${accountId}:${resourceType}:${name}`;
 

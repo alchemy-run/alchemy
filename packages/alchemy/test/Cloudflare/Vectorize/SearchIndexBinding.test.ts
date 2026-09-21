@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { HttpClientResponse } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 import Stack from "./fixtures/stack.ts";
 
 /**
@@ -27,10 +27,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Fresh workers.dev URLs take a few seconds to start serving 200s, and edge
 // propagation can still transiently 404/500 individual route hits after the
@@ -38,10 +35,7 @@ const logLevel = Effect.provideService(
 // (~45s worst case) so a genuine failure surfaces instead of hanging.
 const readinessRetry = {
   schedule: Schedule.max([
-    Schedule.min([
-      Schedule.exponential("500 millis"),
-      Schedule.spaced("5 seconds"),
-    ]),
+    Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
     Schedule.recurs(12),
   ]),
 } as const;
@@ -70,10 +64,7 @@ const exercise = (label: string, baseUrl: string) =>
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.retry({
-        schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
       }),
     );
 
@@ -98,9 +89,7 @@ const exercise = (label: string, baseUrl: string) =>
 
     const getRes = yield* poll({
       description: `[${label}] GET /get returns the two upserted vectors`,
-      effect: getJson(`${baseUrl}/get`).pipe(
-        Effect.map((body) => body as { ids: string[] }),
-      ),
+      effect: getJson(`${baseUrl}/get`).pipe(Effect.map((body) => body as { ids: string[] })),
       predicate: (body) => body.ids.length === 2,
     });
     expect(getRes).toEqual({ ids: [`${label}-a`, `${label}-b`] });
@@ -110,9 +99,7 @@ const exercise = (label: string, baseUrl: string) =>
     const filteredBody = yield* poll({
       description: `[${label}] GET /query-filtered returns the second vector`,
       effect: getJson(`${baseUrl}/query-filtered`).pipe(
-        Effect.map(
-          (body) => body as { count: number; ids: string[]; kinds: string[] },
-        ),
+        Effect.map((body) => body as { count: number; ids: string[]; kinds: string[] }),
       ),
       predicate: (body) => body.ids.length === 1 && body.kinds.length === 1,
     });

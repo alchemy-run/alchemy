@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { QApp } from "@/AWS/QApps";
-import * as Test from "@/Test/Alchemy";
 import * as qapps from "@distilled.cloud/aws/qapps";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { QApp } from "@/AWS/QApps";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -67,9 +67,7 @@ describe("AWS.QApps.QApp", () => {
 
         const instanceId = process.env.QAPPS_INSTANCE_ID;
         if (!instanceId) {
-          return yield* Effect.die(
-            new Error("AWS_TEST_QAPPS runs require QAPPS_INSTANCE_ID"),
-          );
+          return yield* Effect.die(new Error("AWS_TEST_QAPPS runs require QAPPS_INSTANCE_ID"));
         }
 
         const textCardId = "11111111-1111-4111-8111-111111111111";
@@ -139,24 +137,17 @@ describe("AWS.QApps.QApp", () => {
 
         // Typed wait-until-gone.
         yield* Effect.gen(function* () {
-          const gone = yield* qapps
-            .getQApp({ instanceId, appId: app.appId })
-            .pipe(
-              Effect.map((d) => d.status === "DELETED"),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-            );
+          const gone = yield* qapps.getQApp({ instanceId, appId: app.appId }).pipe(
+            Effect.map((d) => d.status === "DELETED"),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          );
           if (!gone) {
             return yield* Effect.fail({ _tag: "StillExists" as const });
           }
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
           }),
         );
       }),

@@ -7,10 +7,7 @@ import type { EventType } from "./EventType.ts";
  * The `eventTypeName` is injected by the binding from the bound event type;
  * only the `eventId` remains.
  */
-export interface GetEventRequest extends Omit<
-  frauddetector.GetEventRequest,
-  "eventTypeName"
-> {}
+export interface GetEventRequest extends Omit<frauddetector.GetEventRequest, "eventTypeName"> {}
 
 /**
  * Read a stored event (its entities and variable values) back from Amazon
@@ -50,10 +47,7 @@ export interface GetEvent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetEventRequest,
-    ) => Effect.Effect<
-      frauddetector.GetEventResult,
-      frauddetector.GetEventError
-    >
+    ) => Effect.Effect<frauddetector.GetEventResult, frauddetector.GetEventError>
   >
 > {}
 export const GetEvent = Binding.Service<GetEvent>("AWS.FraudDetector.GetEvent");

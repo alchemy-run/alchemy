@@ -1,6 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as Transcribe from "@/AWS/Transcribe";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as Transcribe from "@/AWS/Transcribe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -54,8 +54,7 @@ export default TranscribeTestFunction.make(
     const deleteJob = yield* Transcribe.DeleteTranscriptionJob();
 
     // --- call analytics jobs ---
-    const startCallJob =
-      yield* Transcribe.StartCallAnalyticsJob(dataAccessRole);
+    const startCallJob = yield* Transcribe.StartCallAnalyticsJob(dataAccessRole);
     const getCallJob = yield* Transcribe.GetCallAnalyticsJob();
     const listCallJobs = yield* Transcribe.ListCallAnalyticsJobs();
     const deleteCallJob = yield* Transcribe.DeleteCallAnalyticsJob();
@@ -67,8 +66,7 @@ export default TranscribeTestFunction.make(
     const deleteMedicalJob = yield* Transcribe.DeleteMedicalTranscriptionJob();
 
     // --- medical scribe jobs ---
-    const startScribeJob =
-      yield* Transcribe.StartMedicalScribeJob(dataAccessRole);
+    const startScribeJob = yield* Transcribe.StartMedicalScribeJob(dataAccessRole);
     const getScribeJob = yield* Transcribe.GetMedicalScribeJob();
     const listScribeJobs = yield* Transcribe.ListMedicalScribeJobs();
     const deleteScribeJob = yield* Transcribe.DeleteMedicalScribeJob();
@@ -102,8 +100,7 @@ export default TranscribeTestFunction.make(
     const listCategories = yield* Transcribe.ListCallAnalyticsCategories();
 
     // --- custom language models ---
-    const createLanguageModel =
-      yield* Transcribe.CreateLanguageModel(dataAccessRole);
+    const createLanguageModel = yield* Transcribe.CreateLanguageModel(dataAccessRole);
     const describeLanguageModel = yield* Transcribe.DescribeLanguageModel();
     const listLanguageModels = yield* Transcribe.ListLanguageModels();
     const deleteLanguageModel = yield* Transcribe.DeleteLanguageModel();
@@ -139,9 +136,7 @@ export default TranscribeTestFunction.make(
           error: undefined as string | undefined,
           ...(extract ? extract(a) : {}),
         })),
-        Effect.catch((e) =>
-          Effect.succeed({ ok: false, error: e._tag as string }),
-        ),
+        Effect.catch((e) => Effect.succeed({ ok: false, error: e._tag as string })),
       );
 
     return {
@@ -151,13 +146,10 @@ export default TranscribeTestFunction.make(
         const route = `${request.method} ${url.pathname}`;
         const name = url.searchParams.get("name") ?? "";
         const body =
-          request.method === "POST"
-            ? ((yield* request.json) as Record<string, string>)
-            : {};
+          request.method === "POST" ? ((yield* request.json) as Record<string, string>) : {};
 
-        const respond = (
-          effect: Effect.Effect<Record<string, unknown>, never>,
-        ) => effect.pipe(Effect.flatMap(HttpServerResponse.json));
+        const respond = (effect: Effect.Effect<Record<string, unknown>, never>) =>
+          effect.pipe(Effect.flatMap(HttpServerResponse.json));
 
         switch (route) {
           // --- lists (count proves grant + wire-up) ---
@@ -231,12 +223,9 @@ export default TranscribeTestFunction.make(
             );
           case "GET /medicalJob":
             return yield* respond(
-              result(
-                getMedicalJob({ MedicalTranscriptionJobName: name }),
-                (r) => ({
-                  status: r.MedicalTranscriptionJob?.TranscriptionJobStatus,
-                }),
-              ),
+              result(getMedicalJob({ MedicalTranscriptionJobName: name }), (r) => ({
+                status: r.MedicalTranscriptionJob?.TranscriptionJobStatus,
+              })),
             );
           case "GET /scribeJob":
             return yield* respond(
@@ -265,35 +254,21 @@ export default TranscribeTestFunction.make(
 
           // --- deletes (typed tags for bogus names; real delete for fixtures) ---
           case "POST /job/delete":
-            return yield* respond(
-              result(deleteJob({ TranscriptionJobName: body.name! })),
-            );
+            return yield* respond(result(deleteJob({ TranscriptionJobName: body.name! })));
           case "POST /callJob/delete":
-            return yield* respond(
-              result(deleteCallJob({ CallAnalyticsJobName: body.name! })),
-            );
+            return yield* respond(result(deleteCallJob({ CallAnalyticsJobName: body.name! })));
           case "POST /medicalJob/delete":
             return yield* respond(
-              result(
-                deleteMedicalJob({ MedicalTranscriptionJobName: body.name! }),
-              ),
+              result(deleteMedicalJob({ MedicalTranscriptionJobName: body.name! })),
             );
           case "POST /scribeJob/delete":
-            return yield* respond(
-              result(deleteScribeJob({ MedicalScribeJobName: body.name! })),
-            );
+            return yield* respond(result(deleteScribeJob({ MedicalScribeJobName: body.name! })));
           case "POST /vocabulary/delete":
-            return yield* respond(
-              result(deleteVocabulary({ VocabularyName: body.name! })),
-            );
+            return yield* respond(result(deleteVocabulary({ VocabularyName: body.name! })));
           case "POST /medicalVocabulary/delete":
-            return yield* respond(
-              result(deleteMedicalVocabulary({ VocabularyName: body.name! })),
-            );
+            return yield* respond(result(deleteMedicalVocabulary({ VocabularyName: body.name! })));
           case "POST /languageModel/delete":
-            return yield* respond(
-              result(deleteLanguageModel({ ModelName: body.name! })),
-            );
+            return yield* respond(result(deleteLanguageModel({ ModelName: body.name! })));
 
           // --- starts/creates driven through typed validation failures
           //     (invalid S3 URI: nothing is created, nothing is billed) ---
@@ -421,9 +396,7 @@ export default TranscribeTestFunction.make(
               ),
             );
           case "POST /filter/delete":
-            return yield* respond(
-              result(deleteFilter({ VocabularyFilterName: body.name! })),
-            );
+            return yield* respond(result(deleteFilter({ VocabularyFilterName: body.name! })));
 
           // --- call analytics category lifecycle ---
           case "POST /category/create":
@@ -453,9 +426,7 @@ export default TranscribeTestFunction.make(
               ),
             );
           case "POST /category/delete":
-            return yield* respond(
-              result(deleteCategory({ CategoryName: body.name! })),
-            );
+            return yield* respond(result(deleteCategory({ CategoryName: body.name! })));
 
           // --- tagging (ARN supplied by the test) ---
           case "POST /tag":
@@ -487,10 +458,7 @@ export default TranscribeTestFunction.make(
             );
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

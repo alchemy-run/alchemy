@@ -16,11 +16,7 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { resolveOrgSlug } from "./Environment.ts";
-import {
-  createFlyAppName,
-  matchesAlchemyPhysicalName,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import { createFlyAppName, matchesAlchemyPhysicalName, sanitizeFlyAppName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_REDIS_REGION = "iad";
@@ -229,9 +225,7 @@ export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
   errorMessage?: string;
 }> {}
 
-export class RedisPlanNotFound extends Data.TaggedError(
-  "Fly.RedisPlanNotFound",
-)<{
+export class RedisPlanNotFound extends Data.TaggedError("Fly.RedisPlanNotFound")<{
   plan: string;
 }> {}
 
@@ -286,10 +280,7 @@ const pendingStatus = (status: string | null | undefined): boolean => {
   if (status == null || status.length === 0) return false;
   const value = status.toLowerCase();
   return (
-    value === "pending" ||
-    value === "provisioning" ||
-    value === "creating" ||
-    value === "launching"
+    value === "pending" || value === "provisioning" || value === "creating" || value === "launching"
   );
 };
 
@@ -300,9 +291,7 @@ const failedStatus = (status: string | null | undefined): boolean => {
 };
 
 const isLegacyPlanName = (plan: RedisPlan): boolean => {
-  const normalized = (plan.displayName ?? plan.name ?? "")
-    .toLowerCase()
-    .replaceAll(" ", "_");
+  const normalized = (plan.displayName ?? plan.name ?? "").toLowerCase().replaceAll(" ", "_");
   return (
     normalized === "pro_2k" ||
     normalized === "pro_10k" ||
@@ -311,9 +300,7 @@ const isLegacyPlanName = (plan: RedisPlan): boolean => {
   );
 };
 
-export const isFixedRedisPlan = (
-  plan: Pick<RedisPlan, "name" | "displayName">,
-): boolean => {
+export const isFixedRedisPlan = (plan: Pick<RedisPlan, "name" | "displayName">): boolean => {
   const display = (plan.displayName ?? "").toLowerCase();
   const name = (plan.name ?? "").toLowerCase();
   return display.startsWith("fixed ") || name.startsWith("flyio_fixed_");
@@ -326,8 +313,7 @@ const hasAlchemyMetadata = (metadata: unknown): boolean => {
 };
 
 const isOwnedRedis = (row: ObservedRedis): boolean =>
-  matchesAlchemyPhysicalName(row.name ?? undefined) ||
-  hasAlchemyMetadata(row.metadata);
+  matchesAlchemyPhysicalName(row.name ?? undefined) || hasAlchemyMetadata(row.metadata);
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -362,15 +348,13 @@ const toAttrs = (
   status: row.status ?? undefined,
   planId:
     "addOnPlan" in row
-      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ??
-        fallback.planId)
+      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ?? fallback.planId)
       : fallback.planId,
   planName: row.addOnPlanName ?? undefined,
   privateIp: row.privateIp ?? undefined,
   orgSlug:
     "organization" in row
-      ? ((row.organization as { slug?: string | null } | undefined)?.slug ??
-        fallback.orgSlug)
+      ? ((row.organization as { slug?: string | null } | undefined)?.slug ?? fallback.orgSlug)
       : fallback.orgSlug,
   eviction: evictionOf(row.options),
   url: urlOf(row, fallback.url),
@@ -438,23 +422,17 @@ const cheapestPlan = (plans: RedisPlan[]) => {
     );
   });
   const payg = ranked.find((plan) =>
-    /pay.?as.?you.?go|free/i.test(
-      `${plan.displayName ?? ""} ${plan.name ?? ""}`,
-    ),
+    /pay.?as.?you.?go|free/i.test(`${plan.displayName ?? ""} ${plan.name ?? ""}`),
   );
   return payg ?? ranked[0];
 };
 
-const resolvePlan = (
-  plan: string | undefined,
-  existingId: string | undefined,
-) =>
+const resolvePlan = (plan: string | undefined, existingId: string | undefined) =>
   Effect.gen(function* () {
     const plans = yield* listRedisPlans();
     if (plan !== undefined) {
       const found = plans.find(
-        (item) =>
-          item.id === plan || item.name === plan || item.displayName === plan,
+        (item) => item.id === plan || item.name === plan || item.displayName === plan,
       );
       if (found === undefined) {
         return yield* new RedisPlanNotFound({ plan });
@@ -499,16 +477,9 @@ const ensureTos = (orgSlug: string, organizationId: string) =>
 const waitUntilReady = (id: string, name: string) =>
   findRedisAddOn({ id, name }).pipe(
     Effect.flatMap(
-      (
-        row,
-      ): Effect.Effect<
-        AddOnsResponseEdgesItemNode,
-        RedisPending | RedisNotCreated
-      > => {
+      (row): Effect.Effect<AddOnsResponseEdgesItemNode, RedisPending | RedisNotCreated> => {
         if (row === undefined) {
-          return Effect.fail(
-            new RedisPending({ redisId: id, status: "missing" }),
-          );
+          return Effect.fail(new RedisPending({ redisId: id, status: "missing" }));
         }
         if (failedStatus(row.status)) {
           return Effect.fail(
@@ -565,9 +536,9 @@ const desiredOptions = (
   return options;
 };
 
-class RedisSecretVersionMissing extends Data.TaggedError(
-  "Fly.RedisSecretVersionMissing",
-)<{ appName: string }> {}
+class RedisSecretVersionMissing extends Data.TaggedError("Fly.RedisSecretVersionMissing")<{
+  appName: string;
+}> {}
 
 const redisSecretVersion = (
   appName: string,
@@ -623,9 +594,7 @@ export const attachRedisSecrets = Effect.fn(function* (
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* addons
         .addOn({ id: row.id })
-        .pipe(
-          Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
       url = unwrapSensitive(detail?.publicUrl);
     }
     if (url === undefined || url.length === 0) {
@@ -640,9 +609,7 @@ export const attachRedisSecrets = Effect.fn(function* (
         app_name: appName,
         values: { [REDIS_URL_ENV]: value },
       })
-      .pipe(
-        Effect.flatMap((response) => redisSecretVersion(appName, response)),
-      );
+      .pipe(Effect.flatMap((response) => redisSecretVersion(appName, response)));
     const version = yield* update.pipe(
       Effect.catchTag("NotFound", () =>
         machines
@@ -669,13 +636,11 @@ export const RedisProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
+      const desiredName = news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
       const desiredRegion = news.primaryRegion ?? DEFAULT_REDIS_REGION;
       const regionChanged = desiredRegion !== output.primaryRegion;
-      const orgChanged =
-        news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
+      const orgChanged = news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
       if (nameChanged || regionChanged || orgChanged) {
         return {
           action: "replace" as const,
@@ -720,8 +685,7 @@ export const RedisProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? {};
       const name = yield* resolveName(id, props.name, output?.name);
-      const primaryRegion =
-        props.primaryRegion ?? output?.primaryRegion ?? DEFAULT_REDIS_REGION;
+      const primaryRegion = props.primaryRegion ?? output?.primaryRegion ?? DEFAULT_REDIS_REGION;
       const orgSlug = props.orgSlug ?? (yield* resolveOrgSlug());
       const org = yield* resolveOrganization(orgSlug);
       if (org === undefined) {
@@ -735,18 +699,13 @@ export const RedisProvider = () =>
               name: output.name,
             })
           : undefined;
-      if (
-        current === undefined &&
-        (output === undefined || output.name !== name)
-      ) {
+      if (current === undefined && (output === undefined || output.name !== name)) {
         current = yield* findRedisAddOn({ name });
       }
 
       const plan = yield* resolvePlan(
         props.plan,
-        current !== undefined && "addOnPlan" in current
-          ? current.addOnPlan?.id
-          : output?.planId,
+        current !== undefined && "addOnPlan" in current ? current.addOnPlan?.id : output?.planId,
       );
 
       if (current === undefined) {
@@ -789,14 +748,10 @@ export const RedisProvider = () =>
 
       const observedOptions = recordOf(current.options);
       const nextOptions = desiredOptions(props, plan, current.options);
-      const nextReadRegions = sorted(
-        props.readRegions ?? current.readRegions ?? [],
-      );
+      const nextReadRegions = sorted(props.readRegions ?? current.readRegions ?? []);
       const observedReadRegions = sorted(current.readRegions);
-      const observedPlanId =
-        "addOnPlan" in current ? current.addOnPlan?.id : output?.planId;
-      const planChanged =
-        observedPlanId !== undefined && observedPlanId !== plan.id;
+      const observedPlanId = "addOnPlan" in current ? current.addOnPlan?.id : output?.planId;
+      const planChanged = observedPlanId !== undefined && observedPlanId !== plan.id;
       const regionsChanged = !deepEqual(observedReadRegions, nextReadRegions);
       const optionsChanged = !deepEqual(observedOptions, nextOptions);
       const prodPackChanged = props.prodPack !== undefined && planChanged;
@@ -828,10 +783,7 @@ export const RedisProvider = () =>
       }
 
       let latest = (yield* findRedisAddOn({ id: current.id, name })) ?? current;
-      if (
-        unwrapSensitive(latest.publicUrl) === undefined &&
-        latest.id !== undefined
-      ) {
+      if (unwrapSensitive(latest.publicUrl) === undefined && latest.id !== undefined) {
         const detail = yield* addons.addOn({ id: latest.id });
         latest = { ...latest, ...detail };
       }
@@ -852,10 +804,7 @@ export const RedisProvider = () =>
       }
       const deleted = yield* Effect.result(
         addons.deleteAddOn({
-          input:
-            redisId.length > 0
-              ? { addOnId: redisId }
-              : { name, provider: REDIS_PROVIDER },
+          input: redisId.length > 0 ? { addOnId: redisId } : { name, provider: REDIS_PROVIDER },
         }),
       );
       if (Result.isFailure(deleted)) {

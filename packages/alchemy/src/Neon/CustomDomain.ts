@@ -23,9 +23,7 @@ export interface CustomDomainAttributes {
   /** Target Function slug. */ slug: string;
   /** Normalized custom hostname. */ hostname: string;
   /** DNS-only CNAME target; returned before DNS activation to avoid dependency cycles. */ cnameTarget: string;
-  /** Registration state. This is not an independent HTTPS probe. */ status:
-    | string
-    | undefined;
+  /** Registration state. This is not an independent HTTPS probe. */ status: string | undefined;
   /** DNS/CAA check state. */ dnsStatus: string | undefined;
   /** Internal routing state. */ bindingStatus: string | undefined;
   /** Machine-readable status explanation. */ statusReason: string | undefined;
@@ -55,9 +53,9 @@ export interface CustomDomain extends Resource<
  * @resource
  */
 export const CustomDomain = Resource<CustomDomain>("Neon.CustomDomain");
-export class FunctionDomainConflict extends Data.TaggedError(
-  "FunctionDomainConflict",
-)<{ hostname: string }> {}
+export class FunctionDomainConflict extends Data.TaggedError("FunctionDomainConflict")<{
+  hostname: string;
+}> {}
 const normalize = (value: string) => value.toLowerCase().replace(/\.$/, "");
 const scopeOf = (fn: { projectId: string; branchId: string }) => ({
   project_id: fn.projectId,
@@ -67,9 +65,7 @@ const observe = Effect.fn(function* (
   scope: { project_id: string; branch_id: string },
   hostname: string,
 ) {
-  const domains = yield* Neon.listProjectBranchCustomDomains
-    .items(scope)
-    .pipe(Stream.runCollect);
+  const domains = yield* Neon.listProjectBranchCustomDomains.items(scope).pipe(Stream.runCollect);
   return domains.find((domain) => domain.domain === hostname);
 });
 const attrs = (
@@ -93,9 +89,7 @@ export const CustomDomainProvider = () =>
     stables: ["projectId", "branchId", "slug", "hostname", "url"],
     list: Effect.fn(function* () {
       const result: CustomDomainAttributes[] = [];
-      for (const project of yield* Neon.listProjects
-        .items({})
-        .pipe(Stream.runCollect)) {
+      for (const project of yield* Neon.listProjects.items({}).pipe(Stream.runCollect)) {
         for (const branch of yield* Neon.listProjectBranches
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
@@ -131,10 +125,7 @@ export const CustomDomainProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       if (!output && (!olds?.function || !olds.hostname)) return undefined;
       const fn = output ? { ...output, url: output.nativeUrl } : olds!.function;
-      const domain = yield* observe(
-        scopeOf(fn),
-        output?.hostname ?? normalize(olds!.hostname),
-      );
+      const domain = yield* observe(scopeOf(fn), output?.hostname ?? normalize(olds!.hostname));
       if (!domain) return undefined;
       const result = attrs(fn, domain);
       return output ? result : Unowned(result);
@@ -152,11 +143,7 @@ export const CustomDomainProvider = () =>
         }).pipe(Effect.catchTag("Conflict", () => Effect.void));
         domain = yield* observe(scope, hostname);
       }
-      if (
-        !domain ||
-        domain.entity_type !== "function" ||
-        domain.entity_id !== news.function.slug
-      )
+      if (!domain || domain.entity_type !== "function" || domain.entity_id !== news.function.slug)
         return yield* new FunctionDomainConflict({ hostname });
       return attrs(news.function, domain);
     }),

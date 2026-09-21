@@ -1,17 +1,13 @@
-import * as Bedrock from "@/AWS/Bedrock";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import {
-  LanguageModel as AiLanguageModel,
-  Tool,
-  Toolkit,
-} from "effect/unstable/ai";
+import { LanguageModel as AiLanguageModel, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Bedrock from "@/AWS/Bedrock";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "language-model-handler.ts");
 
@@ -71,8 +67,7 @@ export default BedrockLanguageModelFunction.make(
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
         const prompt =
-          url.searchParams.get("prompt") ??
-          "Say the single word 'pong' and nothing else.";
+          url.searchParams.get("prompt") ?? "Say the single word 'pong' and nothing else.";
 
         // Cheap readiness route — no Bedrock call.
         if (pathname === "/ping") {
@@ -95,9 +90,7 @@ export default BedrockLanguageModelFunction.make(
           // Runtime override: clamp the same bound model to a tiny budget.
           const response = yield* AiLanguageModel.generateText({
             prompt,
-          }).pipe(
-            Bedrock.withModelParameters({ maxTokens: 8, temperature: 0 }),
-          );
+          }).pipe(Bedrock.withModelParameters({ maxTokens: 8, temperature: 0 }));
           return yield* HttpServerResponse.json({
             text: response.text,
             finishReason: response.finishReason,
@@ -120,9 +113,7 @@ export default BedrockLanguageModelFunction.make(
           // Collected server-side: Lambda function URLs buffer responses by
           // default, and the tests assert on the part sequence, not
           // incremental delivery.
-          const parts = yield* Stream.runCollect(
-            AiLanguageModel.streamText({ prompt }),
-          );
+          const parts = yield* Stream.runCollect(AiLanguageModel.streamText({ prompt }));
           return HttpServerResponse.text(toSse(parts), {
             headers: { "content-type": "text/event-stream" },
           });
@@ -164,18 +155,12 @@ export default BedrockLanguageModelFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(
         // Surface adapter/model failures as a JSON 500 so live-test runs can
         // read the failure without digging through CloudWatch.
         Effect.catchTag("AiError", (error) =>
-          HttpServerResponse.json(
-            { error: String(error.message) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: String(error.message) }, { status: 500 }),
         ),
         Effect.provide(model),
         Effect.orDie,

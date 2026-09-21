@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Group, GroupMembership, InstanceProfile, Role, User } from "@/AWS/IAM";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Group, GroupMembership, InstanceProfile, Role, User } from "@/AWS/IAM";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,16 +49,12 @@ test.provider("create user, group membership, and instance profile", (stack) =>
     const group = yield* IAM.getGroup({
       GroupName: resources.group.groupName,
     });
-    expect(
-      group.Users.some((user) => user.UserName === resources.user.userName),
-    ).toBe(true);
+    expect(group.Users.some((user) => user.UserName === resources.user.userName)).toBe(true);
 
     const profile = yield* IAM.getInstanceProfile({
       InstanceProfileName: resources.profile.instanceProfileName,
     });
-    expect(profile.InstanceProfile.Roles[0]?.RoleName).toBe(
-      resources.role.roleName,
-    );
+    expect(profile.InstanceProfile.Roles[0]?.RoleName).toBe(resources.role.roleName);
 
     yield* stack.destroy();
 

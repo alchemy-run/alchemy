@@ -103,9 +103,9 @@ export const consumeJobEvents = <StreamReq = never, Req = never>(
     props.id ?? "BatchJobEvents",
     {
       source: ["aws.batch"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as BatchJobEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as BatchJobEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
     },
     { description: props.description, state: props.state },
     process,

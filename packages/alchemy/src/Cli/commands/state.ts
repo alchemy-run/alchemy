@@ -1,19 +1,19 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Argument from "effect/unstable/cli/Argument";
 import { Command, Flag } from "effect/unstable/cli";
+import * as Argument from "effect/unstable/cli/Argument";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
 import type { StateSource } from "../../Alchemist/routes/state.ts";
-import * as State from "../../State/index.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as State from "../../State/index.ts";
 import {
   stateExplorerScreen,
   type StateExplorerSource,
 } from "../components/view/StateExplorer.tsx";
+import { confirmOrDecline } from "./confirm.ts";
 import { failWithHelp, UserInputError } from "./errors.ts";
 import { envFile, profile, yes } from "./flags.ts";
-import { confirmOrDecline } from "./confirm.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const backend = Flag.Literals("backend", [
@@ -67,13 +67,9 @@ const source = (args: StateArgs): StateSource =>
         };
 
 const normalizedPath = (path: string | undefined) => {
-  const parts = (path ?? "")
-    .split("/")
-    .filter((part) => part !== "" && part !== ".");
+  const parts = (path ?? "").split("/").filter((part) => part !== "" && part !== ".");
   return parts.includes("..")
-    ? Effect.fail(
-        new UserInputError({ message: `invalid state path: ${path ?? "/"}` }),
-      )
+    ? Effect.fail(new UserInputError({ message: `invalid state path: ${path ?? "/"}` }))
     : Effect.succeed(parts.join("/"));
 };
 
@@ -86,18 +82,10 @@ const provideStore =
  * to a single-line user error instead of a cause dump. */
 const usingStore =
   (store: State.StateService) =>
-  <A>(
-    operation: Effect.Effect<
-      A,
-      State.InvalidStatePath | State.StateStoreError,
-      State.State
-    >,
-  ) =>
+  <A>(operation: Effect.Effect<A, State.InvalidStatePath | State.StateStoreError, State.State>) =>
     provideStore(store)(operation).pipe(
       Effect.catchTag("InvalidStatePath", (error) =>
-        Effect.fail(
-          new UserInputError({ message: `${error.path}: ${error.reason}` }),
-        ),
+        Effect.fail(new UserInputError({ message: `${error.path}: ${error.reason}` })),
       ),
     );
 
@@ -116,10 +104,7 @@ const listCommand = Command.make(
       yield* Console.log([...items].sort().join("\n"));
     }),
   ),
-).pipe(
-  Command.withAlias("ls"),
-  Command.withDescription("List a state-store directory"),
-);
+).pipe(Command.withAlias("ls"), Command.withDescription("List a state-store directory"));
 
 const readCommand = Command.make(
   "read",
@@ -128,26 +113,19 @@ const readCommand = Command.make(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
       const requested = yield* normalizedPath(Option.getOrUndefined(path));
-      const entries = yield* usingStore(store)(
-        State.readState({ path: requested, recursive }),
-      );
+      const entries = yield* usingStore(store)(State.readState({ path: requested, recursive }));
       yield* Console.log(
         JSON.stringify(
           entries.length === 1
             ? entries[0]!.value
-            : Object.fromEntries(
-                entries.map((entry) => [entry.path, entry.value]),
-              ),
+            : Object.fromEntries(entries.map((entry) => [entry.path, entry.value])),
           null,
           2,
         ),
       );
     }),
   ),
-).pipe(
-  Command.withAlias("cat"),
-  Command.withDescription("Read a state-store file or directory"),
-);
+).pipe(Command.withAlias("cat"), Command.withDescription("Read a state-store file or directory"));
 
 const deleteCommand = Command.make(
   "delete",
@@ -163,22 +141,16 @@ const deleteCommand = Command.make(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const requested = yield* normalizedPath(path);
       if (requested === "") {
-        return yield* Effect.fail(
-          new UserInputError({ message: "cannot delete the state root" }),
-        );
+        return yield* Effect.fail(new UserInputError({ message: "cannot delete the state root" }));
       }
       const store = yield* AlchemistState.store(source(args));
-      yield* usingStore(store)(
-        State.deleteState({ path: requested, recursive }),
-      );
+      yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
       yield* CliKit.accessors.output.success(`Deleted state at ${requested}`);
     }),
   ),
 ).pipe(
   Command.withAlias("rm"),
-  Command.withDescription(
-    "Delete state records without deleting cloud resources",
-  ),
+  Command.withDescription("Delete state records without deleting cloud resources"),
 );
 
 const stateExplorer = (args: StateArgs) =>
@@ -193,14 +165,10 @@ const stateExplorer = (args: StateArgs) =>
       ),
       listStages: (stack) =>
         on(State.listState({ path: stack })).pipe(
-          Effect.map((paths) =>
-            paths.map((path) => path.slice(stack.length + 1, -1)),
-          ),
+          Effect.map((paths) => paths.map((path) => path.slice(stack.length + 1, -1))),
         ),
       listResources: (stack, stage) =>
-        on(
-          State.listState({ path: `${stack}/${stage}`, recursive: true }),
-        ).pipe(
+        on(State.listState({ path: `${stack}/${stage}`, recursive: true })).pipe(
           Effect.map((paths) =>
             paths
               .filter((path) => path !== `${stack}/${stage}/output`)
@@ -227,9 +195,7 @@ const stateExplorer = (args: StateArgs) =>
           (node) =>
             node.kind === "output"
               ? Effect.void
-              : on(
-                  State.deleteState({ path: node.path, recursive: true }),
-                ).pipe(Effect.asVoid),
+              : on(State.deleteState({ path: node.path, recursive: true })).pipe(Effect.asVoid),
           { concurrency: 32, discard: true },
         ),
     };
@@ -263,19 +229,13 @@ const nukeCommand = Command.make(
         (stack) =>
           store
             .deleteStack({ stack })
-            .pipe(
-              Effect.andThen(
-                CliKit.accessors.output.success(`Cleared ${stack}`),
-              ),
-            ),
+            .pipe(Effect.andThen(CliKit.accessors.output.success(`Cleared ${stack}`))),
         { concurrency: 32, discard: true },
       );
     }),
   ),
 ).pipe(
-  Command.withDescription(
-    "Delete all stacks, stages, and outputs from the state store",
-  ),
+  Command.withDescription("Delete all stacks, stages, and outputs from the state store"),
   Command.unlisted,
 );
 
@@ -298,10 +258,5 @@ export const stateCommand = Command.make(
   ),
 ).pipe(
   Command.withDescription("Inspect and manage deployment state"),
-  Command.withSubcommands([
-    listCommand,
-    readCommand,
-    deleteCommand,
-    unsafeCommand,
-  ]),
+  Command.withSubcommands([listCommand, readCommand, deleteCommand, unsafeCommand]),
 );

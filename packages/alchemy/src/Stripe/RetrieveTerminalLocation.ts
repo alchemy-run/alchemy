@@ -33,13 +33,10 @@ export interface RetrieveTerminalLocation extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveTerminalLocationRequest,
-    ) => Effect.Effect<
-      GetTerminalLocationResponse,
-      GetTerminalLocationError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<GetTerminalLocationResponse, GetTerminalLocationError, RuntimeContext>
   >
 > {}
 
-export const RetrieveTerminalLocation =
-  Binding.Service<RetrieveTerminalLocation>("Stripe.RetrieveTerminalLocation");
+export const RetrieveTerminalLocation = Binding.Service<RetrieveTerminalLocation>(
+  "Stripe.RetrieveTerminalLocation",
+);

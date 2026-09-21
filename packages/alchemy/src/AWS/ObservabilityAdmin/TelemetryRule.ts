@@ -152,22 +152,17 @@ export interface TelemetryRule extends Resource<
  *
  * @resource
  */
-export const TelemetryRule = Resource<TelemetryRule>(
-  "AWS.ObservabilityAdmin.TelemetryRule",
-);
+export const TelemetryRule = Resource<TelemetryRule>("AWS.ObservabilityAdmin.TelemetryRule");
 
 /** Normalize the wire tag map (values may be undefined) to a plain record. */
 const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-const sameJson = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * True when any field the desired rule declares differs from the observed
@@ -180,9 +175,7 @@ const ruleNeedsUpdate = (
 ): boolean => {
   if (observed === undefined) return true;
   const observedByKey = new Map<string, unknown>(Object.entries(observed));
-  return Object.entries(desired).some(
-    ([key, value]) => !sameJson(value, observedByKey.get(key)),
-  );
+  return Object.entries(desired).some(([key, value]) => !sameJson(value, observedByKey.get(key)));
 };
 
 const vpcFlowLogGroupName = "/aws/vpc";
@@ -201,30 +194,26 @@ const isManagedVpcFlowLog = (
   flowLog.LogGroupName === vpcFlowLogGroupName &&
   flowLog.LogDestinationType === "cloud-watch-logs" &&
   flowLog.Tags?.some(
-    (tag) =>
-      tag.Key === "CloudWatchTelemetryRuleManaged" && tag.Value === "true",
+    (tag) => tag.Key === "CloudWatchTelemetryRuleManaged" && tag.Value === "true",
   ) === true;
 
-class TelemetryRuleStillExists extends Data.TaggedError(
-  "TelemetryRuleStillExists",
-)<{ readonly ruleName: string }> {}
+class TelemetryRuleStillExists extends Data.TaggedError("TelemetryRuleStillExists")<{
+  readonly ruleName: string;
+}> {}
 
-class ManagedVpcFlowLogDeleteFailed extends Data.TaggedError(
-  "ManagedVpcFlowLogDeleteFailed",
-)<{ readonly failures: ec2.UnsuccessfulItem[] }> {}
+class ManagedVpcFlowLogDeleteFailed extends Data.TaggedError("ManagedVpcFlowLogDeleteFailed")<{
+  readonly failures: ec2.UnsuccessfulItem[];
+}> {}
 
-class ManagedVpcFlowLogsStillExist extends Data.TaggedError(
-  "ManagedVpcFlowLogsStillExist",
-)<{ readonly flowLogIds: string[] }> {}
+class ManagedVpcFlowLogsStillExist extends Data.TaggedError("ManagedVpcFlowLogsStillExist")<{
+  readonly flowLogIds: string[];
+}> {}
 
-class ManagedVpcLogGroupStillExists extends Data.TaggedError(
-  "ManagedVpcLogGroupStillExists",
-)<{ readonly logGroupName: string }> {}
+class ManagedVpcLogGroupStillExists extends Data.TaggedError("ManagedVpcLogGroupStillExists")<{
+  readonly logGroupName: string;
+}> {}
 
-const cleanupObservationSchedule = Schedule.max([
-  Schedule.fixed("1 second"),
-  Schedule.recurs(10),
-]);
+const cleanupObservationSchedule = Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]);
 
 /** Project props to the wire `TelemetryRule` struct (dropping undefineds). */
 const toWireRule = (props: TelemetryRuleProps): obs.TelemetryRule =>
@@ -255,21 +244,14 @@ export const TelemetryRuleProvider = () =>
   Provider.effect(
     TelemetryRule,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: TelemetryRuleProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: TelemetryRuleProps) {
         return props.ruleName ?? (yield* createPhysicalName({ id }));
       });
 
       const readRule = Effect.fn(function* (identifier: string) {
         return yield* obs
           .getTelemetryRule({ RuleIdentifier: identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const waitUntilRuleAbsent = Effect.fn(function* (ruleName: string) {
@@ -314,14 +296,10 @@ export const TelemetryRuleProvider = () =>
           })
           .pipe(
             Stream.runCollect,
-            Effect.map((items) =>
-              Array.from(items).filter(isManagedVpcFlowLog),
-            ),
+            Effect.map((items) => Array.from(items).filter(isManagedVpcFlowLog)),
           );
 
-      const waitUntilManagedFlowLogsAbsent = Effect.fn(function* (
-        deletedIds: string[],
-      ) {
+      const waitUntilManagedFlowLogsAbsent = Effect.fn(function* (deletedIds: string[]) {
         const deleted = new Set(deletedIds);
         yield* listManagedVpcFlowLogs().pipe(
           Effect.flatMap((flowLogs) => {
@@ -350,9 +328,7 @@ export const TelemetryRuleProvider = () =>
         })
         .pipe(
           Effect.flatMap((response) =>
-            response.logGroups?.some(
-              (group) => group.logGroupName === vpcFlowLogGroupName,
-            ) === true
+            response.logGroups?.some((group) => group.logGroupName === vpcFlowLogGroupName) === true
               ? Effect.fail(
                   new ManagedVpcLogGroupStillExists({
                     logGroupName: vpcFlowLogGroupName,
@@ -373,8 +349,7 @@ export const TelemetryRuleProvider = () =>
           yield* ec2.deleteFlowLogs({ FlowLogIds: flowLogIds }).pipe(
             Effect.flatMap((response) => {
               const failures = (response.Unsuccessful ?? []).filter(
-                (failure) =>
-                  failure.Error?.Code !== "InvalidFlowLogId.NotFound",
+                (failure) => failure.Error?.Code !== "InvalidFlowLogId.NotFound",
               );
               return failures.length === 0
                 ? Effect.void
@@ -420,10 +395,7 @@ export const TelemetryRuleProvider = () =>
         );
       });
 
-      const toAttrs = (
-        rule: obs.GetTelemetryRuleOutput,
-        tags: Record<string, string>,
-      ) => ({
+      const toAttrs = (rule: obs.GetTelemetryRuleOutput, tags: Record<string, string>) => ({
         ruleName: rule.RuleName ?? "",
         ruleArn: rule.RuleArn ?? "",
         telemetryType: rule.TelemetryRule?.TelemetryType,
@@ -453,18 +425,14 @@ export const TelemetryRuleProvider = () =>
                 { concurrency: 4 },
               ),
             ),
-            Effect.map((attrs) =>
-              attrs.flatMap((a) => (a === undefined ? [] : [a])),
-            ),
+            Effect.map((attrs) => attrs.flatMap((a) => (a === undefined ? [] : [a]))),
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.ruleName ?? (yield* createName(id, olds ?? {}));
           const attrs = yield* readAttrs(name);
           if (attrs === undefined) return undefined;
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -502,16 +470,11 @@ export const TelemetryRuleProvider = () =>
             observed = yield* readRule(name).pipe(
               Effect.flatMap((rule) =>
                 rule === undefined
-                  ? Effect.fail(
-                      new Error(`telemetry rule '${name}' not yet visible`),
-                    )
+                  ? Effect.fail(new Error(`telemetry rule '${name}' not yet visible`))
                   : Effect.succeed(rule),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
               }),
             );
           } else if (ruleNeedsUpdate(desiredRule, observed.TelemetryRule)) {
@@ -551,23 +514,17 @@ export const TelemetryRuleProvider = () =>
           // not make cleanup decisions from stale desired state.
           const observed = yield* readRule(output.ruleName);
           const deletedRule =
-            observed?.TelemetryRule ??
-            (olds === undefined ? undefined : toWireRule(olds));
+            observed?.TelemetryRule ?? (olds === undefined ? undefined : toWireRule(olds));
           yield* obs
             .deleteTelemetryRule({ RuleIdentifier: output.ruleName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitUntilRuleAbsent(output.ruleName);
 
           // Observability Admin asynchronously creates EC2 flow logs and the
           // shared `/aws/vpc` destination for VPC_FLOW_LOGS rules, but deleting
           // the rule does not remove them. Reap only when this was such a rule
           // and no other live rule can own the shared managed resources.
-          if (
-            isVpcFlowLogRule(deletedRule) &&
-            !(yield* matchingRulesRemain())
-          ) {
+          if (isVpcFlowLogRule(deletedRule) && !(yield* matchingRulesRemain())) {
             yield* cleanupManagedVpcFlowLogs();
           }
         }),

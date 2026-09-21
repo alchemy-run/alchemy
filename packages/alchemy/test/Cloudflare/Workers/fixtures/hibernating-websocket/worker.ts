@@ -1,3 +1,9 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { DurableObject } from "@/Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import {
@@ -6,12 +12,6 @@ import {
   type WebSocketAttachmentError,
 } from "@/Cloudflare/Workers/WebSocket.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as SchemaGetter from "effect/SchemaGetter";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const Attachment = Schema.Struct({
   version: Schema.Literal(1),
@@ -23,12 +23,8 @@ const Cloned = Schema.Struct({
   map: Schema.ReadonlyMap(Schema.String, Schema.Number),
   bytes: Schema.Uint8Array,
 });
-class DecodeOffset extends Context.Service<DecodeOffset, number>()(
-  "DecodeOffset",
-) {}
-class EncodeOffset extends Context.Service<EncodeOffset, number>()(
-  "EncodeOffset",
-) {}
+class DecodeOffset extends Context.Service<DecodeOffset, number>()("DecodeOffset") {}
+class EncodeOffset extends Context.Service<EncodeOffset, number>()("EncodeOffset") {}
 const WithServices = Schema.NumberFromString.pipe(
   Schema.decodeTo(Schema.Number, {
     decode: SchemaGetter.transformEffect((value: number) =>
@@ -44,8 +40,7 @@ const timestamp = "2026-01-02T03:04:05.000Z";
 const failure = (error: WebSocketAttachmentError) => ({
   _tag: error._tag,
   reason: error.reason,
-  cause:
-    error.cause instanceof Error ? error.cause.message : String(error.cause),
+  cause: error.cause instanceof Error ? error.cause.message : String(error.cause),
   causeIsError: error.cause instanceof Error,
 });
 
@@ -60,9 +55,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
       const rejected: string[] = [];
       for (const socket of yield* state.getWebSockets()) {
         yield* socket.getAttachment(Attachment).pipe(
-          Effect.flatMap((value) =>
-            Effect.sync(() => restored.push(value.count)),
-          ),
+          Effect.flatMap((value) => Effect.sync(() => restored.push(value.count))),
           Effect.catchTag("WebSocketAttachmentError", (error) =>
             Effect.gen(function* () {
               rejected.push(error.reason);
@@ -73,10 +66,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
         );
       }
 
-      const handle = Effect.fn(function* (
-        socket: WebSocket,
-        message: string | ArrayBuffer,
-      ) {
+      const handle = Effect.fn(function* (socket: WebSocket, message: string | ArrayBuffer) {
         switch (message) {
           case "codec": {
             const joined = yield* Effect.sync(() => new Date(timestamp));
@@ -85,9 +75,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
               count: 42,
               joined,
             });
-            const encoded = yield* Effect.sync(() =>
-              socket.deserializeAttachment(),
-            );
+            const encoded = yield* Effect.sync(() => socket.deserializeAttachment());
             const value = yield* socket.getAttachment(Attachment);
             return {
               encoded,
@@ -100,9 +88,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
             yield* socket
               .setAttachment(WithServices, 42)
               .pipe(Effect.provideService(EncodeOffset, 5));
-            const encoded = yield* Effect.sync(() =>
-              socket.deserializeAttachment(),
-            );
+            const encoded = yield* Effect.sync(() => socket.deserializeAttachment());
             const decoded = yield* socket
               .getAttachment(WithServices)
               .pipe(Effect.provideService(DecodeOffset, 5));
@@ -124,9 +110,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
             };
           }
           case "missing": {
-            const raw = yield* Effect.sync(() =>
-              socket.deserializeAttachment(),
-            );
+            const raw = yield* Effect.sync(() => socket.deserializeAttachment());
             const result = yield* socket.getAttachment(Schema.Unknown).pipe(
               Effect.as({ reason: "unexpected-success" }),
               Effect.catchTag("WebSocketAttachmentError", (error) =>
@@ -148,10 +132,7 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
           case "encode": {
             yield* socket.setAttachment(Schema.NumberFromString, 7);
             return yield* socket
-              .setAttachment(
-                Schema.NumberFromString.check(Schema.isGreaterThan(0)),
-                -1,
-              )
+              .setAttachment(Schema.NumberFromString.check(Schema.isGreaterThan(0)), -1)
               .pipe(
                 Effect.as({ reason: "unexpected-success" }),
                 Effect.catchTag("WebSocketAttachmentError", (error) =>
@@ -164,21 +145,18 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
           }
           case "oversize": {
             yield* socket.setAttachment(Schema.String, "x".repeat(16_000));
-            const acceptedLength = (yield* socket.getAttachment(Schema.String))
-              .length;
+            const acceptedLength = (yield* socket.getAttachment(Schema.String)).length;
             yield* socket.setAttachment(Schema.String, "small");
-            return yield* socket
-              .setAttachment(Schema.String, "x".repeat(32_768))
-              .pipe(
-                Effect.as({ reason: "unexpected-success" }),
-                Effect.catchTag("WebSocketAttachmentError", (error) =>
-                  Effect.sync(() => ({
-                    ...failure(error),
-                    acceptedLength,
-                    previous: socket.deserializeAttachment(),
-                  })),
-                ),
-              );
+            return yield* socket.setAttachment(Schema.String, "x".repeat(32_768)).pipe(
+              Effect.as({ reason: "unexpected-success" }),
+              Effect.catchTag("WebSocketAttachmentError", (error) =>
+                Effect.sync(() => ({
+                  ...failure(error),
+                  acceptedLength,
+                  previous: socket.deserializeAttachment(),
+                })),
+              ),
+            );
           }
           case "clone": {
             const value = yield* Effect.sync(() => ({
@@ -230,14 +208,9 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
           const [response] = yield* upgrade();
           return response;
         }),
-        webSocketMessage: Effect.fn(function* (
-          socket: WebSocket,
-          message: string | ArrayBuffer,
-        ) {
+        webSocketMessage: Effect.fn(function* (socket: WebSocket, message: string | ArrayBuffer) {
           const response = yield* handle(socket, message).pipe(
-            Effect.catchTag("WebSocketAttachmentError", (error) =>
-              Effect.succeed(failure(error)),
-            ),
+            Effect.catchTag("WebSocketAttachmentError", (error) => Effect.succeed(failure(error))),
           );
           yield* socket.send(JSON.stringify(response));
         }),

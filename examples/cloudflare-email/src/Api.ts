@@ -22,8 +22,7 @@ export class Inbox extends Cloudflare.DurableObject<Inbox>()(
   Effect.gen(function* () {
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-      let received =
-        (yield* state.storage.get<ReceivedMessage[]>("received")) ?? [];
+      let received = (yield* state.storage.get<ReceivedMessage[]>("received")) ?? [];
       return {
         record: Effect.fn(function* (msg: ReceivedMessage) {
           received = [...received, msg];

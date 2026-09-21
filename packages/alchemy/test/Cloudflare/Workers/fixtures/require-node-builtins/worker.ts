@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { roundTrip } from "./dep.cjs";
 
 /**
@@ -20,9 +20,7 @@ export default class RequireNodeBuiltinsWorker extends Cloudflare.Worker<Require
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const value =
-          new URL(request.url, "http://localhost").searchParams.get("value") ??
-          "";
+        const value = new URL(request.url, "http://localhost").searchParams.get("value") ?? "";
         return HttpServerResponse.text(roundTrip(value));
       }),
     };

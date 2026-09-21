@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
@@ -7,12 +5,10 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import TestService from "./fixtures/service.ts";
-import {
-  awaitLogGroups,
-  logGroupNamesFor,
-  observeLogGroups,
-} from "./logGroups.ts";
+import { awaitLogGroups, logGroupNamesFor, observeLogGroups } from "./logGroups.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -44,9 +40,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(service.serviceUrl).toBeTruthy();
       // Effect-native attributes: managed repo, roles, and image.
       expect(service.repositoryUri).toBeTruthy();
-      expect(service.imageUri).toBe(
-        `${service.repositoryUri}:${service.codeHash}`,
-      );
+      expect(service.imageUri).toBe(`${service.repositoryUri}:${service.codeHash}`);
       expect(service.instanceRoleArn).toContain(":role/");
       expect(service.accessRoleArn).toContain(":role/");
 
@@ -55,40 +49,29 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const described = yield* apprunner.describeService({
         ServiceArn: service.serviceArn,
       });
-      expect(
-        described.Service.SourceConfiguration.ImageRepository
-          ?.ImageRepositoryType,
-      ).toBe("ECR");
-      expect(
-        described.Service.SourceConfiguration.AuthenticationConfiguration
-          ?.AccessRoleArn,
-      ).toBe(service.accessRoleArn);
-      expect(described.Service.InstanceConfiguration.InstanceRoleArn).toBe(
-        service.instanceRoleArn,
+      expect(described.Service.SourceConfiguration.ImageRepository?.ImageRepositoryType).toBe(
+        "ECR",
       );
+      expect(described.Service.SourceConfiguration.AuthenticationConfiguration?.AccessRoleArn).toBe(
+        service.accessRoleArn,
+      );
+      expect(described.Service.InstanceConfiguration.InstanceRoleArn).toBe(service.instanceRoleArn);
 
       // The deployed program serves HTTP (ride out DNS/edge propagation).
-      const health = yield* HttpClient.get(
-        `https://${service.serviceUrl}/health`,
-      ).pipe(
+      const health = yield* HttpClient.get(`https://${service.serviceUrl}/health`).pipe(
         Effect.flatMap((res) =>
           res.status === 200
             ? Effect.succeed(res)
             : Effect.fail(new Error(`/health returned ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
         }),
       );
       expect(health.status).toBe(200);
 
       // The `host.run` background loop is executing: /ticks climbs.
-      const readTicks = HttpClient.get(
-        `https://${service.serviceUrl}/ticks`,
-      ).pipe(
+      const readTicks = HttpClient.get(`https://${service.serviceUrl}/ticks`).pipe(
         Effect.flatMap((res) => res.json),
         Effect.map((json) => (json as { ticks: number }).ticks),
       );
@@ -100,10 +83,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             : Effect.fail(new Error(`ticks not climbing (still ${ticks})`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
       expect(later).toBeGreaterThan(first);
@@ -112,27 +92,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // survive `deleteService`, so the provider reaps them explicitly.
       // Asserting they exist FIRST keeps the post-destroy check below from
       // passing vacuously on a wrong name.
-      const logGroupNames = logGroupNamesFor(
-        service.serviceName,
-        service.serviceId,
-      );
+      const logGroupNames = logGroupNamesFor(service.serviceName, service.serviceId);
       expect(yield* awaitLogGroups(logGroupNames)).toEqual([true, true]);
 
       // Destroy immediately — App Runner services bill while running — and
       // verify zero leftovers: service, managed repository, both roles, and
       // both log groups.
-      const { repositoryName, instanceRoleName, accessRoleName, serviceArn } =
-        service;
+      const { repositoryName, instanceRoleName, accessRoleName, serviceArn } = service;
       yield* stack.destroy();
 
-      const serviceAfter = yield* apprunner
-        .describeService({ ServiceArn: serviceArn })
-        .pipe(
-          Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("GONE" as const),
-          ),
-        );
+      const serviceAfter = yield* apprunner.describeService({ ServiceArn: serviceArn }).pipe(
+        Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+      );
       expect(["GONE", "DELETED"]).toContain(serviceAfter);
 
       const repoError = yield* Effect.flip(
@@ -141,9 +113,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(repoError._tag).toBe("RepositoryNotFoundException");
 
       for (const roleName of [instanceRoleName!, accessRoleName!]) {
-        const roleError = yield* Effect.flip(
-          iam.getRole({ RoleName: roleName }),
-        );
+        const roleError = yield* Effect.flip(iam.getRole({ RoleName: roleName }));
         expect(roleError._tag).toBe("NoSuchEntityException");
       }
 

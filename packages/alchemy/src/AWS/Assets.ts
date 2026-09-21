@@ -33,11 +33,7 @@ export type AssetsError =
 /**
  * Requirements for Assets operations (S3 operations need these).
  */
-export type AssetsRequirements =
-  | Region
-  | Credentials
-  | HttpClient
-  | AWSEnvironment;
+export type AssetsRequirements = Region | Credentials | HttpClient | AWSEnvironment;
 
 export class Assets extends Context.Service<
   Assets,
@@ -66,9 +62,7 @@ export class Assets extends Context.Service<
      * @param hash - The content hash to check
      * @returns true if the asset exists
      */
-    readonly hasAsset: (
-      hash: string,
-    ) => Effect.Effect<boolean, AssetsError, AssetsRequirements>;
+    readonly hasAsset: (hash: string) => Effect.Effect<boolean, AssetsError, AssetsRequirements>;
   }
 >()("AWS::Assets") {
   static BucketName = Assets.use((assets) => assets.bucketName);
@@ -115,17 +109,13 @@ export const AssetsLive = Layer.effect(
 
         return Effect.gen(function* () {
           // Check if asset already exists
-          const exists = yield* s3
-            .headObject({ Bucket: yield* bucketName, Key: key })
-            .pipe(
-              Effect.map(() => true),
-              Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            );
+          const exists = yield* s3.headObject({ Bucket: yield* bucketName, Key: key }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag("NotFound", () => Effect.succeed(false)),
+          );
 
           if (exists) {
-            yield* Effect.logDebug(
-              `Asset already exists: s3://${yield* bucketName}/${key}`,
-            );
+            yield* Effect.logDebug(`Asset already exists: s3://${yield* bucketName}/${key}`);
             return key;
           }
 
@@ -137,9 +127,7 @@ export const AssetsLive = Layer.effect(
             ContentType: "application/zip",
           });
 
-          yield* Effect.logDebug(
-            `Uploaded asset: s3://${yield* bucketName}/${key}`,
-          );
+          yield* Effect.logDebug(`Uploaded asset: s3://${yield* bucketName}/${key}`);
           return key;
         }).pipe(
           Effect.mapError((err): AssetsError => ({
@@ -152,17 +140,15 @@ export const AssetsLive = Layer.effect(
       hasAsset: Effect.fn(function* (hash: string) {
         const key = getLambdaAssetKey(hash);
 
-        return yield* s3
-          .headObject({ Bucket: yield* bucketName, Key: key })
-          .pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.mapError((err): AssetsError => ({
-              _tag: "AssetsCheckError",
-              message: `Failed to check asset ${key}`,
-              cause: err,
-            })),
-          );
+        return yield* s3.headObject({ Bucket: yield* bucketName, Key: key }).pipe(
+          Effect.map(() => true),
+          Effect.catchTag("NotFound", () => Effect.succeed(false)),
+          Effect.mapError((err): AssetsError => ({
+            _tag: "AssetsCheckError",
+            message: `Failed to check asset ${key}`,
+            cause: err,
+          })),
+        );
       }),
     };
   }),
@@ -245,8 +231,7 @@ export const createAssetsBucket = Effect.gen(function* () {
     .pipe(
       Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
       Effect.retry({
-        while: (e): boolean =>
-          e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
+        while: (e): boolean => e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
         schedule: Schedule.exponential(100),
       }),
     );

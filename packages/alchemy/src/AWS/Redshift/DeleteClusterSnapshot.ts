@@ -28,10 +28,7 @@ export interface DeleteClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: redshift.DeleteClusterSnapshotMessage,
-    ) => Effect.Effect<
-      redshift.DeleteClusterSnapshotResult,
-      redshift.DeleteClusterSnapshotError
-    >
+    ) => Effect.Effect<redshift.DeleteClusterSnapshotResult, redshift.DeleteClusterSnapshotError>
   >
 > {}
 export const DeleteClusterSnapshot = Binding.Service<DeleteClusterSnapshot>(

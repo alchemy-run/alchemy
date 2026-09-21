@@ -31,12 +31,7 @@ export interface DeleteAccessPoint extends Binding.Service<
   () => Effect.Effect<
     (
       request: efs.DeleteAccessPointRequest,
-    ) => Effect.Effect<
-      efs.DeleteAccessPointResponse,
-      efs.DeleteAccessPointError
-    >
+    ) => Effect.Effect<efs.DeleteAccessPointResponse, efs.DeleteAccessPointError>
   >
 > {}
-export const DeleteAccessPoint = Binding.Service<DeleteAccessPoint>(
-  "AWS.EFS.DeleteAccessPoint",
-);
+export const DeleteAccessPoint = Binding.Service<DeleteAccessPoint>("AWS.EFS.DeleteAccessPoint");

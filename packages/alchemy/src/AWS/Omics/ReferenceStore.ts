@@ -100,27 +100,17 @@ export interface ReferenceStore extends Resource<
  *
  * @resource
  */
-export const ReferenceStore = Resource<ReferenceStore>(
-  "AWS.Omics.ReferenceStore",
-);
+export const ReferenceStore = Resource<ReferenceStore>("AWS.Omics.ReferenceStore");
 
 export const ReferenceStoreProvider = () =>
   Provider.effect(
     ReferenceStore,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
-      const toAttrs = (store: {
-        id: string;
-        arn: string;
-        name?: string;
-        creationTime: Date;
-      }) => ({
+      const toAttrs = (store: { id: string; arn: string; name?: string; creationTime: Date }) => ({
         referenceStoreId: store.id,
         referenceStoreArn: store.arn,
         name: store.name ?? "",
@@ -128,12 +118,7 @@ export const ReferenceStoreProvider = () =>
       });
 
       return ReferenceStore.Provider.of({
-        stables: [
-          "referenceStoreId",
-          "referenceStoreArn",
-          "name",
-          "creationTime",
-        ],
+        stables: ["referenceStoreId", "referenceStoreArn", "name", "creationTime"],
         list: () =>
           omics.listReferenceStores.items({}).pipe(
             Stream.map(toAttrs),
@@ -144,11 +129,7 @@ export const ReferenceStoreProvider = () =>
           if (output?.referenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getReferenceStore({ id: output.referenceStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -184,9 +165,7 @@ export const ReferenceStoreProvider = () =>
               : yield* omics
                   .getReferenceStore({ id: output.referenceStoreId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
 
           // ENSURE — create if missing. The store name is not a unique key, so
@@ -209,9 +188,7 @@ export const ReferenceStoreProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteReferenceStore({ id: output.referenceStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

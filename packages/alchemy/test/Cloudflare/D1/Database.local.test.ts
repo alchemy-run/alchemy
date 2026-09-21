@@ -1,7 +1,3 @@
-import { Action } from "@/Action";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,7 +8,11 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import { Action } from "@/Action";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command (see
@@ -33,10 +33,7 @@ const { test: inProcessTest } = Test.make({
   sidecar: false,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const RpcMigrationStack = Alchemy.Stack(
   "D1RpcMigrationStack",
@@ -67,10 +64,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -114,10 +108,7 @@ inProcessTest.provider(
 
       const db = yield* stack.deploy(
         Cloudflare.D1.Database("InProcessMigratedDB", {
-          migrations: pathe.resolve(
-            import.meta.dirname,
-            "fixtures/rpc-migrations",
-          ),
+          migrations: pathe.resolve(import.meta.dirname, "fixtures/rpc-migrations"),
         }),
       );
 
@@ -146,10 +137,7 @@ test.provider(
         Effect.gen(function* () {
           const db = yield* Cloudflare.D1.Database("LocalDB");
           const worker = yield* Cloudflare.Worker("d1-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/d1-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
             env: { DB: db },
           });
           return { db, worker };
@@ -159,9 +147,7 @@ test.provider(
       // The local provider fabricates a `dev:` id — proof no cloud call ran.
       expect(deployed.db.databaseId).toMatch(/^dev:/);
 
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip`,
-      )) as {
+      const body = (yield* getJsonReady(`${deployed.worker.url}/roundtrip`)) as {
         names: string[];
         count: number | null;
       };
@@ -204,10 +190,7 @@ test.provider(
           migrations: migrationsDir,
         });
         const worker = yield* Cloudflare.Worker("d1-migrations-worker", {
-          main: pathe.resolve(
-            import.meta.dirname,
-            "fixtures/d1-local-worker.ts",
-          ),
+          main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
           env: { DB: db },
         });
         return { db, worker };
@@ -296,10 +279,7 @@ test.provider(
             importFiles: [importFile],
           });
           const worker = yield* Cloudflare.Worker("d1-import-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/d1-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
             env: { DB: db },
           });
           return { db, worker };
@@ -345,10 +325,7 @@ test.provider(
                   "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
                 );
                 yield* client.prepare("DELETE FROM users").run();
-                yield* client
-                  .prepare("INSERT INTO users (name) VALUES (?)")
-                  .bind("ada")
-                  .run();
+                yield* client.prepare("INSERT INTO users (name) VALUES (?)").bind("ada").run();
                 const rows = yield* client
                   .prepare("SELECT name FROM users ORDER BY name")
                   .all<{ name: string }>();
@@ -359,10 +336,7 @@ test.provider(
           const seeded = yield* Seed({});
 
           const worker = yield* Cloudflare.Worker("d1-action-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/d1-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
             env: { DB: db },
           });
           return { db, worker, seeded };
@@ -399,14 +373,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const db = yield* Cloudflare.D1.Database("LiveDevDB").pipe(
-            Alchemy.remote(),
-          );
+          const db = yield* Cloudflare.D1.Database("LiveDevDB").pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("d1-live-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/d1-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
             env: { DB: db },
           });
           return { db, worker };
@@ -416,9 +385,7 @@ test.provider(
       // A real UUID — the live provider created it on Cloudflare.
       expect(deployed.db.databaseId).not.toMatch(/^dev:/);
 
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip`,
-      )) as {
+      const body = (yield* getJsonReady(`${deployed.worker.url}/roundtrip`)) as {
         names: string[];
       };
       expect(body.names).toEqual(["alice", "bob"]);
@@ -440,12 +407,10 @@ test.provider(
       yield* stack.destroy();
 
       // Destroy deleted the real database (stamped live mode).
-      const gone = yield* d1
-        .getDatabase({ accountId, databaseId: deployed.db.databaseId })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("DatabaseNotFound", () => Effect.succeed(true)),
-        );
+      const gone = yield* d1.getDatabase({ accountId, databaseId: deployed.db.databaseId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("DatabaseNotFound", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 120_000 },

@@ -31,6 +31,4 @@ export interface ListWorkspaces extends Binding.Service<
     ) => Effect.Effect<amp.ListWorkspacesResponse, amp.ListWorkspacesError>
   >
 > {}
-export const ListWorkspaces = Binding.Service<ListWorkspaces>(
-  "AWS.AMP.ListWorkspaces",
-);
+export const ListWorkspaces = Binding.Service<ListWorkspaces>("AWS.AMP.ListWorkspaces");

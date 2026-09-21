@@ -1,6 +1,6 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
-import * as EffectConsole from "effect/Console";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as EffectConsole from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -35,9 +35,7 @@ const environment = Effect.fn(function* (target: AwsTarget) {
   // services are no longer in context — capture them here so the route's
   // requirements stay visible in its type.
   const credentialServices =
-    yield* Effect.context<
-      Effect.Services<ReturnType<typeof Auth.loadProfileCredentials>>
-    >();
+    yield* Effect.context<Effect.Services<ReturnType<typeof Auth.loadProfileCredentials>>>();
   const aws = Layer.provideMerge(
     Layer.mergeAll(AWSRegion.fromEnvironment, AWSCredentials.fromEnvironment),
     Layer.succeed(
@@ -58,26 +56,22 @@ const environment = Effect.fn(function* (target: AwsTarget) {
     region,
     layer: Layer.provide(
       aws,
-      ConfigProvider.layer(
-        yield* loadConfigProvider(Option.fromNullishOr(target.envFile)),
-      ),
+      ConfigProvider.layer(yield* loadConfigProvider(Option.fromNullishOr(target.envFile))),
     ),
   };
 });
 
 /** Provision the AWS deployment assets bucket. */
-export const bootstrap = Effect.fn("Alchemist.provider.aws.bootstrap")(
-  function* (target: AwsTarget) {
-    const env = yield* environment(target);
-    const result = yield* Effect.provide(bootstrapAws(), env.layer);
-    return { accountId: env.accountId, region: env.region, ...result };
-  },
-);
-
-/** Destroy every Alchemy bootstrap bucket in the region. */
-export const teardown = Effect.fn("Alchemist.provider.aws.teardown")(function* (
+export const bootstrap = Effect.fn("Alchemist.provider.aws.bootstrap")(function* (
   target: AwsTarget,
 ) {
+  const env = yield* environment(target);
+  const result = yield* Effect.provide(bootstrapAws(), env.layer);
+  return { accountId: env.accountId, region: env.region, ...result };
+});
+
+/** Destroy every Alchemy bootstrap bucket in the region. */
+export const teardown = Effect.fn("Alchemist.provider.aws.teardown")(function* (target: AwsTarget) {
   const env = yield* environment(target);
   const result = yield* Effect.provide(destroyBootstrapAws(), env.layer);
   return {

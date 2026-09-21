@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readQuickSightTags,
-  syncQuickSightTags,
-  toWireTags,
-  waitForSettled,
-} from "./internal.ts";
+import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
 
 /**
  * Properties for an Amazon QuickSight data source — a connection to an
@@ -138,20 +133,13 @@ export const DataSourceProvider = () =>
           ? Effect.succeed(props.dataSourceId)
           : createPhysicalName({ id, maxLength: 64 });
 
-      const readSource = Effect.fn(function* (
-        accountId: string,
-        dataSourceId: string,
-      ) {
+      const readSource = Effect.fn(function* (accountId: string, dataSourceId: string) {
         const response = yield* quicksight
           .describeDataSource({
             AwsAccountId: accountId,
             DataSourceId: dataSourceId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const source = response?.DataSource;
         if (source === undefined || source.Status === "DELETED") {
           return undefined;
@@ -214,22 +202,16 @@ export const DataSourceProvider = () =>
                 SslProperties: news.sslProperties,
                 Tags: toWireTags(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
             observed = yield* waitForSettled(
               dataSourceId,
               readSource(accountId, dataSourceId).pipe(
-                Effect.map((s) =>
-                  s === undefined ? undefined : { ...s, status: s.Status },
-                ),
+                Effect.map((s) => (s === undefined ? undefined : { ...s, status: s.Status })),
               ),
             );
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `QuickSight data source '${dataSourceId}' disappeared while creating`,
-                ),
+                new Error(`QuickSight data source '${dataSourceId}' disappeared while creating`),
               );
             }
           } else {
@@ -246,16 +228,12 @@ export const DataSourceProvider = () =>
             observed = yield* waitForSettled(
               dataSourceId,
               readSource(accountId, dataSourceId).pipe(
-                Effect.map((s) =>
-                  s === undefined ? undefined : { ...s, status: s.Status },
-                ),
+                Effect.map((s) => (s === undefined ? undefined : { ...s, status: s.Status })),
               ),
             );
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `QuickSight data source '${dataSourceId}' disappeared while updating`,
-                ),
+                new Error(`QuickSight data source '${dataSourceId}' disappeared while updating`),
               );
             }
           }
@@ -274,38 +252,32 @@ export const DataSourceProvider = () =>
               AwsAccountId: accountId,
               DataSourceId: output.dataSourceId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* quicksight.listDataSources
-              .pages({ AwsAccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.DataSources ?? [])
-                    .flatMap((s) =>
-                      s.DataSourceId !== undefined &&
-                      s.Arn !== undefined &&
-                      s.Status !== "DELETED"
-                        ? [
-                            {
-                              dataSourceId: s.DataSourceId,
-                              arn: s.Arn,
-                              name: s.Name,
-                              type: s.Type,
-                              status: s.Status,
-                            },
-                          ]
-                        : [],
-                    ),
-                ),
-              );
+            return yield* quicksight.listDataSources.pages({ AwsAccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.DataSources ?? [])
+                  .flatMap((s) =>
+                    s.DataSourceId !== undefined && s.Arn !== undefined && s.Status !== "DELETED"
+                      ? [
+                          {
+                            dataSourceId: s.DataSourceId,
+                            arn: s.Arn,
+                            name: s.Name,
+                            type: s.Type,
+                            status: s.Status,
+                          },
+                        ]
+                      : [],
+                  ),
+              ),
+            );
           }),
       });
     }),

@@ -12,6 +12,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
@@ -35,7 +36,6 @@ import { writePackBytes } from "@/Git/Protocol/PackWriter.ts";
 import type { ManifestEntry, ObjectSource } from "@/Git/Protocol/Store.ts";
 import { inflate, inflateEntry } from "@/Git/Protocol/Zlib.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import * as Fiber from "effect/Fiber";
 
 // ── manifest shape (test/fixtures/packs/manifest.json) ──────────────────────
 
@@ -98,8 +98,7 @@ const makeMemoryStore = () => {
   const objects = new Map<string, StoredObject>();
   const source: ObjectSource & ThinBaseSource = {
     has: (oid) => Effect.sync(() => objects.has(oid)),
-    filterExisting: (oids) =>
-      Effect.sync(() => oids.filter((oid) => objects.has(oid))),
+    filterExisting: (oids) => Effect.sync(() => oids.filter((oid) => objects.has(oid))),
     getMeta: (oid) =>
       Effect.sync(() => {
         const stored = objects.get(oid);
@@ -113,14 +112,11 @@ const makeMemoryStore = () => {
               location: "row" as const,
             };
       }),
-    readZData: (oid) =>
-      Stream.fromEffect(Effect.sync(() => objects.get(oid)!.zdata)),
+    readZData: (oid) => Stream.fromEffect(Effect.sync(() => objects.get(oid)!.zdata)),
     readBase: (oid) =>
       Effect.sync(() => {
         const stored = objects.get(oid);
-        return stored === undefined
-          ? undefined
-          : { type: stored.type, content: stored.content };
+        return stored === undefined ? undefined : { type: stored.type, content: stored.content };
       }),
     readContent: (oid) => Effect.sync(() => objects.get(oid)!.content),
   };
@@ -207,9 +203,7 @@ describe("fixture pack parsing", () => {
 
         const store = makeMemoryStore();
         const summary = yield* ingestInto(pack, store);
-        expect(sortedOids(summary.oids)).toEqual(
-          sortedOids(manifest.packs["simple"]!.oids),
-        );
+        expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["simple"]!.oids));
         // the ingest stores the pack's compressed span verbatim; re-hashing the
         // inflated content must reproduce every oid
         for (const [oid, stored] of store.objects) {
@@ -246,64 +240,52 @@ describe("fixture pack parsing", () => {
           }),
         );
         for (let at = 0; at < pack.length; at += 300) {
-          yield* feeder.push(
-            pack.subarray(at, Math.min(at + 300, pack.length)),
-          );
+          yield* feeder.push(pack.subarray(at, Math.min(at + 300, pack.length)));
         }
         feeder.setFallback(bufferRandomAccess(pack));
         feeder.end();
         const summary = yield* Fiber.join(parse);
-        expect(sortedOids(summary.oids)).toEqual(
-          sortedOids(manifest.packs["ofs-delta"]!.oids),
-        );
+        expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["ofs-delta"]!.oids));
       }).pipe(platform),
   );
 
-  it.live(
-    "ofs-delta pack: OFS_DELTA entries resolve to the same object set",
-    () =>
-      Effect.gen(function* () {
-        const manifest = yield* readManifest;
-        const pack = yield* readFixture("ofs-delta.pack");
-        const types = yield* scanEntryTypes(pack);
-        expect(types).toContain(6);
+  it.live("ofs-delta pack: OFS_DELTA entries resolve to the same object set", () =>
+    Effect.gen(function* () {
+      const manifest = yield* readManifest;
+      const pack = yield* readFixture("ofs-delta.pack");
+      const types = yield* scanEntryTypes(pack);
+      expect(types).toContain(6);
 
-        const store = makeMemoryStore();
-        const resolvedFromDelta: Array<string> = [];
-        const summary = yield* ingestPack({
-          source: bufferRandomAccess(pack),
-          store: store.source,
-          sink: (entry) =>
-            Effect.gen(function* () {
-              if (entry.fromDelta) resolvedFromDelta.push(entry.oid);
-              yield* store.sink(entry);
-            }),
-        });
-        expect(sortedOids(summary.oids)).toEqual(
-          sortedOids(manifest.packs["ofs-delta"]!.oids),
-        );
-        expect(resolvedFromDelta.length).toBeGreaterThan(0);
-        for (const [oid, stored] of store.objects) {
-          expect(yield* hashObject(stored.type, stored.content)).toBe(oid);
-        }
-      }).pipe(platform),
+      const store = makeMemoryStore();
+      const resolvedFromDelta: Array<string> = [];
+      const summary = yield* ingestPack({
+        source: bufferRandomAccess(pack),
+        store: store.source,
+        sink: (entry) =>
+          Effect.gen(function* () {
+            if (entry.fromDelta) resolvedFromDelta.push(entry.oid);
+            yield* store.sink(entry);
+          }),
+      });
+      expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["ofs-delta"]!.oids));
+      expect(resolvedFromDelta.length).toBeGreaterThan(0);
+      for (const [oid, stored] of store.objects) {
+        expect(yield* hashObject(stored.type, stored.content)).toBe(oid);
+      }
+    }).pipe(platform),
   );
 
-  it.live(
-    "ref-delta pack: REF_DELTA entries resolve to the same object set",
-    () =>
-      Effect.gen(function* () {
-        const manifest = yield* readManifest;
-        const pack = yield* readFixture("ref-delta.pack");
-        const types = yield* scanEntryTypes(pack);
-        expect(types).toContain(7);
+  it.live("ref-delta pack: REF_DELTA entries resolve to the same object set", () =>
+    Effect.gen(function* () {
+      const manifest = yield* readManifest;
+      const pack = yield* readFixture("ref-delta.pack");
+      const types = yield* scanEntryTypes(pack);
+      expect(types).toContain(7);
 
-        const store = makeMemoryStore();
-        const summary = yield* ingestInto(pack, store);
-        expect(sortedOids(summary.oids)).toEqual(
-          sortedOids(manifest.packs["ref-delta"]!.oids),
-        );
-      }).pipe(platform),
+      const store = makeMemoryStore();
+      const summary = yield* ingestInto(pack, store);
+      expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["ref-delta"]!.oids));
+    }).pipe(platform),
   );
 
   it.live("thin pack: resolves REF_DELTA bases from the seeded store", () =>
@@ -316,15 +298,11 @@ describe("fixture pack parsing", () => {
       const types = yield* scanEntryTypes(thin);
       expect(types).toContain(7);
       const summary = yield* ingestInto(thin, store);
-      expect(sortedOids(summary.oids)).toEqual(
-        sortedOids(manifest.packs["thin"]!.oids),
-      );
+      expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["thin"]!.oids));
       // the extended blob resolved against the excluded base blob
       expect(summary.oids).toContain(manifest.blobs.data2);
       const data2 = store.objects.get(manifest.blobs.data2)!;
-      expect(yield* hashObject(data2.type, data2.content)).toBe(
-        manifest.blobs.data2,
-      );
+      expect(yield* hashObject(data2.type, data2.content)).toBe(manifest.blobs.data2);
     }).pipe(platform),
   );
 
@@ -354,32 +332,26 @@ describe("fixture pack parsing", () => {
 });
 
 describe("PackWriter round-trips", () => {
-  it.live(
-    "rewrite of an ingested delta pack re-parses to an identical object set",
-    () =>
-      Effect.gen(function* () {
-        const manifest = yield* readManifest;
-        const store = makeMemoryStore();
-        yield* ingestInto(yield* readFixture("ofs-delta.pack"), store);
+  it.live("rewrite of an ingested delta pack re-parses to an identical object set", () =>
+    Effect.gen(function* () {
+      const manifest = yield* readManifest;
+      const store = makeMemoryStore();
+      yield* ingestInto(yield* readFixture("ofs-delta.pack"), store);
 
-        const rewritten = concatBytes(
-          yield* Stream.runCollect(
-            writePackBytes(store.manifestEntries(), store.source),
-          ),
-        );
-        const header = yield* readPackHeader(bufferRandomAccess(rewritten));
-        expect(header.version).toBe(2);
-        expect(header.count).toBe(manifest.packs["ofs-delta"]!.count);
+      const rewritten = concatBytes(
+        yield* Stream.runCollect(writePackBytes(store.manifestEntries(), store.source)),
+      );
+      const header = yield* readPackHeader(bufferRandomAccess(rewritten));
+      expect(header.version).toBe(2);
+      expect(header.count).toBe(manifest.packs["ofs-delta"]!.count);
 
-        const reparsed = makeMemoryStore();
-        const summary = yield* ingestInto(rewritten, reparsed);
-        expect(sortedOids(summary.oids)).toEqual(
-          sortedOids(manifest.packs["ofs-delta"]!.oids),
-        );
-        for (const [oid, stored] of reparsed.objects) {
-          expect(yield* hashObject(stored.type, stored.content)).toBe(oid);
-        }
-      }).pipe(platform),
+      const reparsed = makeMemoryStore();
+      const summary = yield* ingestInto(rewritten, reparsed);
+      expect(sortedOids(summary.oids)).toEqual(sortedOids(manifest.packs["ofs-delta"]!.oids));
+      for (const [oid, stored] of reparsed.objects) {
+        expect(yield* hashObject(stored.type, stored.content)).toBe(oid);
+      }
+    }).pipe(platform),
   );
 
   it.live(
@@ -391,9 +363,7 @@ describe("PackWriter round-trips", () => {
         const store = makeMemoryStore();
         yield* ingestInto(yield* readFixture("simple.pack"), store);
         const rewritten = concatBytes(
-          yield* Stream.runCollect(
-            writePackBytes(store.manifestEntries(), store.source),
-          ),
+          yield* Stream.runCollect(writePackBytes(store.manifestEntries(), store.source)),
         );
         const dir = yield* fs.makeTempDirectory({
           prefix: "git-service-pack-",
@@ -401,11 +371,10 @@ describe("PackWriter round-trips", () => {
         const packPath = path.join(dir, "writer-output.pack");
         yield* fs.writeFile(packPath, rewritten);
 
-        const handle = yield* ChildProcess.make(
-          "git",
-          ["index-pack", "--strict", packPath],
-          { cwd: dir, extendEnv: true },
-        );
+        const handle = yield* ChildProcess.make("git", ["index-pack", "--strict", packPath], {
+          cwd: dir,
+          extendEnv: true,
+        });
         const [exitCode, stderr] = yield* Effect.all(
           [handle.exitCode, Stream.mkString(Stream.decodeText(handle.stderr))],
           { concurrency: 2 },

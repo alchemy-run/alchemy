@@ -31,10 +31,7 @@ export const readIvsTags = Effect.fn(function* (arn: string) {
  * Sync tags on an IVS resource: diff the OBSERVED cloud tags against the
  * desired set and apply only the delta.
  */
-export const syncIvsTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncIvsTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readIvsTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {
@@ -46,9 +43,7 @@ export const syncIvsTags = Effect.fn(function* (
       .pipe(retryWhileThrottled);
   }
   if (removed.length > 0) {
-    yield* ivs
-      .untagResource({ resourceArn: arn, tagKeys: removed })
-      .pipe(retryWhileThrottled);
+    yield* ivs.untagResource({ resourceArn: arn, tagKeys: removed }).pipe(retryWhileThrottled);
   }
 });
 
@@ -79,8 +74,5 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
   });

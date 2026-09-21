@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { CachePolicy } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CachePolicy } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,9 +41,7 @@ describe("AWS.CloudFront.CachePolicy", () => {
           Id: created.cachePolicyId,
         });
         expect(initial.CachePolicy?.Id).toEqual(created.cachePolicyId);
-        expect(initial.CachePolicy?.CachePolicyConfig?.Comment).toEqual(
-          "initial",
-        );
+        expect(initial.CachePolicy?.CachePolicyConfig?.Comment).toEqual("initial");
         expect(initial.CachePolicy?.CachePolicyConfig?.DefaultTTL).toEqual(60);
 
         const updated = yield* stack.deploy(
@@ -68,19 +66,14 @@ describe("AWS.CloudFront.CachePolicy", () => {
 
         // Control-plane reads are eventually consistent — poll until the
         // update is visible, then assert the exact wire values.
-        const after = yield* cloudfront
-          .getCachePolicy({ Id: updated.cachePolicyId })
-          .pipe(
-            Effect.repeat({
-              schedule: Schedule.fixed("2 seconds"),
-              until: (r) =>
-                r.CachePolicy?.CachePolicyConfig?.Comment === "updated",
-              times: 15,
-            }),
-          );
-        expect(after.CachePolicy?.CachePolicyConfig?.Comment).toEqual(
-          "updated",
+        const after = yield* cloudfront.getCachePolicy({ Id: updated.cachePolicyId }).pipe(
+          Effect.repeat({
+            schedule: Schedule.fixed("2 seconds"),
+            until: (r) => r.CachePolicy?.CachePolicyConfig?.Comment === "updated",
+            times: 15,
+          }),
         );
+        expect(after.CachePolicy?.CachePolicyConfig?.Comment).toEqual("updated");
         expect(after.CachePolicy?.CachePolicyConfig?.DefaultTTL).toEqual(120);
         expect(after.CachePolicy?.CachePolicyConfig?.MaxTTL).toEqual(86400);
 
@@ -117,9 +110,7 @@ describe("AWS.CloudFront.CachePolicy", () => {
         const provider = yield* Provider.findProvider(CachePolicy);
         const all = yield* provider.list();
 
-        expect(
-          all.some((p) => p.cachePolicyId === deployed.cachePolicyId),
-        ).toBe(true);
+        expect(all.some((p) => p.cachePolicyId === deployed.cachePolicyId)).toBe(true);
 
         yield* stack.destroy();
         yield* assertCachePolicyDeleted(deployed.cachePolicyId);
@@ -133,11 +124,7 @@ const assertCachePolicyDeleted = (id: string) =>
     Effect.flatMap(() => Effect.fail(new Error("CachePolicyStillExists"))),
     Effect.catchTag("NoSuchCachePolicy", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "CachePolicyStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      while: (error) => error instanceof Error && error.message === "CachePolicyStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

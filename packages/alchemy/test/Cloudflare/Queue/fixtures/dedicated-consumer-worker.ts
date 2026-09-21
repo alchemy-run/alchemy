@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { DedicatedQueue } from "./dedicated-consumer-queue.ts";
 
 /** Records the bodies the queue handler observed, so the test can poll them. */
@@ -41,12 +41,8 @@ export default class ConsumerWorker extends Cloudflare.Worker<ConsumerWorker>()(
     const queue = yield* DedicatedQueue;
     const env = yield* Cloudflare.WorkerEnvironment;
 
-    yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(
-      queue,
-      (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          inbox.getByName("default").record(msg.body.text),
-        ),
+    yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(queue, (stream) =>
+      Stream.runForEach(stream, (msg) => inbox.getByName("default").record(msg.body.text)),
     );
 
     return {
@@ -55,14 +51,11 @@ export default class ConsumerWorker extends Cloudflare.Worker<ConsumerWorker>()(
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/binding") {
           return yield* HttpServerResponse.json({
-            queueName: (env as Record<string, unknown>)
-              .DedicatedQueue_queueName,
+            queueName: (env as Record<string, unknown>).DedicatedQueue_queueName,
           });
         }
         if (url.pathname === "/received") {
-          return yield* HttpServerResponse.json(
-            yield* inbox.getByName("default").snapshot(),
-          );
+          return yield* HttpServerResponse.json(yield* inbox.getByName("default").snapshot());
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),

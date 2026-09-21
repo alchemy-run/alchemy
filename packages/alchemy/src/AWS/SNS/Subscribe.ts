@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface SubscribeRequest extends Omit<
-  sns.SubscribeInput,
-  "TopicArn"
-> {}
+export interface SubscribeRequest extends Omit<sns.SubscribeInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:Subscribe`.
@@ -34,9 +31,7 @@ export interface Subscribe extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (
-      request: SubscribeRequest,
-    ) => Effect.Effect<sns.SubscribeResponse, sns.SubscribeError>
+    (request: SubscribeRequest) => Effect.Effect<sns.SubscribeResponse, sns.SubscribeError>
   >
 > {}
 

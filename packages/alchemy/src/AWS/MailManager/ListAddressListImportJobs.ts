@@ -28,13 +28,9 @@ export interface ListAddressListImportJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.ListAddressListImportJobsRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.ListAddressListImportJobsResponse,
-      mm.ListAddressListImportJobsError
-    >
+    ) => Effect.Effect<mm.ListAddressListImportJobsResponse, mm.ListAddressListImportJobsError>
   >
 > {}
-export const ListAddressListImportJobs =
-  Binding.Service<ListAddressListImportJobs>(
-    "AWS.MailManager.ListAddressListImportJobs",
-  );
+export const ListAddressListImportJobs = Binding.Service<ListAddressListImportJobs>(
+  "AWS.MailManager.ListAddressListImportJobs",
+);

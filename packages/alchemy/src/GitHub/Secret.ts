@@ -141,15 +141,11 @@ export interface Secret extends Resource<
  */
 export const Secret = Resource<Secret>("GitHub.Secret");
 
-async function encryptValue(
-  plaintext: string,
-  publicKey: string,
-): Promise<string> {
+async function encryptValue(plaintext: string, publicKey: string): Promise<string> {
   const mod = await import("libsodium-wrappers");
   // Bun/ESM interop: the actual sodium API lives on `.default` when the
   // CJS module is wrapped, but is the module itself under other loaders.
-  const sodium: typeof import("libsodium-wrappers") =
-    (mod as any).default ?? mod;
+  const sodium: typeof import("libsodium-wrappers") = (mod as any).default ?? mod;
   await sodium.ready;
   const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
   const binMessage = sodium.from_string(plaintext);
@@ -172,8 +168,7 @@ export const SecretProvider = () =>
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.name !== olds.name ||
-        resolveEnvironmentName(news.environment) !==
-          resolveEnvironmentName(olds.environment) ||
+        resolveEnvironmentName(news.environment) !== resolveEnvironmentName(olds.environment) ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
@@ -197,8 +192,7 @@ export const SecretProvider = () =>
       // orphaned secret from its old location before upserting the new one.
       if (
         olds !== undefined &&
-        resolveEnvironmentName(olds.environment) !==
-          resolveEnvironmentName(news.environment)
+        resolveEnvironmentName(olds.environment) !== resolveEnvironmentName(news.environment)
       ) {
         yield* deleteSecret(olds);
       }
@@ -238,9 +232,7 @@ const upsertSecret = Effect.fn(function* (props: SecretProps) {
     return data;
   });
 
-  const encrypted = yield* Effect.tryPromise(() =>
-    encryptValue(plaintext, publicKey.key),
-  );
+  const encrypted = yield* Effect.tryPromise(() => encryptValue(plaintext, publicKey.key));
 
   yield* Effect.tryPromise(async () => {
     if (environment !== undefined) {

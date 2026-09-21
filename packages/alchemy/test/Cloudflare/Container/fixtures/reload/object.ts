@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { RELOAD_CONTAINER_PORT, ReloadContainer } from "./container.ts";
 
 /** Durable Object fronting {@link ReloadContainer}; proxies `path` into it. */
@@ -15,16 +15,10 @@ export class ReloadContainerObject extends Cloudflare.DurableObject<ReloadContai
       return {
         read: (path: string) =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get(`http://container${path}`),
-            );
+            const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
             return yield* response.text;
           }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(ReloadContainer, { enableInternet: false }),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Containers.layer(ReloadContainer, { enableInternet: false }))),
 ) {}

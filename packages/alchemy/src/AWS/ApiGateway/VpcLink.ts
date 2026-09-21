@@ -7,9 +7,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { syncTags, vpcLinkArn } from "./common.ts";
 
 export interface VpcLinkProps {
@@ -113,11 +112,7 @@ export const VpcLinkProvider = () =>
           if (!output?.vpcLinkId) return undefined;
           const v = yield* ag
             .getVpcLink({ vpcLinkId: output.vpcLinkId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!v?.id) return undefined;
           return snapshotFromVpcLink(v, tagRecord(v.tags));
         }),
@@ -147,11 +142,7 @@ export const VpcLinkProvider = () =>
           let observed = output?.vpcLinkId
             ? yield* ag
                 .getVpcLink({ vpcLinkId: output.vpcLinkId })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           // Ensure — create the VPC link if missing.

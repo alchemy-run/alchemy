@@ -37,10 +37,7 @@ export interface DescribeStreamSummary extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeStreamSummaryRequest,
-    ) => Effect.Effect<
-      Kinesis.DescribeStreamSummaryOutput,
-      Kinesis.DescribeStreamSummaryError
-    >
+    ) => Effect.Effect<Kinesis.DescribeStreamSummaryOutput, Kinesis.DescribeStreamSummaryError>
   >
 > {}
 

@@ -31,27 +31,16 @@ export function bootstrap(root, previousHead) {
   const checkout = resolve(root, "submodules/distilled");
   // Use the index, just like `git submodule update`, including a staged pin.
   const pin = git(["rev-parse", ":submodules/distilled"], root);
-  const commonDir = git(
-    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    root,
-  );
-  const gitDir = git(
-    ["rev-parse", "--path-format=absolute", "--git-dir"],
-    root,
-  );
+  const commonDir = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
+  const gitDir = git(["rev-parse", "--path-format=absolute", "--git-dir"], root);
   const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
     .split("\0")[0]
     .slice("worktree ".length);
   if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
 
   if (existsSync(resolve(checkout, ".git"))) {
-    if (
-      realpathSync(git(["rev-parse", "--show-toplevel"], checkout)) !==
-      realpathSync(checkout)
-    ) {
-      throw new Error(
-        `Cannot bootstrap distilled: invalid checkout at ${checkout}`,
-      );
+    if (realpathSync(git(["rev-parse", "--show-toplevel"], checkout)) !== realpathSync(checkout)) {
+      throw new Error(`Cannot bootstrap distilled: invalid checkout at ${checkout}`);
     }
     const current = git(["rev-parse", "HEAD"], checkout);
     if (current === pin) return;
@@ -77,23 +66,11 @@ export function bootstrap(root, previousHead) {
   }
 
   if (existsSync(checkout) && readdirSync(checkout).length !== 0) {
-    throw new Error(
-      `Cannot bootstrap distilled: ${checkout} is nonempty but has no .git entry`,
-    );
+    throw new Error(`Cannot bootstrap distilled: ${checkout} is nonempty but has no .git entry`);
   }
 
   if (gitDir === commonDir) {
-    git(
-      [
-        "submodule",
-        "update",
-        "--init",
-        "--checkout",
-        "--",
-        "submodules/distilled",
-      ],
-      root,
-    );
+    git(["submodule", "update", "--init", "--checkout", "--", "submodules/distilled"], root);
     if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
     return;
   }
@@ -118,14 +95,9 @@ function isolateWorktreeConfig(mainRoot) {
 
   // Resolve the gitfile without opening the repository: its core.worktree may
   // already point at a removed Alchemy worktree, preventing normal Git commands.
-  const commonDir = resolve(
-    checkout,
-    git(["rev-parse", "--resolve-git-dir", ".git"], checkout),
-  );
+  const commonDir = resolve(checkout, git(["rev-parse", "--resolve-git-dir", ".git"], checkout));
   if (existsSync(resolve(commonDir, "commondir"))) {
-    throw new Error(
-      "The primary distilled checkout must not be a linked worktree",
-    );
+    throw new Error("The primary distilled checkout must not be a linked worktree");
   }
   const configs = [[commonDir, checkout]];
   const worktrees = resolve(commonDir, "worktrees");
@@ -140,27 +112,12 @@ function isolateWorktreeConfig(mainRoot) {
   // ones. Submodule sync/update can write core.worktree to the shared config;
   // explicit per-worktree overrides prevent that from redirecting any checkout.
   for (const [admin, path] of configs) {
-    git(
-      [
-        "config",
-        "--file",
-        resolve(admin, "config.worktree"),
-        "core.worktree",
-        path,
-      ],
-      mainRoot,
-    );
+    git(["config", "--file", resolve(admin, "config.worktree"), "core.worktree", path], mainRoot);
   }
   const config = resolve(commonDir, "config");
-  git(
-    ["config", "--file", config, "extensions.worktreeConfig", "true"],
-    mainRoot,
-  );
+  git(["config", "--file", config, "extensions.worktreeConfig", "true"], mainRoot);
   // New worktrees must not inherit a path before their override is installed.
-  if (
-    tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !==
-    undefined
-  ) {
+  if (tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !== undefined) {
     git(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
   }
 }
@@ -176,8 +133,5 @@ function ensureCommit(checkout, pin) {
 // Run only for post-checkout branch/worktree checkouts, not file checkouts.
 // Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
 if (import.meta.main && process.argv[4] === "1") {
-  bootstrap(
-    resolve(import.meta.dirname, ".."),
-    process.argv[2],
-  );
+  bootstrap(resolve(import.meta.dirname, ".."), process.argv[2]);
 }

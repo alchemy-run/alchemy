@@ -1,15 +1,14 @@
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Connect, ConnectHttp, connectEnvKeys } from "@/Neon/Connect";
 import { CurrentRuntimeContext } from "@/RuntimeContext";
 import { Postgres } from "@/SQL/Postgres";
-import * as Effect from "effect/Effect";
-import * as Cause from "effect/Cause";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ConnectBranch, ConnectProject } from "./connect-database.ts";
 
 export const connectHandler = Effect.gen(function* () {
   const context = yield* CurrentRuntimeContext;
-  if (!context)
-    return yield* Effect.die(new Error("Connect fixture requires a host"));
+  if (!context) return yield* Effect.die(new Error("Connect fixture requires a host"));
   const branchResource = yield* ConnectBranch;
   const keys = connectEnvKeys(branchResource);
   const branch = yield* Connect(branchResource);

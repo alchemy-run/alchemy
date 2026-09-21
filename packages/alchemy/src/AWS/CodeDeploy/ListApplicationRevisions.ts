@@ -34,13 +34,9 @@ export interface ListApplicationRevisions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListApplicationRevisionsRequest,
-    ) => Effect.Effect<
-      SVC.ListApplicationRevisionsOutput,
-      SVC.ListApplicationRevisionsError
-    >
+    ) => Effect.Effect<SVC.ListApplicationRevisionsOutput, SVC.ListApplicationRevisionsError>
   >
 > {}
-export const ListApplicationRevisions =
-  Binding.Service<ListApplicationRevisions>(
-    "AWS.CodeDeploy.ListApplicationRevisions",
-  );
+export const ListApplicationRevisions = Binding.Service<ListApplicationRevisions>(
+  "AWS.CodeDeploy.ListApplicationRevisions",
+);

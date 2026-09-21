@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ChatbotTestFunctionLive, { ChatbotTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "ChatbotBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,31 +33,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // The testing account has no Slack workspace or Teams team onboarded, so the
 // reads answer real empty lists (a REAL data-plane success through each
@@ -69,9 +57,7 @@ const postJson = (path: string) =>
 describe.sequential("Chatbot Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Chatbot test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Chatbot test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Chatbot test setup: deploying fixture");
@@ -85,9 +71,7 @@ describe.sequential("Chatbot Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Chatbot test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Chatbot test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -95,9 +79,7 @@ describe.sequential("Chatbot Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Chatbot test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Chatbot test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -117,30 +99,27 @@ describe.sequential("Chatbot Bindings", () => {
   });
 
   describe("GetAccountPreferences", () => {
-    test.provider(
-      "succeeds end-to-end through the binding's IAM grant",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/account-preferences")) as {
-            ok: boolean;
-            hasPreferences: boolean;
-          };
-          expect(response.ok).toBe(true);
-          expect(response.hasPreferences).toBe(true);
-        }),
+    test.provider("succeeds end-to-end through the binding's IAM grant", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/account-preferences")) as {
+          ok: boolean;
+          hasPreferences: boolean;
+        };
+        expect(response.ok).toBe(true);
+        expect(response.hasPreferences).toBe(true);
+      }),
     );
   });
 
   describe("UpdateAccountPreferences", () => {
-    test.provider(
-      "no-op round-trip write succeeds through the binding",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson(
-            "/account-preferences-roundtrip",
-          )) as { ok: boolean; tag?: string };
-          expect(response.ok).toBe(true);
-        }),
+    test.provider("no-op round-trip write succeeds through the binding", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/account-preferences-roundtrip")) as {
+          ok: boolean;
+          tag?: string;
+        };
+        expect(response.ok).toBe(true);
+      }),
     );
   });
 
@@ -200,9 +179,7 @@ describe.sequential("Chatbot Bindings", () => {
     test.provider("answers a typed tag for a nonexistent identity", (_stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* AWS.AWSEnvironment.current;
-        const response = (yield* postJson(
-          `/delete-slack-user-identity?account=${accountId}`,
-        )) as {
+        const response = (yield* postJson(`/delete-slack-user-identity?account=${accountId}`)) as {
           ok: boolean;
           tag?: string;
         };
@@ -221,9 +198,10 @@ describe.sequential("Chatbot Bindings", () => {
       "answers idempotently or with a typed tag for a workspace that was never onboarded",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson(
-            "/delete-slack-workspace-authorization",
-          )) as { ok: boolean; tag?: string };
+          const response = (yield* postJson("/delete-slack-workspace-authorization")) as {
+            ok: boolean;
+            tag?: string;
+          };
           if (!response.ok) {
             expect([
               "DeleteSlackWorkspaceAuthorizationFault",
@@ -238,9 +216,7 @@ describe.sequential("Chatbot Bindings", () => {
     test.provider("answers a typed tag for a nonexistent identity", (_stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* AWS.AWSEnvironment.current;
-        const response = (yield* postJson(
-          `/delete-teams-user-identity?account=${accountId}`,
-        )) as {
+        const response = (yield* postJson(`/delete-teams-user-identity?account=${accountId}`)) as {
           ok: boolean;
           tag?: string;
         };
@@ -255,23 +231,22 @@ describe.sequential("Chatbot Bindings", () => {
   });
 
   describe("DeleteMicrosoftTeamsConfiguredTeam", () => {
-    test.provider(
-      "answers the typed not-found tag for a team that was never onboarded",
-      (_stack) =>
-        Effect.gen(function* () {
-          // ResourceNotFoundException is outside the Smithy model's union
-          // for this operation — patched in distilled patches/chatbot.json.
-          const response = (yield* postJson(
-            "/delete-teams-configured-team",
-          )) as { ok: boolean; tag?: string };
-          if (!response.ok) {
-            expect([
-              "DeleteTeamsConfiguredTeamException",
-              "InvalidParameterException",
-              "ResourceNotFoundException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("answers the typed not-found tag for a team that was never onboarded", (_stack) =>
+      Effect.gen(function* () {
+        // ResourceNotFoundException is outside the Smithy model's union
+        // for this operation — patched in distilled patches/chatbot.json.
+        const response = (yield* postJson("/delete-teams-configured-team")) as {
+          ok: boolean;
+          tag?: string;
+        };
+        if (!response.ok) {
+          expect([
+            "DeleteTeamsConfiguredTeamException",
+            "InvalidParameterException",
+            "ResourceNotFoundException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 });

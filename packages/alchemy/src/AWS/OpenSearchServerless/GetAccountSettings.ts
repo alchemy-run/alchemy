@@ -28,10 +28,7 @@ export interface GetAccountSettings extends Binding.Service<
   () => Effect.Effect<
     (
       request?: aoss.GetAccountSettingsRequest,
-    ) => Effect.Effect<
-      aoss.GetAccountSettingsResponse,
-      aoss.GetAccountSettingsError
-    >
+    ) => Effect.Effect<aoss.GetAccountSettingsResponse, aoss.GetAccountSettingsError>
   >
 > {}
 export const GetAccountSettings = Binding.Service<GetAccountSettings>(

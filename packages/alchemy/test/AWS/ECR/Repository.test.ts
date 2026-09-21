@@ -1,14 +1,14 @@
+import * as ecr from "@distilled.cloud/aws/ecr";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Repository } from "@/AWS/ECR/Repository.ts";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ecr from "@distilled.cloud/aws/ecr";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -47,9 +47,7 @@ test.provider("list enumerates the deployed repository", (stack) =>
     const provider = yield* Provider.findProvider(Repository);
     const all = yield* provider.list();
 
-    expect(all.some((r) => r.repositoryName === repo.repositoryName)).toBe(
-      true,
-    );
+    expect(all.some((r) => r.repositoryName === repo.repositoryName)).toBe(true);
 
     yield* stack.destroy();
     yield* assertRepositoryDeleted(repo.repositoryName);
@@ -62,10 +60,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployRepository = (
-        imageTagMutability: "MUTABLE" | "IMMUTABLE",
-        scanOnPush: boolean,
-      ) =>
+      const deployRepository = (imageTagMutability: "MUTABLE" | "IMMUTABLE", scanOnPush: boolean) =>
         stack.deploy(
           Repository("SettingsRepository", {
             repositoryName: "alchemy-test-ecr-repo-settings",
@@ -107,9 +102,7 @@ const repositoryPolicy: PolicyDocument = {
 const readRepositoryPolicy = (repositoryName: string) =>
   ecr.getRepositoryPolicy({ repositoryName }).pipe(
     Effect.map((response) => response.policyText),
-    Effect.catchTag("RepositoryPolicyNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
   );
 
 test.provider(
@@ -135,9 +128,7 @@ test.provider(
       // document (normalized comparison — key order / whitespace agnostic).
       const observed = yield* readRepositoryPolicy(repo.repositoryName);
       expect(observed).toBeDefined();
-      expect(normalizePolicyDocument(observed!)).toBe(
-        normalizePolicyDocument(repositoryPolicy),
-      );
+      expect(normalizePolicyDocument(observed!)).toBe(normalizePolicyDocument(repositoryPolicy));
 
       // Re-deploy the identical PolicyDocument — must converge cleanly (the
       // provider diffs normalized observed vs desired and no-ops the set).

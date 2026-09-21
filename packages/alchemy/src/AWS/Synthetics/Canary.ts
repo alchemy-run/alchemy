@@ -12,15 +12,10 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
-import { zipFiles } from "../../Util/zip.ts";
 import { sha256Object } from "../../Util/sha256.ts";
+import { zipFiles } from "../../Util/zip.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -285,20 +280,12 @@ class CanaryBackingResourceStillVisible extends Data.TaggedError(
   readonly identifier: string;
 }> {}
 
-class UnexpectedCanaryEngineArn extends Data.TaggedError(
-  "UnexpectedCanaryEngineArn",
-)<{
+class UnexpectedCanaryEngineArn extends Data.TaggedError("UnexpectedCanaryEngineArn")<{
   readonly canaryName: string;
   readonly engineArn: string;
 }> {}
 
-const TRANSITIONAL_STATES = [
-  "CREATING",
-  "UPDATING",
-  "STARTING",
-  "STOPPING",
-  "DELETING",
-];
+const TRANSITIONAL_STATES = ["CREATING", "UPDATING", "STARTING", "STOPPING", "DELETING"];
 
 /**
  * Retry an operation while the canary is briefly locked by a concurrent
@@ -331,11 +318,7 @@ const scriptFilePath = (runtimeVersion: string, handler: string) => {
 };
 
 /** Package the inline script as the zip layout the runtime expects. */
-const buildCode = Effect.fn(function* (
-  script: string,
-  handler: string,
-  runtimeVersion: string,
-) {
+const buildCode = Effect.fn(function* (script: string, handler: string, runtimeVersion: string) {
   const buffer = yield* zipFiles([
     { path: scriptFilePath(runtimeVersion, handler), content: script },
   ]);
@@ -349,9 +332,7 @@ const filterTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 export const CanaryProvider = () =>
@@ -373,8 +354,7 @@ export const CanaryProvider = () =>
         });
       });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       const canaryArnOf = Effect.fn(function* (canaryName: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
@@ -384,9 +364,7 @@ export const CanaryProvider = () =>
       const getCanaryOrUndefined = Effect.fn(function* (canaryName: string) {
         return yield* synthetics.getCanary({ Name: canaryName }).pipe(
           Effect.map((r) => r.Canary),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -395,8 +373,7 @@ export const CanaryProvider = () =>
       const waitForSettled = Effect.fn(function* (canaryName: string) {
         return yield* getCanaryOrUndefined(canaryName).pipe(
           Effect.flatMap((canary) =>
-            canary !== undefined &&
-            TRANSITIONAL_STATES.includes(canary.Status?.State ?? "")
+            canary !== undefined && TRANSITIONAL_STATES.includes(canary.Status?.State ?? "")
               ? Effect.fail(
                   new CanaryNotSettled({
                     canaryName,
@@ -407,26 +384,18 @@ export const CanaryProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof CanaryNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
 
-      const failIfErrored = (
-        canaryName: string,
-        canary: synthetics.Canary | undefined,
-      ) =>
+      const failIfErrored = (canaryName: string, canary: synthetics.Canary | undefined) =>
         canary?.Status?.State === "ERROR"
           ? Effect.fail(
               new CanaryFailed({
                 canaryName,
                 stateReasonCode: canary.Status?.StateReasonCode,
-                message:
-                  canary.Status?.StateReason ??
-                  `canary ${canaryName} is in ERROR state`,
+                message: canary.Status?.StateReason ?? `canary ${canaryName} is in ERROR state`,
               }),
             )
           : Effect.void;
@@ -448,10 +417,7 @@ export const CanaryProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof CanaryNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(40),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
           }),
         );
       });
@@ -475,13 +441,11 @@ export const CanaryProvider = () =>
         // wait out any transitional state (STOPPING, UPDATING, ...) — a
         // canary can only be deleted from READY/STOPPED/ERROR.
         yield* waitForSettled(canaryName);
-        yield* synthetics
-          .deleteCanary({ Name: canaryName, DeleteLambda: true })
-          .pipe(
-            // e.g. a run is still finishing; bounded retry
-            retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+        yield* synthetics.deleteCanary({ Name: canaryName, DeleteLambda: true }).pipe(
+          // e.g. a run is still finishing; bounded retry
+          retryWhileConflict,
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
         yield* waitUntilGone(canaryName);
       });
 
@@ -497,9 +461,7 @@ export const CanaryProvider = () =>
         // can never make deletion target another Lambda.
         return functionName?.startsWith(`cwsyn-${canaryName}-`)
           ? Effect.succeed(functionName)
-          : Effect.fail(
-              new UnexpectedCanaryEngineArn({ canaryName, engineArn }),
-            );
+          : Effect.fail(new UnexpectedCanaryEngineArn({ canaryName, engineArn }));
       };
 
       const discoverBackingFunctionNames = Effect.fn(function* (
@@ -514,32 +476,23 @@ export const CanaryProvider = () =>
         // The backing Lambda's only observable relationship is its service
         // name. Require the complete canonical UUID suffix so a canary named
         // `foo` can never capture another named `foo-bar`.
-        const escapedCanaryName = canaryName.replace(
-          /[.*+?^${}()|[\]\\]/g,
-          "\\$&",
-        );
+        const escapedCanaryName = canaryName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const exactBackingName = new RegExp(
           `^cwsyn-${escapedCanaryName}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
           "i",
         );
-        const pages = yield* lambda.listFunctions
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* lambda.listFunctions.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.Functions ?? [])
           .flatMap((fn) =>
-            fn.FunctionName && exactBackingName.test(fn.FunctionName)
-              ? [fn.FunctionName]
-              : [],
+            fn.FunctionName && exactBackingName.test(fn.FunctionName) ? [fn.FunctionName] : [],
           );
       });
 
       const backingFunctionExists = (functionName: string) =>
         lambda.getFunction({ FunctionName: functionName }).pipe(
           Effect.as(true),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(false),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
         );
 
       const exactLogGroupExists = (logGroupName: string) =>
@@ -550,9 +503,7 @@ export const CanaryProvider = () =>
           })
           .pipe(
             Effect.map((response) =>
-              (response.logGroups ?? []).some(
-                (group) => group.logGroupName === logGroupName,
-              ),
+              (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
             ),
           );
 
@@ -575,12 +526,8 @@ export const CanaryProvider = () =>
               : Effect.void,
           ),
           Effect.retry({
-            while: (error) =>
-              error._tag === "CanaryBackingResourceStillVisible",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(20),
-            ]),
+            while: (error) => error._tag === "CanaryBackingResourceStillVisible",
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
           }),
         );
 
@@ -593,10 +540,7 @@ export const CanaryProvider = () =>
         yield* lambda.deleteFunction({ FunctionName: functionName }).pipe(
           Effect.retry({
             while: (error) => error._tag === "ResourceConflictException",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
           }),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         );
@@ -615,10 +559,7 @@ export const CanaryProvider = () =>
             yield* logs.deleteLogGroup({ logGroupName }).pipe(
               Effect.retry({
                 while: (error) => error._tag === "OperationAbortedException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
@@ -710,14 +651,8 @@ export const CanaryProvider = () =>
               },
               {
                 Effect: "Allow",
-                Action: [
-                  "logs:CreateLogGroup",
-                  "logs:CreateLogStream",
-                  "logs:PutLogEvents",
-                ],
-                Resource: [
-                  `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`,
-                ],
+                Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+                Resource: [`arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`],
               },
               {
                 Effect: "Allow",
@@ -765,10 +700,7 @@ export const CanaryProvider = () =>
               error._tag === "DeleteConflictException" ||
               error._tag === "LimitExceededException" ||
               error._tag === "ServiceFailureException",
-            schedule: Schedule.max([
-              Schedule.fixed("1 second"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(20)]),
           }),
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
         );
@@ -779,11 +711,7 @@ export const CanaryProvider = () =>
         for (let attempt = 0; attempt < 30; attempt++) {
           const remaining = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -807,8 +735,7 @@ export const CanaryProvider = () =>
           artifactS3Location,
           executionRoleArn,
           schedule: {
-            expression:
-              props.schedule?.expression ?? DEFAULT_SCHEDULE_EXPRESSION,
+            expression: props.schedule?.expression ?? DEFAULT_SCHEDULE_EXPRESSION,
             durationInSeconds: toWireSeconds(props.schedule?.duration) ?? 0,
           },
           runConfig:
@@ -819,20 +746,13 @@ export const CanaryProvider = () =>
                   timeout: undefined,
                   timeoutInSeconds: toWireSeconds(props.runConfig.timeout),
                 },
-          successRetentionPeriodInDays: toWireDays(
-            props.successRetentionPeriod,
-          ),
-          failureRetentionPeriodInDays: toWireDays(
-            props.failureRetentionPeriod,
-          ),
+          successRetentionPeriodInDays: toWireDays(props.successRetentionPeriod),
+          failureRetentionPeriodInDays: toWireDays(props.failureRetentionPeriod),
           vpcConfig: props.vpcConfig,
-          provisionedResourceCleanup:
-            props.provisionedResourceCleanup ?? "AUTOMATIC",
+          provisionedResourceCleanup: props.provisionedResourceCleanup ?? "AUTOMATIC",
         });
 
-      const toRunConfigInput = (
-        props: CanaryProps,
-      ): synthetics.CanaryRunConfigInput | undefined =>
+      const toRunConfigInput = (props: CanaryProps): synthetics.CanaryRunConfigInput | undefined =>
         props.runConfig === undefined
           ? undefined
           : {
@@ -842,16 +762,12 @@ export const CanaryProvider = () =>
               EnvironmentVariables: props.runConfig.environmentVariables,
             };
 
-      const toScheduleInput = (
-        props: CanaryProps,
-      ): synthetics.CanaryScheduleInput => ({
+      const toScheduleInput = (props: CanaryProps): synthetics.CanaryScheduleInput => ({
         Expression: props.schedule?.expression ?? DEFAULT_SCHEDULE_EXPRESSION,
         DurationInSeconds: toWireSeconds(props.schedule?.duration),
       });
 
-      const toVpcConfigInput = (
-        props: CanaryProps,
-      ): synthetics.VpcConfigInput | undefined =>
+      const toVpcConfigInput = (props: CanaryProps): synthetics.VpcConfigInput | undefined =>
         props.vpcConfig === undefined
           ? undefined
           : {
@@ -860,23 +776,13 @@ export const CanaryProvider = () =>
             };
 
       return Canary.Provider.of({
-        stables: [
-          "canaryName",
-          "canaryArn",
-          "canaryId",
-          "roleName",
-          "engineArn",
-        ],
+        stables: ["canaryName", "canaryArn", "canaryId", "roleName", "engineArn"],
 
         // Enumerate every canary in the ambient account/region.
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* synthetics.describeCanaries
-              .pages({})
-              .pipe(Stream.runCollect);
-            const canaries = Array.from(pages).flatMap(
-              (page) => page.Canaries ?? [],
-            );
+            const pages = yield* synthetics.describeCanaries.pages({}).pipe(Stream.runCollect);
+            const canaries = Array.from(pages).flatMap((page) => page.Canaries ?? []);
             const items: Canary["Attributes"][] = [];
             for (const canary of canaries) {
               if (!canary.Name) continue;
@@ -886,8 +792,7 @@ export const CanaryProvider = () =>
                 canaryId: canary.Id ?? "",
                 executionRoleArn: canary.ExecutionRoleArn ?? "",
                 artifactS3Location: canary.ArtifactS3Location
-                  ? parseArtifactLocation(canary.ArtifactS3Location)
-                      .artifactS3Location
+                  ? parseArtifactLocation(canary.ArtifactS3Location).artifactS3Location
                   : "",
                 runtimeVersion: canary.RuntimeVersion ?? "",
                 roleName: undefined,
@@ -899,8 +804,7 @@ export const CanaryProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const canaryName =
-            output?.canaryName ?? (yield* createCanaryName(id, olds ?? {}));
+          const canaryName = output?.canaryName ?? (yield* createCanaryName(id, olds ?? {}));
           const canary = yield* getCanaryOrUndefined(canaryName);
           if (canary === undefined) return undefined;
           const attrs: Canary["Attributes"] = {
@@ -909,8 +813,7 @@ export const CanaryProvider = () =>
             canaryId: canary.Id ?? "",
             executionRoleArn: canary.ExecutionRoleArn ?? "",
             artifactS3Location: canary.ArtifactS3Location
-              ? parseArtifactLocation(canary.ArtifactS3Location)
-                  .artifactS3Location
+              ? parseArtifactLocation(canary.ArtifactS3Location).artifactS3Location
               : "",
             runtimeVersion: canary.RuntimeVersion ?? "",
             roleName: output?.roleName,
@@ -932,8 +835,7 @@ export const CanaryProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const canaryName =
-            output?.canaryName ?? (yield* createCanaryName(id, news));
+          const canaryName = output?.canaryName ?? (yield* createCanaryName(id, news));
           const canaryArn = yield* canaryArnOf(canaryName);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -1000,20 +902,13 @@ export const CanaryProvider = () =>
                 Schedule: toScheduleInput(news),
                 RunConfig: toRunConfigInput(news),
                 RuntimeVersion: runtimeVersion,
-                SuccessRetentionPeriodInDays: toWireDays(
-                  news.successRetentionPeriod,
-                ),
-                FailureRetentionPeriodInDays: toWireDays(
-                  news.failureRetentionPeriod,
-                ),
+                SuccessRetentionPeriodInDays: toWireDays(news.successRetentionPeriod),
+                FailureRetentionPeriodInDays: toWireDays(news.failureRetentionPeriod),
                 VpcConfig: toVpcConfigInput(news),
-                ProvisionedResourceCleanup:
-                  news.provisionedResourceCleanup ?? "AUTOMATIC",
+                ProvisionedResourceCleanup: news.provisionedResourceCleanup ?? "AUTOMATIC",
                 Tags: desiredTags,
               });
-              yield* session.note(
-                `created canary ${canaryName}, waiting for it to become ready`,
-              );
+              yield* session.note(`created canary ${canaryName}, waiting for it to become ready`);
               observed = yield* waitForSettled(canaryName);
               if (
                 observed?.Status?.State === "ERROR" &&
@@ -1048,11 +943,7 @@ export const CanaryProvider = () =>
             observed = yield* waitForSettled(canaryName);
             yield* failIfErrored(canaryName, observed);
             if (output?.configHash !== configHash) {
-              const code = yield* buildCode(
-                news.script,
-                handler,
-                runtimeVersion,
-              );
+              const code = yield* buildCode(news.script, handler, runtimeVersion);
               yield* synthetics
                 .updateCanary({
                   Name: canaryName,
@@ -1061,16 +952,11 @@ export const CanaryProvider = () =>
                   RuntimeVersion: runtimeVersion,
                   Schedule: toScheduleInput(news),
                   RunConfig: toRunConfigInput(news),
-                  SuccessRetentionPeriodInDays: toWireDays(
-                    news.successRetentionPeriod,
-                  ),
-                  FailureRetentionPeriodInDays: toWireDays(
-                    news.failureRetentionPeriod,
-                  ),
+                  SuccessRetentionPeriodInDays: toWireDays(news.successRetentionPeriod),
+                  FailureRetentionPeriodInDays: toWireDays(news.failureRetentionPeriod),
                   VpcConfig: toVpcConfigInput(news),
                   ArtifactS3Location: artifactS3Location,
-                  ProvisionedResourceCleanup:
-                    news.provisionedResourceCleanup ?? "AUTOMATIC",
+                  ProvisionedResourceCleanup: news.provisionedResourceCleanup ?? "AUTOMATIC",
                 })
                 .pipe(retryWhileConflict);
               yield* session.note(`updated canary ${canaryName}`);
@@ -1083,9 +969,7 @@ export const CanaryProvider = () =>
           const desiredRunning = news.start ?? false;
           const state = observed?.Status?.State;
           if (desiredRunning && state !== "RUNNING") {
-            yield* synthetics
-              .startCanary({ Name: canaryName })
-              .pipe(retryWhileConflict);
+            yield* synthetics.startCanary({ Name: canaryName }).pipe(retryWhileConflict);
             yield* session.note(`started canary ${canaryName}`);
             observed = yield* waitForSettled(canaryName);
           } else if (!desiredRunning && state === "RUNNING") {

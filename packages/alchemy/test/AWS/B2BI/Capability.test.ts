@@ -1,12 +1,12 @@
+import * as b2bi from "@distilled.cloud/aws/b2bi";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Capability, Transformer } from "@/AWS/B2BI";
 import type { PolicyStatement } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import * as b2bi from "@distilled.cloud/aws/b2bi";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -78,14 +78,10 @@ const assertCapabilityGone = (capabilityId: string) =>
   Effect.gen(function* () {
     const result = yield* b2bi.getCapability({ capabilityId }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
-      return yield* Effect.fail(
-        new Error(`Capability '${capabilityId}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`Capability '${capabilityId}' still exists`));
     }
   }).pipe(
     Effect.retry({

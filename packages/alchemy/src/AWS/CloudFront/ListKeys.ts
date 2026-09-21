@@ -30,9 +30,7 @@ export interface ListKeys extends Binding.Service<
   (
     store: KeyValueStore,
   ) => Effect.Effect<
-    (
-      request: ListKeysRequest,
-    ) => Effect.Effect<kvs.ListKeysResponse, kvs.ListKeysError>
+    (request: ListKeysRequest) => Effect.Effect<kvs.ListKeysResponse, kvs.ListKeysError>
   >
 > {}
 

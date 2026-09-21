@@ -16,10 +16,7 @@ export default {
       const result = await client.query("select 1 as ok");
       return Response.json({ rows: result.rows });
     } catch (error) {
-      return Response.json(
-        { ok: false, error: String(error) },
-        { status: 500 },
-      );
+      return Response.json({ ok: false, error: String(error) }, { status: 500 });
     } finally {
       await client.end();
     }

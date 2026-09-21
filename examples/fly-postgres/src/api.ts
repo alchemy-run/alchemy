@@ -44,10 +44,7 @@ export default class Api extends Fly.Service<Api>()(
         const path = new URL(request.url, "http://service").pathname;
         if (path === "/migrate" && request.method === "POST") {
           if (request.headers["x-migrate-token"] !== MIGRATE_TOKEN) {
-            return yield* HttpServerResponse.json(
-              { error: "unauthorized" },
-              { status: 401 },
-            );
+            return yield* HttpServerResponse.json({ error: "unauthorized" }, { status: 401 });
           }
           // drizzle-kit emits one file per migration with statements
           // separated by `--> statement-breakpoint`. Apply each statement,
@@ -59,13 +56,13 @@ export default class Api extends Fly.Service<Api>()(
             .map((statement) => statement.trim())
             .filter((statement) => statement.length > 0);
           for (const statement of statements) {
-            yield* directDb.execute(sql.raw(statement)).pipe(
-              Effect.catch((error) =>
-                String(error).includes("already exists")
-                  ? Effect.void
-                  : Effect.fail(error),
-              ),
-            );
+            yield* directDb
+              .execute(sql.raw(statement))
+              .pipe(
+                Effect.catch((error) =>
+                  String(error).includes("already exists") ? Effect.void : Effect.fail(error),
+                ),
+              );
           }
           return yield* HttpServerResponse.json({
             applied: statements.length,
@@ -86,10 +83,7 @@ export default class Api extends Fly.Service<Api>()(
             }
             const id = Number(path.split("/").pop());
             if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
+              return yield* HttpServerResponse.json({ error: "Invalid user ID" }, { status: 400 });
             }
             const user = yield* db.query.Users.findFirst({
               where: { id },
@@ -110,30 +104,18 @@ export default class Api extends Fly.Service<Api>()(
           case "DELETE": {
             const id = Number(path.split("/").pop());
             if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
+              return yield* HttpServerResponse.json({ error: "Invalid user ID" }, { status: 400 });
             }
-            const [user] = yield* db
-              .delete(Users)
-              .where(eq(Users.id, id))
-              .returning();
+            const [user] = yield* db.delete(Users).where(eq(Users.id, id)).returning();
             return yield* HttpServerResponse.json({ user });
           }
           default: {
-            return yield* HttpServerResponse.json(
-              { error: "Method not allowed" },
-              { status: 405 },
-            );
+            return yield* HttpServerResponse.json({ error: "Method not allowed" }, { status: 405 });
           }
         }
       }).pipe(
         Effect.catch((cause: unknown) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(cause) }, { status: 500 }),
         ),
       ),
     };

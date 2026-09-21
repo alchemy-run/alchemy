@@ -1,16 +1,13 @@
-import { adopt } from "@/AdoptPolicy.ts";
-import { Project } from "@/Neon/Project.ts";
-import {
-  ProjectVPCEndpoint,
-  validateProjectVPCEndpoint,
-} from "@/Neon/ProjectVPCEndpoint.ts";
-import { providers } from "@/Neon/Providers.ts";
-import * as Output from "@/Output.ts";
-import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { adopt } from "@/AdoptPolicy.ts";
+import { Project } from "@/Neon/Project.ts";
+import { ProjectVPCEndpoint, validateProjectVPCEndpoint } from "@/Neon/ProjectVPCEndpoint.ts";
+import { providers } from "@/Neon/Providers.ts";
+import * as Output from "@/Output.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 const endpoint = {
@@ -104,44 +101,40 @@ test.provider(
     ),
 );
 
-test.provider(
-  "project restriction rejects a cached grant from another project before I/O",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* ProjectVPCEndpoint.Provider;
-      expect(
-        yield* provider
-          .reconcile({
-            ...context,
-            bindings: [],
-            session: {
-              emit: () => Effect.void,
-              done: () => Effect.void,
-              note: () => Effect.void,
-            },
-            olds: undefined,
-            news: { ...props, project: { projectId: "other-project" } },
-            output: {
-              ...endpoint,
-              projectId: props.project.projectId,
-              label: props.label,
-              initialLabel: props.label,
-              managedLabel: props.label,
-            },
-          })
-          .pipe(
-            Effect.as(false),
-            Effect.catchTag("InvalidProjectVPCEndpoint", () =>
-              Effect.succeed(true),
-            ),
-          ),
-      ).toBe(true);
-    }).pipe(
-      Effect.provideService(
-        SDK.Credentials,
-        Effect.die("Unexpected Neon request in a no-I/O guard test"),
-      ),
+test.provider("project restriction rejects a cached grant from another project before I/O", () =>
+  Effect.gen(function* () {
+    const provider = yield* ProjectVPCEndpoint.Provider;
+    expect(
+      yield* provider
+        .reconcile({
+          ...context,
+          bindings: [],
+          session: {
+            emit: () => Effect.void,
+            done: () => Effect.void,
+            note: () => Effect.void,
+          },
+          olds: undefined,
+          news: { ...props, project: { projectId: "other-project" } },
+          output: {
+            ...endpoint,
+            projectId: props.project.projectId,
+            label: props.label,
+            initialLabel: props.label,
+            managedLabel: props.label,
+          },
+        })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("InvalidProjectVPCEndpoint", () => Effect.succeed(true)),
+        ),
+    ).toBe(true);
+  }).pipe(
+    Effect.provideService(
+      SDK.Credentials,
+      Effect.die("Unexpected Neon request in a no-I/O guard test"),
     ),
+  ),
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -194,11 +187,7 @@ test.provider.skipIf(!enabled)(
         });
         return { a, b };
       });
-      const application = (
-        second: boolean,
-        label: string,
-        takeOwnership = false,
-      ) =>
+      const application = (second: boolean, label: string, takeOwnership = false) =>
         Effect.gen(function* () {
           const projects = yield* base;
           const restriction = yield* ProjectVPCEndpoint("Restriction", {
@@ -208,9 +197,7 @@ test.provider.skipIf(!enabled)(
           }).pipe(adopt(takeOwnership));
           return { ...projects, restriction };
         });
-      const first = yield* stack.deploy(
-        application(false, "Alchemy project fixture"),
-      );
+      const first = yield* stack.deploy(application(false, "Alchemy project fixture"));
       const aRequest = {
         project_id: first.a.projectId,
         vpc_endpoint_id: scope.vpcEndpointId,
@@ -220,33 +207,23 @@ test.provider.skipIf(!enabled)(
         vpc_endpoint_id: scope.vpcEndpointId,
       };
       expect(first.restriction.initialLabel).toBeNull();
-      expect(
-        (yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints,
-      ).toContainEqual({
+      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toContainEqual({
         vpc_endpoint_id: scope.vpcEndpointId,
         label: "Alchemy project fixture",
       });
       yield* stack.deploy(application(false, "Alchemy project updated"));
-      expect(
-        (yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints,
-      ).toContainEqual({
+      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toContainEqual({
         vpc_endpoint_id: scope.vpcEndpointId,
         label: "Alchemy project updated",
       });
       yield* stack.deploy(application(true, "Alchemy replacement fixture"));
-      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toEqual(
-        [],
-      );
-      expect(
-        (yield* SDK.listProjectVPCEndpoints(bRequest)).endpoints,
-      ).toContainEqual({
+      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toEqual([]);
+      expect((yield* SDK.listProjectVPCEndpoints(bRequest)).endpoints).toContainEqual({
         vpc_endpoint_id: scope.vpcEndpointId,
         label: "Alchemy replacement fixture",
       });
       yield* stack.deploy(base);
-      expect((yield* SDK.listProjectVPCEndpoints(bRequest)).endpoints).toEqual(
-        [],
-      );
+      expect((yield* SDK.listProjectVPCEndpoints(bRequest)).endpoints).toEqual([]);
 
       yield* SDK.assignProjectVPCEndpoint({
         ...aRequest,
@@ -255,26 +232,17 @@ test.provider.skipIf(!enabled)(
       const baseline = (yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints;
       expect(
         Result.isFailure(
-          yield* stack
-            .plan(application(false, "Adopted fixture"))
-            .pipe(Effect.result),
+          yield* stack.plan(application(false, "Adopted fixture")).pipe(Effect.result),
         ),
       ).toBe(true);
-      const adopted = yield* stack.deploy(
-        application(false, "Adopted fixture", true),
-      );
-      expect(adopted.restriction.initialLabel).toBe(
-        "Original fixture restriction",
-      );
+      const adopted = yield* stack.deploy(application(false, "Adopted fixture", true));
+      expect(adopted.restriction.initialLabel).toBe("Original fixture restriction");
       yield* stack.deploy(application(false, "Updated adopted fixture"));
       yield* stack.deploy(base);
-      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toEqual(
-        baseline,
+      expect((yield* SDK.listProjectVPCEndpoints(aRequest)).endpoints).toEqual(baseline);
+      expect((yield* SDK.getOrganizationVPCEndpointDetails(organizationRequest)).label).toBe(
+        organizationBaseline.label,
       );
-      expect(
-        (yield* SDK.getOrganizationVPCEndpointDetails(organizationRequest))
-          .label,
-      ).toBe(organizationBaseline.label);
       yield* stack.destroy();
       for (const projectId of [first.a.projectId, first.b.projectId]) {
         expect(

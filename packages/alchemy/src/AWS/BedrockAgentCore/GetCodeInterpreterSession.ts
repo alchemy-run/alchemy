@@ -46,7 +46,6 @@ export interface GetCodeInterpreterSession extends Binding.Service<
     >
   >
 > {}
-export const GetCodeInterpreterSession =
-  Binding.Service<GetCodeInterpreterSession>(
-    "AWS.BedrockAgentCore.GetCodeInterpreterSession",
-  );
+export const GetCodeInterpreterSession = Binding.Service<GetCodeInterpreterSession>(
+  "AWS.BedrockAgentCore.GetCodeInterpreterSession",
+);

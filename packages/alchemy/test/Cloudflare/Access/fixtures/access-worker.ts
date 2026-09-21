@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * The Access application this Worker enrolls into — policies authored
@@ -34,9 +34,7 @@ export default class AccessProtectedWorker extends Cloudflare.Worker<AccessProte
       fetch: Effect.gen(function* () {
         const access = yield* Cloudflare.Access.Context;
         const identity =
-          access === undefined
-            ? undefined
-            : yield* access.getIdentity().pipe(Effect.orDie);
+          access === undefined ? undefined : yield* access.getIdentity().pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           marker: "alchemy-access-worker-open",
           authenticated: access !== undefined,

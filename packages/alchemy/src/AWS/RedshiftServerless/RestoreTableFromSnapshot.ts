@@ -35,17 +35,13 @@ export interface RestoreTableFromSnapshot extends Binding.Service<
     namespace: Namespace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        serverless.RestoreTableFromSnapshotRequest,
-        "namespaceName"
-      >,
+      request: Omit<serverless.RestoreTableFromSnapshotRequest, "namespaceName">,
     ) => Effect.Effect<
       serverless.RestoreTableFromSnapshotResponse,
       serverless.RestoreTableFromSnapshotError
     >
   >
 > {}
-export const RestoreTableFromSnapshot =
-  Binding.Service<RestoreTableFromSnapshot>(
-    "AWS.RedshiftServerless.RestoreTableFromSnapshot",
-  );
+export const RestoreTableFromSnapshot = Binding.Service<RestoreTableFromSnapshot>(
+  "AWS.RedshiftServerless.RestoreTableFromSnapshot",
+);

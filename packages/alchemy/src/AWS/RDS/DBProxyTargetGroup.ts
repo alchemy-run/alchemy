@@ -102,12 +102,9 @@ export interface DBProxyTargetGroup extends Resource<
  *
  * @resource
  */
-export const DBProxyTargetGroup = Resource<DBProxyTargetGroup>(
-  "AWS.RDS.DBProxyTargetGroup",
-);
+export const DBProxyTargetGroup = Resource<DBProxyTargetGroup>("AWS.RDS.DBProxyTargetGroup");
 
-const toTargetGroupName = (props: DBProxyTargetGroupProps) =>
-  props.targetGroupName ?? "default";
+const toTargetGroupName = (props: DBProxyTargetGroupProps) => props.targetGroupName ?? "default";
 
 export const DBProxyTargetGroupProvider = () =>
   Provider.effect(
@@ -126,9 +123,7 @@ export const DBProxyTargetGroupProvider = () =>
             TargetGroupName: targetGroupName,
           })
           .pipe(
-            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.succeed(undefined)),
           );
         return response?.TargetGroups?.[0];
       });
@@ -163,15 +158,9 @@ export const DBProxyTargetGroupProvider = () =>
             TargetGroupName: targetGroupName,
           })
           .pipe(
-            Effect.catchTag("DBProxyTargetNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DBProxyNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("DBProxyTargetNotFoundFault", () => Effect.succeed(undefined)),
+            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.succeed(undefined)),
+            Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)),
           );
         const targets = response?.Targets ?? [];
         const observedClusters: string[] = [];
@@ -202,9 +191,7 @@ export const DBProxyTargetGroupProvider = () =>
           Effect.gen(function* () {
             const proxies = yield* rds.describeDBProxies.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.DBProxies ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.DBProxies ?? [])),
             );
             const perProxy = yield* Effect.forEach(
               proxies,
@@ -217,9 +204,7 @@ export const DBProxyTargetGroupProvider = () =>
                     .pipe(
                       Stream.runCollect,
                       Effect.map((chunk) =>
-                        Array.from(chunk).flatMap(
-                          (page) => page.TargetGroups ?? [],
-                        ),
+                        Array.from(chunk).flatMap((page) => page.TargetGroups ?? []),
                       ),
                       Effect.catchTag("DBProxyNotFoundFault", () =>
                         Effect.succeed([] as rds.DBProxyTargetGroup[]),
@@ -232,10 +217,11 @@ export const DBProxyTargetGroupProvider = () =>
                     groups,
                     (group) =>
                       Effect.gen(function* () {
-                        const targetGroupName =
-                          group.TargetGroupName ?? "default";
-                        const { observedClusters, observedInstances } =
-                          yield* readTargets({ dbProxyName, targetGroupName });
+                        const targetGroupName = group.TargetGroupName ?? "default";
+                        const { observedClusters, observedInstances } = yield* readTargets({
+                          dbProxyName,
+                          targetGroupName,
+                        });
                         return {
                           dbProxyName: group.DBProxyName ?? dbProxyName,
                           targetGroupName,
@@ -267,12 +253,9 @@ export const DBProxyTargetGroupProvider = () =>
           const props = {
             dbProxyName: output?.dbProxyName ?? olds?.dbProxyName ?? "",
             targetGroupName: output?.targetGroupName ?? olds?.targetGroupName,
-            dbClusterIdentifiers:
-              output?.dbClusterIdentifiers ?? olds?.dbClusterIdentifiers,
-            dbInstanceIdentifiers:
-              output?.dbInstanceIdentifiers ?? olds?.dbInstanceIdentifiers,
-            connectionPoolConfig:
-              output?.connectionPoolConfig ?? olds?.connectionPoolConfig,
+            dbClusterIdentifiers: output?.dbClusterIdentifiers ?? olds?.dbClusterIdentifiers,
+            dbInstanceIdentifiers: output?.dbInstanceIdentifiers ?? olds?.dbInstanceIdentifiers,
+            connectionPoolConfig: output?.connectionPoolConfig ?? olds?.connectionPoolConfig,
           } satisfies DBProxyTargetGroupProps;
           const group = yield* readGroup({
             dbProxyName: props.dbProxyName,
@@ -317,15 +300,9 @@ export const DBProxyTargetGroupProvider = () =>
           const observedClusterSet = new Set(observedClusters);
           const observedInstanceSet = new Set(observedInstances);
 
-          const addClusters = [...desiredClusters].filter(
-            (id) => !observedClusterSet.has(id),
-          );
-          const removeClusters = [...observedClusterSet].filter(
-            (id) => !desiredClusters.has(id),
-          );
-          const addInstances = [...desiredInstances].filter(
-            (id) => !observedInstanceSet.has(id),
-          );
+          const addClusters = [...desiredClusters].filter((id) => !observedClusterSet.has(id));
+          const removeClusters = [...observedClusterSet].filter((id) => !desiredClusters.has(id));
+          const addInstances = [...desiredInstances].filter((id) => !observedInstanceSet.has(id));
           const removeInstances = [...observedInstanceSet].filter(
             (id) => !desiredInstances.has(id),
           );
@@ -334,10 +311,8 @@ export const DBProxyTargetGroupProvider = () =>
             yield* rds.registerDBProxyTargets({
               DBProxyName: news.dbProxyName,
               TargetGroupName: targetGroupName,
-              DBClusterIdentifiers:
-                addClusters.length > 0 ? addClusters : undefined,
-              DBInstanceIdentifiers:
-                addInstances.length > 0 ? addInstances : undefined,
+              DBClusterIdentifiers: addClusters.length > 0 ? addClusters : undefined,
+              DBInstanceIdentifiers: addInstances.length > 0 ? addInstances : undefined,
             });
           }
 
@@ -345,10 +320,8 @@ export const DBProxyTargetGroupProvider = () =>
             yield* rds.deregisterDBProxyTargets({
               DBProxyName: news.dbProxyName,
               TargetGroupName: targetGroupName,
-              DBClusterIdentifiers:
-                removeClusters.length > 0 ? removeClusters : undefined,
-              DBInstanceIdentifiers:
-                removeInstances.length > 0 ? removeInstances : undefined,
+              DBClusterIdentifiers: removeClusters.length > 0 ? removeClusters : undefined,
+              DBInstanceIdentifiers: removeInstances.length > 0 ? removeInstances : undefined,
             });
           }
 
@@ -365,36 +338,24 @@ export const DBProxyTargetGroupProvider = () =>
             );
           }
           yield* session.note(
-            observedGroup.TargetGroupArn ??
-              output?.targetGroupArn ??
-              observedGroup.TargetGroupName,
+            observedGroup.TargetGroupArn ?? output?.targetGroupArn ?? observedGroup.TargetGroupName,
           );
           return toAttrs({ group: observedGroup, props: news });
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (
-            output.dbClusterIdentifiers.length > 0 ||
-            output.dbInstanceIdentifiers.length > 0
-          ) {
+          if (output.dbClusterIdentifiers.length > 0 || output.dbInstanceIdentifiers.length > 0) {
             yield* rds
               .deregisterDBProxyTargets({
                 DBProxyName: output.dbProxyName,
                 TargetGroupName: output.targetGroupName,
                 DBClusterIdentifiers:
-                  output.dbClusterIdentifiers.length > 0
-                    ? output.dbClusterIdentifiers
-                    : undefined,
+                  output.dbClusterIdentifiers.length > 0 ? output.dbClusterIdentifiers : undefined,
                 DBInstanceIdentifiers:
                   output.dbInstanceIdentifiers.length > 0
                     ? output.dbInstanceIdentifiers
                     : undefined,
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBProxyTargetGroupNotFoundFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.void));
           }
         }),
       };

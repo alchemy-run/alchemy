@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { RestartObject } from "./object.ts";
 
 /**
@@ -49,9 +49,7 @@ export default Cloudflare.Worker(
         // Surface failures as 5xx (not a thrown defect) so the test's readiness
         // retry treats a mid-restart blip as retryable rather than fatal.
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(String(cause), { status: 503 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(String(cause), { status: 503 })),
         ),
       ),
     };

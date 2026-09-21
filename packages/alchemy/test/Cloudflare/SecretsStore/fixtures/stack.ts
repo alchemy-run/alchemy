@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index";
-import * as Effect from "effect/Effect";
 import AsyncSecretWorker from "./async-worker.ts";
 import EffectSecretWorker from "./effect-worker.ts";
 

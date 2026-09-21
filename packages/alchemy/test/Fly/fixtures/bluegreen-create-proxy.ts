@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { Credentials } from "@distilled.cloud/fly-io/Credentials";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
@@ -8,7 +9,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { createServer } from "node:http";
 
 export const dropCompletedCreate = Effect.fn(function* (appName: string) {
   const resolveCredentials = yield* Credentials;
@@ -35,9 +35,7 @@ export const dropCompletedCreate = Effect.fn(function* (appName: string) {
         request.url !== route ||
         request.headers.authorization !== authorization
       ) {
-        yield* Effect.sync(() =>
-          NodeHttpServerRequest.toIncomingMessage(request).socket.destroy(),
-        );
+        yield* Effect.sync(() => NodeHttpServerRequest.toIncomingMessage(request).socket.destroy());
         return HttpServerResponse.empty();
       }
       const body = yield* request.text;
@@ -52,9 +50,7 @@ export const dropCompletedCreate = Effect.fn(function* (appName: string) {
       yield* Ref.set(completedStatus, response.status);
       if (response.status >= 200 && response.status < 300) {
         // Drop the actual completed response, not a synthesized API failure.
-        yield* Effect.sync(() =>
-          NodeHttpServerRequest.toIncomingMessage(request).socket.destroy(),
-        );
+        yield* Effect.sync(() => NodeHttpServerRequest.toIncomingMessage(request).socket.destroy());
         return HttpServerResponse.empty();
       }
       return HttpServerResponse.text(actualBody, {

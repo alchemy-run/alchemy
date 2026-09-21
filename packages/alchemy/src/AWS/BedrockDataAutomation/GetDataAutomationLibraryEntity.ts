@@ -50,7 +50,6 @@ export interface GetDataAutomationLibraryEntity extends Binding.Service<
     >
   >
 > {}
-export const GetDataAutomationLibraryEntity =
-  Binding.Service<GetDataAutomationLibraryEntity>(
-    "AWS.BedrockDataAutomation.GetDataAutomationLibraryEntity",
-  );
+export const GetDataAutomationLibraryEntity = Binding.Service<GetDataAutomationLibraryEntity>(
+  "AWS.BedrockDataAutomation.GetDataAutomationLibraryEntity",
+);

@@ -1,12 +1,4 @@
-import { RailwayAuth } from "@/Railway/AuthProvider.ts";
-import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import * as railway from "@distilled.cloud/railway";
-import * as Alchemy from "@/index.ts";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -14,21 +6,24 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Alchemy from "@/index.ts";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
+import * as Test from "@/Test/Alchemy";
 import MySQLApi, { Db, Site } from "./fixtures/mysql-api.ts";
+import { suitePartition } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
 const { test } = Test.make({
   providers: Railway.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
-  );
+  effect.pipe(Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))));
 
 const firstOk = (rows: unknown): unknown => {
   if (!Array.isArray(rows) || rows[0] == null || typeof rows[0] !== "object") {
@@ -73,11 +68,7 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readServiceVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const readServiceVariables = (projectId: string, environmentId: string, serviceId: string) =>
   railway
     .variables({
       projectId,
@@ -87,19 +78,13 @@ const readServiceVariables = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed({} as Record<string, string>)),
     );
 
 const waitUntilServiceGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -156,9 +141,7 @@ test.provider(
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.db.environmentId).toEqual(created.environment.environmentId);
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -172,14 +155,10 @@ test.provider(
       expect(created.db.tcpProxyDomain).toContain("proxy.rlwy.net");
       expect(created.db.tcpProxyPort).toEqual(expect.any(Number));
       expect(created.db.tcpProxyPort).toBeGreaterThan(0);
-      expect(
-        created.db.connectionUri.includes(
-          `${created.db.name}.railway.internal`,
-        ),
-      ).toEqual(true);
-      expect(
-        created.db.publicConnectionUri.includes(created.db.tcpProxyDomain!),
-      ).toEqual(true);
+      expect(created.db.connectionUri.includes(`${created.db.name}.railway.internal`)).toEqual(
+        true,
+      );
+      expect(created.db.publicConnectionUri.includes(created.db.tcpProxyDomain!)).toEqual(true);
 
       const fetched = yield* railway.service(
         { id: created.db.serviceId },
@@ -199,9 +178,7 @@ test.provider(
       );
       expect(instance.serviceId).toEqual(created.db.serviceId);
       expect(instance.source?.image).toEqual(expect.stringContaining("mysql"));
-      expect(instance.startCommand).toEqual(
-        Railway.DEFAULT_MYSQL_START_COMMAND,
-      );
+      expect(instance.startCommand).toEqual(Railway.DEFAULT_MYSQL_START_COMMAND);
 
       const volume = yield* railway.volumeInstance(
         {
@@ -246,17 +223,13 @@ test.provider(
       expect((vars.MYSQLPASSWORD ?? "").length).toBeGreaterThan(0);
       expect(vars.MYSQLDATABASE).toEqual("railway");
       expect((vars[Railway.MYSQL_URL_SECRET] ?? "").length).toBeGreaterThan(0);
-      expect(
-        (vars[Railway.MYSQL_PUBLIC_URL_SECRET] ?? "").length,
-      ).toBeGreaterThan(0);
+      expect((vars[Railway.MYSQL_PUBLIC_URL_SECRET] ?? "").length).toBeGreaterThan(0);
 
       const provider = yield* Provider.findProvider(Railway.MySQL);
       yield* Effect.logDebug("MySQL test: provider.list started");
       const listed = yield* provider.list();
       yield* Effect.logDebug("MySQL test: provider.list completed");
-      const found = listed.find(
-        (row) => row.serviceId === created.db.serviceId,
-      );
+      const found = listed.find((row) => row.serviceId === created.db.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.db.name);
       expect(found?.projectId).toEqual(created.db.projectId);
@@ -266,9 +239,7 @@ test.provider(
       yield* Effect.logDebug("MySQL test: SELECT 1 completed");
       expect(firstOk(rows)).toEqual(1);
 
-      const nextName =
-        created.db.name.slice(0, -1) +
-        (created.db.name.endsWith("z") ? "y" : "z");
+      const nextName = created.db.name.slice(0, -1) + (created.db.name.endsWith("z") ? "y" : "z");
 
       yield* Effect.logDebug("MySQL test: update started");
       const updated = yield* stack.deploy(
@@ -288,9 +259,7 @@ test.provider(
       expect(updated.db.name).toEqual(nextName);
       expect(updated.db.projectId).toEqual(created.db.projectId);
       expect(updated.db.volumeId).toEqual(created.db.volumeId);
-      expect(
-        updated.db.connectionUri.includes(`${nextName}.railway.internal`),
-      ).toEqual(true);
+      expect(updated.db.connectionUri.includes(`${nextName}.railway.internal`)).toEqual(true);
 
       const fetchedUpdate = yield* railway.service(
         {
@@ -305,9 +274,7 @@ test.provider(
 
       const gone = yield* waitUntilServiceGone(created.db.serviceId);
       expect(gone).toEqual("gone");
-      const volumeGone = yield* waitUntilVolumeGone(
-        created.db.volumeInstanceId,
-      );
+      const volumeGone = yield* waitUntilVolumeGone(created.db.volumeInstanceId);
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -355,18 +322,13 @@ describe("ConnectMySQL runtime integrations", () => {
           }),
           Effect.flatMap((res) =>
             res.status === 200
-              ? res.json.pipe(
-                  Effect.mapError(() => new NotReady({ status: res.status })),
-                )
+              ? res.json.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
               : Effect.fail(new NotReady({ status: res.status })),
           ),
           Effect.retry({
             while: (e) =>
               e._tag === "NotReady" &&
-              (e.status === 0 ||
-                e.status === 404 ||
-                e.status === 502 ||
-                e.status === 503),
+              (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
             schedule: Schedule.exponential("500 millis").pipe(
               Schedule.upTo({ duration: "45 seconds" }),
             ),
@@ -381,18 +343,13 @@ describe("ConnectMySQL runtime integrations", () => {
         }),
         Effect.flatMap((res) =>
           res.status === 200
-            ? res.text.pipe(
-                Effect.mapError(() => new NotReady({ status: res.status })),
-              )
+            ? res.text.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
             : Effect.fail(new NotReady({ status: res.status })),
         ),
         Effect.retry({
           while: (e) =>
             e._tag === "NotReady" &&
-            (e.status === 0 ||
-              e.status === 404 ||
-              e.status === 502 ||
-              e.status === 503),
+            (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
           schedule: Schedule.exponential("500 millis").pipe(
             Schedule.upTo({ duration: "45 seconds" }),
           ),

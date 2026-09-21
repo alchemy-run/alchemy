@@ -33,10 +33,7 @@ export interface DescribeDirectories extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ds.DescribeDirectoriesRequest,
-    ) => Effect.Effect<
-      ds.DescribeDirectoriesResult,
-      ds.DescribeDirectoriesError
-    >
+    ) => Effect.Effect<ds.DescribeDirectoriesResult, ds.DescribeDirectoriesError>
   >
 > {}
 export const DescribeDirectories = Binding.Service<DescribeDirectories>(

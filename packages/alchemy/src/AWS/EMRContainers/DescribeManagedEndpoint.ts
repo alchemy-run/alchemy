@@ -33,10 +33,7 @@ export interface DescribeManagedEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<emrc.DescribeManagedEndpointRequest, "virtualClusterId">,
-    ) => Effect.Effect<
-      emrc.DescribeManagedEndpointResponse,
-      emrc.DescribeManagedEndpointError
-    >
+    ) => Effect.Effect<emrc.DescribeManagedEndpointResponse, emrc.DescribeManagedEndpointError>
   >
 > {}
 export const DescribeManagedEndpoint = Binding.Service<DescribeManagedEndpoint>(

@@ -91,11 +91,7 @@ export interface IntegrationEventsProps {
  * );
  * ```
  */
-export const consumeIntegrationEvents = <
-  Detail = unknown,
-  StreamReq = never,
-  Req = never,
->(
+export const consumeIntegrationEvents = <Detail = unknown, StreamReq = never, Req = never>(
   id: string,
   props: IntegrationEventsProps,
   process: (
@@ -121,13 +117,7 @@ export const consumeIntegrationEvents = <
       ...(props.detailType ? { "detail-type": props.detailType } : {}),
     };
     yield* props.bus
-      ? consumeBusEvents(
-          `${id}-Events`,
-          props.bus,
-          pattern,
-          props.rule,
-          process,
-        )
+      ? consumeBusEvents(`${id}-Events`, props.bus, pattern, props.rule, process)
       : consumeBusEvents(`${id}-Events`, pattern, props.rule, process);
 
     return integration;

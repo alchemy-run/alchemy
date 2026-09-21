@@ -1,3 +1,4 @@
+import * as os from "node:os";
 import {
   Runtime,
   type RuntimeServices,
@@ -22,28 +23,32 @@ import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
-import { isPathWithin } from "../../Util/isPathWithin.ts";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as os from "node:os";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
+import {
+  Artifacts as AlchemyArtifacts,
+  createArtifactStore,
+  makeScopedArtifacts,
+} from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
-import { theme } from "../../Util/Theme.ts";
+import { FQN_SEPARATOR } from "../../FQN.ts";
+import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
+import * as LocalProvider from "../../Local/LocalProvider.ts";
+import { Stack } from "../../Stack.ts";
+import { unwrapRedacted } from "../../Util/index.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import {
   formatResourceTag,
   makeResourceLogger,
   makeResourceOutput,
 } from "../../Util/ResourceOutput.ts";
-import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
-import { FQN_SEPARATOR } from "../../FQN.ts";
-import * as LocalProvider from "../../Local/LocalProvider.ts";
-import { Stack } from "../../Stack.ts";
-import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";
+import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
+import { theme } from "../../Util/Theme.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
@@ -55,38 +60,25 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
+import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
-import {
-  Artifacts as AlchemyArtifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "../../Artifacts.ts";
-import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
+import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
+import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
+import { startViteChild } from "./ViteChild.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
 import { resolveTailConsumers } from "./WorkerProvider.ts";
-import {
-  materializeRuntimeBindings,
-  WorkerValidationError,
-} from "./RuntimeBindings.ts";
-import { startViteChild } from "./ViteChild.ts";
-import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
   port: number;
 };
 
-const workerStartedMessage = (
-  fqn: string,
-  elapsed: number,
-  url: URL,
-  logDir: string,
-): string => {
+const workerStartedMessage = (fqn: string, elapsed: number, url: URL, logDir: string): string => {
   const duration = `${Math.round(elapsed)}ms`;
   if (!colorsEnabled()) {
     return `${formatResourceTag(fqn, false)} Started in ${duration} → ${url} (logs: ${logDir})`;
@@ -154,8 +146,7 @@ export const LocalWorkerProvider = () =>
         stack.stage,
         ...worker.fqn.split(FQN_SEPARATOR),
       ];
-      const workerLogDir = (worker: { fqn: string }) =>
-        devLogDir(...workerLogSegments(worker));
+      const workerLogDir = (worker: { fqn: string }) => devLogDir(...workerLogSegments(worker));
       const baseConsole = yield* ConsoleService.Console;
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
@@ -188,18 +179,14 @@ export const LocalWorkerProvider = () =>
       > => ({
         maxBatchSize: settings?.batchSize,
         maxBatchTimeout:
-          settings?.maxWaitTimeMs !== undefined
-            ? settings.maxWaitTimeMs / 1000
-            : undefined,
+          settings?.maxWaitTimeMs !== undefined ? settings.maxWaitTimeMs / 1000 : undefined,
         maxRetries: settings?.maxRetries,
         retryDelay: settings?.retryDelay,
       });
 
       const getQueueConsumers = Effect.fn(function* (scriptName: string) {
         const consumers: RuntimeQueueConsumer[] = [];
-        for (const consumer of MutableHashMap.values(
-          localRuntimeState.queueConsumers,
-        )) {
+        for (const consumer of MutableHashMap.values(localRuntimeState.queueConsumers)) {
           if (consumer.scriptName === scriptName) {
             // A LIVE queue (`Alchemy.remote()`) consumed locally: the broker
             // is still local, but it is fed by the runtime's pull loop
@@ -223,10 +210,9 @@ export const LocalWorkerProvider = () =>
               });
               continue;
             }
-            const queue = MutableHashMap.get(
-              localRuntimeState.queues,
-              consumer.queueId,
-            ).pipe(Option.getOrUndefined);
+            const queue = MutableHashMap.get(localRuntimeState.queues, consumer.queueId).pipe(
+              Option.getOrUndefined,
+            );
             if (queue) {
               consumers.push({
                 queueName: queue.queueName,
@@ -241,14 +227,9 @@ export const LocalWorkerProvider = () =>
         return consumers;
       });
 
-      const startProxy = Effect.fn(function* (
-        id: string,
-        serverOptions: DevServerOptions,
-      ) {
+      const startProxy = Effect.fn(function* (id: string, serverOptions: DevServerOptions) {
         const scope = yield* Scope.fork(rootScope);
-        const instance = yield* workerProxy
-          .serve(serverOptions)
-          .pipe(Scope.provide(scope));
+        const instance = yield* workerProxy.serve(serverOptions).pipe(Scope.provide(scope));
         proxyInstances.set(id, { serverOptions, instance, scope });
         return instance;
       });
@@ -261,10 +242,7 @@ export const LocalWorkerProvider = () =>
         }
       });
 
-      const maybeStartProxy = Effect.fn(function* (
-        id: string,
-        serverOptions: DevServerOptions,
-      ) {
+      const maybeStartProxy = Effect.fn(function* (id: string, serverOptions: DevServerOptions) {
         const existing = proxyInstances.get(id);
         if (existing) {
           if (Equal.equals(existing.serverOptions, serverOptions)) {
@@ -275,9 +253,7 @@ export const LocalWorkerProvider = () =>
         return yield* startProxy(id, serverOptions);
       });
 
-      const toRuntimeModules = Effect.fn(function* (
-        bundle: Bundle.BundleOutput,
-      ) {
+      const toRuntimeModules = Effect.fn(function* (bundle: Bundle.BundleOutput) {
         const modules: Module[] = [];
         for (const file of bundle.files) {
           // Vendored Python packages are opaque Data modules named by their
@@ -286,8 +262,7 @@ export const LocalWorkerProvider = () =>
           // as ES modules via `import_from_javascript()`.
           if (file.path.startsWith("python_modules/")) {
             const isJsShim =
-              file.path.startsWith("python_modules/workers/") &&
-              /\.m?js$/.test(file.path);
+              file.path.startsWith("python_modules/workers/") && /\.m?js$/.test(file.path);
             modules.push(
               isJsShim
                 ? {
@@ -396,8 +371,7 @@ export const LocalWorkerProvider = () =>
               // Reuse the existing namespace id if it was provided, otherwise generate a new one.
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
               const namespaceId =
-                binding.namespaceId ??
-                encodeURIComponent(`${name}-${binding.className}`);
+                binding.namespaceId ?? encodeURIComponent(`${name}-${binding.className}`);
               durableObjectNamespaces[binding.className] = {
                 className: binding.className,
                 uniqueKey: namespaceId,
@@ -441,9 +415,7 @@ export const LocalWorkerProvider = () =>
           if (data.containers) {
             for (const container of data.containers) {
               if (!container.dev) {
-                return yield* Effect.die(
-                  `Container ${container.className} has no dev image`,
-                );
+                return yield* Effect.die(`Container ${container.className} has no dev image`);
               }
               containers[container.className] = {
                 ...container.dev,
@@ -457,15 +429,11 @@ export const LocalWorkerProvider = () =>
         }
         for (const [className, dev] of Object.entries(containers)) {
           if (!durableObjectNamespaces[className]) {
-            return yield* Effect.die(
-              `Durable Object namespace ${className} not found`,
-            );
+            return yield* Effect.die(`Durable Object namespace ${className} not found`);
           }
           durableObjectNamespaces[className].container = dev;
         }
-        const dev:
-          | DevServerOptions
-          | { readonly mode: "external"; readonly url?: string } =
+        const dev: DevServerOptions | { readonly mode: "external"; readonly url?: string } =
           props.dev?.mode === "external"
             ? props.dev
             : {
@@ -501,10 +469,7 @@ export const LocalWorkerProvider = () =>
            * a stub that delegates every request to the ASSETS binding.
            */
           assetsOnly:
-            props.main === undefined &&
-            props.script === undefined &&
-            !props.vite &&
-            !!props.assets,
+            props.main === undefined && props.script === undefined && !props.vite && !!props.assets,
           bindingDescriptors,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
@@ -554,9 +519,7 @@ export const LocalWorkerProvider = () =>
           } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev,
-          crons: Array.from(
-            new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
-          ),
+          crons: Array.from(new Set([...getCronBindings(bindings), ...(props.crons ?? [])])),
           // Tail consumers, resolved to plain `{ service }` records exactly
           // like the live provider hashes/uploads them (script names only,
           // deliberately hash-safe). Restart-relevant: serve lowers the list
@@ -565,9 +528,7 @@ export const LocalWorkerProvider = () =>
           // Streaming tail consumers, same resolution — serve lowers the
           // list into workerd's `streamingTails` designators, which deliver
           // the producer's events live via the consumer's `tailStream()`.
-          streamingTailConsumers: resolveTailConsumers(
-            props.streamingTailConsumers,
-          ),
+          streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
         };
       });
 
@@ -591,8 +552,7 @@ export const LocalWorkerProvider = () =>
         return yield* materializeRuntimeBindings(
           {
             ...config,
-            devAccess:
-              config.dev.mode === "external" ? undefined : config.dev.access,
+            devAccess: config.dev.mode === "external" ? undefined : config.dev.access,
           },
           {
             accountId,
@@ -655,10 +615,7 @@ export const LocalWorkerProvider = () =>
        * serve produced DUPLICATES whose simultaneous restarts storm the
        * instance until the DO's container link breaks.
        */
-      const containerWatchers = new Map<
-        string,
-        { key: string; fiber: Fiber.Fiber<void> }
-      >();
+      const containerWatchers = new Map<string, { key: string; fiber: Fiber.Fiber<void> }>();
 
       const stopContainerWatcher = (id: string) =>
         Effect.suspend(() => {
@@ -690,9 +647,7 @@ export const LocalWorkerProvider = () =>
         restart: Effect.Effect<
           void,
           never,
-          | ChildProcessSpawner.ChildProcessSpawner
-          | PlatformFileSystem.FileSystem
-          | Path.Path
+          ChildProcessSpawner.ChildProcessSpawner | PlatformFileSystem.FileSystem | Path.Path
         >,
       ) =>
         Effect.gen(function* () {
@@ -730,9 +685,7 @@ export const LocalWorkerProvider = () =>
                   if (stat.type === "Directory") {
                     yield* walk(file);
                   } else {
-                    hashes.push(
-                      `${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`,
-                    );
+                    hashes.push(`${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`);
                   }
                 }
               });
@@ -747,14 +700,12 @@ export const LocalWorkerProvider = () =>
             return yield* sha256(hashes.join("\n"));
           }).pipe(Effect.orElseSucceed(() => undefined));
 
-          const streams = [...watched.entries()].flatMap(
-            ([context, { dockerfile }]) => [
-              fs.watch(context, { recursive: true }),
-              ...(dockerfile !== undefined && !dockerfile.startsWith(context)
-                ? [fs.watch(path.dirname(dockerfile))]
-                : []),
-            ],
-          );
+          const streams = [...watched.entries()].flatMap(([context, { dockerfile }]) => [
+            fs.watch(context, { recursive: true }),
+            ...(dockerfile !== undefined && !dockerfile.startsWith(context)
+              ? [fs.watch(path.dirname(dockerfile))]
+              : []),
+          ]);
           const watchLoop = Effect.gen(function* () {
             let last = yield* fingerprint;
             yield* Stream.mergeAll(streams, {
@@ -830,9 +781,9 @@ export const LocalWorkerProvider = () =>
                 // REPLACES workerd's stdio inheritance, so this is the only
                 // path its output takes: raw chunks go to the file, complete
                 // lines go to the console with the worker's pnpm-style prefix.
-                const devLog = yield* openDevLog(
-                  ...workerLogSegments(worker),
-                ).pipe(Scope.provide(scope));
+                const devLog = yield* openDevLog(...workerLogSegments(worker)).pipe(
+                  Scope.provide(scope),
+                );
                 // One splitter per channel: a shared buffer would splice a
                 // partial stdout line onto the next stderr chunk, and stderr
                 // would lose its severity on the way to the console.
@@ -878,9 +829,7 @@ export const LocalWorkerProvider = () =>
                       // `tailStream()` receives the onset while the producer
                       // is still executing (dropped with a `[registry]`
                       // warning until the consumer registers).
-                      streamingTails: worker.streamingTailConsumers?.map(
-                        (c) => c.service,
-                      ),
+                      streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
@@ -895,9 +844,7 @@ export const LocalWorkerProvider = () =>
                   // interrupted start must close it here — nothing else owns
                   // it yet.
                   Effect.onExit((exit) =>
-                    exit._tag === "Failure"
-                      ? Scope.close(scope, exit)
-                      : Effect.void,
+                    exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
                   ),
                 );
                 workerdScopes.set(worker.fqn, scope);
@@ -918,10 +865,7 @@ export const LocalWorkerProvider = () =>
                   Effect.suspend(() => restartWorker(worker.fqn)),
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
-                if (
-                  JSON.stringify(currentConsumers) !==
-                  JSON.stringify(queueConsumers)
-                ) {
+                if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
                   // Wiring changed while workerd was starting — serve again
                   // with the fresh consumers before exposing the instance.
                   superseded.push(scope);
@@ -935,9 +879,7 @@ export const LocalWorkerProvider = () =>
               // the cutover above. The registry's entry removal is
               // owner-aware, so these closes cannot delete the replacement's
               // registration.
-              for (const replaced of previous
-                ? [...superseded, previous]
-                : superseded) {
+              for (const replaced of previous ? [...superseded, previous] : superseded) {
                 yield* Scope.close(replaced, Exit.void).pipe(
                   Effect.catchCause((cause) =>
                     Effect.logWarning(
@@ -961,10 +903,7 @@ export const LocalWorkerProvider = () =>
        */
       const logRestartFailure = (fqn: string) =>
         Effect.catchCause((cause: Cause.Cause<unknown>) =>
-          Effect.logWarning(
-            `[${fqn}] Failed to restart local worker`,
-            Cause.squash(cause),
-          ),
+          Effect.logWarning(`[${fqn}] Failed to restart local worker`, Cause.squash(cause)),
         );
 
       const restartWorker = (
@@ -972,9 +911,7 @@ export const LocalWorkerProvider = () =>
       ): Effect.Effect<
         void,
         never,
-        | ChildProcessSpawner.ChildProcessSpawner
-        | PlatformFileSystem.FileSystem
-        | Path.Path
+        ChildProcessSpawner.ChildProcessSpawner | PlatformFileSystem.FileSystem | Path.Path
       > =>
         Effect.suspend(() => {
           const latest = latestServes.get(id);
@@ -1017,10 +954,7 @@ export const LocalWorkerProvider = () =>
       const dropServeState = (id: string) => {
         const latest = latestServes.get(id) ?? latestViteServes.get(id);
         if (latest) {
-          MutableHashMap.remove(
-            localRuntimeState.workerRestarts,
-            latest.worker.name,
-          );
+          MutableHashMap.remove(localRuntimeState.workerRestarts, latest.worker.name);
           latestServes.delete(id);
           latestViteServes.delete(id);
           servedViteConsumers.delete(id);
@@ -1068,9 +1002,7 @@ export const LocalWorkerProvider = () =>
             return Effect.void;
           }),
           Stream.filterMap((event) =>
-            event._tag === "Success"
-              ? Result.succeed(event.output)
-              : Result.failVoid,
+            event._tag === "Success" ? Result.succeed(event.output) : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
             serveWith(worker, bundle, proxy).pipe(
@@ -1093,10 +1025,7 @@ export const LocalWorkerProvider = () =>
                   return message;
                 } else {
                   return Effect.all([
-                    Effect.logError(
-                      `[${worker.fqn}] Error`,
-                      Cause.squash(exit.cause),
-                    ),
+                    Effect.logError(`[${worker.fqn}] Error`, Cause.squash(exit.cause)),
                     proxy.fail(Cause.pretty(exit.cause)),
                   ]);
                 }
@@ -1125,22 +1054,14 @@ export const LocalWorkerProvider = () =>
             proxy,
           );
           yield* Effect.log(
-            workerStartedMessage(
-              worker.fqn,
-              Date.now() - start,
-              proxy.url,
-              workerLogDir(worker),
-            ),
+            workerStartedMessage(worker.fqn, Date.now() - start, proxy.url, workerLogDir(worker)),
           );
           return proxy.url;
         }
         const bundles: Stream.Stream<
           Bundle.BundleWatchEvent,
           Bundle.BundleError,
-          | ChildProcessSpawner.ChildProcessSpawner
-          | FileSystem.FileSystem
-          | Path.Path
-          | Scope.Scope
+          ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope
         > = isPythonMain(worker.bundleOptions.main)
           ? watchPythonWorkerBundle({
               id: worker.bundleOptions.id,
@@ -1172,8 +1093,7 @@ export const LocalWorkerProvider = () =>
         files: [
           {
             path: "main.js",
-            content:
-              "export default { fetch: (request, env) => env.ASSETS.fetch(request) };",
+            content: "export default { fetch: (request, env) => env.ASSETS.fetch(request) };",
             hash: "assets-only-stub",
           },
         ],
@@ -1185,12 +1105,7 @@ export const LocalWorkerProvider = () =>
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
         yield* Effect.log(
-          workerStartedMessage(
-            worker.fqn,
-            Date.now() - start,
-            proxy.url,
-            workerLogDir(worker),
-          ),
+          workerStartedMessage(worker.fqn, Date.now() - start, proxy.url, workerLogDir(worker)),
         );
         return proxy.url;
       });
@@ -1224,10 +1139,7 @@ export const LocalWorkerProvider = () =>
       // `rootScope` and tracked in `workerdScopes`, so it survives instance
       // restarts and is reclaimed by `stop`/handoff/`serveWith` like any
       // other running instance.
-      const serveVite = (
-        args: ViteServeArgs,
-        options?: { onlyIfConsumersChanged?: boolean },
-      ) =>
+      const serveVite = (args: ViteServeArgs, options?: { onlyIfConsumersChanged?: boolean }) =>
         Semaphore.withPermits(
           serveLock(args.worker.fqn),
           1,
@@ -1243,8 +1155,7 @@ export const LocalWorkerProvider = () =>
                 const current = yield* getQueueConsumers(worker.name);
                 if (
                   workerdScopes.has(worker.fqn) &&
-                  JSON.stringify(current) ===
-                    servedViteConsumers.get(worker.fqn)
+                  JSON.stringify(current) === servedViteConsumers.get(worker.fqn)
                 ) {
                   return;
                 }
@@ -1267,9 +1178,9 @@ export const LocalWorkerProvider = () =>
                 // from the previous loop iteration).
                 yield* closeWorkerd(worker.fqn);
                 const scope = yield* Scope.fork(rootScope);
-                const devLog = yield* openDevLog(
-                  ...workerLogSegments(worker),
-                ).pipe(Scope.provide(scope));
+                const devLog = yield* openDevLog(...workerLogSegments(worker)).pipe(
+                  Scope.provide(scope),
+                );
                 const logResourceOutput = makeResourceLogger(worker.fqn);
                 const child = yield* restore(
                   startViteChild(
@@ -1304,9 +1215,7 @@ export const LocalWorkerProvider = () =>
                     },
                     (channel, line) =>
                       logResourceOutput(channel, line).pipe(
-                        Effect.andThen(
-                          Effect.sync(() => devLog.writeLine(line)),
-                        ),
+                        Effect.andThen(Effect.sync(() => devLog.writeLine(line))),
                       ),
                   ).pipe(Scope.provide(scope)),
                 ).pipe(
@@ -1314,9 +1223,7 @@ export const LocalWorkerProvider = () =>
                   // interrupted start must close it here — nothing else owns
                   // it yet.
                   Effect.onExit((exit) =>
-                    exit._tag === "Failure"
-                      ? Scope.close(scope, exit)
-                      : Effect.void,
+                    exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
                   ),
                 );
                 workerdScopes.set(worker.fqn, scope);
@@ -1329,10 +1236,7 @@ export const LocalWorkerProvider = () =>
                 yield* child.exitCode.pipe(
                   Effect.flatMap((exitCode) => {
                     const message = `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`;
-                    return Effect.all([
-                      Effect.logWarning(message),
-                      proxy.fail(message),
-                    ]);
+                    return Effect.all([Effect.logWarning(message), proxy.fail(message)]);
                   }),
                   Effect.andThen(invalidate),
                   Effect.forkIn(scope),
@@ -1347,18 +1251,12 @@ export const LocalWorkerProvider = () =>
                   restartWorker(worker.fqn),
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
-                if (
-                  JSON.stringify(currentConsumers) !==
-                  JSON.stringify(queueConsumers)
-                ) {
+                if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
                   // Wiring changed while the child was starting — serve
                   // again with the fresh consumers before exposing it.
                   continue;
                 }
-                servedViteConsumers.set(
-                  worker.fqn,
-                  JSON.stringify(queueConsumers),
-                );
+                servedViteConsumers.set(worker.fqn, JSON.stringify(queueConsumers));
                 yield* proxy.set(child.url);
                 return;
               }
@@ -1379,12 +1277,7 @@ export const LocalWorkerProvider = () =>
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
         yield* Effect.log(
-          workerStartedMessage(
-            worker.fqn,
-            Date.now() - start,
-            proxy.url,
-            workerLogDir(worker),
-          ),
+          workerStartedMessage(worker.fqn, Date.now() - start, proxy.url, workerLogDir(worker)),
         );
         return proxy.url;
       });
@@ -1437,8 +1330,7 @@ export const LocalWorkerProvider = () =>
           return yield* Effect.fail(
             new SourceProviderError({
               provider: worker.source!.provider,
-              message:
-                "A source declared devMode 'bundle' but returned a server-mode dev handle.",
+              message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
             }),
           );
         }
@@ -1452,9 +1344,7 @@ export const LocalWorkerProvider = () =>
         // The physical name only survives an update when it isn't changing.
         stables: ({ output, config }) =>
           Effect.succeed(
-            output?.workerName === config.name
-              ? (["workerName"] as ["workerName"])
-              : undefined,
+            output?.workerName === config.name ? (["workerName"] as ["workerName"]) : undefined,
           ),
 
         precreate: Effect.fn(function* ({ id, fqn, news, bindings }) {
@@ -1465,9 +1355,7 @@ export const LocalWorkerProvider = () =>
               if (binding.type === "durable_object_namespace") {
                 durableObjectNamespaces[binding.className] =
                   binding.namespaceId ??
-                  encodeURIComponent(
-                    `${binding.scriptName!}-${binding.className}`,
-                  );
+                  encodeURIComponent(`${binding.scriptName!}-${binding.className}`);
               }
             }
           }
@@ -1495,9 +1383,7 @@ export const LocalWorkerProvider = () =>
             tags: [],
             durableObjectNamespaces,
             routes: [],
-            crons: Array.from(
-              new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
-            ),
+            crons: Array.from(new Set([...getCronBindings(bindings), ...(news.crons ?? [])])),
             accountId,
           };
         }),
@@ -1543,9 +1429,7 @@ export const LocalWorkerProvider = () =>
             config.bindingDescriptors.some((b) => b.type === "self_url") ||
             Object.values(config.env ?? {}).some(isSelfUrl);
           const selfUrl = needsSelfUrl
-            ? (yield* maybeStartProxy(fqn, config.dev)).url
-                .toString()
-                .replace(/\/$/, "")
+            ? (yield* maybeStartProxy(fqn, config.dev)).url.toString().replace(/\/$/, "")
             : undefined;
           // Substitute `Worker.URL` sentinels once, up front — the runtime
           // bindings, the Vite define entries, and the child-process config
@@ -1559,10 +1443,7 @@ export const LocalWorkerProvider = () =>
                   ]),
                 )
               : config.env;
-          const workerBindings = yield* materializeWorkerBindings(
-            { ...config, env },
-            selfUrl,
-          );
+          const workerBindings = yield* materializeWorkerBindings({ ...config, env }, selfUrl);
           const worker: RunnableWorkerConfig = {
             ...config,
             env,
@@ -1626,16 +1507,12 @@ export const LocalWorkerProvider = () =>
         // reads vendored modules (FileSystem) from inside `start`;
         // `readAssetsConfigFiles` (assets `_headers`/`_redirects`) needs
         // FileSystem + Path.
-        | ChildProcessSpawner.ChildProcessSpawner
-        | FileSystem.FileSystem
-        | Path.Path
+        ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
       >;
     }),
   );
 
-const toRuntimeAssets = Effect.fn(function* (
-  assets: WorkerAssetsConfig | undefined,
-) {
+const toRuntimeAssets = Effect.fn(function* (assets: WorkerAssetsConfig | undefined) {
   if (!assets) return undefined;
   // Mirror the deploy path: the special `_headers` / `_redirects` files
   // in the assets directory carry the rules unless overridden by
@@ -1646,8 +1523,7 @@ const toRuntimeAssets = Effect.fn(function* (
   // the client output directory is the build's business, and in `dev` the
   // vite plugin serves assets from the dev server, so there is no directory
   // to read here.
-  const directory: string | undefined =
-    typeof assets === "string" ? assets : assets.directory;
+  const directory: string | undefined = typeof assets === "string" ? assets : assets.directory;
   // An unreadable file just means no rules here — the assets plugin
   // reports directory problems itself.
   const files = yield* readAssetsConfigFiles(directory).pipe(

@@ -1,3 +1,4 @@
+import type { Config as CredentialsConfig } from "@distilled.cloud/prisma";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
@@ -10,14 +11,11 @@ import * as Stream from "effect/Stream";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
 import type { LogLine } from "../Provider.ts";
-import type { Config as CredentialsConfig } from "@distilled.cloud/prisma";
 import { Credentials } from "./Credentials.ts";
 import { getDeploymentLogsRequest } from "./Internal/LogsClient.ts";
 import type { DeploymentLogsQuery } from "./Types.ts";
 
-export class PrismaLogStreamError extends Data.TaggedError(
-  "PrismaLogStreamError",
-)<{
+export class PrismaLogStreamError extends Data.TaggedError("PrismaLogStreamError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -39,9 +37,7 @@ interface PrismaDeploymentTerminalLine {
   details?: Record<string, unknown>;
 }
 
-export type PrismaDeploymentLogRecord =
-  | PrismaDeploymentLogLine
-  | PrismaDeploymentTerminalLine;
+export type PrismaDeploymentLogRecord = PrismaDeploymentLogLine | PrismaDeploymentTerminalLine;
 
 export type ParsedDeploymentLogRecord =
   | { _tag: "log"; line: LogLine; raw: PrismaDeploymentLogLine }
@@ -68,8 +64,7 @@ export const parseDeploymentLogRecord = (
       }),
     );
   }
-  let recordType: "log" | "terminal" | "unknown" | "invalid-json" =
-    "invalid-json";
+  let recordType: "log" | "terminal" | "unknown" | "invalid-json" = "invalid-json";
   return Effect.try({
     try: () => {
       const parsed = JSON.parse(message) as unknown;
@@ -78,8 +73,7 @@ export const parseDeploymentLogRecord = (
         throw new Error("Invalid Prisma deployment log record shape");
       }
       const raw = parsed as Partial<PrismaDeploymentLogRecord>;
-      recordType =
-        raw.type === "log" || raw.type === "terminal" ? raw.type : "unknown";
+      recordType = raw.type === "log" || raw.type === "terminal" ? raw.type : "unknown";
       if (
         raw.type === "log" &&
         typeof raw.text === "string" &&
@@ -104,9 +98,7 @@ export const parseDeploymentLogRecord = (
         typeof raw.retryable === "boolean" &&
         (raw.cursor === null || typeof raw.cursor === "string") &&
         (raw.details === undefined ||
-          (raw.details !== null &&
-            typeof raw.details === "object" &&
-            !Array.isArray(raw.details)))
+          (raw.details !== null && typeof raw.details === "object" && !Array.isArray(raw.details)))
       ) {
         return {
           _tag: "terminal" as const,
@@ -122,10 +114,7 @@ export const parseDeploymentLogRecord = (
   });
 };
 
-export const tailDeploymentLogs = (
-  deploymentId: string,
-  query?: DeploymentLogsQuery,
-) =>
+export const tailDeploymentLogs = (deploymentId: string, query?: DeploymentLogsQuery) =>
   Stream.unwrap(
     Effect.gen(function* () {
       // Resolve the credentials on the caller's fiber once; the reconnect
@@ -175,9 +164,7 @@ const tailDeploymentLogsWith = (
           Queue.failCauseUnsafe(queue, Cause.fail(error));
         };
 
-        const connect = (
-          cursor: string | undefined,
-        ): Effect.Effect<void, PrismaLogStreamError> =>
+        const connect = (cursor: string | undefined): Effect.Effect<void, PrismaLogStreamError> =>
           Effect.gen(function* () {
             if (stopped) return;
             const request = yield* getDeploymentLogsRequest(
@@ -188,8 +175,7 @@ const tailDeploymentLogsWith = (
               Effect.mapError(
                 () =>
                   new PrismaLogStreamError({
-                    message:
-                      "Failed to prepare the Prisma deployment log stream request",
+                    message: "Failed to prepare the Prisma deployment log stream request",
                   }),
               ),
             );
@@ -251,10 +237,7 @@ const tailDeploymentLogsWith = (
               Effect.runFork(
                 Effect.sleep(
                   Duration.millis(
-                    Math.min(
-                      RECONNECT_BACKOFF_MS * 2 ** noProgressReconnects,
-                      1_000,
-                    ),
+                    Math.min(RECONNECT_BACKOFF_MS * 2 ** noProgressReconnects, 1_000),
                   ),
                 ).pipe(
                   Effect.andThen(connect(reconnectCursor)),
@@ -287,23 +270,16 @@ const tailDeploymentLogsWith = (
               }
               const record = decoded.value;
               if (record._tag === "log") {
-                if (
-                  latestByteEnd !== undefined &&
-                  record.raw.byteEnd <= latestByteEnd
-                ) {
+                if (latestByteEnd !== undefined && record.raw.byteEnd <= latestByteEnd) {
                   // Exact/older replay after reconnect: drop it and keep the
                   // no-progress budget intact.
                   return;
                 }
-                if (
-                  latestByteEnd !== undefined &&
-                  record.raw.byteStart < latestByteEnd
-                ) {
+                if (latestByteEnd !== undefined && record.raw.byteStart < latestByteEnd) {
                   terminalHandled = true;
                   fail(
                     new PrismaLogStreamError({
-                      message:
-                        "Prisma deployment log stream returned an overlapping byte range",
+                      message: "Prisma deployment log stream returned an overlapping byte range",
                     }),
                   );
                   socket.close(1000, "overlapping log range");
@@ -356,8 +332,7 @@ const tailDeploymentLogsWith = (
             socket.on("error", (cause) => {
               if (terminalHandled || stopped) return;
               const oversized =
-                cause instanceof Error &&
-                cause.message.includes("Max payload size exceeded");
+                cause instanceof Error && cause.message.includes("Max payload size exceeded");
               const error = new PrismaLogStreamError({
                 message: "Prisma deployment log WebSocket failed",
               });
@@ -375,18 +350,13 @@ const tailDeploymentLogsWith = (
                 if (!socketOpened) {
                   terminalHandled = true;
                   const error = new PrismaLogStreamError({
-                    message:
-                      "Prisma deployment log WebSocket closed before opening",
+                    message: "Prisma deployment log WebSocket closed before opening",
                   });
                   Deferred.doneUnsafe(opened, Effect.fail(error));
                   fail(error);
                   return;
                 }
-                scheduleReconnect(
-                  latestCursor,
-                  "transport_closed",
-                  "already-closed",
-                );
+                scheduleReconnect(latestCursor, "transport_closed", "already-closed");
               }
             });
 
@@ -442,8 +412,7 @@ const loadWebSocketConstructor = Effect.tryPromise({
   try: () => import("ws").then((module) => module.default),
   catch: (cause) =>
     new PrismaLogStreamError({
-      message:
-        "Prisma deployment log tailing requires the optional `ws` package.",
+      message: "Prisma deployment log tailing requires the optional `ws` package.",
       cause,
     }),
 });

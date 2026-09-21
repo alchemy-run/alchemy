@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface StartDeploymentRequest extends Omit<
-  amplify.StartDeploymentRequest,
-  "appId"
-> {}
+export interface StartDeploymentRequest extends Omit<amplify.StartDeploymentRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:StartDeployment`.
@@ -49,13 +46,8 @@ export interface StartDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartDeploymentRequest,
-    ) => Effect.Effect<
-      amplify.StartDeploymentResult,
-      amplify.StartDeploymentError
-    >
+    ) => Effect.Effect<amplify.StartDeploymentResult, amplify.StartDeploymentError>
   >
 > {}
 
-export const StartDeployment = Binding.Service<StartDeployment>(
-  "AWS.Amplify.StartDeployment",
-);
+export const StartDeployment = Binding.Service<StartDeployment>("AWS.Amplify.StartDeployment");

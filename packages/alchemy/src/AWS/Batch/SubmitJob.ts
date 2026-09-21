@@ -36,9 +36,7 @@ export interface SubmitJob extends Binding.Service<
     queue: JobQueue,
     jobDefinition: JobDefinition,
   ) => Effect.Effect<
-    (
-      request: SubmitJobRequest,
-    ) => Effect.Effect<batch.SubmitJobResponse, batch.SubmitJobError>
+    (request: SubmitJobRequest) => Effect.Effect<batch.SubmitJobResponse, batch.SubmitJobError>
   >
 > {}
 export const SubmitJob = Binding.Service<SubmitJob>("AWS.Batch.SubmitJob");

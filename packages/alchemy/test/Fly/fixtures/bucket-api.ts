@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export const BUCKET_PORT = 3000;
 export const OBJECT_KEY = "alchemy-marker.txt";
@@ -70,9 +70,7 @@ export default class BucketApi extends Fly.Service<BucketApi>()(
           const text =
             obj.Body === undefined
               ? ""
-              : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(
-                  Effect.orDie,
-                );
+              : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             ok: text === OBJECT_BODY,
             text,

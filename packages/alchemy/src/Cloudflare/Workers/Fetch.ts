@@ -72,10 +72,7 @@ export const FetchBinding = Layer.effect(
 const doFetch = (
   fetcher: runtime.Fetcher,
   request: HttpClientRequest.HttpClientRequest,
-): Effect.Effect<
-  HttpClientResponse.HttpClientResponse,
-  HttpClientError.RequestError
-> => {
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.RequestError> => {
   const urlResult = Url.make(
     request.url,
     request.urlParams,

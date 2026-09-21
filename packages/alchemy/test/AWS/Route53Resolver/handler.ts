@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Route53Resolver from "@/AWS/Route53Resolver";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Route53Resolver from "@/AWS/Route53Resolver";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
@@ -68,14 +68,11 @@ export default Route53ResolverBindingsFunction.make(
   },
   Effect.gen(function* () {
     const net = yield* resolveNetwork;
-    const endpoint = yield* Route53Resolver.ResolverEndpoint(
-      "BindingsEndpoint",
-      {
-        direction: "OUTBOUND",
-        securityGroupIds: net.securityGroupIds,
-        ipAddresses: net.subnetIds.map((subnetId) => ({ subnetId })),
-      },
-    );
+    const endpoint = yield* Route53Resolver.ResolverEndpoint("BindingsEndpoint", {
+      direction: "OUTBOUND",
+      securityGroupIds: net.securityGroupIds,
+      ipAddresses: net.subnetIds.map((subnetId) => ({ subnetId })),
+    });
     const rule = yield* Route53Resolver.ResolverRule("BindingsRule", {
       domainName: "bindings.alchemy-r53r-test.internal",
       resolverEndpointId: endpoint.resolverEndpointId,
@@ -88,8 +85,7 @@ export default Route53ResolverBindingsFunction.make(
         yield* Route53Resolver.ListResolverEndpointIpAddresses(endpoint),
       getResolverRule: yield* Route53Resolver.GetResolverRule(rule),
       updateResolverRule: yield* Route53Resolver.UpdateResolverRule(rule),
-      listResolverRuleAssociations:
-        yield* Route53Resolver.ListResolverRuleAssociations(rule),
+      listResolverRuleAssociations: yield* Route53Resolver.ListResolverRuleAssociations(rule),
     };
 
     return {
@@ -131,9 +127,7 @@ export default Route53ResolverBindingsFunction.make(
           return yield* HttpServerResponse.json({
             domainName: response.ResolverRule?.DomainName ?? "",
             ruleType: response.ResolverRule?.RuleType ?? "",
-            targetIps: (response.ResolverRule?.TargetIps ?? []).map(
-              (t) => t.Ip ?? "",
-            ),
+            targetIps: (response.ResolverRule?.TargetIps ?? []).map((t) => t.Ip ?? ""),
           });
         }
 
@@ -145,9 +139,7 @@ export default Route53ResolverBindingsFunction.make(
           });
           return yield* HttpServerResponse.json({
             status: response.ResolverRule?.Status ?? "",
-            targetIps: (response.ResolverRule?.TargetIps ?? []).map(
-              (t) => t.Ip ?? "",
-            ),
+            targetIps: (response.ResolverRule?.TargetIps ?? []).map((t) => t.Ip ?? ""),
           });
         }
 

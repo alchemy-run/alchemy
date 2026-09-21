@@ -21,20 +21,13 @@ const root = path.resolve(import.meta.dirname, "..");
 // Spawn the CLI entry directly (not through `bun run` / the cli.js
 // launcher) so signals hit the actual CLI process, whose scope teardown
 // kills the exec child and the provider sidecars.
-const alchemyBin = path.join(
-  root,
-  "node_modules",
-  "alchemy",
-  "bin",
-  "alchemy.js",
-);
+const alchemyBin = path.join(root, "node_modules", "alchemy", "bin", "alchemy.js");
 // Isolated stage so this suite never fights a developer's own `alchemy dev`
 // session (default stage) over state rows.
 const STAGE = "dev-cli-test";
 
 // The whole suite needs docker (floci and the MicroVM containers).
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
 let proc: ReturnType<typeof spawn> | undefined;
 let ws: WebSocket | undefined;
@@ -122,11 +115,9 @@ afterAll(async () => {
     // Session MicroVMs are provisioned at RUNTIME (per WebSocket), not as
     // stack resources, so `destroy` does not reap them — remove the
     // emulator's VM containers this run booted.
-    const ids = spawnSync(
-      "docker",
-      ["ps", "-q", "--filter", "name=floci-microvm-"],
-      { encoding: "utf8" },
-    )
+    const ids = spawnSync("docker", ["ps", "-q", "--filter", "name=floci-microvm-"], {
+      encoding: "utf8",
+    })
       .stdout.trim()
       .split("\n")
       .filter(Boolean);

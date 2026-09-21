@@ -35,10 +35,7 @@ export const readVectorsActions = [
 ] as const;
 
 /** IAM actions granted by the write-level binding. */
-export const writeVectorsActions = [
-  "s3vectors:PutVectors",
-  "s3vectors:DeleteVectors",
-] as const;
+export const writeVectorsActions = ["s3vectors:PutVectors", "s3vectors:DeleteVectors"] as const;
 
 /**
  * Build the shared body of an S3 Vectors data-plane `*Http` binding layer:
@@ -53,11 +50,7 @@ export const makeVectorsHttpBinding = <Client, R>(options: {
   /** IAM actions granted on the bound index's ARN. */
   actions: readonly string[];
   /** Layer-scoped builder of the per-index typed runtime client. */
-  makeClient: Effect.Effect<
-    (indexArn: Effect.Effect<string>, label: string) => Client,
-    never,
-    R
-  >;
+  makeClient: Effect.Effect<(indexArn: Effect.Effect<string>, label: string) => Client, never, R>;
 }) =>
   Effect.gen(function* () {
     const makeClient = yield* options.makeClient;
@@ -67,23 +60,18 @@ export const makeVectorsHttpBinding = <Client, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.S3Vectors.${options.name}(${index}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [index.indexArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.S3Vectors.${options.name}(${index}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [index.indexArn],
+              },
+            ],
+          });
         }
       }
-      return makeClient(
-        IndexArn,
-        `AWS.S3Vectors.${options.name}(${index.LogicalId})`,
-      );
+      return makeClient(IndexArn, `AWS.S3Vectors.${options.name}(${index.LogicalId})`);
     });
   });
 
@@ -93,13 +81,8 @@ export const makeReadVectorsClient = Effect.gen(function* () {
   const getVectors = yield* s3vectors.getVectors;
   const listVectors = yield* s3vectors.listVectors;
 
-  return (
-    IndexArn: Effect.Effect<string>,
-    label: string,
-  ): ReadVectorsClient => ({
-    query: Effect.fn(`${label}.query`)(function* (
-      request: QueryVectorsRequest,
-    ) {
+  return (IndexArn: Effect.Effect<string>, label: string): ReadVectorsClient => ({
+    query: Effect.fn(`${label}.query`)(function* (request: QueryVectorsRequest) {
       const indexArn = yield* IndexArn;
       return yield* queryVectors({ ...request, indexArn });
     }),
@@ -119,17 +102,12 @@ export const makeWriteVectorsClient = Effect.gen(function* () {
   const putVectors = yield* s3vectors.putVectors;
   const deleteVectors = yield* s3vectors.deleteVectors;
 
-  return (
-    IndexArn: Effect.Effect<string>,
-    label: string,
-  ): WriteVectorsClient => ({
+  return (IndexArn: Effect.Effect<string>, label: string): WriteVectorsClient => ({
     put: Effect.fn(`${label}.put`)(function* (request: PutVectorsRequest) {
       const indexArn = yield* IndexArn;
       return yield* putVectors({ ...request, indexArn });
     }),
-    delete: Effect.fn(`${label}.delete`)(function* (
-      request: DeleteVectorsRequest,
-    ) {
+    delete: Effect.fn(`${label}.delete`)(function* (request: DeleteVectorsRequest) {
       const indexArn = yield* IndexArn;
       return yield* deleteVectors({ ...request, indexArn });
     }),

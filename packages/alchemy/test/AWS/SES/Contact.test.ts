@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Contact, ContactList } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Contact, ContactList } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,9 +21,7 @@ const assertContactDeleted = (contactListName: string, emailAddress: string) =>
       EmailAddress: emailAddress,
     })
     .pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new ContactStillExists({ contactListName, emailAddress })),
-      ),
+      Effect.flatMap(() => Effect.fail(new ContactStillExists({ contactListName, emailAddress }))),
       // A deleted contact list takes its contacts with it.
       Effect.catchTag("NotFoundException", () => Effect.void),
       Effect.retry({
@@ -52,9 +50,7 @@ test.provider(
           const contact = yield* Contact("Subscriber", {
             contactListName: list.contactListName,
             emailAddress: "reader@alchemy-test.example.com",
-            topicPreferences: [
-              { TopicName: "product-updates", SubscriptionStatus: "OPT_IN" },
-            ],
+            topicPreferences: [{ TopicName: "product-updates", SubscriptionStatus: "OPT_IN" }],
             attributes: { plan: "free" },
           });
           return { list, contact };
@@ -87,9 +83,7 @@ test.provider(
           yield* Contact("Subscriber", {
             contactListName: list.contactListName,
             emailAddress: "reader@alchemy-test.example.com",
-            topicPreferences: [
-              { TopicName: "product-updates", SubscriptionStatus: "OPT_OUT" },
-            ],
+            topicPreferences: [{ TopicName: "product-updates", SubscriptionStatus: "OPT_OUT" }],
             unsubscribeAll: true,
           });
         }),
@@ -101,10 +95,7 @@ test.provider(
       expect(updated.UnsubscribeAll).toBe(true);
 
       yield* stack.destroy();
-      yield* assertContactDeleted(
-        list.contactListName,
-        "reader@alchemy-test.example.com",
-      );
+      yield* assertContactDeleted(list.contactListName, "reader@alchemy-test.example.com");
     }),
   { timeout: 120_000, exclusive: true },
 );
@@ -146,16 +137,10 @@ test.provider(
         }),
       );
       expect(second.emailAddress).toBe("second@alchemy-test.example.com");
-      yield* assertContactDeleted(
-        first.contactListName,
-        "first@alchemy-test.example.com",
-      );
+      yield* assertContactDeleted(first.contactListName, "first@alchemy-test.example.com");
 
       yield* stack.destroy();
-      yield* assertContactDeleted(
-        second.contactListName,
-        "second@alchemy-test.example.com",
-      );
+      yield* assertContactDeleted(second.contactListName, "second@alchemy-test.example.com");
     }),
   { timeout: 120_000, exclusive: true },
 );

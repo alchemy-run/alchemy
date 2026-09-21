@@ -1,3 +1,8 @@
+import { describe, expect } from "alchemy-test";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 /**
  * Binding-diff stability: a deploy with NO changes must produce an all-noop
  * plan for resources that carry bindings — regardless of the binding data's
@@ -23,17 +28,7 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { encodeState, InMemoryService, reviveState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import {
-  BindingTarget,
-  TestLayers,
-  TestResource,
-  TestResourceHooks,
-} from "./test.resources.ts";
+import { BindingTarget, TestLayers, TestResource, TestResourceHooks } from "./test.resources.ts";
 
 const { test } = Test.make({
   providers: TestLayers(),
@@ -50,8 +45,7 @@ const { test } = Test.make({
  * form, `undefined` keys vanish).
  */
 const jsonRoundTripState = () => {
-  const roundTrip = <T>(v: T): T =>
-    JSON.parse(JSON.stringify(encodeState(v)), reviveState);
+  const roundTrip = <T>(v: T): T => JSON.parse(JSON.stringify(encodeState(v)), reviveState);
   const store: Record<string, Record<string, Record<string, any>>> = {};
   return Layer.effect(
     State,
@@ -90,22 +84,15 @@ const makeHarness = (name: string, kind: StoreKind) => {
         state: stateLayer,
       }),
     );
-  const deploy = (
-    effect: Effect.Effect<any, any, any>,
-  ): Effect.Effect<any, any, never> =>
+  const deploy = (effect: Effect.Effect<any, any, any>): Effect.Effect<any, any, never> =>
     compile(effect).pipe(
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(
-          Effect.flatMap(apply),
-          Effect.provide(compiled.services),
-        ),
+        Plan.make(compiled).pipe(Effect.flatMap(apply), Effect.provide(compiled.services)),
       ),
       Effect.provide(Layer.succeed(Stage, "test")),
       provideFreshArtifactStore,
     ) as unknown as Effect.Effect<any, any, never>;
-  const plan = (
-    effect: Effect.Effect<any, any, any>,
-  ): Effect.Effect<any, any, never> =>
+  const plan = (effect: Effect.Effect<any, any, any>): Effect.Effect<any, any, never> =>
     compile(effect).pipe(
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled).pipe(Effect.provide(compiled.services)),
@@ -256,8 +243,7 @@ describe("binding rows are deterministically ordered", () => {
       const p: any = yield* plan(program(true)).pipe(
         Effect.provide(
           Layer.succeed(TestResourceHooks, {
-            diff: (_id, newBindings) =>
-              Effect.sync(() => void observed.push(newBindings)),
+            diff: (_id, newBindings) => Effect.sync(() => void observed.push(newBindings)),
           }),
         ),
       );
@@ -270,10 +256,7 @@ describe("binding rows are deterministically ordered", () => {
         expect(rows.map((r) => r.sid)).toEqual(["CapA", "CapB"]);
       }
       // The plan node's rows are sorted too.
-      expect(p.resources.Host.bindings.map((r: any) => r.sid)).toEqual([
-        "CapA",
-        "CapB",
-      ]);
+      expect(p.resources.Host.bindings.map((r: any) => r.sid)).toEqual(["CapA", "CapB"]);
     }),
   );
 });
@@ -304,10 +287,7 @@ describe("persisted binding rows are plain data", () => {
           state: stateLayer,
         }),
         Effect.flatMap((compiled: any) =>
-          Plan.make(compiled).pipe(
-            Effect.flatMap(apply),
-            Effect.provide(compiled.services),
-          ),
+          Plan.make(compiled).pipe(Effect.flatMap(apply), Effect.provide(compiled.services)),
         ),
         Effect.provide(Layer.succeed(Stage, "test")),
         provideFreshArtifactStore,

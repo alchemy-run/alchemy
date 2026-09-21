@@ -38,10 +38,7 @@ export interface ListResourceTelemetry extends Binding.Service<
   () => Effect.Effect<
     (
       request?: obs.ListResourceTelemetryInput,
-    ) => Effect.Effect<
-      obs.ListResourceTelemetryOutput,
-      obs.ListResourceTelemetryError
-    >
+    ) => Effect.Effect<obs.ListResourceTelemetryOutput, obs.ListResourceTelemetryError>
   >
 > {}
 

@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { Table } from "./Table.ts";
 import { discover, withEndpoint } from "./internal.ts";
+import type { Table } from "./Table.ts";
 
 /**
  * Shared scaffolding for Amazon Timestream HTTP bindings.
@@ -47,19 +47,14 @@ export const makeWriteTableHttpBinding = <Req, I, A, E, R>(options: {
   /** Also grant `actions` on the owning database's ARN (batch load). */
   grantDatabaseArn?: boolean;
   /** Shape the wire request from the caller's request + the table names. */
-  toRequest: (
-    request: Req,
-    names: { DatabaseName: string; TableName: string },
-  ) => I;
+  toRequest: (request: Req, names: { DatabaseName: string; TableName: string }) => I;
 }) =>
   Effect.gen(function* () {
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const op = yield* options.operation;
     const describeEndpoints = yield* TSW.describeEndpoints;
-    const withWriteEndpoint = withEndpoint(
-      discover("write", describeEndpoints({})),
-    );
+    const withWriteEndpoint = withEndpoint(discover("write", describeEndpoints({})));
     return Effect.fn(function* (table: Table) {
       const DatabaseName = yield* table.databaseName;
       const TableName = yield* table.tableName;
@@ -77,9 +72,7 @@ export const makeWriteTableHttpBinding = <Req, I, A, E, R>(options: {
                       // The owning database's ARN is the table ARN minus its
                       // `/table/{name}` suffix.
                       table.tableArn.pipe(
-                        Output.map((arn: string) =>
-                          arn.replace(/\/table\/[^/]*$/, ""),
-                        ),
+                        Output.map((arn: string) => arn.replace(/\/table\/[^/]*$/, "")),
                       ),
                     ]
                   : [Output.interpolate`${table.tableArn}`],
@@ -89,9 +82,7 @@ export const makeWriteTableHttpBinding = <Req, I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request: Req) {
         return yield* withWriteEndpoint(
           op(
             options.toRequest(request, {
@@ -122,9 +113,7 @@ export const makeQueryTableHttpBinding = <I, A, E, R>(options: {
   Effect.gen(function* () {
     const op = yield* options.operation;
     const describeEndpoints = yield* TSQ.describeEndpoints;
-    const withQueryEndpoint = withEndpoint(
-      discover("query", describeEndpoints({})),
-    );
+    const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
@@ -141,9 +130,7 @@ export const makeQueryTableHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request: I) {
         return yield* withQueryEndpoint(op(request));
       });
     });
@@ -166,9 +153,7 @@ export const makeWriteAccountHttpBinding = <I, A, E, R>(options: {
   Effect.gen(function* () {
     const op = yield* options.operation;
     const describeEndpoints = yield* TSW.describeEndpoints;
-    const withWriteEndpoint = withEndpoint(
-      discover("write", describeEndpoints({})),
-    );
+    const withWriteEndpoint = withEndpoint(discover("write", describeEndpoints({})));
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
@@ -207,9 +192,7 @@ export const makeQueryAccountHttpBinding = <I, A, E, R>(options: {
   Effect.gen(function* () {
     const op = yield* options.operation;
     const describeEndpoints = yield* TSQ.describeEndpoints;
-    const withQueryEndpoint = withEndpoint(
-      discover("query", describeEndpoints({})),
-    );
+    const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;

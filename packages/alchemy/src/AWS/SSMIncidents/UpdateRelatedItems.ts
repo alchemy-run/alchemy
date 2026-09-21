@@ -37,10 +37,7 @@ export interface UpdateRelatedItems extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.UpdateRelatedItemsInput,
-    ) => Effect.Effect<
-      incidents.UpdateRelatedItemsOutput,
-      incidents.UpdateRelatedItemsError
-    >
+    ) => Effect.Effect<incidents.UpdateRelatedItemsOutput, incidents.UpdateRelatedItemsError>
   >
 > {}
 export const UpdateRelatedItems = Binding.Service<UpdateRelatedItems>(

@@ -9,11 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  environmentArn,
-  readAppConfigTags,
-  syncAppConfigTags,
-} from "./internal.ts";
+import { environmentArn, readAppConfigTags, syncAppConfigTags } from "./internal.ts";
 
 /**
  * A CloudWatch alarm AppConfig monitors during a deployment. If the alarm
@@ -111,53 +107,32 @@ export const EnvironmentProvider = () =>
           ? Effect.succeed(props.environmentName)
           : createPhysicalName({ id, maxLength: 64 });
 
-      const readEnvironment = Effect.fn(function* (
-        applicationId: string,
-        environmentId: string,
-      ) {
+      const readEnvironment = Effect.fn(function* (applicationId: string, environmentId: string) {
         return yield* appconfig
           .getEnvironment({
             ApplicationId: applicationId,
             EnvironmentId: environmentId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const findByName = Effect.fn(function* (
-        applicationId: string,
-        name: string,
-      ) {
-        const envs = yield* appconfig.listEnvironments
-          .pages({ ApplicationId: applicationId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Items ?? []),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([] as appconfig.Environment[]),
-            ),
-          );
+      const findByName = Effect.fn(function* (applicationId: string, name: string) {
+        const envs = yield* appconfig.listEnvironments.pages({ ApplicationId: applicationId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed([] as appconfig.Environment[]),
+          ),
+        );
         return envs.find((e) => e.Name === name);
       });
 
       return {
-        stables: [
-          "environmentId",
-          "environmentName",
-          "applicationId",
-          "environmentArn",
-        ],
+        stables: ["environmentId", "environmentName", "applicationId", "environmentArn"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if ((olds?.applicationId ?? undefined) !== news?.applicationId) {
@@ -219,12 +194,7 @@ export const EnvironmentProvider = () =>
             });
           }
 
-          const arn = environmentArn(
-            region,
-            accountId,
-            applicationId,
-            observed.Id!,
-          );
+          const arn = environmentArn(region, accountId, applicationId, observed.Id!);
 
           // 3b. Sync tags.
           yield* syncAppConfigTags(arn, desiredTags);
@@ -245,9 +215,7 @@ export const EnvironmentProvider = () =>
               ApplicationId: output.applicationId,
               EnvironmentId: output.environmentId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Environments are keyed under their parent application, so
@@ -259,9 +227,7 @@ export const EnvironmentProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const apps = yield* appconfig.listApplications.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             );
             const results: {
               environmentId: string;
@@ -272,30 +238,21 @@ export const EnvironmentProvider = () =>
             }[] = [];
             for (const app of apps) {
               if (app.Id === undefined) continue;
-              const envs = yield* appconfig.listEnvironments
-                .pages({ ApplicationId: app.Id })
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.Items ?? []),
-                  ),
-                  // The application may be deleted between the two calls.
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([] as appconfig.Environment[]),
-                  ),
-                );
+              const envs = yield* appconfig.listEnvironments.pages({ ApplicationId: app.Id }).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+                // The application may be deleted between the two calls.
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed([] as appconfig.Environment[]),
+                ),
+              );
               for (const env of envs) {
                 if (env.Id === undefined || env.Name === undefined) continue;
                 results.push({
                   environmentId: env.Id,
                   environmentName: env.Name,
                   applicationId: app.Id,
-                  environmentArn: environmentArn(
-                    region,
-                    accountId,
-                    app.Id,
-                    env.Id,
-                  ),
+                  environmentArn: environmentArn(region, accountId, app.Id, env.Id),
                   state: env.State ?? "",
                 });
               }

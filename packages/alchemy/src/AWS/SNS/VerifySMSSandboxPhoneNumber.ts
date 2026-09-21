@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface VerifySMSSandboxPhoneNumberRequest
-  extends sns.VerifySMSSandboxPhoneNumberInput {}
+export interface VerifySMSSandboxPhoneNumberRequest extends sns.VerifySMSSandboxPhoneNumberInput {}
 
 /**
  * Runtime binding for `sns:VerifySMSSandboxPhoneNumber`.
@@ -29,14 +28,10 @@ export interface VerifySMSSandboxPhoneNumber extends Binding.Service<
   () => Effect.Effect<
     (
       request: VerifySMSSandboxPhoneNumberRequest,
-    ) => Effect.Effect<
-      sns.VerifySMSSandboxPhoneNumberResult,
-      sns.VerifySMSSandboxPhoneNumberError
-    >
+    ) => Effect.Effect<sns.VerifySMSSandboxPhoneNumberResult, sns.VerifySMSSandboxPhoneNumberError>
   >
 > {}
 
-export const VerifySMSSandboxPhoneNumber =
-  Binding.Service<VerifySMSSandboxPhoneNumber>(
-    "AWS.SNS.VerifySMSSandboxPhoneNumber",
-  );
+export const VerifySMSSandboxPhoneNumber = Binding.Service<VerifySMSSandboxPhoneNumber>(
+  "AWS.SNS.VerifySMSSandboxPhoneNumber",
+);

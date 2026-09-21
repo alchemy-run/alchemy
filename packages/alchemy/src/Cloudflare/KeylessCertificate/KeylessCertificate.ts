@@ -2,7 +2,6 @@ import * as keylessCertificates from "@distilled.cloud/cloudflare/keyless-certif
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -133,13 +132,7 @@ export interface Attributes {
   tunnel: { privateIp: string; vnetId: string } | undefined;
 }
 
-export type KeylessCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type KeylessCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A zone-level Keyless SSL configuration — serve TLS for a certificate whose
@@ -222,9 +215,7 @@ export const KeylessCertificate = Resource<KeylessCertificate>(TypeId, {
 /**
  * Returns true if the given value is a KeylessCertificate resource.
  */
-export const isKeylessCertificate = (
-  value: unknown,
-): value is KeylessCertificate =>
+export const isKeylessCertificate = (value: unknown): value is KeylessCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const KeylessCertificateProvider = () =>
@@ -242,25 +233,20 @@ export const KeylessCertificateProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          keylessCertificates.listKeylessCertificates
-            .pages({ zoneId: zone.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter((keyless) => keyless.status !== "deleted")
-                    .map((keyless) =>
-                      toAttributes(
-                        { ...keyless, permissions: [...keyless.permissions] },
-                        zone.id,
-                      ),
-                    ),
-                ),
+          keylessCertificates.listKeylessCertificates.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((keyless) => keyless.status !== "deleted")
+                  .map((keyless) =>
+                    toAttributes({ ...keyless, permissions: [...keyless.permissions] }, zone.id),
+                  ),
               ),
-              // Non-entitled / plan-gated zones reject Keyless SSL listing.
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
+            // Non-entitled / plan-gated zones reject Keyless SSL listing.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -276,10 +262,7 @@ export const KeylessCertificateProvider = () =>
         return { action: "replace" } as const;
       }
       // bundleMethod is create-only.
-      if (
-        (olds.bundleMethod ?? "ubiquitous") !==
-        (news.bundleMethod ?? "ubiquitous")
-      ) {
+      if ((olds.bundleMethod ?? "ubiquitous") !== (news.bundleMethod ?? "ubiquitous")) {
         return { action: "replace" } as const;
       }
       // The PATCH API can set a tunnel but cannot clear one — removing it
@@ -305,10 +288,7 @@ export const KeylessCertificateProvider = () =>
       // Owned path: refresh by our persisted identifier. Cloudflare keeps a
       // tombstone with status "deleted" for a while — report it as gone.
       if (output?.keylessCertificateId) {
-        const observed = yield* getKeylessCertificate(
-          zoneId,
-          output.keylessCertificateId,
-        );
+        const observed = yield* getKeylessCertificate(zoneId, output.keylessCertificateId);
         return observed ? toAttributes(observed, zoneId) : undefined;
       }
 
@@ -369,8 +349,7 @@ export const KeylessCertificateProvider = () =>
         observed.host !== desired.host ||
         observed.port !== desired.port ||
         (news.enabled !== undefined && observed.enabled !== news.enabled) ||
-        (desiredTunnel !== undefined &&
-          !sameTunnel(observed.tunnel ?? undefined, desiredTunnel));
+        (desiredTunnel !== undefined && !sameTunnel(observed.tunnel ?? undefined, desiredTunnel));
 
       if (dirty) {
         observed = yield* keylessCertificates.patchKeylessCertificate({
@@ -409,16 +388,12 @@ type ObservedKeyless = keylessCertificates.GetKeylessCertificateResponse;
  * missing Keyless SSL") and the "deleted" tombstone status to `undefined`.
  */
 const getKeylessCertificate = (zoneId: string, keylessCertificateId: string) =>
-  keylessCertificates
-    .getKeylessCertificate({ zoneId, keylessCertificateId })
-    .pipe(
-      Effect.map((observed): ObservedKeyless | undefined =>
-        observed.status === "deleted" ? undefined : observed,
-      ),
-      Effect.catchTag("KeylessCertificateNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  keylessCertificates.getKeylessCertificate({ zoneId, keylessCertificateId }).pipe(
+    Effect.map((observed): ObservedKeyless | undefined =>
+      observed.status === "deleted" ? undefined : observed,
+    ),
+    Effect.catchTag("KeylessCertificateNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a non-deleted Keyless SSL configuration by exact name. Names are not
@@ -427,9 +402,7 @@ const getKeylessCertificate = (zoneId: string, keylessCertificateId: string) =>
  */
 const findByName = (zoneId: string, name: string) =>
   keylessCertificates.listKeylessCertificates.items({ zoneId }).pipe(
-    Stream.filter(
-      (keyless) => keyless.name === name && keyless.status !== "deleted",
-    ),
+    Stream.filter((keyless) => keyless.name === name && keyless.status !== "deleted"),
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
@@ -475,10 +448,7 @@ const sameTunnel = (
   observed.privateIp === desired.privateIp &&
   observed.vnetId === desired.vnetId;
 
-const toAttributes = (
-  keyless: ObservedKeyless,
-  zoneId: string,
-): Attributes => ({
+const toAttributes = (keyless: ObservedKeyless, zoneId: string): Attributes => ({
   keylessCertificateId: keyless.id,
   zoneId,
   name: keyless.name,

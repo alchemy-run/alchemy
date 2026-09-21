@@ -1,14 +1,14 @@
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { ScalableTarget, ScalingPolicy } from "@/AWS/ApplicationAutoScaling";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
-import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { reclaimTaskDefinitionFamily } from "../ECS/reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -101,9 +101,7 @@ test.provider(
                 AdjustmentType: "ChangeInCapacity",
                 Cooldown: 60,
                 MetricAggregationType: "Average",
-                StepAdjustments: [
-                  { MetricIntervalLowerBound: 0, ScalingAdjustment: 1 },
-                ],
+                StepAdjustments: [{ MetricIntervalLowerBound: 0, ScalingAdjustment: 1 }],
               },
             });
             return {
@@ -119,9 +117,7 @@ test.provider(
         );
 
       const created = yield* deploy(50);
-      expect(created.resourceId).toEqual(
-        `service/${clusterName}/${created.serviceName}`,
-      );
+      expect(created.resourceId).toEqual(`service/${clusterName}/${created.serviceName}`);
       expect(created.scalableTargetArn).toContain("scalable-target/");
 
       // Out-of-band: the DesiredCount dimension is registered min 1 / max 3.
@@ -142,9 +138,7 @@ test.provider(
       });
       const observedPolicy = policies.ScalingPolicies?.[0];
       expect(observedPolicy?.PolicyType).toBe("TargetTrackingScaling");
-      expect(
-        observedPolicy?.TargetTrackingScalingPolicyConfiguration?.TargetValue,
-      ).toBe(50);
+      expect(observedPolicy?.TargetTrackingScalingPolicyConfiguration?.TargetValue).toBe(50);
       expect((observedPolicy?.Alarms ?? []).length).toBeGreaterThan(0);
 
       // Out-of-band: the step scaling policy exists with its adjustments.
@@ -156,9 +150,9 @@ test.provider(
       });
       const observedStepPolicy = stepPolicies.ScalingPolicies?.[0];
       expect(observedStepPolicy?.PolicyType).toBe("StepScaling");
-      expect(
-        observedStepPolicy?.StepScalingPolicyConfiguration?.StepAdjustments,
-      ).toEqual([{ MetricIntervalLowerBound: 0, ScalingAdjustment: 1 }]);
+      expect(observedStepPolicy?.StepScalingPolicyConfiguration?.StepAdjustments).toEqual([
+        { MetricIntervalLowerBound: 0, ScalingAdjustment: 1 },
+      ]);
 
       // Update the policy target in place — same policy ARN.
       const updated = yield* deploy(30);
@@ -169,8 +163,8 @@ test.provider(
         ResourceId: created.resourceId,
       });
       expect(
-        policiesAfterUpdate.ScalingPolicies?.[0]
-          ?.TargetTrackingScalingPolicyConfiguration?.TargetValue,
+        policiesAfterUpdate.ScalingPolicies?.[0]?.TargetTrackingScalingPolicyConfiguration
+          ?.TargetValue,
       ).toBe(30);
 
       // Destroy in dependency order and verify deregistration out-of-band.

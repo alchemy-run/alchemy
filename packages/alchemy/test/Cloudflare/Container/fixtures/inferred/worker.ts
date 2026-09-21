@@ -1,5 +1,5 @@
-import type * as Cloudflare from "@/Cloudflare";
 import { Container, getContainer } from "@cloudflare/containers";
+import type * as Cloudflare from "@/Cloudflare";
 import type { InferredClassWorker } from "./stack.ts";
 
 /**
@@ -25,8 +25,7 @@ export default {
       const binding = env.Probe as unknown;
       return Response.json({
         kind:
-          typeof (binding as { idFromName?: unknown } | null)?.idFromName ===
-          "function"
+          typeof (binding as { idFromName?: unknown } | null)?.idFromName === "function"
             ? "durable_object_namespace"
             : JSON.stringify(binding),
       });

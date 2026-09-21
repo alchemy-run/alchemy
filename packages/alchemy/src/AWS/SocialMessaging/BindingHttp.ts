@@ -24,12 +24,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * Flows): the deploy-time half grants `actions` on the WABA ARN and the
  * runtime half injects the linked account id into every request as `id`.
  */
-export const makeWabaScopedHttpBinding = <
-  I extends { id: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SocialMessaging.ListWhatsAppMessageTemplates`. */
   tag: string;
   /** The distilled operation; `id` is injected from the linked account. */
@@ -57,9 +52,7 @@ export const makeWabaScopedHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (
-        request?: Omit<I, "id">,
-      ) {
+      return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (request?: Omit<I, "id">) {
         return yield* op({ ...request, id: yield* AccountId } as I);
       });
     });
@@ -99,9 +92,7 @@ export const makeWabaPhonePlaneHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

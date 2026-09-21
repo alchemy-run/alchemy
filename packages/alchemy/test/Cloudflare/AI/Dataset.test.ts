@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const GATEWAY_ID = "alchemy-test-aigw-dataset";
 const GATEWAY_ID_B = "alchemy-test-aigw-dataset-b";
@@ -28,10 +25,7 @@ const expectGone = (accountId: string, gatewayId: string, datasetId: string) =>
     Effect.flatMap(() => Effect.fail(new DatasetStillExists())),
     Effect.retry({
       while: (e): e is DatasetStillExists => e instanceof DatasetStillExists,
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("DatasetNotFound", () => Effect.void),
   );
@@ -66,9 +60,7 @@ describe.sequential("AiGatewayDataset", () => {
       expect(initial.dataset.gatewayId).toEqual(GATEWAY_ID);
       expect(initial.dataset.name).toEqual("alchemy-test-dataset");
       expect(initial.dataset.enable).toBe(true);
-      expect(initial.dataset.filters).toEqual([
-        { key: "success", operator: "eq", value: [true] },
-      ]);
+      expect(initial.dataset.filters).toEqual([{ key: "success", operator: "eq", value: [true] }]);
 
       // Verify out-of-band via the API.
       const live = yield* aiGateway.getDataset({
@@ -78,9 +70,7 @@ describe.sequential("AiGatewayDataset", () => {
       });
       expect(live.name).toEqual("alchemy-test-dataset");
       expect(live.enable).toBe(true);
-      expect(live.filters).toEqual([
-        { key: "success", operator: "eq", value: [true] },
-      ]);
+      expect(live.filters).toEqual([{ key: "success", operator: "eq", value: [true] }]);
 
       // Update mutable props in place — same dataset id.
       const updated = yield* stack.deploy(
@@ -279,9 +269,7 @@ describe.sequential("AiGatewayDataset", () => {
       const provider = yield* Provider.findProvider(Cloudflare.AI.Dataset);
       const all = yield* provider.list();
 
-      expect(all.some((d) => d.datasetId === deployed.dataset.datasetId)).toBe(
-        true,
-      );
+      expect(all.some((d) => d.datasetId === deployed.dataset.datasetId)).toBe(true);
 
       yield* stack.destroy();
 

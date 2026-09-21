@@ -109,14 +109,10 @@ export interface ResourceShare extends Resource<
 export const ResourceShare = Resource<ResourceShare>("AWS.RAM.ResourceShare");
 
 const toName = (id: string, props: { shareName?: string } = {}) =>
-  props.shareName
-    ? Effect.succeed(props.shareName)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.shareName ? Effect.succeed(props.shareName) : createPhysicalName({ id, maxLength: 128 });
 
 /** RAM's inline `{ key, value }` tag list → a plain `Record`. */
-const tagsToRecord = (
-  tags: readonly ram.Tag[] | undefined,
-): Record<string, string> => {
+const tagsToRecord = (tags: readonly ram.Tag[] | undefined): Record<string, string> => {
   const record: Record<string, string> = {};
   for (const tag of tags ?? []) {
     if (tag.key !== undefined && tag.value !== undefined) {
@@ -147,20 +143,16 @@ const readByArn = Effect.fn(function* (arn: string) {
       Effect.map((r) => r.resourceShares ?? []),
       Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
     );
-  const share = shares.find(
-    (s) => s.resourceShareArn === arn && isLive(s.status),
-  );
+  const share = shares.find((s) => s.resourceShareArn === arn && isLive(s.status));
   return share ? toAttrs(share) : undefined;
 });
 
 /** Find a live share owned by us with the given name. */
 const readByName = Effect.fn(function* (name: string) {
-  const shares = yield* ram
-    .getResourceShares({ resourceOwner: "SELF", name })
-    .pipe(
-      Effect.map((r) => r.resourceShares ?? []),
-      Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
-    );
+  const shares = yield* ram.getResourceShares({ resourceOwner: "SELF", name }).pipe(
+    Effect.map((r) => r.resourceShares ?? []),
+    Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
+  );
   const share = shares.find((s) => s.name === name && isLive(s.status));
   return share ? toAttrs(share) : undefined;
 });
@@ -178,9 +170,7 @@ const readAssociations = Effect.fn(function* (
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) =>
-        Array.fromIterable(chunk).flatMap(
-          (page) => page.resourceShareAssociations ?? [],
-        ),
+        Array.fromIterable(chunk).flatMap((page) => page.resourceShareAssociations ?? []),
       ),
       Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
     );
@@ -201,10 +191,7 @@ export const ResourceShareProvider = () =>
           // permissionArns are fixed at creation; changing the set replaces.
           const oldPerms = [...(olds?.permissionArns ?? [])].sort();
           const newPerms = [...(news.permissionArns ?? [])].sort();
-          if (
-            oldPerms.length !== newPerms.length ||
-            oldPerms.some((p, i) => p !== newPerms[i])
-          ) {
+          if (oldPerms.length !== newPerms.length || oldPerms.some((p, i) => p !== newPerms[i])) {
             return { action: "replace" } as const;
           }
         }),
@@ -216,9 +203,7 @@ export const ResourceShareProvider = () =>
                 .flatMap((page) => page.resourceShares ?? [])
                 .filter(
                   (s) =>
-                    isLive(s.status) &&
-                    s.resourceShareArn !== undefined &&
-                    s.name !== undefined,
+                    isLive(s.status) && s.resourceShareArn !== undefined && s.name !== undefined,
                 )
                 .map(toAttrs),
             ),
@@ -228,9 +213,7 @@ export const ResourceShareProvider = () =>
             ? yield* readByArn(output.resourceShareArn)
             : yield* readByName(yield* toName(id, olds ?? {}));
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -255,10 +238,8 @@ export const ResourceShareProvider = () =>
           if (!state) {
             const created = yield* ram.createResourceShare({
               name,
-              resourceArns:
-                desiredResources.length > 0 ? desiredResources : undefined,
-              principals:
-                desiredPrincipals.length > 0 ? desiredPrincipals : undefined,
+              resourceArns: desiredResources.length > 0 ? desiredResources : undefined,
+              principals: desiredPrincipals.length > 0 ? desiredPrincipals : undefined,
               sources: desiredSources.length > 0 ? desiredSources : undefined,
               allowExternalPrincipals: news.allowExternalPrincipals,
               permissionArns:
@@ -297,35 +278,25 @@ export const ResourceShareProvider = () =>
           const currentPrincipals = yield* readAssociations(arn, "PRINCIPAL");
           const currentResources = yield* readAssociations(arn, "RESOURCE");
 
-          const principalsToAdd = desiredPrincipals.filter(
-            (p) => !currentPrincipals.includes(p),
-          );
+          const principalsToAdd = desiredPrincipals.filter((p) => !currentPrincipals.includes(p));
           const principalsToRemove = currentPrincipals.filter(
             (p) => !desiredPrincipals.includes(p),
           );
-          const resourcesToAdd = desiredResources.filter(
-            (r) => !currentResources.includes(r),
-          );
-          const resourcesToRemove = currentResources.filter(
-            (r) => !desiredResources.includes(r),
-          );
+          const resourcesToAdd = desiredResources.filter((r) => !currentResources.includes(r));
+          const resourcesToRemove = currentResources.filter((r) => !desiredResources.includes(r));
 
           if (principalsToAdd.length > 0 || resourcesToAdd.length > 0) {
             yield* ram.associateResourceShare({
               resourceShareArn: arn,
-              principals:
-                principalsToAdd.length > 0 ? principalsToAdd : undefined,
-              resourceArns:
-                resourcesToAdd.length > 0 ? resourcesToAdd : undefined,
+              principals: principalsToAdd.length > 0 ? principalsToAdd : undefined,
+              resourceArns: resourcesToAdd.length > 0 ? resourcesToAdd : undefined,
             });
           }
           if (principalsToRemove.length > 0 || resourcesToRemove.length > 0) {
             yield* ram.disassociateResourceShare({
               resourceShareArn: arn,
-              principals:
-                principalsToRemove.length > 0 ? principalsToRemove : undefined,
-              resourceArns:
-                resourcesToRemove.length > 0 ? resourcesToRemove : undefined,
+              principals: principalsToRemove.length > 0 ? principalsToRemove : undefined,
+              resourceArns: resourcesToRemove.length > 0 ? resourcesToRemove : undefined,
             });
           }
 
@@ -357,10 +328,7 @@ export const ResourceShareProvider = () =>
             .pipe(
               Effect.catchTag("UnknownResourceException", () => Effect.void),
               // Already transitioning to DELETED from a prior attempt.
-              Effect.catchTag(
-                "InvalidStateTransitionException",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidStateTransitionException", () => Effect.void),
             );
         }),
       };

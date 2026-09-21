@@ -19,12 +19,7 @@ import { keyLabel, keyPolicyStatement, type KeyLike } from "./KeyBinding.ts";
  * (exact key ARN, or `Resource: "*"` + `kms:RequestAlias` for an alias), and
  * the runtime half injects the key identifier into every request.
  */
-export const makeKmsKeyHttpBinding = <
-  I extends { KeyId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeKmsKeyHttpBinding = <I extends { KeyId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.KMS.Sign`. */
   tag: string;
   /** The distilled operation. */
@@ -36,8 +31,7 @@ export const makeKmsKeyHttpBinding = <
     const op = yield* options.operation;
 
     return Effect.fn(function* (key: KeyLike) {
-      const KeyId =
-        typeof key === "string" ? Effect.succeed(key) : yield* key.keyId;
+      const KeyId = typeof key === "string" ? Effect.succeed(key) : yield* key.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -46,9 +40,7 @@ export const makeKmsKeyHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${keyLabel(key)})`)(function* (
-        request?: Omit<I, "KeyId">,
-      ) {
+      return Effect.fn(`${options.tag}(${keyLabel(key)})`)(function* (request?: Omit<I, "KeyId">) {
         const keyId = yield* KeyId;
         return yield* op({ ...request, KeyId: keyId } as I);
       });

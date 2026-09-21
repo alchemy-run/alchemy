@@ -1,17 +1,15 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Macie2 from "@/AWS/Macie2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Macie2 from "@/AWS/Macie2";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class Macie2TestFunction extends Lambda.Function<Lambda.Function>()(
-  "Macie2TestFunction",
-) {}
+export class Macie2TestFunction extends Lambda.Function<Lambda.Function>()("Macie2TestFunction") {}
 
 /**
  * Routes answer `{ …fields }` on success or `{ errorTag }` when the operation
@@ -27,9 +25,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -66,8 +62,7 @@ export default Macie2TestFunction.make(
     const searchResources = yield* Macie2.SearchResources();
 
     // Identifiers & lists
-    const listManagedDataIdentifiers =
-      yield* Macie2.ListManagedDataIdentifiers();
+    const listManagedDataIdentifiers = yield* Macie2.ListManagedDataIdentifiers();
     const testCustomDataIdentifier = yield* Macie2.TestCustomDataIdentifier();
     const listAllowLists = yield* Macie2.ListAllowLists();
     const listFindingsFilters = yield* Macie2.ListFindingsFilters();
@@ -79,8 +74,7 @@ export default Macie2TestFunction.make(
     const getUsageTotals = yield* Macie2.GetUsageTotals();
 
     // Automated discovery & reveal
-    const getAutomatedDiscoveryConfiguration =
-      yield* Macie2.GetAutomatedDiscoveryConfiguration();
+    const getAutomatedDiscoveryConfiguration = yield* Macie2.GetAutomatedDiscoveryConfiguration();
     const listClassificationScopes = yield* Macie2.ListClassificationScopes();
     const getRevealConfiguration = yield* Macie2.GetRevealConfiguration();
 
@@ -89,10 +83,8 @@ export default Macie2TestFunction.make(
     const getInvitationsCount = yield* Macie2.GetInvitationsCount();
     const listInvitations = yield* Macie2.ListInvitations();
     const listMembers = yield* Macie2.ListMembers();
-    const listOrganizationAdminAccounts =
-      yield* Macie2.ListOrganizationAdminAccounts();
-    const describeOrganizationConfiguration =
-      yield* Macie2.DescribeOrganizationConfiguration();
+    const listOrganizationAdminAccounts = yield* Macie2.ListOrganizationAdminAccounts();
+    const describeOrganizationConfiguration = yield* Macie2.DescribeOrganizationConfiguration();
 
     const bound = {
       createSampleFindings,
@@ -147,10 +139,7 @@ export default Macie2TestFunction.make(
         if (request.method === "GET" && pathname === "/finding-detail") {
           const id = url.searchParams.get("id");
           if (!id) {
-            return yield* HttpServerResponse.json(
-              { error: "missing id" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing id" }, { status: 400 });
           }
           const { findings } = yield* getFindings({ findingIds: [id] });
           return yield* HttpServerResponse.json({
@@ -238,8 +227,7 @@ export default Macie2TestFunction.make(
 
         // A fresh session has no export configuration — an empty document.
         if (request.method === "GET" && pathname === "/export-config") {
-          const { configuration } =
-            yield* getClassificationExportConfiguration();
+          const { configuration } = yield* getClassificationExportConfiguration();
           return yield* HttpServerResponse.json({
             configured: configuration?.s3Destination !== undefined,
           });
@@ -345,8 +333,7 @@ export default Macie2TestFunction.make(
             {
               errorTag: (e as { _tag?: string })._tag ?? "UnknownError",
               errorMessage:
-                (e as { message?: string }).message ??
-                (e as { Message?: string }).Message,
+                (e as { message?: string }).message ?? (e as { Message?: string }).Message,
             },
             { status: 500 },
           ),

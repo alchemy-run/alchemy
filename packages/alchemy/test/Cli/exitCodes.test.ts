@@ -1,11 +1,11 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as FileSystem from "effect/FileSystem";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 
@@ -70,9 +70,7 @@ describe("CLI exit codes", () => {
     Effect.gen(function* () {
       const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);
       expect(exitCode).toBe(1);
-      expect(stderr).toContain(
-        "Stack entrypoint 'alchemy.run.ts' does not exist",
-      );
+      expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
       expect(stderr).not.toContain("PlatformError");
       expect(stderr).not.toContain("at Effect.fn");
     }),
@@ -82,14 +80,9 @@ describe("CLI exit codes", () => {
     "dev without a stack entrypoint reports it and exits 1 under node",
     () =>
       Effect.gen(function* () {
-        const { stderr, exitCode } = yield* runInEmptyProject(
-          ["dev"],
-          nodePath!,
-        );
+        const { stderr, exitCode } = yield* runInEmptyProject(["dev"], nodePath!);
         expect(exitCode).toBe(1);
-        expect(stderr).toContain(
-          "Stack entrypoint 'alchemy.run.ts' does not exist",
-        );
+        expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
         expect(stderr).not.toContain("PlatformError");
       }),
   );
@@ -188,17 +181,9 @@ describe("CLI exit codes", () => {
   it.live("provider check-env accepts an explicit profile", () =>
     Effect.gen(function* () {
       expect(
-        yield* exitCodeOf(
-          [
-            "provider",
-            "check-env",
-            "--profile",
-            "default",
-            "--provider",
-            "neon",
-          ],
-          { NEON_API_KEY: "napi_test_key" },
-        ),
+        yield* exitCodeOf(["provider", "check-env", "--profile", "default", "--provider", "neon"], {
+          NEON_API_KEY: "napi_test_key",
+        }),
       ).toBe(0);
     }),
   );

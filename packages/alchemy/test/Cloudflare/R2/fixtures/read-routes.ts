@@ -1,6 +1,6 @@
-import type { ReadBucketClient } from "@/Cloudflare/R2/ReadBucket.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { ReadBucketClient } from "@/Cloudflare/R2/ReadBucket.ts";
 
 /**
  * Shared read-side routes exercised by both the binding and HTTP fixtures so
@@ -26,9 +26,7 @@ export const readRoutes = (r2: ReadBucketClient, url: URL) =>
     }
     if (url.pathname === "/list") {
       const prefix = url.searchParams.get("prefix") ?? undefined;
-      const result = yield* r2
-        .list(prefix ? { prefix } : undefined)
-        .pipe(Effect.orDie);
+      const result = yield* r2.list(prefix ? { prefix } : undefined).pipe(Effect.orDie);
       return yield* HttpServerResponse.json({
         keys: result.objects.map((o) => o.key),
       });

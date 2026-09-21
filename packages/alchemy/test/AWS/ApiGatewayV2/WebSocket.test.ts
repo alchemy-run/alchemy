@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -7,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import WebSocket from "ws";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import WebSocketTestFunctionLive, { WebSocketTestFunction } from "./ws-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -63,11 +63,7 @@ const wsSendAndReceive = (url: string, message: string) =>
       settle(Effect.fail(new WebSocketFailure({ reason: String(error) }))),
     );
     socket.on("close", (code) =>
-      settle(
-        Effect.fail(
-          new WebSocketFailure({ reason: `closed before echo (${code})` }),
-        ),
-      ),
+      settle(Effect.fail(new WebSocketFailure({ reason: `closed before echo (${code})` }))),
     );
   });
 
@@ -79,9 +75,7 @@ test.provider(
 
       const fn = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* WebSocketTestFunction.pipe(
-            Effect.provide(WebSocketTestFunctionLive),
-          );
+          return yield* WebSocketTestFunction.pipe(Effect.provide(WebSocketTestFunctionLive));
         }),
       );
       expect(fn.functionUrl).toBeTruthy();
@@ -149,10 +143,7 @@ test.provider(
       const second = yield* wsSendAndReceive(wsUrl, "again").pipe(
         Effect.timeout(Duration.seconds(15)),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential("1 second"),
-            Schedule.recurs(3),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(3)]),
         }),
       );
       expect(second).toBe("echo:again");

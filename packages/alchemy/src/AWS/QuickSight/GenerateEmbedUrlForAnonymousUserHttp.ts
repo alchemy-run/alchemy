@@ -12,15 +12,10 @@ export const GenerateEmbedUrlForAnonymousUserHttp = Layer.effect(
     tag: "AWS.QuickSight.GenerateEmbedUrlForAnonymousUser",
     operation: quicksight.generateEmbedUrlForAnonymousUser,
     actions: ["quicksight:GenerateEmbedUrlForAnonymousUser"],
-    applyDefaults: (
-      request: GenerateEmbedUrlForAnonymousUserRequest | undefined,
-      dashboard,
-    ) => ({
+    applyDefaults: (request: GenerateEmbedUrlForAnonymousUserRequest | undefined, dashboard) => ({
       ...request,
       Namespace: request?.Namespace ?? "default",
-      AuthorizedResourceArns: request?.AuthorizedResourceArns ?? [
-        dashboard.arn,
-      ],
+      AuthorizedResourceArns: request?.AuthorizedResourceArns ?? [dashboard.arn],
       ExperienceConfiguration: request?.ExperienceConfiguration ?? {
         Dashboard: { InitialDashboardId: dashboard.dashboardId },
       },

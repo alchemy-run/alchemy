@@ -27,6 +27,4 @@ export interface DescribeStep extends Binding.Service<
     ) => Effect.Effect<SVC.DescribeStepOutput, SVC.DescribeStepError>
   >
 > {}
-export const DescribeStep = Binding.Service<DescribeStep>(
-  "AWS.EMR.DescribeStep",
-);
+export const DescribeStep = Binding.Service<DescribeStep>("AWS.EMR.DescribeStep");

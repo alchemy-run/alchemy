@@ -1,7 +1,7 @@
-import { Docker } from "@/Docker/Docker.ts";
-import { Stage } from "@/Stage.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Docker } from "@/Docker/Docker.ts";
+import { Stage } from "@/Stage.ts";
 
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>
@@ -10,14 +10,7 @@ export const withBuilder =
       const name = `${prefix}-${yield* Stage}`;
       const docker = yield* Docker;
       return yield* Effect.acquireUseRelease(
-        docker.run([
-          "buildx",
-          "create",
-          "--name",
-          name,
-          "--driver",
-          "docker-container",
-        ]),
+        docker.run(["buildx", "create", "--name", name, "--driver", "docker-container"]),
         () =>
           Effect.acquireUseRelease(
             Effect.sync(() => {
@@ -26,25 +19,17 @@ export const withBuilder =
                 attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
               };
               process.env.BUILDX_BUILDER = name;
-              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(
-                options?.attestations === false,
-              );
+              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(options?.attestations === false);
               return previous;
             }),
-            () =>
-              docker
-                .run(["buildx", "inspect", "--bootstrap"])
-                .pipe(Effect.andThen(effect)),
+            () => docker.run(["buildx", "inspect", "--bootstrap"]).pipe(Effect.andThen(effect)),
             (previous) =>
               Effect.sync(() => {
-                if (previous.builder === undefined)
-                  delete process.env.BUILDX_BUILDER;
+                if (previous.builder === undefined) delete process.env.BUILDX_BUILDER;
                 else process.env.BUILDX_BUILDER = previous.builder;
                 if (previous.attestations === undefined)
                   delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
-                else
-                  process.env.BUILDX_NO_DEFAULT_ATTESTATIONS =
-                    previous.attestations;
+                else process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = previous.attestations;
               }),
           ),
         () => docker.run(["buildx", "rm", "--force", name]).pipe(Effect.orDie),
@@ -71,15 +56,8 @@ const decodeBuild = Schema.Struct({
 
 export const buildHistory = Effect.gen(function* () {
   const docker = yield* Docker;
-  const history = yield* docker.run([
-    "buildx",
-    "history",
-    "ls",
-    "--format",
-    "json",
-  ]);
-  return yield* Effect.forEach(
-    history.stdout.split("\n").filter(Boolean),
-    (line) => decodeBuild(line),
+  const history = yield* docker.run(["buildx", "history", "ls", "--format", "json"]);
+  return yield* Effect.forEach(history.stdout.split("\n").filter(Boolean), (line) =>
+    decodeBuild(line),
   );
 });

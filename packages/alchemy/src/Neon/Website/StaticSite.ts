@@ -76,14 +76,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const local = context.dev && remote !== true;
     const cwd = props.cwd ?? props.rootDir;
     if (props.project !== undefined && props.branch !== undefined) {
-      return yield* Effect.die(
-        new Error("Specify branch or project, never both."),
-      );
+      return yield* Effect.die(new Error("Specify branch or project, never both."));
     }
     if (props.spa && props.errorPage !== undefined) {
-      return yield* Effect.die(
-        new Error("StaticSite spa and errorPage are mutually exclusive."),
-      );
+      return yield* Effect.die(new Error("StaticSite spa and errorPage are mutually exclusive."));
     }
     if (local && props.dev !== undefined) {
       const dev = yield* Command.Dev("Dev", {

@@ -33,15 +33,10 @@ export interface RetrievePaymentMethodDomain extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrievePaymentMethodDomainRequest,
-    ) => Effect.Effect<
-      StripePaymentMethodDomain,
-      GetPaymentMethodDomainError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripePaymentMethodDomain, GetPaymentMethodDomainError, RuntimeContext>
   >
 > {}
 
-export const RetrievePaymentMethodDomain =
-  Binding.Service<RetrievePaymentMethodDomain>(
-    "Stripe.RetrievePaymentMethodDomain",
-  );
+export const RetrievePaymentMethodDomain = Binding.Service<RetrievePaymentMethodDomain>(
+  "Stripe.RetrievePaymentMethodDomain",
+);

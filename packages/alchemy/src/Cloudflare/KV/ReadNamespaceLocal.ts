@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeReadKVClient } from "./ReadNamespaceBinding.ts";
 import { makeLocalKVNamespaceBinding } from "./NamespaceLocal.ts";
 import { ReadNamespace } from "./ReadNamespace.ts";
+import { makeReadKVClient } from "./ReadNamespaceBinding.ts";
 import { makeReadKVHttpClient } from "./ReadNamespaceHttp.ts";
 
 /**

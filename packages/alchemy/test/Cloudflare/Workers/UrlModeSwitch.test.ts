@@ -1,3 +1,5 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 /**
  * Repro for the workers.dev URL regression under `alchemy dev`:
  * a Worker previously deployed live (stamped `providerMode: "live"`) is
@@ -9,8 +11,6 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { inDev } from "../../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -97,8 +97,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 test.provider(
   "worker.url with a custom domain resolves to localhost after live → local",

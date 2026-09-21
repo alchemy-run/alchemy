@@ -53,9 +53,7 @@ export interface ConnectReplicationGroup extends Binding.Service<
   (
     group: ReplicationGroup,
     options?: ConnectReplicationGroupOptions,
-  ) => Effect.Effect<
-    Effect.Effect<ReplicationGroupConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ReplicationGroupConnectionInfo, never, RuntimeContext>>
 > {}
 export const ConnectReplicationGroup = Binding.Service<ConnectReplicationGroup>(
   "AWS.ElastiCache.ConnectReplicationGroup",

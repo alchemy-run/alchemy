@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,10 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import CloudWatchTestFunctionLive, {
-  CloudWatchTestFunction,
-  METRIC_NAME,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import CloudWatchTestFunctionLive, { CloudWatchTestFunction, METRIC_NAME } from "./handler";
 
 // Runtime binding coverage for every CloudWatch capability that can be
 // exercised against fixture-deployable resources. Two bindings have no
@@ -34,10 +31,7 @@ const sharedStack = Core.scratchStack(testOptions, "CloudWatchBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let fixtureFunctionName: string | undefined;
@@ -57,38 +51,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe("CloudWatch Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "CloudWatch test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("CloudWatch test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("CloudWatch test setup: deploying fixture");
@@ -102,9 +85,7 @@ describe("CloudWatch Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       fixtureFunctionName = functionName;
 
-      yield* Effect.logInfo(
-        `CloudWatch test setup: probing readiness at ${baseUrl}/health`,
-      );
+      yield* Effect.logInfo(`CloudWatch test setup: probing readiness at ${baseUrl}/health`);
       yield* HttpClient.get(`${baseUrl}/health`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -128,9 +109,7 @@ describe("CloudWatch Bindings", () => {
         const gone = yield* Core.withProviders(
           lambda.getFunction({ FunctionName: fixtureFunctionName }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           ),
           testOptions,
           "CloudWatchBindings",
@@ -260,10 +239,7 @@ describe("CloudWatch Bindings", () => {
         if (response.ok) {
           expect(Array.isArray(response.contributors)).toBe(true);
         } else {
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.error);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.error);
         }
       }),
     );

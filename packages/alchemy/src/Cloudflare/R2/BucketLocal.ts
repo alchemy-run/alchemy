@@ -37,9 +37,7 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
     // providers layer). Capture the full context so each op can be run with the
     // current credentials.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services and the Cloudflare
     // environment, all present during stack-eval but not statically

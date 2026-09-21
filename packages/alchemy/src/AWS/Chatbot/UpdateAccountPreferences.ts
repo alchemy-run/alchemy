@@ -32,7 +32,6 @@ export interface UpdateAccountPreferences extends Binding.Service<
   >
 > {}
 
-export const UpdateAccountPreferences =
-  Binding.Service<UpdateAccountPreferences>(
-    "AWS.Chatbot.UpdateAccountPreferences",
-  );
+export const UpdateAccountPreferences = Binding.Service<UpdateAccountPreferences>(
+  "AWS.Chatbot.UpdateAccountPreferences",
+);

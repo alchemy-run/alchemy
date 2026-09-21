@@ -43,9 +43,7 @@ export interface WriteBucketClient {
    * Delete one key or a list of keys. Deleting a key that does not exist
    * succeeds.
    */
-  delete(
-    keys: string | string[],
-  ): Effect.Effect<void, BucketError, RuntimeContext>;
+  delete(keys: string | string[]): Effect.Effect<void, BucketError, RuntimeContext>;
   /**
    * Mint a presigned upload URL, so a browser can write the object without
    * credentials. Pure client-side SigV4 — no request is made to the store.
@@ -106,9 +104,7 @@ export const WriteBucket = Binding.Service<WriteBucket>("Prisma.WriteBucket");
  * Build the write operations over an already-resolved transport. Shared with
  * {@link ReadWriteBucket} so both levels run the same code.
  */
-export const writeBucketOperations = (
-  access: BucketAccess,
-): WriteBucketClient => ({
+export const writeBucketOperations = (access: BucketAccess): WriteBucketClient => ({
   put: (key: string, value: BucketBody, options?: PutOptions) =>
     access.bucketName.pipe(
       Effect.flatMap((Bucket) =>
@@ -162,9 +158,8 @@ export const writeBucketOperations = (
 /**
  * Build a write-only bucket client from a bound bucket key's credentials.
  */
-export const makeWriteBucketClient = (
-  credentials: BucketCredentials,
-): WriteBucketClient => writeBucketOperations(makeBucketAccess(credentials));
+export const makeWriteBucketClient = (credentials: BucketCredentials): WriteBucketClient =>
+  writeBucketOperations(makeBucketAccess(credentials));
 
 /**
  * Implementation layer for {@link WriteBucket}. Provide it on the host

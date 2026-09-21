@@ -1,6 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,23 +7,16 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-
 import { HttpServerResponse } from "effect/unstable/http";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
-import type {
-  DurableObjectExport,
-  DurableObjectShape,
-} from "./DurableObject.ts";
-import {
-  DurableObjectState,
-  fromDurableObjectState,
-} from "./DurableObjectState.ts";
+import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
+import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
@@ -100,11 +92,7 @@ export const makeDurableObjectBridge =
                 ),
                 Effect.map((instance) => ({
                   instance,
-                  services: Context.add(
-                    services,
-                    RuntimeContext,
-                    instanceRuntimeContext,
-                  ),
+                  services: Context.add(services, RuntimeContext, instanceRuntimeContext),
                   context,
                   telemetry,
                 })),
@@ -116,8 +104,7 @@ export const makeDurableObjectBridge =
 
         return new Proxy(this, {
           get: (target, prop) => {
-            const bind = (f: any) =>
-              typeof f === "function" ? f.bind(target) : f;
+            const bind = (f: any) => (typeof f === "function" ? f.bind(target) : f);
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
             return async (...args: any[]) =>
@@ -148,10 +135,7 @@ export const makeDurableObjectBridge =
 
       async #execute(
         fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
-        onExit?: (
-          exit: Exit.Exit<any, any>,
-          scope: Scope.Closeable,
-        ) => Promise<any>,
+        onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
 
@@ -161,18 +145,13 @@ export const makeDurableObjectBridge =
           .pipe(
             Effect.provide(
               Layer.mergeAll(
-                Layer.succeed(
-                  DurableObjectState,
-                  fromDurableObjectState(this.#state),
-                ),
+                Layer.succeed(DurableObjectState, fromDurableObjectState(this.#state)),
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters, attached to the *call*
                 // scope by `buildEventTelemetry` so buffered telemetry
                 // flushes when the scope closes into `waitUntil` below (the
                 // isolate scope never finalizes on workerd).
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
+                Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),
@@ -215,10 +194,7 @@ export const makeDurableObjectBridge =
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
         return this.#execute((instance) =>
-          dispatchAlarmCallbacks(
-            this.#state,
-            instance.alarm !== undefined,
-          ).pipe(
+          dispatchAlarmCallbacks(this.#state, instance.alarm !== undefined).pipe(
             Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void),
           ),
         );
@@ -227,33 +203,21 @@ export const makeDurableObjectBridge =
       async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
         return this.#execute(
           (instance) =>
-            instance.webSocketMessage?.(fromWebSocket(ws as any), message) ??
-            Effect.void,
+            instance.webSocketMessage?.(fromWebSocket(ws as any), message) ?? Effect.void,
         );
       }
 
-      async webSocketClose(
-        ws: WebSocket,
-        code: number,
-        reason: string,
-        wasClean: boolean,
-      ) {
+      async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
         return this.#execute(
           (instance) =>
-            instance.webSocketClose?.(
-              fromWebSocket(ws as any),
-              code,
-              reason,
-              wasClean,
-            ) ?? Effect.void,
+            instance.webSocketClose?.(fromWebSocket(ws as any), code, reason, wasClean) ??
+            Effect.void,
         );
       }
 
       async webSocketError(ws: WebSocket, error: unknown) {
         return this.#execute(
-          (instance) =>
-            instance.webSocketError?.(fromWebSocket(ws as any), error) ??
-            Effect.void,
+          (instance) => instance.webSocketError?.(fromWebSocket(ws as any), error) ?? Effect.void,
         );
       }
     } as any;

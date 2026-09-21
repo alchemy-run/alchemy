@@ -35,9 +35,7 @@ const write = (file: string, content: string) => {
  * TypeScript.
  */
 const makeProject = () => {
-  const root = realpathSync(
-    mkdtempSync(path.join(os.tmpdir(), "alchemy-register-oxc-")),
-  );
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "alchemy-register-oxc-")));
   temporaryDirectories.push(root);
   const at = (file: string) => path.join(root, file);
   write(at("package.json"), '{"type":"module"}');
@@ -64,26 +62,14 @@ const makeProject = () => {
     at("node_modules/wsdep/package.json"),
     '{"name":"wsdep","type":"module","exports":{".":"./src/index.ts"}}',
   );
-  write(
-    at("node_modules/wsdep/src/index.ts"),
-    'export const fromWorkspaceDep: string = "ws";\n',
-  );
+  write(at("node_modules/wsdep/src/index.ts"), 'export const fromWorkspaceDep: string = "ws";\n');
   write(
     at("node_modules/conditional/package.json"),
     '{"name":"conditional","type":"module","exports":{".":{"bun":"./src/index.ts","import":"./lib/index.js"}}}',
   );
-  write(
-    at("node_modules/conditional/src/index.ts"),
-    'export const selected: string = "src";\n',
-  );
-  write(
-    at("node_modules/conditional/lib/index.js"),
-    'export const selected = "lib";\n',
-  );
-  write(
-    at("src/lib/helper.ts"),
-    'export const helper = (): string => "helper";\n',
-  );
+  write(at("node_modules/conditional/src/index.ts"), 'export const selected: string = "src";\n');
+  write(at("node_modules/conditional/lib/index.js"), 'export const selected = "lib";\n');
+  write(at("src/lib/helper.ts"), 'export const helper = (): string => "helper";\n');
   write(at("src/lib/helper.js"), 'export const helper = () => "emitted";\n');
   write(at("src/dir/index.ts"), 'export const index = "dir-index";\n');
   write(at("src/sub.ts"), 'export const sub = "sub";\n');
@@ -122,15 +108,9 @@ const makeProject = () => {
   return root;
 };
 
-const registerUrl = pathToFileURL(
-  path.resolve(import.meta.dir, "../src/register-oxc.ts"),
-).href;
+const registerUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/register-oxc.ts")).href;
 
-const runNode = (
-  cwd: string,
-  script: string,
-  env: Record<string, string> = {},
-) =>
+const runNode = (cwd: string, script: string, env: Record<string, string> = {}) =>
   spawnSync("node", ["--no-warnings", "--input-type=module", "-e", script], {
     cwd,
     encoding: "utf8",
@@ -192,10 +172,7 @@ describe("registerOxc", () => {
 
   it("adds configured package export conditions to project resolution", () => {
     const root = makeProject();
-    write(
-      path.join(root, "src/conditional.ts"),
-      'export { selected } from "conditional";\n',
-    );
+    write(path.join(root, "src/conditional.ts"), 'export { selected } from "conditional";\n');
     const result = runNode(
       root,
       `
@@ -258,10 +235,7 @@ describe("transform cache", () => {
   it("reuses Oxc output across processes and keys on the tsconfig", () => {
     const root = makeProject();
     const cache = path.join(root, "cache");
-    const first = runNode(
-      root,
-      importSub(`{ cache: ${JSON.stringify(cache)} }`),
-    );
+    const first = runNode(root, importSub(`{ cache: ${JSON.stringify(cache)} }`));
     expect(first.status, first.stderr).toBe(0);
     expect(first.stdout.trim()).toBe("sub");
     const entries = readdirSync(cache)
@@ -272,9 +246,7 @@ describe("transform cache", () => {
     // transforming again: make the cached code say something the source
     // does not.
     const entry = entries.find((file) =>
-      (
-        JSON.parse(readFileSync(file, "utf8")) as { code: string }
-      ).code.includes('"sub"'),
+      (JSON.parse(readFileSync(file, "utf8")) as { code: string }).code.includes('"sub"'),
     );
     expect(entry).toBeDefined();
     const cached = JSON.parse(readFileSync(entry!, "utf8")) as {
@@ -287,10 +259,7 @@ describe("transform cache", () => {
         code: cached.code.replace('"sub"', '"from-cache"'),
       }),
     );
-    const second = runNode(
-      root,
-      importSub(`{ cache: ${JSON.stringify(cache)} }`),
-    );
+    const second = runNode(root, importSub(`{ cache: ${JSON.stringify(cache)} }`));
     expect(second.status, second.stderr).toBe(0);
     expect(second.stdout.trim()).toBe("from-cache");
     // The resolved tsconfig is part of the key: editing it is a miss.
@@ -300,10 +269,7 @@ describe("transform cache", () => {
     };
     config.compilerOptions.target = "ES2020";
     writeFileSync(tsconfig, JSON.stringify(config));
-    const third = runNode(
-      root,
-      importSub(`{ cache: ${JSON.stringify(cache)} }`),
-    );
+    const third = runNode(root, importSub(`{ cache: ${JSON.stringify(cache)} }`));
     expect(third.status, third.stderr).toBe(0);
     expect(third.stdout.trim()).toBe("sub");
   });

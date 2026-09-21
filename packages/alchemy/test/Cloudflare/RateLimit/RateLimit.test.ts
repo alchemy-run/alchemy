@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -25,16 +22,14 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // propagation between separate HTTP requests.
 const burst = Effect.fn(function* (url: string, key: string, n: number) {
   const client = yield* HttpClient.HttpClient;
-  const res = yield* client
-    .get(`${url}/burst?key=${encodeURIComponent(key)}&n=${n}`)
-    .pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-      ),
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
-    );
+  const res = yield* client.get(`${url}/burst?key=${encodeURIComponent(key)}&n=${n}`).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? Effect.succeed(res)
+        : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+    ),
+    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
+  );
   return (yield* res.json) as { key: string; results: boolean[] };
 });
 
@@ -84,10 +79,6 @@ const behaviorSuite = (label: string, getUrl: () => Effect.Effect<string>) =>
     );
   });
 
-behaviorSuite("async worker (env binding)", () =>
-  stack.pipe(Effect.map((s) => s.asyncUrl)),
-);
+behaviorSuite("async worker (env binding)", () => stack.pipe(Effect.map((s) => s.asyncUrl)));
 
-behaviorSuite("effect worker (yield* RateLimit)", () =>
-  stack.pipe(Effect.map((s) => s.effectUrl)),
-);
+behaviorSuite("effect worker (yield* RateLimit)", () => stack.pipe(Effect.map((s) => s.effectUrl)));

@@ -39,13 +39,8 @@ export interface ListResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.ListResourcesInput,
-    ) => Effect.Effect<
-      cloudcontrol.ListResourcesOutput,
-      cloudcontrol.ListResourcesError
-    >
+    ) => Effect.Effect<cloudcontrol.ListResourcesOutput, cloudcontrol.ListResourcesError>
   >
 > {}
 
-export const ListResources = Binding.Service<ListResources>(
-  "AWS.CloudControl.ListResources",
-);
+export const ListResources = Binding.Service<ListResources>("AWS.CloudControl.ListResources");

@@ -206,9 +206,10 @@ export class PipeStateTimeout extends Data.TaggedError("PipeStateTimeout")<{
 }> {}
 
 /** Internal poll signal: the pipe is still in a transitional state. */
-class PipeStillTransitioning extends Data.TaggedError(
-  "PipeStillTransitioning",
-)<{ pipeName: string; state: string }> {}
+class PipeStillTransitioning extends Data.TaggedError("PipeStillTransitioning")<{
+  pipeName: string;
+  state: string;
+}> {}
 
 /** Internal poll signal: the pipe still exists after a delete. */
 class PipeStillPresent extends Data.TaggedError("PipeStillPresent")<{
@@ -226,19 +227,11 @@ const TRANSITIONAL_STATES: ReadonlySet<string> = new Set([
 
 const isFailedState = (state: string) => state.includes("FAILED");
 
-const unwrap = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const unwrapTags = (
-  tags:
-    | { [key: string]: string | Redacted.Redacted<string> | undefined }
-    | undefined,
+  tags: { [key: string]: string | Redacted.Redacted<string> | undefined } | undefined,
 ): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(tags ?? {})) {
@@ -286,8 +279,7 @@ const retryUntilRoleAssumable = <A, E extends { _tag: string }, R>(
       if (e._tag !== "ValidationException") return false;
       const message = (e as { message?: unknown }).message;
       return (
-        typeof message === "string" &&
-        (message.includes("assume") || message.includes("trust"))
+        typeof message === "string" && (message.includes("assume") || message.includes("trust"))
       );
     },
     schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
@@ -315,9 +307,7 @@ const retryWhileConflicting = <A, E extends { _tag: string }, R>(
 const subsetMatches = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
   const want = Redacted.isRedacted(desired) ? Redacted.value(desired) : desired;
-  const have = Redacted.isRedacted(observed)
-    ? Redacted.value(observed)
-    : observed;
+  const have = Redacted.isRedacted(observed) ? Redacted.value(observed) : observed;
   if (Array.isArray(want)) {
     if (!Array.isArray(have) || have.length !== want.length) return false;
     return want.every((item, i) => subsetMatches(item, have[i]));
@@ -331,9 +321,7 @@ const subsetMatches = (desired: unknown, observed: unknown): boolean => {
   return want === have;
 };
 
-const filterPatternsOf = (
-  criteria: pipes.FilterCriteria | undefined,
-): string[] =>
+const filterPatternsOf = (criteria: pipes.FilterCriteria | undefined): string[] =>
   (criteria?.Filters ?? [])
     .map((filter) => unwrap(filter.Pattern))
     .filter((pattern): pattern is string => pattern !== undefined);
@@ -361,32 +349,24 @@ const toUpdateSourceParameters = (
     ? {
         BatchSize: params.KinesisStreamParameters.BatchSize,
         DeadLetterConfig: params.KinesisStreamParameters.DeadLetterConfig,
-        OnPartialBatchItemFailure:
-          params.KinesisStreamParameters.OnPartialBatchItemFailure,
+        OnPartialBatchItemFailure: params.KinesisStreamParameters.OnPartialBatchItemFailure,
         MaximumBatchingWindowInSeconds:
           params.KinesisStreamParameters.MaximumBatchingWindowInSeconds,
-        MaximumRecordAgeInSeconds:
-          params.KinesisStreamParameters.MaximumRecordAgeInSeconds,
-        MaximumRetryAttempts:
-          params.KinesisStreamParameters.MaximumRetryAttempts,
-        ParallelizationFactor:
-          params.KinesisStreamParameters.ParallelizationFactor,
+        MaximumRecordAgeInSeconds: params.KinesisStreamParameters.MaximumRecordAgeInSeconds,
+        MaximumRetryAttempts: params.KinesisStreamParameters.MaximumRetryAttempts,
+        ParallelizationFactor: params.KinesisStreamParameters.ParallelizationFactor,
       }
     : undefined,
   DynamoDBStreamParameters: params?.DynamoDBStreamParameters
     ? {
         BatchSize: params.DynamoDBStreamParameters.BatchSize,
         DeadLetterConfig: params.DynamoDBStreamParameters.DeadLetterConfig,
-        OnPartialBatchItemFailure:
-          params.DynamoDBStreamParameters.OnPartialBatchItemFailure,
+        OnPartialBatchItemFailure: params.DynamoDBStreamParameters.OnPartialBatchItemFailure,
         MaximumBatchingWindowInSeconds:
           params.DynamoDBStreamParameters.MaximumBatchingWindowInSeconds,
-        MaximumRecordAgeInSeconds:
-          params.DynamoDBStreamParameters.MaximumRecordAgeInSeconds,
-        MaximumRetryAttempts:
-          params.DynamoDBStreamParameters.MaximumRetryAttempts,
-        ParallelizationFactor:
-          params.DynamoDBStreamParameters.ParallelizationFactor,
+        MaximumRecordAgeInSeconds: params.DynamoDBStreamParameters.MaximumRecordAgeInSeconds,
+        MaximumRetryAttempts: params.DynamoDBStreamParameters.MaximumRetryAttempts,
+        ParallelizationFactor: params.DynamoDBStreamParameters.ParallelizationFactor,
       }
     : undefined,
 });
@@ -411,19 +391,13 @@ export const PipeProvider = () =>
         id: string,
         props: { pipeName?: string | undefined },
       ) {
-        return (
-          props.pipeName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.pipeName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const describeOrUndefined = (pipeName: string) =>
         pipes
           .describePipe({ Name: pipeName })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       /**
        * Poll (bounded, ~60s) until the pipe leaves its transitional state.
@@ -434,8 +408,7 @@ export const PipeProvider = () =>
       const awaitSettled = Effect.fn(function* (pipeName: string) {
         const described = yield* describeOrUndefined(pipeName).pipe(
           Effect.flatMap((d) =>
-            d?.CurrentState !== undefined &&
-            TRANSITIONAL_STATES.has(d.CurrentState)
+            d?.CurrentState !== undefined && TRANSITIONAL_STATES.has(d.CurrentState)
               ? Effect.fail(
                   new PipeStillTransitioning({
                     pipeName,
@@ -455,10 +428,7 @@ export const PipeProvider = () =>
             ),
           ),
         );
-        if (
-          described?.CurrentState !== undefined &&
-          isFailedState(described.CurrentState)
-        ) {
+        if (described?.CurrentState !== undefined && isFailedState(described.CurrentState)) {
           return yield* Effect.fail(
             new PipeFailed({
               pipeName,
@@ -474,9 +444,7 @@ export const PipeProvider = () =>
       const awaitGone = Effect.fn(function* (pipeName: string) {
         yield* pipes.describePipe({ Name: pipeName }).pipe(
           Effect.flatMap((d) =>
-            Effect.fail(
-              new PipeStillPresent({ pipeName, state: d.CurrentState }),
-            ),
+            Effect.fail(new PipeStillPresent({ pipeName, state: d.CurrentState })),
           ),
           Effect.catchTag("NotFoundException", () => Effect.void),
           retryWhilePresent,
@@ -499,9 +467,7 @@ export const PipeProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* pipes.listPipes.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Pipes ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Pipes ?? [])),
             );
             return summaries
               .filter(
@@ -516,8 +482,7 @@ export const PipeProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const pipeName =
-            output?.pipeName ?? (yield* createName(id, olds ?? {}));
+          const pipeName = output?.pipeName ?? (yield* createName(id, olds ?? {}));
           const described = yield* describeOrUndefined(pipeName);
           if (!described?.Arn) return undefined;
           const attrs = {
@@ -542,8 +507,7 @@ export const PipeProvider = () =>
           }
           // Stream starting positions are create-only.
           if (
-            startingPositionOf(olds.sourceParameters) !==
-            startingPositionOf(news.sourceParameters)
+            startingPositionOf(olds.sourceParameters) !== startingPositionOf(news.sourceParameters)
           ) {
             return { action: "replace" } as const;
           }
@@ -621,8 +585,7 @@ export const PipeProvider = () =>
           //    removal-sensitive; parameter objects compare user-specified
           //    fields only (AWS fills the rest with defaults).
           const needsUpdate =
-            (news.description !== undefined &&
-              unwrap(observed.Description) !== news.description) ||
+            (news.description !== undefined && unwrap(observed.Description) !== news.description) ||
             (observed.DesiredState ?? "RUNNING") !== desiredState ||
             observed.Target !== news.target ||
             (observed.Enrichment !== undefined && observed.Enrichment !== ""
@@ -640,10 +603,7 @@ export const PipeProvider = () =>
               observed.SourceParameters,
             ) ||
             !subsetMatches(news.targetParameters, observed.TargetParameters) ||
-            !subsetMatches(
-              news.enrichmentParameters,
-              observed.EnrichmentParameters,
-            );
+            !subsetMatches(news.enrichmentParameters, observed.EnrichmentParameters);
 
           if (needsUpdate) {
             yield* pipes
@@ -651,9 +611,7 @@ export const PipeProvider = () =>
                 Name: pipeName,
                 Description: news.description,
                 DesiredState: desiredState,
-                SourceParameters: toUpdateSourceParameters(
-                  news.sourceParameters,
-                ),
+                SourceParameters: toUpdateSourceParameters(news.sourceParameters),
                 // "" clears a previously-configured enrichment.
                 Enrichment: news.enrichment ?? "",
                 EnrichmentParameters: news.enrichmentParameters,

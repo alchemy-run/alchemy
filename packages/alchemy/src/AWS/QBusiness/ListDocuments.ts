@@ -37,12 +37,7 @@ export interface ListDocuments extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListDocumentsRequest,
-    ) => Effect.Effect<
-      qbusiness.ListDocumentsResponse,
-      qbusiness.ListDocumentsError
-    >
+    ) => Effect.Effect<qbusiness.ListDocumentsResponse, qbusiness.ListDocumentsError>
   >
 > {}
-export const ListDocuments = Binding.Service<ListDocuments>(
-  "AWS.QBusiness.ListDocuments",
-);
+export const ListDocuments = Binding.Service<ListDocuments>("AWS.QBusiness.ListDocuments");

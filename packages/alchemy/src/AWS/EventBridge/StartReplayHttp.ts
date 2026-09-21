@@ -26,45 +26,42 @@ export const StartReplayHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
-          yield* host.bind`Allow(${host}, AWS.EventBridge.StartReplay(${archive}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["events:StartReplay"],
-                  Resource: [
-                    `arn:aws:events:${region}:${accountId}:replay/*`,
-                    // StartReplay also authorizes against the source archive.
-                    archive.archiveArn,
-                    // ...and against the DESTINATION event bus. EventBridge
-                    // only allows replaying to the archive's source bus, so
-                    // that bus ARN covers every legal destination.
-                    archive.eventSourceArn,
-                  ],
-                },
-              ],
-            },
-          );
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
+          yield* host.bind`Allow(${host}, AWS.EventBridge.StartReplay(${archive}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["events:StartReplay"],
+                Resource: [
+                  `arn:aws:events:${region}:${accountId}:replay/*`,
+                  // StartReplay also authorizes against the source archive.
+                  archive.archiveArn,
+                  // ...and against the DESTINATION event bus. EventBridge
+                  // only allows replaying to the archive's source bus, so
+                  // that bus ARN covers every legal destination.
+                  archive.eventSourceArn,
+                ],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.EventBridge.StartReplay(${archive.LogicalId})`)(
-        function* (request: StartReplayRequest) {
-          return yield* startReplay({
-            ...request,
-            EventSourceArn: yield* ArchiveArn,
-            // Default the destination to the archive's source bus — the only
-            // destination EventBridge accepts for a replay.
-            Destination: request.Destination ?? {
-              Arn: yield* EventSourceArn,
-            },
-          });
-        },
-      );
+      return Effect.fn(`AWS.EventBridge.StartReplay(${archive.LogicalId})`)(function* (
+        request: StartReplayRequest,
+      ) {
+        return yield* startReplay({
+          ...request,
+          EventSourceArn: yield* ArchiveArn,
+          // Default the destination to the archive's source bus — the only
+          // destination EventBridge accepts for a replay.
+          Destination: request.Destination ?? {
+            Arn: yield* EventSourceArn,
+          },
+        });
+      });
     });
   }),
 );

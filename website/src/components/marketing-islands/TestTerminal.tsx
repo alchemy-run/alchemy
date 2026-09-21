@@ -55,11 +55,7 @@ const TEST_STEPS: Step[] = [
   },
 ];
 
-export default function TestTerminal({
-  title = `CI · ${TEST_STAGE}`,
-}: {
-  title?: string;
-}) {
+export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?: string }) {
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
   const [steps, setSteps] = useState<RunningStep[]>([]);
@@ -100,9 +96,7 @@ export default function TestTerminal({
           setSteps((arr) => [...arr, { ...s, status: "running" }]);
           await sleep(s.runMs);
           if (aborted()) return;
-          setSteps((arr) =>
-            arr.map((r) => (r.id === s.id ? { ...r, status: "done" } : r)),
-          );
+          setSteps((arr) => arr.map((r) => (r.id === s.id ? { ...r, status: "done" } : r)));
           await sleep(160);
         }
         if (aborted()) return;
@@ -140,17 +134,13 @@ export default function TestTerminal({
             >
               {icon}
             </span>
-            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
-              {s.label}
-            </span>
+            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{s.label}</span>
             {!isRunning ? (
               <span style={{ color: "var(--alc-code-comment)" }}>
                 {` (${s.detail} · ${s.durSec}s)`}
               </span>
             ) : (
-              <span
-                style={{ color: "var(--alc-code-comment)" }}
-              >{` (${s.detail})`}</span>
+              <span style={{ color: "var(--alc-code-comment)" }}>{` (${s.detail})`}</span>
             )}
           </Line>
           {s.url && !isRunning && (
@@ -165,16 +155,10 @@ export default function TestTerminal({
     }
     return (
       <Line key={s.id}>
-        <span
-          style={{ color: iconColor, width: "1.2em", display: "inline-block" }}
-        >
-          {icon}
-        </span>
+        <span style={{ color: iconColor, width: "1.2em", display: "inline-block" }}>{icon}</span>
         <span style={{ color: "var(--alc-fg-invert)" }}>{s.label}</span>
         {!isRunning && (
-          <span
-            style={{ color: "var(--alc-code-comment)" }}
-          >{` (${s.durMs}ms)`}</span>
+          <span style={{ color: "var(--alc-code-comment)" }}>{` (${s.durMs}ms)`}</span>
         )}
       </Line>
     );
@@ -209,9 +193,7 @@ export default function TestTerminal({
               {" PASS "}
             </span>
             <span>{summary.tests} tests · </span>
-            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
-              {summary.secs}s
-            </span>
+            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{summary.secs}s</span>
           </Line>
         </>
       )}

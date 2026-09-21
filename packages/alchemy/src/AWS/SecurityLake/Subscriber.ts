@@ -10,11 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readSecurityLakeTags,
-  retryWhileConflict,
-  toTagList,
-} from "./internal.ts";
+import { readSecurityLakeTags, retryWhileConflict, toTagList } from "./internal.ts";
 
 /**
  * The AWS identity (principal + external ID) that a subscriber authenticates
@@ -144,9 +140,9 @@ export { SubscriberResource as Subscriber };
  * `CreateSubscriber` returned without a subscriber body and the subscriber
  * could not be re-observed by name.
  */
-export class SubscriberCreateFailed extends Data.TaggedError(
-  "SubscriberCreateFailed",
-)<{ readonly subscriberName: string }> {}
+export class SubscriberCreateFailed extends Data.TaggedError("SubscriberCreateFailed")<{
+  readonly subscriberName: string;
+}> {}
 
 const buildAttrs = (subscriber: securitylake.SubscriberResource) => ({
   subscriberId: subscriber.subscriberId,
@@ -176,8 +172,7 @@ const sourcesMatch = (
         return (
           haveAws !== undefined &&
           haveAws.sourceName === wantAws.sourceName &&
-          (wantAws.sourceVersion === undefined ||
-            haveAws.sourceVersion === wantAws.sourceVersion)
+          (wantAws.sourceVersion === undefined || haveAws.sourceVersion === wantAws.sourceVersion)
         );
       });
     }
@@ -185,8 +180,7 @@ const sourcesMatch = (
       (have) =>
         have.customLogSource?.sourceName === want.customLogSource?.sourceName &&
         (want.customLogSource?.sourceVersion === undefined ||
-          have.customLogSource?.sourceVersion ===
-            want.customLogSource.sourceVersion),
+          have.customLogSource?.sourceVersion === want.customLogSource.sourceVersion),
     );
   });
 
@@ -194,31 +188,21 @@ export const SubscriberProvider = () =>
   Provider.effect(
     SubscriberResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { subscriberName?: string },
-      ) {
-        return (
-          props.subscriberName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { subscriberName?: string }) {
+        return props.subscriberName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getById = (subscriberId: string) =>
         securitylake.getSubscriber({ subscriberId }).pipe(
           Effect.map((response) => response.subscriber),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // Subscriber names are unique per account/region — find the live
       // subscriber carrying our deterministic name when state was lost.
       const findByName = (subscriberName: string) =>
         securitylake.listSubscribers.items({}).pipe(
-          Stream.filter(
-            (subscriber) => subscriber.subscriberName === subscriberName,
-          ),
+          Stream.filter((subscriber) => subscriber.subscriberName === subscriberName),
           Stream.take(1),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
@@ -232,11 +216,7 @@ export const SubscriberProvider = () =>
             output?.subscriberId
               ? getById(output.subscriberId)
               : Effect.flatMap(createName(id, olds ?? {}), findByName)
-          ).pipe(
-            Effect.catchTag("UnauthorizedException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          ).pipe(Effect.catchTag("UnauthorizedException", () => Effect.succeed(undefined)));
           if (subscriber === undefined) return undefined;
           const attrs = buildAttrs(subscriber);
           const tags = yield* readSecurityLakeTags(attrs.subscriberArn);
@@ -250,11 +230,7 @@ export const SubscriberProvider = () =>
             // An account that never onboarded Security Lake has no
             // subscribers to enumerate.
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () => Effect.succeed([]),
             ),
           ),
@@ -278,9 +254,7 @@ export const SubscriberProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — by cached id first, then by deterministic name.
-          let subscriber = output?.subscriberId
-            ? yield* getById(output.subscriberId)
-            : undefined;
+          let subscriber = output?.subscriberId ? yield* getById(output.subscriberId) : undefined;
           subscriber ??= yield* findByName(subscriberName);
 
           // 2. ENSURE — create when missing; a ConflictException means a
@@ -297,25 +271,18 @@ export const SubscriberProvider = () =>
               })
               .pipe(
                 Effect.map((response) => response.subscriber),
-                Effect.catchTag("ConflictException", () =>
-                  findByName(subscriberName),
-                ),
+                Effect.catchTag("ConflictException", () => findByName(subscriberName)),
               );
             if (subscriber === undefined) {
-              return yield* Effect.fail(
-                new SubscriberCreateFailed({ subscriberName }),
-              );
+              return yield* Effect.fail(new SubscriberCreateFailed({ subscriberName }));
             }
           } else {
             // 3. SYNC mutable settings — observed ↔ desired.
             const changed =
               subscriber.subscriberName !== subscriberName ||
-              (subscriber.subscriberDescription ?? "") !==
-                (news.subscriberDescription ?? "") ||
-              subscriber.subscriberIdentity.principal !==
-                news.subscriberIdentity.principal ||
-              subscriber.subscriberIdentity.externalId !==
-                news.subscriberIdentity.externalId ||
+              (subscriber.subscriberDescription ?? "") !== (news.subscriberDescription ?? "") ||
+              subscriber.subscriberIdentity.principal !== news.subscriberIdentity.principal ||
+              subscriber.subscriberIdentity.externalId !== news.subscriberIdentity.externalId ||
               !sourcesMatch(news.sources, subscriber.sources);
             if (changed) {
               subscriber = yield* securitylake
@@ -333,9 +300,7 @@ export const SubscriberProvider = () =>
             }
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
-            const observedTags = yield* readSecurityLakeTags(
-              subscriber.subscriberArn,
-            );
+            const observedTags = yield* readSecurityLakeTags(subscriber.subscriberArn);
             const { upsert, removed } = diffTags(observedTags, desiredTags);
             if (upsert.length > 0) {
               yield* securitylake.tagResource({
@@ -358,18 +323,16 @@ export const SubscriberProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* securitylake
-            .deleteSubscriber({ subscriberId: output.subscriberId })
-            .pipe(
-              retryWhileConflict,
-              // Gone already, or the data lake itself was offboarded first
-              // (which removes all subscribers and makes subscriber APIs
-              // reject with UnauthorizedException).
-              Effect.catchTag(
-                ["ResourceNotFoundException", "UnauthorizedException"],
-                () => Effect.void,
-              ),
-            );
+          yield* securitylake.deleteSubscriber({ subscriberId: output.subscriberId }).pipe(
+            retryWhileConflict,
+            // Gone already, or the data lake itself was offboarded first
+            // (which removes all subscribers and makes subscriber APIs
+            // reject with UnauthorizedException).
+            Effect.catchTag(
+              ["ResourceNotFoundException", "UnauthorizedException"],
+              () => Effect.void,
+            ),
+          );
         }),
       };
     }),

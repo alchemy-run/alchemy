@@ -10,8 +10,7 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type TableBucketArn =
-  `arn:aws:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
+export type TableBucketArn = `arn:aws:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
 
 /**
  * Server-side encryption configuration for an S3 table bucket. Applied at
@@ -119,9 +118,7 @@ export const TableBucketProvider = () =>
     list: Effect.fn(function* () {
       const buckets = yield* s3tables.listTableBuckets.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.tableBuckets ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.tableBuckets ?? [])),
       );
       return buckets.map((b): TableBucket["Attributes"] => ({
         tableBucketArn: b.arn as TableBucketArn,
@@ -196,10 +193,7 @@ export const TableBucketProvider = () =>
         bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
           Effect.retry({
             while: (e) => e._tag === "NotFoundException",
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
           }),
         );
       }
@@ -234,13 +228,11 @@ export const TableBucketProvider = () =>
         // Nuke explicitly sets force after operator confirmation. It can
         // discover a top-level bucket even when child state was never saved,
         // so only this path may purge globally-invisible children.
-        const tables = yield* s3tables.listTables
-          .items({ tableBucketARN })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFoundException", () => Effect.succeed([])),
-          );
+        const tables = yield* s3tables.listTables.items({ tableBucketARN }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+        );
         yield* Effect.forEach(
           tables,
           (table) =>
@@ -254,13 +246,11 @@ export const TableBucketProvider = () =>
           { concurrency: 4, discard: true },
         );
 
-        const namespaces = yield* s3tables.listNamespaces
-          .items({ tableBucketARN })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFoundException", () => Effect.succeed([])),
-          );
+        const namespaces = yield* s3tables.listNamespaces.items({ tableBucketARN }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+        );
         yield* Effect.forEach(
           namespaces,
           (namespace) =>
@@ -284,10 +274,7 @@ export const TableBucketProvider = () =>
             e._tag === "ConflictException" ||
             e._tag === "TooManyRequestsException" ||
             e._tag === "InternalServerErrorException",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
         Effect.catchTag("NotFoundException", () => Effect.void),
       );

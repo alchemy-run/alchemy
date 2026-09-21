@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Effect-native Worker fixture that exercises all three Cloudflare tunnel
@@ -31,9 +31,7 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
     // create always succeeds.
     const purge = Effect.fn(function* (...names: string[]) {
       for (const name of names) {
-        const list = yield* tunnels
-          .list({ name, isDeleted: false })
-          .pipe(Effect.orDie);
+        const list = yield* tunnels.list({ name, isDeleted: false }).pipe(Effect.orDie);
         yield* Effect.forEach(
           (list.result ?? []).filter((t) => t.name === name && t.id),
           (t) => tunnels.delete(t.id!).pipe(Effect.orDie),
@@ -49,18 +47,14 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
 
         // Read-only: prove the read token works by listing tunnels.
         if (url.pathname === "/read") {
-          const list = yield* read
-            .list({ isDeleted: false })
-            .pipe(Effect.orDie);
+          const list = yield* read.list({ isDeleted: false }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ count: list.result?.length });
         }
 
         // Write: create then delete with the write-scoped token.
         if (url.pathname === "/write") {
           yield* purge(name);
-          const tunnel = yield* write
-            .create({ name, configSrc: "cloudflare" })
-            .pipe(Effect.orDie);
+          const tunnel = yield* write.create({ name, configSrc: "cloudflare" }).pipe(Effect.orDie);
           yield* write.delete(tunnel.id!).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             id: tunnel.id,
@@ -79,9 +73,7 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
           const id = created.id!;
           const got = yield* tunnels.get(id).pipe(Effect.orDie);
           const list = yield* tunnels.list().pipe(Effect.orDie);
-          const updated = yield* tunnels
-            .update(id, { name: `${name}-renamed` })
-            .pipe(Effect.orDie);
+          const updated = yield* tunnels.update(id, { name: `${name}-renamed` }).pipe(Effect.orDie);
           const token = yield* tunnels.getToken(id).pipe(Effect.orDie);
           yield* tunnels.delete(id).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({

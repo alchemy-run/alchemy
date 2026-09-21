@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
-import TaggedOneShotTaskLive, {
-  TaggedOneShotTask,
-} from "./fixtures/tagged-oneshot-task.ts";
+import TaggedOneShotTaskLive, { TaggedOneShotTask } from "./fixtures/tagged-oneshot-task.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -84,20 +82,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
       // Wait for the task to stop: image pull + container boot + the one-shot
       // program running to completion (~1-3 minutes for a cold Fargate task).
-      const stopped = yield* ecs
-        .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
-        .pipe(
-          Effect.flatMap((result) => {
-            const task = result.tasks?.[0];
-            return task?.lastStatus === "STOPPED"
-              ? Effect.succeed(task)
-              : Effect.fail(
-                  new Error(`task not stopped yet: ${task?.lastStatus}`),
-                );
-          }),
-          Effect.tapError((error) => Effect.logInfo(String(error))),
-          Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
-        );
+      const stopped = yield* ecs.describeTasks({ cluster: clusterArn, tasks: [taskArn!] }).pipe(
+        Effect.flatMap((result) => {
+          const task = result.tasks?.[0];
+          return task?.lastStatus === "STOPPED"
+            ? Effect.succeed(task)
+            : Effect.fail(new Error(`task not stopped yet: ${task?.lastStatus}`));
+        }),
+        Effect.tapError((error) => Effect.logInfo(String(error))),
+        Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
+      );
 
       // Exit code 0 proves the Layer-form entrypoint booted, ran `{ run }`,
       // and exited cleanly. A bootstrap crash exits 1 (and a task that never

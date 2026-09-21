@@ -44,6 +44,4 @@ export interface UploadLayerPart extends Binding.Service<
   >
 > {}
 
-export const UploadLayerPart = Binding.Service<UploadLayerPart>(
-  "AWS.ECR.UploadLayerPart",
-);
+export const UploadLayerPart = Binding.Service<UploadLayerPart>("AWS.ECR.UploadLayerPart");

@@ -1,12 +1,12 @@
-import * as CostAndUsageReport from "@/AWS/CostAndUsageReport";
-import * as Lambda from "@/AWS/Lambda";
-import { Bucket } from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CostAndUsageReport from "@/AWS/CostAndUsageReport";
+import * as Lambda from "@/AWS/Lambda";
+import { Bucket } from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -15,9 +15,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 export const REPORT_NAME = "alchemy-test-cur-bindings-report";
 export const BUCKET_NAME = "alchemy-test-cur-bindings";
 
-export class CurTestFunction extends Lambda.Function<Lambda.Function>()(
-  "CurTestFunction",
-) {}
+export class CurTestFunction extends Lambda.Function<Lambda.Function>()("CurTestFunction") {}
 
 export default CurTestFunction.make(
   {
@@ -48,27 +46,22 @@ export default CurTestFunction.make(
       ],
     });
 
-    const report = yield* CostAndUsageReport.ReportDefinition(
-      "CurBindingsReport",
-      {
-        reportName: REPORT_NAME,
-        timeUnit: "DAILY",
-        format: "textORcsv",
-        compression: "GZIP",
-        s3Bucket: bucket.bucketName,
-        s3Prefix: "cur-bindings",
-        s3Region: bucket.region,
-        tags: { fixture: "cur-bindings" },
-      },
-    );
+    const report = yield* CostAndUsageReport.ReportDefinition("CurBindingsReport", {
+      reportName: REPORT_NAME,
+      timeUnit: "DAILY",
+      format: "textORcsv",
+      compression: "GZIP",
+      s3Bucket: bucket.bucketName,
+      s3Prefix: "cur-bindings",
+      s3Region: bucket.region,
+      tags: { fixture: "cur-bindings" },
+    });
 
     // --- account-level bindings ---
-    const describeReportDefinitions =
-      yield* CostAndUsageReport.DescribeReportDefinitions();
+    const describeReportDefinitions = yield* CostAndUsageReport.DescribeReportDefinitions();
 
     // --- report-scoped bindings ---
-    const listReportTags =
-      yield* CostAndUsageReport.ListTagsForResource(report);
+    const listReportTags = yield* CostAndUsageReport.ListTagsForResource(report);
 
     const bound = {
       describeReportDefinitions,
@@ -89,9 +82,7 @@ export default CurTestFunction.make(
 
         if (request.method === "GET" && pathname === "/reports") {
           const result = yield* describeReportDefinitions();
-          const names = (result.ReportDefinitions ?? []).map(
-            (r) => r.ReportName,
-          );
+          const names = (result.ReportDefinitions ?? []).map((r) => r.ReportName);
           return yield* HttpServerResponse.json({
             count: names.length,
             names,
@@ -101,9 +92,7 @@ export default CurTestFunction.make(
         if (request.method === "GET" && pathname === "/report-tags") {
           const result = yield* listReportTags();
           return yield* HttpServerResponse.json({
-            tags: Object.fromEntries(
-              (result.Tags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            tags: Object.fromEntries((result.Tags ?? []).map((t) => [t.Key, t.Value])),
           });
         }
 

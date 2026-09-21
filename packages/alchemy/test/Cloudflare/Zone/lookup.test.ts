@@ -1,12 +1,8 @@
-import {
-  isId,
-  resolveZoneId,
-  zoneNameCandidates,
-} from "@/Cloudflare/Zone/lookup.ts";
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { isId, resolveZoneId, zoneNameCandidates } from "@/Cloudflare/Zone/lookup.ts";
 
 describe("Cloudflare zone lookup", () => {
   const withoutCredentials = <A, E>(
@@ -19,18 +15,13 @@ describe("Cloudflare zone lookup", () => {
       ),
       Effect.provideService(
         HttpClient.HttpClient,
-        HttpClient.make(() =>
-          Effect.die("explicit zone IDs must not list zones"),
-        ),
+        HttpClient.make(() => Effect.die("explicit zone IDs must not list zones")),
       ),
       Effect.runSync,
     );
 
   test("zoneNameCandidates walks hostname labels longest-first", () => {
-    expect(zoneNameCandidates("app.example.com")).toEqual([
-      "app.example.com",
-      "example.com",
-    ]);
+    expect(zoneNameCandidates("app.example.com")).toEqual(["app.example.com", "example.com"]);
     expect(zoneNameCandidates("a.b.c.example.com")).toEqual([
       "a.b.c.example.com",
       "b.c.example.com",

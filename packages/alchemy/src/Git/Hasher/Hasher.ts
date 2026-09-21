@@ -24,19 +24,14 @@
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Fiber from "effect/Fiber";
 import { WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
 import { Random } from "../../Random.ts";
-import {
-  BlobStore,
-  type BlobStoreShape,
-  type UploadedPart,
-} from "../BlobStore.ts";
-import type { Oid, ObjectType } from "../Protocol/ObjectCodec.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { BlobStore, type BlobStoreShape, type UploadedPart } from "../BlobStore.ts";
+import { ObjectTooLargeError, PackFormatError } from "../Protocol/PackParser.ts";
 import {
   type EntryBounds,
   hashBounds,
@@ -47,10 +42,6 @@ import {
   type DeltaJob,
   type DeltaResolved,
 } from "../Protocol/PartialScan.ts";
-import {
-  ObjectTooLargeError,
-  PackFormatError,
-} from "../Protocol/PackParser.ts";
 
 export {
   decodeBoundsRequest,
@@ -67,7 +58,6 @@ import {
   decodeScanResult,
   encodeBoundsRequest,
   encodeDeltaBatch,
-  frame,
   HASH_ROUTE,
   HashError,
   makeFrameReader,
@@ -127,10 +117,7 @@ export interface HasherShape {
   readonly hashPart: (
     payload: Uint8Array,
     options: HashPartOptions,
-  ) => Effect.Effect<
-    HashPartResult,
-    HashError | PackFormatError | ObjectTooLargeError
-  >;
+  ) => Effect.Effect<HashPartResult, HashError | PackFormatError | ObjectTooLargeError>;
   /**
    * Applies a batch of deltas whose bases the caller supplies (DESIGN
    * §22.13): the cross-chunk and thin deltas the scan left unresolved.
@@ -139,10 +126,7 @@ export interface HasherShape {
     bases: ReadonlyArray<DeltaBase>,
     jobs: ReadonlyArray<DeltaJob>,
     options: { readonly maxObjectSize: number },
-  ) => Effect.Effect<
-    Array<DeltaResolved>,
-    HashError | PackFormatError | ObjectTooLargeError
-  >;
+  ) => Effect.Effect<Array<DeltaResolved>, HashError | PackFormatError | ObjectTooLargeError>;
   /**
    * The parallel half (DESIGN §22.8): hash entries whose spans the caller
    * already found with `scanBounds`. Parts hashed this way have no chain
@@ -152,15 +136,10 @@ export interface HasherShape {
     payload: Uint8Array,
     bounds: ReadonlyArray<EntryBounds>,
     options: { readonly base: number; readonly maxObjectSize: number },
-  ) => Effect.Effect<
-    ScanResult,
-    HashError | PackFormatError | ObjectTooLargeError
-  >;
+  ) => Effect.Effect<ScanResult, HashError | PackFormatError | ObjectTooLargeError>;
 }
 
-export class Hasher extends Context.Service<Hasher, HasherShape>()(
-  "alchemy/Git/Hasher",
-) {}
+export class Hasher extends Context.Service<Hasher, HasherShape>()("alchemy/Git/Hasher") {}
 
 /** The in-process hasher: scans here; a requested spill part goes to `blobs`. */
 export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
@@ -174,36 +153,25 @@ export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
         spill === undefined
           ? undefined
           : yield* Effect.forkDetach(
-              blobs
-                .uploadPart(
-                  spill.key,
-                  spill.uploadId,
-                  spill.partNumber,
-                  payload,
-                )
-                .pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new HashError({
-                        reason: `spill part ${spill.partNumber}: ${error.reason}`,
-                      }),
-                  ),
-                  Effect.provide(RuntimeContext.phantom),
+              blobs.uploadPart(spill.key, spill.uploadId, spill.partNumber, payload).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new HashError({
+                      reason: `spill part ${spill.partNumber}: ${error.reason}`,
+                    }),
                 ),
+                Effect.provide(RuntimeContext.phantom),
+              ),
             );
       const skip = options.skip ?? 0;
-      const scan = yield* scanPart(
-        skip === 0 ? payload : payload.subarray(skip),
-        options,
-      );
+      const scan = yield* scanPart(skip === 0 ? payload : payload.subarray(skip), options);
       return {
         ...scan,
         part: upload === undefined ? undefined : Fiber.join(upload),
       };
     }),
   resolveDeltas: (bases, jobs, options) => resolveDeltas(bases, jobs, options),
-  hashBoundsPart: (payload, bounds, options) =>
-    hashBounds(payload, bounds, options),
+  hashBoundsPart: (payload, bounds, options) => hashBounds(payload, bounds, options),
 });
 
 /** Runs the scan in-process (tests, or a deployment without a self binding). */
@@ -224,16 +192,16 @@ export const HasherInline: Layer.Layer<Hasher, never, BlobStore> = Layer.effect(
  * by both the route and the self-calling hasher, so no user credential is
  * ever involved.
  */
-export const InternalSecret: Effect.Effect<
-  Effect.Effect<Redacted.Redacted<string>>
-> = Effect.gen(function* () {
-  // Yielding the resource class gives a constructor whose providers are
-  // the host stack's (the same way the Cloudflare `*Http` bindings mint
-  // tokens), so declaring the secret here needs nothing from the caller.
-  const R = yield* Random;
-  const resource = yield* R("GitInternalSecret");
-  return yield* resource.text;
-});
+export const InternalSecret: Effect.Effect<Effect.Effect<Redacted.Redacted<string>>> = Effect.gen(
+  function* () {
+    // Yielding the resource class gives a constructor whose providers are
+    // the host stack's (the same way the Cloudflare `*Http` bindings mint
+    // tokens), so declaring the secret here needs nothing from the caller.
+    const R = yield* Random;
+    const resource = yield* R("GitInternalSecret");
+    return yield* resource.text;
+  },
+);
 
 export const HASHER_BINDING = "GIT_SELF";
 
@@ -250,18 +218,12 @@ interface SelfFetcher {
  * value no user ever holds. Falls back to {@link HasherInline} when the
  * binding is absent from the environment.
  */
-export const HasherSelf: Layer.Layer<
-  Hasher,
-  never,
-  WorkerEnvironment | BlobStore
-> = Layer.effect(
+export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStore> = Layer.effect(
   Hasher,
   Effect.gen(function* () {
     const env = yield* WorkerEnvironment;
     const blobs = yield* BlobStore;
-    const fetcher = (env as Record<string, unknown>)[HASHER_BINDING] as
-      | SelfFetcher
-      | undefined;
+    const fetcher = (env as Record<string, unknown>)[HASHER_BINDING] as SelfFetcher | undefined;
     if (fetcher === undefined) {
       return makeInlineHasher(blobs);
     }
@@ -279,8 +241,7 @@ export const HasherSelf: Layer.Layer<
               },
               body: body as unknown as BodyInit,
             }),
-          catch: (error) =>
-            new HashError({ reason: `hash part fetch: ${String(error)}` }),
+          catch: (error) => new HashError({ reason: `hash part fetch: ${String(error)}` }),
         });
         if (response.status !== 200 || response.body === null) {
           const text = yield* Effect.tryPromise({
@@ -326,12 +287,8 @@ export const HasherSelf: Layer.Layer<
           const part = next().pipe(
             Effect.flatMap((bytes) =>
               bytes === undefined
-                ? Effect.fail(
-                    new HashError({ reason: "hash part: no part frame" }),
-                  )
-                : Effect.succeed(
-                    JSON.parse(new TextDecoder().decode(bytes)) as UploadedPart,
-                  ),
+                ? Effect.fail(new HashError({ reason: "hash part: no part frame" }))
+                : Effect.succeed(JSON.parse(new TextDecoder().decode(bytes)) as UploadedPart),
             ),
           );
           return { ...scan, part };

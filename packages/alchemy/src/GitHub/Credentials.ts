@@ -37,10 +37,7 @@ export class GitHubCredentials extends Context.Service<
   Effect.Effect<GitHubCredentialsService>
 >()("GitHub::Credentials") {}
 
-const make = (
-  token: Redacted.Redacted<string>,
-  baseUrl?: string,
-): GitHubCredentialsService => ({
+const make = (token: Redacted.Redacted<string>, baseUrl?: string): GitHubCredentialsService => ({
   token,
   baseUrl,
   octokit: (override) => {
@@ -69,13 +66,8 @@ export const fromToken = (
     GitHubCredentials,
     Effect.gen(function* () {
       const baseUrl =
-        options?.baseUrl !== undefined
-          ? yield* normalizeGitHubBaseUrl(options.baseUrl)
-          : undefined;
-      return make(
-        typeof token === "string" ? Redacted.make(token) : token,
-        baseUrl,
-      );
+        options?.baseUrl !== undefined ? yield* normalizeGitHubBaseUrl(options.baseUrl) : undefined;
+      return make(typeof token === "string" ? Redacted.make(token) : token, baseUrl);
     }).pipe(Effect.orDie),
   );
 
@@ -121,10 +113,7 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
 
       return yield* resolve.pipe(
         Effect.map((creds) =>
-          make(
-            creds.token,
-            fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl,
-          ),
+          make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
         ),
         Effect.mapError(
           (e) =>

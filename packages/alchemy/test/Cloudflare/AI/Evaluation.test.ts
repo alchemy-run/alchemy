@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const GATEWAY_ID = "alchemy-test-aigw-eval";
 
@@ -23,20 +20,12 @@ class EvaluationStillExists extends Data.TaggedError("EvaluationStillExists") {}
 // A deleted evaluation surfaces as `EvaluationNotFound` (Cloudflare error
 // code 7002, which also covers a deleted parent gateway) — that's the
 // success condition here.
-const expectGone = (
-  accountId: string,
-  gatewayId: string,
-  evaluationId: string,
-) =>
+const expectGone = (accountId: string, gatewayId: string, evaluationId: string) =>
   aiGateway.getEvaluation({ accountId, gatewayId, id: evaluationId }).pipe(
     Effect.flatMap(() => Effect.fail(new EvaluationStillExists())),
     Effect.retry({
-      while: (e): e is EvaluationStillExists =>
-        e instanceof EvaluationStillExists,
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(10),
-      ]),
+      while: (e): e is EvaluationStillExists => e instanceof EvaluationStillExists,
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("EvaluationNotFound", () => Effect.void),
   );
@@ -96,16 +85,12 @@ test.provider("create, noop, replace, delete an evaluation", (stack) =>
 
     // Redeploying identical props is a no-op (still the same evaluation).
     const noop = yield* stack.deploy(program("alchemy-test-eval"));
-    expect(noop.evaluation.evaluationId).toEqual(
-      initial.evaluation.evaluationId,
-    );
+    expect(noop.evaluation.evaluationId).toEqual(initial.evaluation.evaluationId);
 
     // Evaluations are create-only — renaming is a replacement.
     const renamed = yield* stack.deploy(program("alchemy-test-eval-v2"));
     expect(renamed.evaluation.name).toEqual("alchemy-test-eval-v2");
-    expect(renamed.evaluation.evaluationId).not.toEqual(
-      initial.evaluation.evaluationId,
-    );
+    expect(renamed.evaluation.evaluationId).not.toEqual(initial.evaluation.evaluationId);
 
     // The replaced evaluation is gone.
     yield* expectGone(accountId, GATEWAY_ID, initial.evaluation.evaluationId);
@@ -152,9 +137,7 @@ test.provider("list enumerates the deployed evaluation", (stack) =>
     const provider = yield* Provider.findProvider(Cloudflare.AI.Evaluation);
     const all = yield* provider.list();
 
-    const found = all.find(
-      (e) => e.evaluationId === deployed.evaluation.evaluationId,
-    );
+    const found = all.find((e) => e.evaluationId === deployed.evaluation.evaluationId);
     expect(found).toBeDefined();
     expect(found?.accountId).toEqual(accountId);
     expect(found?.gatewayId).toEqual(GATEWAY_ID);

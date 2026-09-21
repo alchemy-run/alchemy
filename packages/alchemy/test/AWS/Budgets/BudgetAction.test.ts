@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as budgets from "@distilled.cloud/aws/budgets";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,9 +36,7 @@ const deployAction = (thresholdValue: number) =>
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/AWSBudgetsActionsWithAWSResourceControlAccess",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/AWSBudgetsActionsWithAWSResourceControlAccess"],
     });
 
     const targetRole = yield* AWS.IAM.Role("BudgetActionTargetRole", {
@@ -80,9 +78,7 @@ const deployAction = (thresholdValue: number) =>
       },
       executionRoleArn: execRole.roleArn,
       approvalModel: "MANUAL",
-      subscribers: [
-        { subscriptionType: "EMAIL", address: "budget-test@example.com" },
-      ],
+      subscribers: [{ subscriptionType: "EMAIL", address: "budget-test@example.com" }],
       tags: { Team: "alchemy-test" },
     });
 
@@ -117,24 +113,18 @@ test.provider(
       expect(created?.Definition.IamActionDefinition?.PolicyArn).toBe(
         "arn:aws:iam::aws:policy/AWSDenyAll",
       );
-      expect(created?.Definition.IamActionDefinition?.Roles).toEqual([
-        targetRoleName,
-      ]);
+      expect(created?.Definition.IamActionDefinition?.Roles).toEqual([targetRoleName]);
 
       // Tags — user tag plus the internal alchemy brand.
       const tags = yield* budgets
         .listTagsForResource({ ResourceARN: deployed.actionArn })
         .pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
         );
       expect(tags.Team).toBe("alchemy-test");
-      expect(Object.keys(tags).some((k) => k.startsWith("alchemy:"))).toBe(
-        true,
-      );
+      expect(Object.keys(tags).some((k) => k.startsWith("alchemy:"))).toBe(true);
 
       // Update — lower the threshold; the action id must be stable.
       const updated = yield* stack.deploy(deployAction(90));
@@ -153,9 +143,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "found"),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed("not-found"),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed("not-found")),
         );
       expect(afterDestroy).toBe("not-found");
     }),

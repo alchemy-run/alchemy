@@ -31,12 +31,7 @@ export interface DescribeUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.DescribeUserRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.DescribeUserResponse,
-      identitystore.DescribeUserError
-    >
+    ) => Effect.Effect<identitystore.DescribeUserResponse, identitystore.DescribeUserError>
   >
 > {}
-export const DescribeUser = Binding.Service<DescribeUser>(
-  "AWS.IdentityCenter.DescribeUser",
-);
+export const DescribeUser = Binding.Service<DescribeUser>("AWS.IdentityCenter.DescribeUser");

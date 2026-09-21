@@ -35,10 +35,7 @@ export interface CreateSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<serverless.CreateSnapshotRequest, "namespaceName">,
-    ) => Effect.Effect<
-      serverless.CreateSnapshotResponse,
-      serverless.CreateSnapshotError
-    >
+    ) => Effect.Effect<serverless.CreateSnapshotResponse, serverless.CreateSnapshotError>
   >
 > {}
 export const CreateSnapshot = Binding.Service<CreateSnapshot>(

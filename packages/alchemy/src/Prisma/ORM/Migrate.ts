@@ -129,10 +129,7 @@ export const MigrateProvider = () =>
       const path = yield* Path.Path;
 
       const resolveConfig = (p: MigrateProps) =>
-        path.resolve(
-          process.cwd(),
-          p.config ?? p.contract.config ?? "./prisma.config.ts",
-        );
+        path.resolve(process.cwd(), p.config ?? p.contract.config ?? "./prisma.config.ts");
 
       const configDir = (p: MigrateProps) => path.dirname(resolveConfig(p));
 

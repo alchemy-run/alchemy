@@ -10,11 +10,11 @@
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as Schema from "effect/Schema";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import { GitApi, isRead, RegistryStore } from "@/Git/index.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
@@ -47,10 +47,9 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
  * Who is calling, as the middleware resolved it: a user, or `null` for an
  * anonymous read of a public repository. Routes and hooks read it.
  */
-export class TestCaller extends Context.Service<
-  TestCaller,
-  { readonly user: TestUser | null }
->()("test/Git/Caller") {}
+export class TestCaller extends Context.Service<TestCaller, { readonly user: TestUser | null }>()(
+  "test/Git/Caller",
+) {}
 
 /** API schema for typed clients. Authentication is applied to router layers. */
 // Client-only error declaration: router middleware returns this error on 401.
@@ -64,9 +63,7 @@ export class TestApi extends GitApi.middleware(AuthenticationErrors) {}
  * The credential a request carries: `git` sends HTTP Basic with the
  * token in the password field, the REST clients a bearer token.
  */
-const credential = (
-  headers: Readonly<Record<string, string | undefined>>,
-): string | undefined => {
+const credential = (headers: Readonly<Record<string, string | undefined>>): string | undefined => {
   const header = headers.authorization;
   if (header === undefined) return undefined;
   const space = header.indexOf(" ");

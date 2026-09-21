@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
-export interface UpdateUsageRequest extends Omit<
-  ag.UpdateUsageRequest,
-  "usagePlanId"
-> {}
+export interface UpdateUsageRequest extends Omit<ag.UpdateUsageRequest, "usagePlanId"> {}
 
 /**
  * Runtime binding for granting a temporary quota extension to an API key
@@ -38,12 +35,6 @@ export interface UpdateUsage extends Binding.Service<
   "AWS.ApiGateway.UpdateUsage",
   <P extends UsagePlan>(
     usagePlan: P,
-  ) => Effect.Effect<
-    (
-      request: UpdateUsageRequest,
-    ) => Effect.Effect<ag.Usage, ag.UpdateUsageError>
-  >
+  ) => Effect.Effect<(request: UpdateUsageRequest) => Effect.Effect<ag.Usage, ag.UpdateUsageError>>
 > {}
-export const UpdateUsage = Binding.Service<UpdateUsage>(
-  "AWS.ApiGateway.UpdateUsage",
-);
+export const UpdateUsage = Binding.Service<UpdateUsage>("AWS.ApiGateway.UpdateUsage");

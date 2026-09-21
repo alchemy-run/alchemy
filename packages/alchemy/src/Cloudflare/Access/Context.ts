@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { WorkerExecutionContextAccess } from "../Workers/WorkerAccess.ts";
 import { WorkerExecutionContext } from "../Workers/Worker.ts";
+import type { WorkerExecutionContextAccess } from "../Workers/WorkerAccess.ts";
 
 /**
  * One-yield accessor for the current request's Cloudflare Access context

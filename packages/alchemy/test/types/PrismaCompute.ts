@@ -1,28 +1,24 @@
-import * as Prisma from "@/Prisma";
-import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Prisma from "@/Prisma";
+import type { RuntimeContext } from "@/RuntimeContext";
 
 declare const connection: Prisma.Connection;
 
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
-type EffectRequirement<T> =
-  T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
+type EffectRequirement<T> = T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
 
 type ApiShape = {
   connectionId(): Effect.Effect<string, never, RuntimeContext>;
 };
 
-export class PrismaComputeApi extends Prisma.Compute<
-  PrismaComputeApi,
-  ApiShape
->()("PrismaComputeApi") {}
+export class PrismaComputeApi extends Prisma.Compute<PrismaComputeApi, ApiShape>()(
+  "PrismaComputeApi",
+) {}
 
 export const PrismaComputeApiLive = PrismaComputeApi.make(
   {

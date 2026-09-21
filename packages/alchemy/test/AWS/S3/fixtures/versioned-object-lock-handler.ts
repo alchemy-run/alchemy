@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class S3VersionedObjectLockFunction extends Lambda.Function<S3VersionedObjectLockFunction>()(
   "S3VersionedObjectLockFunction",
@@ -30,46 +30,28 @@ export default S3VersionedObjectLockFunction.make(
       forceDestroy: true,
     } as const;
     const buckets = {
-      GetObjectRetention: yield* S3.Bucket(
-        "VersionedObjectLockGetRetentionBucket",
-        props,
-      ),
-      PutObjectRetention: yield* S3.Bucket(
-        "VersionedObjectLockPutRetentionBucket",
-        props,
-      ),
-      GetObjectLegalHold: yield* S3.Bucket(
-        "VersionedObjectLockGetHoldBucket",
-        props,
-      ),
-      PutObjectLegalHold: yield* S3.Bucket(
-        "VersionedObjectLockPutHoldBucket",
-        props,
-      ),
+      GetObjectRetention: yield* S3.Bucket("VersionedObjectLockGetRetentionBucket", props),
+      PutObjectRetention: yield* S3.Bucket("VersionedObjectLockPutRetentionBucket", props),
+      GetObjectLegalHold: yield* S3.Bucket("VersionedObjectLockGetHoldBucket", props),
+      PutObjectLegalHold: yield* S3.Bucket("VersionedObjectLockPutHoldBucket", props),
       RestoreObject: yield* S3.Bucket("VersionedObjectLockRestoreBucket", {
         versioning: "Enabled",
         forceDestroy: true,
       }),
     };
-    const getRetention = yield* S3.GetObjectRetention(
-      buckets.GetObjectRetention,
-    );
-    const putRetention = yield* S3.PutObjectRetention(
-      buckets.PutObjectRetention,
-    );
+    const getRetention = yield* S3.GetObjectRetention(buckets.GetObjectRetention);
+    const putRetention = yield* S3.PutObjectRetention(buckets.PutObjectRetention);
     const getHold = yield* S3.GetObjectLegalHold(buckets.GetObjectLegalHold);
     const putHold = yield* S3.PutObjectLegalHold(buckets.PutObjectLegalHold);
     const restore = yield* S3.RestoreObject(buckets.RestoreObject);
-    const info = yield* Effect.forEach(
-      Object.entries(buckets),
-      ([binding, bucket]) =>
-        Effect.gen(function* () {
-          return {
-            binding,
-            bucketName: yield* bucket.bucketName,
-            bucketArn: yield* bucket.bucketArn,
-          };
-        }),
+    const info = yield* Effect.forEach(Object.entries(buckets), ([binding, bucket]) =>
+      Effect.gen(function* () {
+        return {
+          binding,
+          bucketName: yield* bucket.bucketName,
+          bucketArn: yield* bucket.bucketArn,
+        };
+      }),
     );
 
     return {
@@ -86,9 +68,7 @@ export default S3VersionedObjectLockFunction.make(
               };
             }),
           );
-          if (
-            resolved.some((bucket) => !bucket.bucketName || !bucket.bucketArn)
-          ) {
+          if (resolved.some((bucket) => !bucket.bucketName || !bucket.bucketArn)) {
             return HttpServerResponse.text("Outputs not hydrated yet", {
               status: 503,
             });
@@ -101,8 +81,7 @@ export default S3VersionedObjectLockFunction.make(
         const body = yield* request.json;
         switch (url.pathname) {
           case "/get-retention": {
-            const input =
-              yield* Schema.decodeUnknownEffect(versionRequest)(body);
+            const input = yield* Schema.decodeUnknownEffect(versionRequest)(body);
             return yield* HttpServerResponse.json(yield* getRetention(input));
           }
           case "/put-retention": {
@@ -113,9 +92,7 @@ export default S3VersionedObjectLockFunction.make(
                 retainUntil: Schema.String,
               }),
             )(body);
-            const RetainUntilDate = yield* Effect.sync(
-              () => new Date(input.retainUntil),
-            );
+            const RetainUntilDate = yield* Effect.sync(() => new Date(input.retainUntil));
             yield* putRetention({
               Key: input.Key,
               VersionId: input.VersionId,
@@ -124,8 +101,7 @@ export default S3VersionedObjectLockFunction.make(
             return yield* HttpServerResponse.json({ retained: true });
           }
           case "/get-hold": {
-            const input =
-              yield* Schema.decodeUnknownEffect(versionRequest)(body);
+            const input = yield* Schema.decodeUnknownEffect(versionRequest)(body);
             return yield* HttpServerResponse.json(yield* getHold(input));
           }
           case "/put-hold": {
@@ -144,8 +120,7 @@ export default S3VersionedObjectLockFunction.make(
             return yield* HttpServerResponse.json({ updated: true });
           }
           case "/restore": {
-            const input =
-              yield* Schema.decodeUnknownEffect(versionRequest)(body);
+            const input = yield* Schema.decodeUnknownEffect(versionRequest)(body);
             const result = yield* restore({
               ...input,
               RestoreRequest: {

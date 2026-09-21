@@ -1,3 +1,8 @@
+import crypto from "node:crypto";
+import zlib from "node:zlib";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * Probe fixture: what does THIS workerd's `node:zlib` offer for a
  * synchronous, exact-span inflate, and what does each path cost? (See
@@ -6,11 +11,6 @@
  * during synchronous work, so the worker cannot time itself.
  */
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import crypto from "node:crypto";
-import zlib from "node:zlib";
 
 const streamInflate = (z: Uint8Array) =>
   new Promise<number>((resolve, reject) => {
@@ -81,15 +81,8 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
                 bytesWritten?: number;
                 close?: () => void;
               };
-              const out = engine._processChunk(
-                withTrailer,
-                zlib.constants.Z_SYNC_FLUSH,
-              );
-              if (
-                out.length === content.length &&
-                engine.bytesWritten === z.length
-              )
-                ok++;
+              const out = engine._processChunk(withTrailer, zlib.constants.Z_SYNC_FLUSH);
+              if (out.length === content.length && engine.bytesWritten === z.length) ok++;
               engine.close?.();
             }
           } else if (which === "processChunkReuse") {
@@ -103,10 +96,7 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
             };
             let consumedBefore = 0;
             for (let i = 0; i < n; i++) {
-              const out = engine._processChunk(
-                withTrailer,
-                zlib.constants.Z_SYNC_FLUSH,
-              );
+              const out = engine._processChunk(withTrailer, zlib.constants.Z_SYNC_FLUSH);
               const consumed = engine.bytesWritten - consumedBefore;
               consumedBefore = engine.bytesWritten;
               if (out.length === content.length && consumed === z.length) ok++;
@@ -121,11 +111,7 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
                 buffer: Uint8Array;
                 engine: { bytesWritten?: number };
               };
-              if (
-                r.buffer.length === content.length &&
-                r.engine.bytesWritten === z.length
-              )
-                ok++;
+              if (r.buffer.length === content.length && r.engine.bytesWritten === z.length) ok++;
             }
           } else if (which === "plain") {
             for (let i = 0; i < n; i++) {
@@ -151,11 +137,7 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
             }
           } else if (which === "copy") {
             for (let i = 0; i < n; i++) {
-              if (
-                Uint8Array.from(content.subarray(1)).length ===
-                content.length - 1
-              )
-                ok++;
+              if (Uint8Array.from(content.subarray(1)).length === content.length - 1) ok++;
             }
           } else if (which === "jsloop") {
             // A delta-apply-shaped loop: byte copies with small varint reads.
@@ -175,8 +157,7 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
               for (let i = 0; i < n; i++) {
                 const v = yield* Effect.gen(function* () {
                   let acc = 0;
-                  for (let j = 0; j < 20; j++)
-                    acc += yield* Effect.sync(() => j);
+                  for (let j = 0; j < 20; j++) acc += yield* Effect.sync(() => j);
                   return acc;
                 });
                 if (v === 190) k++;
@@ -186,8 +167,7 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
           } else if (which === "stream") {
             ok = yield* Effect.promise(async () => {
               let k = 0;
-              for (let i = 0; i < n; i++)
-                if ((await streamInflate(z)) === content.length) k++;
+              for (let i = 0; i < n; i++) if ((await streamInflate(z)) === content.length) k++;
               return k;
             });
           }

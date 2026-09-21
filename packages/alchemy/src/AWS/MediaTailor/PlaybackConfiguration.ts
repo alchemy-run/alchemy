@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -328,27 +323,17 @@ export const PlaybackConfigurationProvider = () =>
           name: config.Name,
           playbackConfigurationArn: config.PlaybackConfigurationArn,
           playbackEndpointPrefix: config.PlaybackEndpointPrefix,
-          sessionInitializationEndpointPrefix:
-            config.SessionInitializationEndpointPrefix,
-          hlsManifestEndpointPrefix:
-            config.HlsConfiguration?.ManifestEndpointPrefix,
-          dashManifestEndpointPrefix:
-            config.DashConfiguration?.ManifestEndpointPrefix,
+          sessionInitializationEndpointPrefix: config.SessionInitializationEndpointPrefix,
+          hlsManifestEndpointPrefix: config.HlsConfiguration?.ManifestEndpointPrefix,
+          dashManifestEndpointPrefix: config.DashConfiguration?.ManifestEndpointPrefix,
         } satisfies PlaybackConfigurationAttributes;
       });
 
       const observe = (name: string) =>
         mediatailor.getPlaybackConfiguration({ Name: name }).pipe(
-          Effect.map(
-            (
-              config,
-            ): mediatailor.GetPlaybackConfigurationResponse | undefined =>
-              config,
-          ),
+          Effect.map((config): mediatailor.GetPlaybackConfigurationResponse | undefined => config),
           // Typed synthetic tag for a missing playback configuration.
-          Effect.catchTag("PlaybackConfigurationNotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("PlaybackConfigurationNotFound", () => Effect.succeed(undefined)),
         );
 
       const desiredRequest = (
@@ -359,15 +344,12 @@ export const PlaybackConfigurationProvider = () =>
         AdDecisionServerUrl: props.adDecisionServerUrl,
         VideoContentSourceUrl: props.videoContentSourceUrl,
         SlateAdUrl: props.slateAdUrl,
-        PersonalizationThresholdSeconds: toWireSeconds(
-          props.personalizationThreshold,
-        ),
+        PersonalizationThresholdSeconds: toWireSeconds(props.personalizationThreshold),
         TranscodeProfileName: props.transcodeProfileName,
         InsertionMode: props.insertionMode,
         CdnConfiguration: props.cdnConfiguration && {
           AdSegmentUrlPrefix: props.cdnConfiguration.adSegmentUrlPrefix,
-          ContentSegmentUrlPrefix:
-            props.cdnConfiguration.contentSegmentUrlPrefix,
+          ContentSegmentUrlPrefix: props.cdnConfiguration.contentSegmentUrlPrefix,
         },
         DashConfiguration: props.dashConfiguration && {
           MpdLocation: props.dashConfiguration.mpdLocation,
@@ -383,11 +365,8 @@ export const PlaybackConfigurationProvider = () =>
           EndUrl: props.bumper.endUrl,
         },
         LivePreRollConfiguration: props.livePreRollConfiguration && {
-          AdDecisionServerUrl:
-            props.livePreRollConfiguration.adDecisionServerUrl,
-          MaxDurationSeconds: toWireSeconds(
-            props.livePreRollConfiguration.maxDuration,
-          ),
+          AdDecisionServerUrl: props.livePreRollConfiguration.adDecisionServerUrl,
+          MaxDurationSeconds: toWireSeconds(props.livePreRollConfiguration.maxDuration),
         },
         ManifestProcessingRules: props.manifestProcessingRules && {
           AdMarkerPassthrough: {
@@ -415,10 +394,8 @@ export const PlaybackConfigurationProvider = () =>
                       playbackEndpointPrefix: config.PlaybackEndpointPrefix,
                       sessionInitializationEndpointPrefix:
                         config.SessionInitializationEndpointPrefix,
-                      hlsManifestEndpointPrefix:
-                        config.HlsConfiguration?.ManifestEndpointPrefix,
-                      dashManifestEndpointPrefix:
-                        config.DashConfiguration?.ManifestEndpointPrefix,
+                      hlsManifestEndpointPrefix: config.HlsConfiguration?.ManifestEndpointPrefix,
+                      dashManifestEndpointPrefix: config.DashConfiguration?.ManifestEndpointPrefix,
                     },
                   ]
                 : [],
@@ -429,9 +406,7 @@ export const PlaybackConfigurationProvider = () =>
           const found = yield* observe(name);
           if (found === undefined) return undefined;
           const attrs = yield* toAttributes(found);
-          return (yield* hasAlchemyTags(id, tagRecord(found.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(found.Tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -469,9 +444,7 @@ export const PlaybackConfigurationProvider = () =>
           const observedLogs = put.LogConfiguration;
           const observedPercent = observedLogs?.PercentEnabled ?? 0;
           const desiredPercent = desiredLogs?.percentEnabled ?? 0;
-          const observedStrategies = [
-            ...(observedLogs?.EnabledLoggingStrategies ?? []),
-          ].sort();
+          const observedStrategies = [...(observedLogs?.EnabledLoggingStrategies ?? [])].sort();
           const desiredStrategies =
             desiredLogs === undefined
               ? observedStrategies // nothing desired: only percent converges
@@ -485,8 +458,7 @@ export const PlaybackConfigurationProvider = () =>
               PercentEnabled: desiredPercent,
               ...(desiredLogs?.enabledLoggingStrategies
                 ? {
-                    EnabledLoggingStrategies:
-                      desiredLogs.enabledLoggingStrategies,
+                    EnabledLoggingStrategies: desiredLogs.enabledLoggingStrategies,
                   }
                 : {}),
             });

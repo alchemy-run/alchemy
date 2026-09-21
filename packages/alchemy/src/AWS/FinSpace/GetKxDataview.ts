@@ -31,6 +31,4 @@ export interface GetKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxDataviewResponse, SVC.GetKxDataviewError>
   >
 > {}
-export const GetKxDataview = Binding.Service<GetKxDataview>(
-  "AWS.FinSpace.GetKxDataview",
-);
+export const GetKxDataview = Binding.Service<GetKxDataview>("AWS.FinSpace.GetKxDataview");

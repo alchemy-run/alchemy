@@ -142,9 +142,7 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
       if (zoneId === undefined) {
-        return yield* Effect.fail(
-          new Error("Cloudflare Ruleset: zone id is not resolved"),
-        );
+        return yield* Effect.fail(new Error("Cloudflare Ruleset: zone id is not resolved"));
       }
       const name = yield* createRulesetName(id, news.name ?? output?.name);
       const ruleset = yield* rulesets.putPhasForZone({
@@ -166,9 +164,7 @@ export const RulesetProvider = () =>
           zoneId: output.zoneId,
           rulesetPhase: output.phase ?? olds.phase,
         })
-        .pipe(
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
       if (entrypoint === undefined) return;
       yield* rulesets
         .deleteRulesetForZone({
@@ -218,9 +214,7 @@ export const RulesetProvider = () =>
                       rulesetPhase: entry.phase,
                     })
                     .pipe(
-                      Effect.map((ruleset) =>
-                        toRulesetAttributes(zone.id, ruleset),
-                      ),
+                      Effect.map((ruleset) => toRulesetAttributes(zone.id, ruleset)),
                       // Per-item not-found / plan-gated entrypoints are
                       // skipped rather than failing the whole enumeration.
                       Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>

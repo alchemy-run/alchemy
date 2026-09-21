@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListCostAllocationTags}.
  */
-export interface ListCostAllocationTagsRequest
-  extends ce.ListCostAllocationTagsRequest {}
+export interface ListCostAllocationTagsRequest extends ce.ListCostAllocationTagsRequest {}
 
 /**
  * Runtime binding for `ce:ListCostAllocationTags`.
@@ -33,10 +32,7 @@ export interface ListCostAllocationTags extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListCostAllocationTagsRequest,
-    ) => Effect.Effect<
-      ce.ListCostAllocationTagsResponse,
-      ce.ListCostAllocationTagsError
-    >
+    ) => Effect.Effect<ce.ListCostAllocationTagsResponse, ce.ListCostAllocationTagsError>
   >
 > {}
 

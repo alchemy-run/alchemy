@@ -1,24 +1,19 @@
-import * as AWS from "@/AWS";
-import * as Prisma from "@/Prisma";
-import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Prisma from "@/Prisma";
+import type { RuntimeContext } from "@/RuntimeContext";
 
 declare const connection: Prisma.Connection;
 
 type ApiShape = {
-  databaseUrl(): Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  databaseUrl(): Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 };
 
-export class PrismaLambdaApi extends AWS.Lambda.Function<
-  PrismaLambdaApi,
-  ApiShape
->()("PrismaLambdaApi") {}
+export class PrismaLambdaApi extends AWS.Lambda.Function<PrismaLambdaApi, ApiShape>()(
+  "PrismaLambdaApi",
+) {}
 
 export const PrismaLambdaApiLive = PrismaLambdaApi.make(
   {

@@ -37,12 +37,7 @@ export interface Autocomplete extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoPlaces.AutocompleteRequest,
-    ) => Effect.Effect<
-      geoPlaces.AutocompleteResponse,
-      geoPlaces.AutocompleteError
-    >
+    ) => Effect.Effect<geoPlaces.AutocompleteResponse, geoPlaces.AutocompleteError>
   >
 > {}
-export const Autocomplete = Binding.Service<Autocomplete>(
-  "AWS.GeoPlaces.Autocomplete",
-);
+export const Autocomplete = Binding.Service<Autocomplete>("AWS.GeoPlaces.Autocomplete");

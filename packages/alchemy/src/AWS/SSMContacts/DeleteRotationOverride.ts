@@ -29,10 +29,7 @@ export interface DeleteRotationOverride extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.DeleteRotationOverrideRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.DeleteRotationOverrideResult,
-      ssm.DeleteRotationOverrideError
-    >
+    ) => Effect.Effect<ssm.DeleteRotationOverrideResult, ssm.DeleteRotationOverrideError>
   >
 > {}
 export const DeleteRotationOverride = Binding.Service<DeleteRotationOverride>(

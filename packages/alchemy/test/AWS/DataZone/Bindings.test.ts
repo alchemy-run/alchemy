@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -11,6 +8,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DataZoneTestFunctionLive, {
   BINDINGS_DOMAIN_NAME,
   BINDINGS_PROJECT_NAME,
@@ -23,10 +23,7 @@ const sharedStack = Core.scratchStack(testOptions, "DataZoneBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) plus DataZone
 // user-profile propagation can take well over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -45,9 +42,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -59,9 +54,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 /** Resolve the fixture domain's id by its deterministic name. */
 const findDomainId = Effect.gen(function* () {
@@ -70,8 +63,7 @@ const findDomainId = Effect.gen(function* () {
     .flatMap((page) => page.items ?? [])
     .find(
       (s) =>
-        (Redacted.isRedacted(s.name) ? Redacted.value(s.name) : s.name) ===
-          BINDINGS_DOMAIN_NAME &&
+        (Redacted.isRedacted(s.name) ? Redacted.value(s.name) : s.name) === BINDINGS_DOMAIN_NAME &&
         s.status !== "DELETING" &&
         s.status !== "DELETED",
     );
@@ -81,9 +73,7 @@ const findDomainId = Effect.gen(function* () {
 describe.sequential("DataZone Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "DataZone test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("DataZone test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("DataZone test setup: deploying fixture");
@@ -99,9 +89,7 @@ describe.sequential("DataZone Bindings", () => {
       functionRoleArn = attrs.roleArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `DataZone test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`DataZone test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -109,9 +97,7 @@ describe.sequential("DataZone Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `DataZone test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`DataZone test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -218,16 +204,14 @@ describe.sequential("DataZone Bindings", () => {
   });
 
   describe("ListSubscriptions", () => {
-    test.provider(
-      "lists approved subscriptions (empty in a fresh domain)",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/subscriptions")) as {
-            ok: boolean;
-            items: number;
-          };
-          expect(response).toMatchObject({ ok: true, items: 0 });
-        }),
+    test.provider("lists approved subscriptions (empty in a fresh domain)", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/subscriptions")) as {
+          ok: boolean;
+          items: number;
+        };
+        expect(response).toMatchObject({ ok: true, items: 0 });
+      }),
     );
   });
 
@@ -258,18 +242,16 @@ describe.sequential("DataZone Bindings", () => {
   });
 
   describe("consumeDataZoneEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      () =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeDataZoneEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", () =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeDataZoneEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

@@ -6,10 +6,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { RailwayS3CredentialsMissing } from "./BucketBinding.ts";
 
-export interface ListObjectsV2Request extends Omit<
-  S3.ListObjectsV2Request,
-  "Bucket"
-> {}
+export interface ListObjectsV2Request extends Omit<S3.ListObjectsV2Request, "Bucket"> {}
 
 /**
  * Runtime binding for Railway `ListObjectsV2` over the S3 API.
@@ -43,6 +40,4 @@ export interface ListObjectsV2 extends Binding.Service<
   >
 > {}
 
-export const ListObjectsV2 = Binding.Service<ListObjectsV2>(
-  "Railway.ListObjectsV2",
-);
+export const ListObjectsV2 = Binding.Service<ListObjectsV2>("Railway.ListObjectsV2");

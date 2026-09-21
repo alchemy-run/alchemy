@@ -1,6 +1,6 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export default class BindingsSprite extends Fly.Sprite<BindingsSprite>()(
   "BindingsSprite",

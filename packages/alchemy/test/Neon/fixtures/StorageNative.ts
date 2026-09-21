@@ -15,9 +15,7 @@ export const signStorageRead = (config: {
 
 export default {
   async fetch(request: Request) {
-    if (
-      request.headers.get("authorization") !== `Bearer ${process.env.APP_TOKEN}`
-    )
+    if (request.headers.get("authorization") !== `Bearer ${process.env.APP_TOKEN}`)
       return new Response("Unauthorized", { status: 401 });
     const client = new AwsClient({
       region: process.env.AWS_REGION!,

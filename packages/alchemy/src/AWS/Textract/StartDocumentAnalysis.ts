@@ -31,10 +31,7 @@ export interface StartDocumentAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.StartDocumentAnalysisRequest,
-    ) => Effect.Effect<
-      textract.StartDocumentAnalysisResponse,
-      textract.StartDocumentAnalysisError
-    >
+    ) => Effect.Effect<textract.StartDocumentAnalysisResponse, textract.StartDocumentAnalysisError>
   >
 > {}
 export const StartDocumentAnalysis = Binding.Service<StartDocumentAnalysis>(

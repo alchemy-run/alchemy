@@ -39,11 +39,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  *
  * @binding
  */
-export const MySQL = <
-  TRelations extends AnyRelations = EmptyRelations,
-  E = never,
-  R = never,
->(
+export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzleMySqlConfig<TRelations> & {
     /**
@@ -57,19 +53,16 @@ export const MySQL = <
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
-        const [MysqlClient, MySqlDrizzle, { resolveMySQLConfig }] =
-          yield* Effect.promise(() =>
-            Promise.all([
-              import("@effect/sql-mysql2/MysqlClient"),
-              import("drizzle-orm/effect-mysql2"),
-              import("../SQL/MySQL.ts"),
-            ]),
-          );
+        const [MysqlClient, MySqlDrizzle, { resolveMySQLConfig }] = yield* Effect.promise(() =>
+          Promise.all([
+            import("@effect/sql-mysql2/MysqlClient"),
+            import("drizzle-orm/effect-mysql2"),
+            import("../SQL/MySQL.ts"),
+          ]),
+        );
         const { client, ...drizzleConfig } = config ?? {};
         const mysqlCtx = yield* Layer.build(
-          MysqlClient.layer(
-            yield* resolveMySQLConfig({ ...client, url: connectionString }),
-          ),
+          MysqlClient.layer(yield* resolveMySQLConfig({ ...client, url: connectionString })),
         );
         return yield* MySqlDrizzle.makeWithDefaults(
           drizzleConfig as EffectDrizzleMySqlConfig<TRelations>,

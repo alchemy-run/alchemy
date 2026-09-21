@@ -3,10 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import {
-  packageWebsiteArtifact,
-  type WebsiteArtifactProps,
-} from "./Artifact.ts";
+import { packageWebsiteArtifact, type WebsiteArtifactProps } from "./Artifact.ts";
 
 NodeRuntime.runMain(
   Effect.gen(function* () {
@@ -16,14 +13,8 @@ NodeRuntime.runMain(
     if (!inputPath || !outputPath)
       return yield* Effect.fail(new Error("Missing Website packaging paths"));
     const source = yield* fs.readFileString(inputPath);
-    const props = yield* Effect.try(
-      () => JSON.parse(source) as WebsiteArtifactProps,
-    );
+    const props = yield* Effect.try(() => JSON.parse(source) as WebsiteArtifactProps);
     const { archive } = yield* packageWebsiteArtifact(props);
     yield* fs.writeFile(outputPath, archive);
-  }).pipe(
-    Effect.scoped,
-    Effect.provide(NodeServices.layer),
-    Effect.provide(FetchHttpClient.layer),
-  ),
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), Effect.provide(FetchHttpClient.layer)),
 );

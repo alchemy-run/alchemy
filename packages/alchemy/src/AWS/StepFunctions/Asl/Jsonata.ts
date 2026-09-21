@@ -133,11 +133,7 @@ export const literal = <T>(value: T): Expr<T> => makeExpr(literalNode(value));
 export const jsonata = <T = unknown>(expression: string): Expr<T> =>
   makeExpr({ _: "raw", jsonata: expression });
 
-const binop = (
-  op: ExprOperator,
-  left: unknown,
-  right: unknown,
-): Expr<boolean> =>
+const binop = (op: ExprOperator, left: unknown, right: unknown): Expr<boolean> =>
   makeExpr({ _: "binop", op, left: toNode(left), right: toNode(right) });
 
 /** `left = right` (JSONata equality). */
@@ -147,64 +143,43 @@ export const eq = <T>(left: ExprInput<T>, right: ExprInput<T>): Expr<boolean> =>
 export const ne = <T>(left: ExprInput<T>, right: ExprInput<T>): Expr<boolean> =>
   binop("!=", left, right);
 /** `left > right`. */
-export const gt = (
-  left: ExprInput<number>,
-  right: ExprInput<number>,
-): Expr<boolean> => binop(">", left, right);
+export const gt = (left: ExprInput<number>, right: ExprInput<number>): Expr<boolean> =>
+  binop(">", left, right);
 /** `left >= right`. */
-export const gte = (
-  left: ExprInput<number>,
-  right: ExprInput<number>,
-): Expr<boolean> => binop(">=", left, right);
+export const gte = (left: ExprInput<number>, right: ExprInput<number>): Expr<boolean> =>
+  binop(">=", left, right);
 /** `left < right`. */
-export const lt = (
-  left: ExprInput<number>,
-  right: ExprInput<number>,
-): Expr<boolean> => binop("<", left, right);
+export const lt = (left: ExprInput<number>, right: ExprInput<number>): Expr<boolean> =>
+  binop("<", left, right);
 /** `left <= right`. */
-export const lte = (
-  left: ExprInput<number>,
-  right: ExprInput<number>,
-): Expr<boolean> => binop("<=", left, right);
+export const lte = (left: ExprInput<number>, right: ExprInput<number>): Expr<boolean> =>
+  binop("<=", left, right);
 /** Boolean conjunction. */
 export const and = (
-  ...conditions: [
-    ExprInput<boolean>,
-    ExprInput<boolean>,
-    ...ExprInput<boolean>[],
-  ]
+  ...conditions: [ExprInput<boolean>, ExprInput<boolean>, ...ExprInput<boolean>[]]
 ): Expr<boolean> =>
   conditions
     .slice(1)
     .reduce<Expr<boolean>>(
       (acc, c) => binop("and", acc, c),
-      isExpr(conditions[0])
-        ? (conditions[0] as Expr<boolean>)
-        : literal(conditions[0] as boolean),
+      isExpr(conditions[0]) ? (conditions[0] as Expr<boolean>) : literal(conditions[0] as boolean),
     );
 /** Boolean disjunction. */
 export const or = (
-  ...conditions: [
-    ExprInput<boolean>,
-    ExprInput<boolean>,
-    ...ExprInput<boolean>[],
-  ]
+  ...conditions: [ExprInput<boolean>, ExprInput<boolean>, ...ExprInput<boolean>[]]
 ): Expr<boolean> =>
   conditions
     .slice(1)
     .reduce<Expr<boolean>>(
       (acc, c) => binop("or", acc, c),
-      isExpr(conditions[0])
-        ? (conditions[0] as Expr<boolean>)
-        : literal(conditions[0] as boolean),
+      isExpr(conditions[0]) ? (conditions[0] as Expr<boolean>) : literal(conditions[0] as boolean),
     );
 /** Boolean negation (`$not(...)`). */
 export const not = (condition: ExprInput<boolean>): Expr<boolean> =>
   makeExpr({ _: "not", inner: toNode(condition) });
 
 /** The execution-input root expression. */
-export const inputExpr = <T>(): Expr<T> =>
-  makeExpr({ _: "root", root: { kind: "input" } });
+export const inputExpr = <T>(): Expr<T> => makeExpr({ _: "root", root: { kind: "input" } });
 
 /** A reference to the ASL variable `name`. */
 export const variableExpr = <T>(name: string): Expr<T> =>
@@ -247,9 +222,7 @@ export const renderNode = (node: ExprNode): string => {
         node.parent._ === "root" || node.parent._ === "prop"
           ? renderNode(node.parent)
           : `(${renderNode(node.parent)})`;
-      return IDENT.test(node.name)
-        ? `${parent}.${node.name}`
-        : `${parent}.\`${node.name}\``;
+      return IDENT.test(node.name) ? `${parent}.${node.name}` : `${parent}.\`${node.name}\``;
     }
     case "literal":
       return JSON.stringify(node.value === undefined ? null : node.value);
@@ -263,5 +236,4 @@ export const renderNode = (node: ExprNode): string => {
 };
 
 /** Render an {@link Expr} to a `{% ... %}`-wrapped ASL JSONata string. */
-export const renderExprString = (expr: Expr<any>): string =>
-  `{% ${renderNode(nodeOf(expr))} %}`;
+export const renderExprString = (expr: Expr<any>): string => `{% ${renderNode(nodeOf(expr))} %}`;

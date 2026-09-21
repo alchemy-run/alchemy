@@ -1,6 +1,6 @@
 import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -8,8 +8,8 @@ import * as LogLevel from "effect/LogLevel";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
-import { rootDir } from "../Auth/Paths.ts";
 import packageJson from "../../package.json" with { type: "json" };
+import { rootDir } from "../Auth/Paths.ts";
 import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 
 /** Logs older than this are pruned (by mtime) on CLI start. */
@@ -41,9 +41,7 @@ const logLevelChoices: Record<string, LogLevel.LogLevel> = {
  * segment before a `--` separator is inspected; an unrecognised value falls
  * back to Info and is left for the parser to reject.
  */
-export const consoleLogFloor = (
-  argv: ReadonlyArray<string>,
-): LogLevel.LogLevel => {
+export const consoleLogFloor = (argv: ReadonlyArray<string>): LogLevel.LogLevel => {
   const separator = argv.indexOf("--");
   const flagArgs = separator === -1 ? argv : argv.slice(0, separator);
   let floor: LogLevel.LogLevel = "Info";
@@ -113,10 +111,7 @@ export const GlobalLogLive = Layer.unwrap(
           const file = path.join(dir, entry);
           const info = yield* fs.stat(file);
           const mtime = Option.getOrUndefined(info.mtime)?.getTime();
-          if (
-            mtime !== undefined &&
-            now - mtime > Duration.toMillis(MAX_LOG_AGE)
-          ) {
+          if (mtime !== undefined && now - mtime > Duration.toMillis(MAX_LOG_AGE)) {
             yield* fs.remove(file);
           }
         }).pipe(Effect.ignore),

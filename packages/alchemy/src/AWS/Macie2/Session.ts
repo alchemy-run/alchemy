@@ -9,10 +9,7 @@ import type { Providers } from "../Providers.ts";
 /**
  * How frequently Amazon Macie publishes updated policy findings.
  */
-export type FindingPublishingFrequency =
-  | "FIFTEEN_MINUTES"
-  | "ONE_HOUR"
-  | "SIX_HOURS";
+export type FindingPublishingFrequency = "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
 
 /**
  * The Macie enablement status. `ENABLED` runs Macie; `PAUSED` suspends it
@@ -107,8 +104,7 @@ export const SessionProvider = () =>
         read: Effect.fn(function* ({ output }) {
           const session = yield* getSession;
           if (!session) return undefined;
-          const accountId =
-            output?.accountId ?? (yield* AWSEnvironment.current).accountId;
+          const accountId = output?.accountId ?? (yield* AWSEnvironment.current).accountId;
           const attrs = buildAttrs(accountId, session);
           // Macie has no session-level tags, so ownership cannot be verified
           // from the cloud. If we have no prior state (`output` absent) but a
@@ -144,8 +140,7 @@ export const SessionProvider = () =>
             const statusChanged = live.status !== desiredStatus;
             const freqChanged =
               news.findingPublishingFrequency !== undefined &&
-              news.findingPublishingFrequency !==
-                live.findingPublishingFrequency;
+              news.findingPublishingFrequency !== live.findingPublishingFrequency;
             if (statusChanged || freqChanged) {
               yield* macie2.updateMacieSession({
                 status: desiredStatus,

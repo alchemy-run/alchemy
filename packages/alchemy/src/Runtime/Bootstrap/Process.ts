@@ -46,28 +46,21 @@ export const entrypointLayer = (entrypoint: unknown): Layer.Layer<any> =>
   makeEntrypointLayer(entrypointTag, entrypoint);
 
 /** `Stack` from the `ALCHEMY_STACK_NAME` / `ALCHEMY_STAGE` the host injects. */
-export const stackFromEnv: Layer.Layer<Stack, Config.ConfigError> =
-  Layer.effect(
-    Stack,
-    Effect.all([
-      Config.String("ALCHEMY_STACK_NAME"),
-      Config.String("ALCHEMY_STAGE"),
-    ]).pipe(
-      Effect.map(([name, stage]) => ({
-        name,
-        stage,
-        bindings: {},
-        resources: {},
-        actions: {},
-      })),
-    ),
-  );
+export const stackFromEnv: Layer.Layer<Stack, Config.ConfigError> = Layer.effect(
+  Stack,
+  Effect.all([Config.String("ALCHEMY_STACK_NAME"), Config.String("ALCHEMY_STAGE")]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {},
+      actions: {},
+    })),
+  ),
+);
 
 /** `Stack` from constants baked in at deploy time. */
-export const stackConstant = (
-  name: string,
-  stage: string,
-): Layer.Layer<Stack> =>
+export const stackConstant = (name: string, stage: string): Layer.Layer<Stack> =>
   Layer.succeed(Stack, {
     name,
     stage,
@@ -89,10 +82,9 @@ export const resolveProgram = (
 ): Effect.Effect<any, any, any> =>
   entrypointTag.pipe(
     Effect.flatMap((self) => {
-      const program: Effect.Effect<any, any, any> =
-        self.RuntimeContext.exports.pipe(
-          Effect.flatMap((exports: any) => exports[exportKey]),
-        );
+      const program: Effect.Effect<any, any, any> = self.RuntimeContext.exports.pipe(
+        Effect.flatMap((exports: any) => exports[exportKey]),
+      );
       return options?.telemetry
         ? program.pipe(provideProcessTelemetry(self.RuntimeContext))
         : program;

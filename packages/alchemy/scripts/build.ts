@@ -1,6 +1,6 @@
-import { $ } from "bun";
 import { rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { $ } from "bun";
 import packageJson from "../package.json" with { type: "json" };
 
 const packageDirectory = resolve(import.meta.dir, "..");

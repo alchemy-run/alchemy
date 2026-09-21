@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import { PostgresDatabase } from "@/Planetscale/Postgres/PostgresDatabase.ts";
 import { PostgresRole } from "@/Planetscale/Postgres/PostgresRole.ts";
-import * as Effect from "effect/Effect";
 
 /**
  * PlanetScale Postgres used as the container's DATABASE_URL. Like Neon,

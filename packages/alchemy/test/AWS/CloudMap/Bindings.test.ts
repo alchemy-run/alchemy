@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,16 +5,16 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CloudMapTestFunctionLive, { CloudMapTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CloudMapBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let serviceId: string;
@@ -36,25 +33,20 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
-class CloudMapOperationPending extends Data.TaggedError(
-  "CloudMapOperationPending",
-)<{ readonly operationId: string }> {}
+class CloudMapOperationPending extends Data.TaggedError("CloudMapOperationPending")<{
+  readonly operationId: string;
+}> {}
 
 /** Await a Cloud Map async operation out-of-band (bounded). */
 const waitOperation = (operationId: string) =>
@@ -81,9 +73,7 @@ const registerOutOfBand = (instanceId: string, ipv4: string) =>
     })
     .pipe(
       Effect.flatMap((r) =>
-        r.OperationId !== undefined
-          ? waitOperation(r.OperationId)
-          : Effect.void,
+        r.OperationId !== undefined ? waitOperation(r.OperationId) : Effect.void,
       ),
     );
 
@@ -95,9 +85,7 @@ const deregisterOutOfBand = (instanceId: string, inServiceId?: string) =>
     })
     .pipe(
       Effect.flatMap((r) =>
-        r.OperationId !== undefined
-          ? waitOperation(r.OperationId)
-          : Effect.void,
+        r.OperationId !== undefined ? waitOperation(r.OperationId) : Effect.void,
       ),
       Effect.catchTag("InstanceNotFound", () => Effect.void),
     );
@@ -110,9 +98,7 @@ interface DiscoveredInstance {
 
 /** Call the deployed Lambda's /discover route (through the binding). */
 const discoverViaLambda = Effect.gen(function* () {
-  const response = yield* send(
-    HttpClientRequest.get(`${baseUrl}/discover?health=ALL`),
-  );
+  const response = yield* send(HttpClientRequest.get(`${baseUrl}/discover?health=ALL`));
   const body = (yield* response.json) as unknown as {
     instances: DiscoveredInstance[];
   };
@@ -138,17 +124,13 @@ const expectDiscovered = (prefix: string, expected: string[]) =>
         .filter((id) => id.startsWith(prefix))
         .sort();
       const want = [...expected].sort();
-      return actual.length === want.length &&
-        actual.every((id, i) => id === want[i])
+      return actual.length === want.length && actual.every((id, i) => id === want[i])
         ? Effect.succeed(instances)
         : Effect.fail(new UnexpectedInstances({ expected: want, actual }));
     }),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedInstances",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -161,25 +143,18 @@ const expectInstanceState = (instanceId: string, present: boolean) =>
     Effect.map(() => true),
     Effect.catchTag("InstanceNotFound", () => Effect.succeed(false)),
     Effect.flatMap((exists) =>
-      exists === present
-        ? Effect.void
-        : Effect.fail(new InstanceNotVisible({ instanceId })),
+      exists === present ? Effect.void : Effect.fail(new InstanceNotVisible({ instanceId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotVisible",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
 describe("CloudMap Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "CloudMap test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("CloudMap test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("CloudMap test setup: deploying fixture");
@@ -192,9 +167,7 @@ describe("CloudMap Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      yield* Effect.logInfo(
-        `CloudMap test setup: probing readiness at ${baseUrl}/info`,
-      );
+      yield* Effect.logInfo(`CloudMap test setup: probing readiness at ${baseUrl}/info`);
       // readiness = 200 AND the Output-backed env vars are visible. Lambda
       // applies the code update and the env-var configuration update
       // separately, so there is a brief window where the real handler serves
@@ -212,9 +185,7 @@ describe("CloudMap Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
-      yield* Effect.logInfo(
-        `CloudMap test setup: fixture info = ${JSON.stringify(info)}`,
-      );
+      yield* Effect.logInfo(`CloudMap test setup: fixture info = ${JSON.stringify(info)}`);
       serviceId = (info as { serviceId: string }).serviceId;
       customServiceId = (info as { customServiceId: string }).customServiceId;
       expect(serviceId).toBeTruthy();
@@ -233,12 +204,10 @@ describe("CloudMap Bindings", () => {
         // then the namespace) can delete without ResourceInUse churn
         for (const cleanupServiceId of [serviceId, customServiceId]) {
           if (cleanupServiceId !== undefined) {
-            const instances = yield* sd
-              .listInstances({ ServiceId: cleanupServiceId })
-              .pipe(
-                Effect.map((r) => r.Instances ?? []),
-                Effect.catchTag("ServiceNotFound", () => Effect.succeed([])),
-              );
+            const instances = yield* sd.listInstances({ ServiceId: cleanupServiceId }).pipe(
+              Effect.map((r) => r.Instances ?? []),
+              Effect.catchTag("ServiceNotFound", () => Effect.succeed([])),
+            );
             yield* Effect.forEach(
               instances,
               (instance) =>
@@ -267,10 +236,7 @@ describe("CloudMap Bindings", () => {
           yield* registerOutOfBand("disc-b", "10.0.0.2");
 
           // the deployed Lambda sees both through the DiscoverInstances binding
-          const instances = yield* expectDiscovered("disc-", [
-            "disc-a",
-            "disc-b",
-          ]);
+          const instances = yield* expectDiscovered("disc-", ["disc-a", "disc-b"]);
           const discA = instances.find((i) => i.instanceId === "disc-a");
           expect(discA?.attributes.AWS_INSTANCE_IPV4).toBe("10.0.0.1");
 
@@ -292,13 +258,10 @@ describe("CloudMap Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/register`),
-              {
-                instanceId: "bind-reg",
-                attributes: { AWS_INSTANCE_IPV4: "10.0.0.9" },
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/register`), {
+              instanceId: "bind-reg",
+              attributes: { AWS_INSTANCE_IPV4: "10.0.0.9" },
+            }),
           );
           expect(response.status).toBe(200);
           const body = (yield* response.json) as { operationId?: string };
@@ -310,9 +273,7 @@ describe("CloudMap Bindings", () => {
             ServiceId: serviceId,
             InstanceId: "bind-reg",
           });
-          expect(instance.Instance?.Attributes?.AWS_INSTANCE_IPV4).toBe(
-            "10.0.0.9",
-          );
+          expect(instance.Instance?.Attributes?.AWS_INSTANCE_IPV4).toBe("10.0.0.9");
 
           // cleanup
           yield* deregisterOutOfBand("bind-reg");
@@ -330,10 +291,9 @@ describe("CloudMap Bindings", () => {
           yield* expectInstanceState("bind-dereg", true);
 
           const response = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/deregister`),
-              { instanceId: "bind-dereg" },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/deregister`), {
+              instanceId: "bind-dereg",
+            }),
           );
           expect(response.status).toBe(200);
 
@@ -351,9 +311,7 @@ describe("CloudMap Bindings", () => {
           yield* registerOutOfBand("read-a", "10.0.0.31");
 
           // GetInstance — full attribute map by id
-          const single = yield* send(
-            HttpClientRequest.get(`${baseUrl}/instance?id=read-a`),
-          );
+          const single = yield* send(HttpClientRequest.get(`${baseUrl}/instance?id=read-a`));
           expect(single.status).toBe(200);
           const singleBody = (yield* single.json) as {
             instanceId: string;
@@ -363,16 +321,12 @@ describe("CloudMap Bindings", () => {
           expect(singleBody.attributes.AWS_INSTANCE_IPV4).toBe("10.0.0.31");
 
           // ListInstances — control-plane enumeration includes it
-          const listed = yield* send(
-            HttpClientRequest.get(`${baseUrl}/instances`),
-          );
+          const listed = yield* send(HttpClientRequest.get(`${baseUrl}/instances`));
           expect(listed.status).toBe(200);
           const listedBody = (yield* listed.json) as {
             instances: { instanceId: string }[];
           };
-          expect(listedBody.instances.map((i) => i.instanceId)).toContain(
-            "read-a",
-          );
+          expect(listedBody.instances.map((i) => i.instanceId)).toContain("read-a");
 
           // cleanup
           yield* deregisterOutOfBand("read-a");
@@ -386,9 +340,7 @@ describe("CloudMap Bindings", () => {
       "lambda reads the instance-set revision through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/revision`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/revision`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as { revision: number };
           expect(typeof body.revision).toBe("number");
@@ -402,9 +354,7 @@ describe("CloudMap Bindings", () => {
       "lambda reads the service attributes declared on the Service resource",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/service-attributes`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/service-attributes`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as {
             attributes: Record<string, string>;
@@ -422,13 +372,10 @@ describe("CloudMap Bindings", () => {
         Effect.gen(function* () {
           // register an instance on the custom-health service via the binding
           const registered = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/custom/register`),
-              {
-                instanceId: "cust-1",
-                attributes: { AWS_INSTANCE_IPV4: "10.0.0.41" },
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/custom/register`), {
+              instanceId: "cust-1",
+              attributes: { AWS_INSTANCE_IPV4: "10.0.0.41" },
+            }),
           );
           expect(registered.status).toBe(200);
           const { operationId } = (yield* registered.json) as {
@@ -444,8 +391,7 @@ describe("CloudMap Bindings", () => {
             Effect.map((body) => body as { status?: string }),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
-              until: (op): boolean =>
-                op.status === "SUCCESS" || op.status === "FAIL",
+              until: (op): boolean => op.status === "SUCCESS" || op.status === "FAIL",
               times: 45,
             }),
           );
@@ -453,21 +399,16 @@ describe("CloudMap Bindings", () => {
 
           const pushHealth = (status: "HEALTHY" | "UNHEALTHY") =>
             send(
-              HttpClientRequest.bodyJsonUnsafe(
-                HttpClientRequest.post(`${baseUrl}/custom/health`),
-                { instanceId: "cust-1", status },
-              ),
+              HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/custom/health`), {
+                instanceId: "cust-1",
+                status,
+              }),
             );
 
-          const readHealth = send(
-            HttpClientRequest.get(`${baseUrl}/custom/health-status`),
-          ).pipe(
+          const readHealth = send(HttpClientRequest.get(`${baseUrl}/custom/health-status`)).pipe(
             Effect.flatMap((r) => r.json),
             Effect.map(
-              (body) =>
-                (body as { status: Record<string, string | undefined> }).status[
-                  "cust-1"
-                ],
+              (body) => (body as { status: Record<string, string | undefined> }).status["cust-1"],
             ),
           );
 

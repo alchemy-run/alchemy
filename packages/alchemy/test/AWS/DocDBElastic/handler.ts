@@ -1,10 +1,10 @@
-import * as DocDBElastic from "@/AWS/DocDBElastic";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DocDBElastic from "@/AWS/DocDBElastic";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -76,9 +76,7 @@ export default DocDBElasticTestFunction.make(
         if (request.method === "GET" && pathname === "/snapshot-probe") {
           const tag = yield* getSnapshot({ snapshotArn: arn }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -86,9 +84,7 @@ export default DocDBElasticTestFunction.make(
         if (request.method === "GET" && pathname === "/delete-probe") {
           const tag = yield* deleteSnapshot({ snapshotArn: arn }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -118,9 +114,8 @@ export default DocDBElasticTestFunction.make(
         if (request.method === "GET" && pathname === "/pending-probe") {
           const tag = yield* getPending({ resourceArn: arn }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -133,9 +128,8 @@ export default DocDBElasticTestFunction.make(
             optInType: "NEXT_MAINTENANCE",
           }).pipe(
             Effect.map(() => "Applied"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });

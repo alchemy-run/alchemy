@@ -1,4 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -9,6 +8,7 @@ import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 export class Journal extends Cloudflare.DurableObject<Journal>()(
   "LifecycleJournal",
@@ -24,17 +24,13 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         Effect.fail(
           internal
             ? new Error("internal error; reference = application")
-            : new TypeError(
-                'The RPC receiver does not implement the method "entries".',
-              ),
+            : new TypeError('The RPC receiver does not implement the method "entries".'),
         ),
     });
   }),
 ) {}
 
-class Dependency extends Context.Service<Dependency, string>()(
-  "LifecycleDependency",
-) {}
+class Dependency extends Context.Service<Dependency, string>()("LifecycleDependency") {}
 
 class InheritedData {
   declare readonly _tag: "InheritedData";
@@ -91,10 +87,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   "LifecycleWorkflow",
   Effect.gen(function* () {
     const journals = yield* Journal;
-    return Effect.fn(function* (input: {
-      scenario: Scenario | "ready";
-      stage?: string;
-    }) {
+    return Effect.fn(function* (input: { scenario: Scenario | "ready"; stage?: string }) {
       if (input.scenario === "ready") return ["workflow-ready"];
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const journal = journals.getByName(event.instanceId);
@@ -143,19 +136,14 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             Effect.orDie,
           ),
         );
-        yield* journal.record(
-          `open:${context.attempt}:${dependency}:${scope !== runScope}`,
-        );
+        yield* journal.record(`open:${context.attempt}:${dependency}:${scope !== runScope}`);
         yield* Deferred.succeed(started, undefined);
         if (input.scenario === "interrupt") return yield* Effect.never;
         if (input.scenario.startsWith("unsupported")) {
           const value = yield* Effect.sync(() => {
-            if (input.scenario === "unsupported-function")
-              return () => "not data";
-            if (input.scenario === "unsupported-symbol")
-              return Symbol("not data");
-            if (input.scenario === "unsupported-size")
-              return "x".repeat(20_000);
+            if (input.scenario === "unsupported-function") return () => "not data";
+            if (input.scenario === "unsupported-symbol") return Symbol("not data");
+            if (input.scenario === "unsupported-size") return "x".repeat(20_000);
             if (input.scenario === "unsupported-array")
               return Object.assign(new Array(2), {
                 0: "first",
@@ -229,8 +217,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             ? Effect.die(error)
             : Effect.fail(error).pipe(Effect.orDie);
         }
-        if (input.scenario === "die")
-          return yield* Effect.die(applicationError);
+        if (input.scenario === "die") return yield* Effect.die(applicationError);
         if (input.scenario === "orDie") {
           return yield* Effect.fail(applicationError).pipe(Effect.orDie);
         }
@@ -249,8 +236,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
       const task = Cloudflare.Workflows.task("attempt", attempt, {
         retries: {
           limit: 1,
-          delay:
-            input.scenario === "interrupt-retry" ? "30 seconds" : "1 second",
+          delay: input.scenario === "interrupt-retry" ? "30 seconds" : "1 second",
           backoff: "constant",
         },
         timeout: "10 seconds",
@@ -261,26 +247,21 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
                 const dependency = yield* Dependency;
                 const previous = (yield* journal.entries()) ?? [];
                 const attempt =
-                  previous.filter((entry) => entry.startsWith("rollback-open"))
-                    .length + 1;
-                const suffix =
-                  input.scenario === "rollback" ? "" : `:${attempt}`;
+                  previous.filter((entry) => entry.startsWith("rollback-open")).length + 1;
+                const suffix = input.scenario === "rollback" ? "" : `:${attempt}`;
                 yield* Effect.addFinalizer(() =>
                   Effect.sleep("20 millis").pipe(
                     Effect.andThen(journal.record(`rollback-close${suffix}`)),
                     Effect.orDie,
                   ),
                 );
-                yield* journal.record(
-                  `rollback-open:${dependency}:${scope !== runScope}${suffix}`,
-                );
+                yield* journal.record(`rollback-open:${dependency}:${scope !== runScope}${suffix}`);
                 yield* journal.record(`rollback-body${suffix}`);
                 const error = new ApplicationError({
                   message: "rollback failure",
                   attempt,
                 });
-                if (input.scenario === "rollback-die")
-                  return yield* Effect.die(error);
+                if (input.scenario === "rollback-die") return yield* Effect.die(error);
                 if (input.scenario === "rollback-orDie")
                   return yield* Effect.fail(error).pipe(Effect.orDie);
                 if (input.scenario === "rollback-retry" && attempt === 1)
@@ -291,21 +272,14 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
           : {}),
       }).pipe(Effect.provideService(Dependency, "captured"));
 
-      if (
-        input.scenario === "interrupt" ||
-        input.scenario === "interrupt-retry"
-      ) {
+      if (input.scenario === "interrupt" || input.scenario === "interrupt-retry") {
         const fiber = yield* Effect.forkChild(task);
         yield* Deferred.await(started);
-        if (input.scenario === "interrupt-retry")
-          yield* Effect.sleep("250 millis");
+        if (input.scenario === "interrupt-retry") yield* Effect.sleep("250 millis");
         yield* Fiber.interrupt(fiber).pipe(Effect.timeout("2 seconds"));
         yield* journal.record("joined");
         yield* Effect.sleep("2500 millis");
-      } else if (
-        input.scenario === "exhaustion" ||
-        input.scenario.startsWith("replay")
-      ) {
+      } else if (input.scenario === "exhaustion" || input.scenario.startsWith("replay")) {
         const result = yield* input.scenario.startsWith("replay-terminal")
           ? task.pipe(
               Effect.catchDefect(
@@ -313,16 +287,13 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
                   const message = `[alchemy-workflow-terminal:v1]${terminalMessage}`;
                   if (
                     !(error instanceof Error) ||
-                    (error.message !== message &&
-                      error.message !== `NonRetryableError: ${message}`)
+                    (error.message !== message && error.message !== `NonRetryableError: ${message}`)
                   ) {
                     return yield* Effect.die(error);
                   }
                   const previous = (yield* journal.entries()) ?? [];
                   yield* journal.record(`caught:terminal:${executed}`);
-                  return previous.includes("checkpoint")
-                    ? "replayed"
-                    : "recovered";
+                  return previous.includes("checkpoint") ? "replayed" : "recovered";
                 }),
               ),
             )
@@ -334,8 +305,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
                   if (
                     error.message !== "application failure" ||
                     error.attempt !== 2 ||
-                    details?.date.toISOString() !==
-                      "2026-09-18T12:00:00.000Z" ||
+                    details?.date.toISOString() !== "2026-09-18T12:00:00.000Z" ||
                     details.count !== 1234567890123456789n ||
                     !(details.bytes instanceof Uint8Array) ||
                     details.bytes.join(",") !== "0,1,128,255" ||
@@ -350,14 +320,10 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
                     details.inherited._tag !== "InheritedData" ||
                     details.inherited.code !== "inherited" ||
                     details.nested.message !== "nested failure" ||
-                    JSON.stringify(details.nested.cause) !==
-                      '{"code":"NESTED"}' ||
-                    (error === applicationError &&
-                      error.describe() !== "application:2")
+                    JSON.stringify(details.nested.cause) !== '{"code":"NESTED"}' ||
+                    (error === applicationError && error.describe() !== "application:2")
                   )
-                    return yield* Effect.die(
-                      new Error("Application failure data changed"),
-                    );
+                    return yield* Effect.die(new Error("Application failure data changed"));
                   yield* journal.record(
                     `caught:application:${error.attempt}:${error === applicationError}`,
                   );
@@ -366,10 +332,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
               ),
             );
         if (input.scenario.startsWith("replay") && result === "recovered") {
-          yield* Cloudflare.Workflows.task(
-            "replay-checkpoint",
-            Effect.succeed("saved"),
-          );
+          yield* Cloudflare.Workflows.task("replay-checkpoint", Effect.succeed("saved"));
           yield* journal.record("checkpoint");
           return yield* journal.entries();
         }
@@ -385,30 +348,21 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   }),
 ) {}
 
-class WorkflowControlUnavailable extends Data.TaggedError(
-  "WorkflowControlUnavailable",
-)<{
+class WorkflowControlUnavailable extends Data.TaggedError("WorkflowControlUnavailable")<{
   operation: string;
   cause: Error;
 }> {}
 
-const retryWorkflowControl = <A, R>(
-  operation: string,
-  effect: Effect.Effect<A, never, R>,
-) =>
+const retryWorkflowControl = <A, R>(operation: string, effect: Effect.Effect<A, never, R>) =>
   effect.pipe(
     Effect.catchDefect((defect) =>
       Cause.isUnknownError(defect) &&
       defect.cause instanceof Error &&
       defect.cause.message === "internal error"
-        ? Effect.fail(
-            new WorkflowControlUnavailable({ operation, cause: defect.cause }),
-          )
+        ? Effect.fail(new WorkflowControlUnavailable({ operation, cause: defect.cause }))
         : Effect.die(defect),
     ),
-    Effect.tapError(() =>
-      Effect.logWarning(`Native Workflow ${operation} unavailable; retrying`),
-    ),
+    Effect.tapError(() => Effect.logWarning(`Native Workflow ${operation} unavailable; retrying`)),
     Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 4 }),
     Effect.orDie,
   );
@@ -419,11 +373,7 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
   Effect.gen(function* () {
     const workflow = yield* LifecycleWorkflow;
     const journals = yield* Journal;
-    const start = Effect.fn(function* (
-      id: string,
-      scenario: Scenario | "ready",
-      stage?: string,
-    ) {
+    const start = Effect.fn(function* (id: string, scenario: Scenario | "ready", stage?: string) {
       // Retrying anonymous create() could duplicate an accepted start; createBatch is idempotent by ID.
       yield* retryWorkflowControl(
         "createBatch",
@@ -442,10 +392,7 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
             const instance = yield* start(id, "ready");
             return yield* HttpServerResponse.json({ id: instance.id });
           }
-          const instance = yield* retryWorkflowControl(
-            "get",
-            workflow.get(value),
-          );
+          const instance = yield* retryWorkflowControl("get", workflow.get(value));
           return yield* HttpServerResponse.json(
             yield* retryWorkflowControl("status", instance.status()),
           );
@@ -460,35 +407,26 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
           return yield* HttpServerResponse.json({ id: instance.id });
         }
         if (action === "restart") {
-          const instance = yield* retryWorkflowControl(
-            "get",
-            workflow.get(value),
-          );
+          const instance = yield* retryWorkflowControl("get", workflow.get(value));
           yield* instance.restart({
             from: { name: "replay-checkpoint", type: "do" },
           });
           return HttpServerResponse.text("ok");
         }
         if (action === "journal") {
-          return yield* HttpServerResponse.json(
-            (yield* journals.getByName(value).entries()) ?? [],
-          );
+          return yield* HttpServerResponse.json((yield* journals.getByName(value).entries()) ?? []);
         }
         if (action === "status") {
-          const instance = yield* retryWorkflowControl(
-            "get",
-            workflow.get(value),
-          );
+          const instance = yield* retryWorkflowControl("get", workflow.get(value));
           return yield* HttpServerResponse.json({
             ...(yield* retryWorkflowControl("status", instance.status())),
             entries: (yield* journals.getByName(value).entries()) ?? [],
           });
         }
         if (path === "/ready" && request.method === "GET") {
-          const applicationError = new URL(
-            request.url,
-            "http://localhost",
-          ).searchParams.get("application-error");
+          const applicationError = new URL(request.url, "http://localhost").searchParams.get(
+            "application-error",
+          );
           const journal = journals.getByName("ready");
           return yield* (
             applicationError !== null
@@ -506,21 +444,15 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
                   error.cause.message ===
                     'The RPC receiver does not implement the method "entries".') ||
                   (error.cause.name === "Error" &&
-                    /^internal error; reference = [a-z0-9]+$/.test(
-                      error.cause.message,
-                    )))
+                    /^internal error; reference = [a-z0-9]+$/.test(error.cause.message)))
               ) {
                 return Effect.succeed(
-                  HttpServerResponse.text(
-                    "LifecycleJournal.entries not ready",
-                    {
-                      status: 503,
-                      headers: {
-                        "x-workflow-lifecycle-readiness":
-                          "journal-rpc-not-ready",
-                      },
+                  HttpServerResponse.text("LifecycleJournal.entries not ready", {
+                    status: 503,
+                    headers: {
+                      "x-workflow-lifecycle-readiness": "journal-rpc-not-ready",
                     },
-                  ),
+                  }),
                 );
               }
               return Effect.failCause(cause);
@@ -530,9 +462,7 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
         ),
       ),
     };

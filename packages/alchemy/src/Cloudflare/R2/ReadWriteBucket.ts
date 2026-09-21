@@ -15,9 +15,6 @@ export interface ReadWriteBucket extends Binding.Service<
   (bucket: Bucket) => Effect.Effect<ReadWriteBucketClient>
 > {}
 
-export const ReadWriteBucket = Binding.Service<ReadWriteBucket>(
-  "Cloudflare.R2.ReadWriteBucket",
-);
+export const ReadWriteBucket = Binding.Service<ReadWriteBucket>("Cloudflare.R2.ReadWriteBucket");
 
-export interface ReadWriteBucketClient
-  extends ReadBucketClient, WriteBucketClient {}
+export interface ReadWriteBucketClient extends ReadBucketClient, WriteBucketClient {}

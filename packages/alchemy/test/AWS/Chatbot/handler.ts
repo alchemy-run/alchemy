@@ -1,10 +1,10 @@
-import * as Chatbot from "@/AWS/Chatbot";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Chatbot from "@/AWS/Chatbot";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -45,19 +45,13 @@ export default ChatbotTestFunction.make(
     const getAccountPreferences = yield* Chatbot.GetAccountPreferences();
     const updateAccountPreferences = yield* Chatbot.UpdateAccountPreferences();
     const describeSlackWorkspaces = yield* Chatbot.DescribeSlackWorkspaces();
-    const describeSlackUserIdentities =
-      yield* Chatbot.DescribeSlackUserIdentities();
+    const describeSlackUserIdentities = yield* Chatbot.DescribeSlackUserIdentities();
     const deleteSlackUserIdentity = yield* Chatbot.DeleteSlackUserIdentity();
-    const deleteSlackWorkspaceAuthorization =
-      yield* Chatbot.DeleteSlackWorkspaceAuthorization();
-    const listMicrosoftTeamsConfiguredTeams =
-      yield* Chatbot.ListMicrosoftTeamsConfiguredTeams();
-    const listMicrosoftTeamsUserIdentities =
-      yield* Chatbot.ListMicrosoftTeamsUserIdentities();
-    const deleteMicrosoftTeamsUserIdentity =
-      yield* Chatbot.DeleteMicrosoftTeamsUserIdentity();
-    const deleteMicrosoftTeamsConfiguredTeam =
-      yield* Chatbot.DeleteMicrosoftTeamsConfiguredTeam();
+    const deleteSlackWorkspaceAuthorization = yield* Chatbot.DeleteSlackWorkspaceAuthorization();
+    const listMicrosoftTeamsConfiguredTeams = yield* Chatbot.ListMicrosoftTeamsConfiguredTeams();
+    const listMicrosoftTeamsUserIdentities = yield* Chatbot.ListMicrosoftTeamsUserIdentities();
+    const deleteMicrosoftTeamsUserIdentity = yield* Chatbot.DeleteMicrosoftTeamsUserIdentity();
+    const deleteMicrosoftTeamsConfiguredTeam = yield* Chatbot.DeleteMicrosoftTeamsConfiguredTeam();
 
     const bound = {
       getAccountPreferences,
@@ -94,10 +88,7 @@ export default ChatbotTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/account-preferences-roundtrip"
-        ) {
+        if (request.method === "POST" && pathname === "/account-preferences-roundtrip") {
           // Read the current preferences, then write the identical values
           // back — a safe no-op write proving the update binding.
           const current = yield* getAccountPreferences();
@@ -105,16 +96,14 @@ export default ChatbotTestFunction.make(
             UserAuthorizationRequired:
               current.AccountPreferences?.UserAuthorizationRequired ?? false,
             TrainingDataCollectionEnabled:
-              current.AccountPreferences?.TrainingDataCollectionEnabled ??
-              false,
+              current.AccountPreferences?.TrainingDataCollectionEnabled ?? false,
           }).pipe(
             Effect.map((r) => ({
               ok: true as const,
               hasPreferences: r.AccountPreferences !== undefined,
             })),
-            Effect.catchTag(
-              ["InvalidParameterException", "InvalidRequestException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["InvalidParameterException", "InvalidRequestException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -136,10 +125,7 @@ export default ChatbotTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/teams-configured-teams"
-        ) {
+        if (request.method === "GET" && pathname === "/teams-configured-teams") {
           const result = yield* listMicrosoftTeamsConfiguredTeams();
           return yield* HttpServerResponse.json({
             ok: true,
@@ -155,10 +141,7 @@ export default ChatbotTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/delete-slack-user-identity"
-        ) {
+        if (request.method === "POST" && pathname === "/delete-slack-user-identity") {
           const result = yield* deleteSlackUserIdentity({
             ChatConfigurationArn: nonexistentSlackConfigurationArn(
               url.searchParams.get("account") ?? "",
@@ -179,29 +162,20 @@ export default ChatbotTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/delete-slack-workspace-authorization"
-        ) {
+        if (request.method === "POST" && pathname === "/delete-slack-workspace-authorization") {
           const result = yield* deleteSlackWorkspaceAuthorization({
             SlackTeamId: NONEXISTENT_SLACK_TEAM,
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
             Effect.catchTag(
-              [
-                "DeleteSlackWorkspaceAuthorizationFault",
-                "InvalidParameterException",
-              ],
+              ["DeleteSlackWorkspaceAuthorizationFault", "InvalidParameterException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/delete-teams-user-identity"
-        ) {
+        if (request.method === "POST" && pathname === "/delete-teams-user-identity") {
           const result = yield* deleteMicrosoftTeamsUserIdentity({
             ChatConfigurationArn: nonexistentTeamsConfigurationArn(
               url.searchParams.get("account") ?? "",
@@ -221,10 +195,7 @@ export default ChatbotTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/delete-teams-configured-team"
-        ) {
+        if (request.method === "POST" && pathname === "/delete-teams-configured-team") {
           const result = yield* deleteMicrosoftTeamsConfiguredTeam({
             TeamId: NONEXISTENT_TEAMS_ID,
           }).pipe(

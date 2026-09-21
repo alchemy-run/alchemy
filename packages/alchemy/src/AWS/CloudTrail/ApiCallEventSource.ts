@@ -115,9 +115,7 @@ export const consumeApiCallEvents = <StreamReq = never, Req = never>(
       ...(props.eventSources || props.eventNames
         ? {
             detail: {
-              ...(props.eventSources
-                ? { eventSource: [...props.eventSources] }
-                : {}),
+              ...(props.eventSources ? { eventSource: [...props.eventSources] } : {}),
               ...(props.eventNames ? { eventName: [...props.eventNames] } : {}),
             },
           }

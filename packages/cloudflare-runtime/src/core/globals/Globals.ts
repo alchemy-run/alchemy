@@ -1,4 +1,3 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Cause from "effect/Cause";
 import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
@@ -7,9 +6,9 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const EntryWorker = {
-  worker: () =>
-    loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
 };
 import {
   DEFAULT_COMPATIBILITY_DATE,
@@ -21,7 +20,6 @@ import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
-import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import * as Cf from "./Cf.ts";
 import {
   BINDING_EMAIL_DIRECTORY,
@@ -30,12 +28,11 @@ import {
 } from "./EmailOptions.shared.ts";
 import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
+import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
 
-export class Globals extends Plugin.Service<Globals>()(
-  "cloudflare-runtime/plugin/Globals",
-) {}
+export class Globals extends Plugin.Service<Globals>()("cloudflare-runtime/plugin/Globals") {}
 
 /**
  * Fire one cron expression against the entry socket's scheduled route.
@@ -45,25 +42,16 @@ export class Globals extends Plugin.Service<Globals>()(
  * Trigger failures are logged and the loop continues. The loop runs on the
  * worker's start `Scope`, so it dies with the worker.
  */
-const cronLoop = (
-  workerName: string,
-  expression: string,
-  cron: Cron.Cron,
-  port: number,
-) => {
+const cronLoop = (workerName: string, expression: string, cron: Cron.Cron, port: number) => {
   const fire = Effect.gen(function* () {
     const time = yield* Effect.sync(() => Date.now());
     const url =
       `http://127.0.0.1:${port}${PATH_SCHEDULED}` +
       `?cron=${encodeURIComponent(expression)}&time=${time}`;
-    const response = yield* Effect.tryPromise(() =>
-      fetch(url, { method: "POST" }),
-    );
+    const response = yield* Effect.tryPromise(() => fetch(url, { method: "POST" }));
     const body = yield* Effect.tryPromise(() => response.text());
     if (response.ok) {
-      yield* Effect.logInfo(
-        `[cron:${workerName}] "${expression}" triggered scheduled(): ${body}`,
-      );
+      yield* Effect.logInfo(`[cron:${workerName}] "${expression}" triggered scheduled(): ${body}`);
     } else {
       yield* Effect.logWarning(
         `[cron:${workerName}] "${expression}" scheduled() handler failed: ${body}`,
@@ -71,10 +59,7 @@ const cronLoop = (
     }
   }).pipe(
     Effect.catchCause((cause) =>
-      Effect.logWarning(
-        `[cron:${workerName}] "${expression}" trigger failed`,
-        Cause.squash(cause),
-      ),
+      Effect.logWarning(`[cron:${workerName}] "${expression}" trigger failed`, Cause.squash(cause)),
     ),
   );
   // `Schedule.cron` over a pre-parsed `Cron` cannot fail to parse, so the
@@ -90,9 +75,7 @@ export const GlobalsLive = Layer.effect(
     const internet = yield* Internet.Internet;
     const storage = yield* Storage.Storage;
     const cf = yield* Cf.Cf;
-    const modules = formatInternalWorkerModules(
-      yield* Effect.promise(EntryWorker.worker),
-    );
+    const modules = formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker));
 
     // Inbound email replies (`message.reply(...)` from the user worker's
     // `email()` handler) are persisted under `{storage}/email` — the same
@@ -136,22 +119,19 @@ export const GlobalsLive = Layer.effect(
         // plan/config time rather than a dead timer at runtime. Cloudflare
         // evaluates crons in UTC; pin the parse to UTC so `Cron.next`
         // matches production timing.
-        const crons = yield* Effect.forEach(
-          worker.crons ?? [],
-          (expression) => {
-            const parsed = Cron.parse(expression, "UTC");
-            return Result.isSuccess(parsed)
-              ? Effect.succeed({ expression, cron: parsed.success })
-              : Effect.fail(
-                  new ConfigError({
-                    subtag: "InvalidCron",
-                    message: `Invalid cron expression "${expression}": ${parsed.failure.message}`,
-                    hint: 'Use a standard cron expression, e.g. "*/5 * * * *".',
-                    detail: { workerName: worker.name, expression },
-                  }),
-                );
-          },
-        );
+        const crons = yield* Effect.forEach(worker.crons ?? [], (expression) => {
+          const parsed = Cron.parse(expression, "UTC");
+          return Result.isSuccess(parsed)
+            ? Effect.succeed({ expression, cron: parsed.success })
+            : Effect.fail(
+                new ConfigError({
+                  subtag: "InvalidCron",
+                  message: `Invalid cron expression "${expression}": ${parsed.failure.message}`,
+                  hint: 'Use a standard cron expression, e.g. "*/5 * * * *".',
+                  detail: { workerName: worker.name, expression },
+                }),
+              );
+        });
         return {
           middlewares: [
             {
@@ -196,11 +176,7 @@ export const GlobalsLive = Layer.effect(
               upstreamBindingName: "USER_WORKER",
             },
           ],
-          services: [
-            internet,
-            storage,
-            ...(email === undefined ? [] : [email.service]),
-          ],
+          services: [internet, storage, ...(email === undefined ? [] : [email.service])],
           start:
             crons.length === 0
               ? undefined
@@ -211,9 +187,7 @@ export const GlobalsLive = Layer.effect(
                     yield* Effect.forEach(
                       crons,
                       ({ expression, cron }) =>
-                        Effect.forkScoped(
-                          cronLoop(worker.name, expression, cron, port),
-                        ),
+                        Effect.forkScoped(cronLoop(worker.name, expression, cron, port)),
                       { discard: true },
                     );
                   }),

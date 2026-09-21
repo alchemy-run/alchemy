@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface DeleteItemRequest extends Omit<
-  DynamoDB.DeleteItemInput,
-  "TableName"
-> {}
+export interface DeleteItemRequest extends Omit<DynamoDB.DeleteItemInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:DeleteItem`.
@@ -41,6 +38,4 @@ export interface DeleteItem extends Binding.Service<
   >
 > {}
 
-export const DeleteItem = Binding.Service<DeleteItem>(
-  "AWS.DynamoDB.DeleteItem",
-);
+export const DeleteItem = Binding.Service<DeleteItem>("AWS.DynamoDB.DeleteItem");

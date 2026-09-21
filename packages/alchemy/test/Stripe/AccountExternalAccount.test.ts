@@ -1,7 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import { isMissingStripeResource } from "@/Stripe/missing.ts";
-import * as Test from "@/Test/Alchemy";
 import {
   DeleteAccount,
   GetAccountExternalAccount,
@@ -13,13 +9,14 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
+import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /** Opt-in: the testing Stripe account must be a Connect platform. */
 const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
@@ -130,17 +127,14 @@ test.provider.skipIf(!CONNECT_ENABLED)(
             ...connectAccountProps,
             email: "alchemy.aea.lifecycle@example.com",
           });
-          const externalAccount = yield* Stripe.AccountExternalAccount(
-            "PayoutBank",
-            {
-              account: account.id,
-              externalAccount: token.id,
-              accountHolderName: "Jenny Rosen",
-              accountHolderType: "individual",
-              defaultForCurrency: true,
-              metadata: { purpose: "payouts" },
-            },
-          );
+          const externalAccount = yield* Stripe.AccountExternalAccount("PayoutBank", {
+            account: account.id,
+            externalAccount: token.id,
+            accountHolderName: "Jenny Rosen",
+            accountHolderType: "individual",
+            defaultForCurrency: true,
+            metadata: { purpose: "payouts" },
+          });
           return { account, externalAccount };
         }),
       );
@@ -170,12 +164,8 @@ test.provider.skipIf(!CONNECT_ENABLED)(
         expect(fetched.account_holder_name).toEqual("Jenny Rosen");
         expect(fetched.account_holder_type).toEqual("individual");
         expect(fetched.metadata?.purpose).toEqual("payouts");
-        expect(
-          fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-        ).toBeDefined();
-        expect(
-          fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-        ).toBeDefined();
+        expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+        expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
         expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
       }
 
@@ -185,26 +175,21 @@ test.provider.skipIf(!CONNECT_ENABLED)(
             ...connectAccountProps,
             email: "alchemy.aea.lifecycle@example.com",
           });
-          const externalAccount = yield* Stripe.AccountExternalAccount(
-            "PayoutBank",
-            {
-              account: account.id,
-              externalAccount: token.id,
-              accountHolderName: "Alchemy Tester",
-              accountHolderType: "company",
-              defaultForCurrency: true,
-              metadata: { purpose: "payroll", region: "us" },
-            },
-          );
+          const externalAccount = yield* Stripe.AccountExternalAccount("PayoutBank", {
+            account: account.id,
+            externalAccount: token.id,
+            accountHolderName: "Alchemy Tester",
+            accountHolderType: "company",
+            defaultForCurrency: true,
+            metadata: { purpose: "payroll", region: "us" },
+          });
           return { account, externalAccount };
         }),
       );
 
       expect(updated.externalAccount.id).toEqual(created.externalAccount.id);
       expect(updated.externalAccount.account).toEqual(created.account.id);
-      expect(updated.externalAccount.accountHolderName).toEqual(
-        "Alchemy Tester",
-      );
+      expect(updated.externalAccount.accountHolderName).toEqual("Alchemy Tester");
       expect(updated.externalAccount.accountHolderType).toEqual("company");
       expect(updated.externalAccount.metadata).toEqual({
         purpose: "payroll",
@@ -220,9 +205,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
         expect(refetched.account_holder_type).toEqual("company");
         expect(refetched.metadata?.purpose).toEqual("payroll");
         expect(refetched.metadata?.region).toEqual("us");
-        expect(
-          refetched.metadata?.[Stripe.alchemyMetadataKeys.id],
-        ).toBeDefined();
+        expect(refetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
       }
 
       yield* stack.destroy();
@@ -250,22 +233,17 @@ test.provider.skipIf(!CONNECT_ENABLED)(
             ...connectAccountProps,
             email: "alchemy.aea.list@example.com",
           });
-          const externalAccount = yield* Stripe.AccountExternalAccount(
-            "ListPayoutBank",
-            {
-              account: account.id,
-              externalAccount: token.id,
-              accountHolderName: "List Holder",
-              metadata: { kind: "list" },
-            },
-          );
+          const externalAccount = yield* Stripe.AccountExternalAccount("ListPayoutBank", {
+            account: account.id,
+            externalAccount: token.id,
+            accountHolderName: "List Holder",
+            metadata: { kind: "list" },
+          });
           return { account, externalAccount };
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Stripe.AccountExternalAccount,
-      );
+      const provider = yield* Provider.findProvider(Stripe.AccountExternalAccount);
       const all = yield* provider.list();
       const found = all.find((ea) => ea.id === deployed.externalAccount.id);
       expect(found).toBeDefined();
@@ -282,9 +260,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       expect(gone).toEqual("gone");
 
       const after = yield* provider.list();
-      expect(
-        after.find((ea) => ea.id === deployed.externalAccount.id),
-      ).toBeUndefined();
+      expect(after.find((ea) => ea.id === deployed.externalAccount.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

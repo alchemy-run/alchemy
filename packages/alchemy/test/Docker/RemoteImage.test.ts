@@ -1,12 +1,12 @@
-import * as Docker from "@/Docker";
-import * as Provider from "@/Provider";
-import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Docker from "@/Docker";
+import * as Provider from "@/Provider";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -108,9 +108,7 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       const targetTag = "retagged";
       const targetRef = `${targetName}:${targetTag}`;
       // RemoteImage.delete is a no-op, so reclaim the re-tagged image here.
-      yield* Effect.addFinalizer(() =>
-        docker.image.remove([targetRef], true).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => docker.image.remove([targetRef], true).pipe(Effect.ignore));
 
       const image = yield* stack.deploy(
         Docker.RemoteImage("retagged-hello", {
@@ -148,15 +146,7 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
         ]).pipe(Effect.ignore),
       );
 
-      yield* docker.run([
-        "run",
-        "-d",
-        "--name",
-        registryName,
-        "-p",
-        `${port}:5000`,
-        "registry:2",
-      ]);
+      yield* docker.run(["run", "-d", "--name", registryName, "-p", `${port}:5000`, "registry:2"]);
 
       // Wait for the registry HTTP API to start serving before pushing.
       yield* client.get(`http://${host}/v2/`).pipe(

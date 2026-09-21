@@ -1,19 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  ResolverEndpoint,
-  ResolverRule,
-  ResolverRuleAssociation,
-} from "@/AWS/Route53Resolver";
-import * as Test from "@/Test/Alchemy";
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  assertEndpointDeleting,
-  assertRuleGone,
-  defaultNetwork,
-} from "./helpers.ts";
+import * as AWS from "@/AWS";
+import { ResolverEndpoint, ResolverRule, ResolverRuleAssociation } from "@/AWS/Route53Resolver";
+import * as Test from "@/Test/Alchemy";
+import { assertEndpointDeleting, assertRuleGone, defaultNetwork } from "./helpers.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,9 +22,7 @@ test.provider("associating a nonexistent rule fails with a typed tag", () =>
       })
       .pipe(
         Effect.map(() => "created" as const),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("not-found" as const),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("not-found" as const)),
       );
     expect(result).toBe("not-found");
   }),
@@ -68,20 +58,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         }),
       );
 
-      expect(deployed.association.resolverRuleAssociationId).toContain(
-        "rslvr-rrassoc-",
-      );
-      expect(deployed.association.resolverRuleId).toBe(
-        deployed.rule.resolverRuleId,
-      );
+      expect(deployed.association.resolverRuleAssociationId).toContain("rslvr-rrassoc-");
+      expect(deployed.association.resolverRuleId).toBe(deployed.rule.resolverRuleId);
       expect(deployed.association.vpcId).toBe(net.vpcId);
 
       // Out-of-band: the association exists and converges to COMPLETE
       // (VPC associations routinely take 1-2 minutes).
       const status = yield* r53r
         .getResolverRuleAssociation({
-          ResolverRuleAssociationId:
-            deployed.association.resolverRuleAssociationId,
+          ResolverRuleAssociationId: deployed.association.resolverRuleAssociationId,
         })
         .pipe(
           Effect.map((r) => r.ResolverRuleAssociation?.Status),
@@ -123,14 +108,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       const gone = yield* r53r
         .getResolverRuleAssociation({
-          ResolverRuleAssociationId:
-            deployed.association.resolverRuleAssociationId,
+          ResolverRuleAssociationId: deployed.association.resolverRuleAssociationId,
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
       yield* assertRuleGone(deployed.rule.resolverRuleId);

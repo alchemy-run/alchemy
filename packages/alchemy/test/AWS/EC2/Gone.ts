@@ -32,9 +32,7 @@ export const assertVpcGone = Effect.fn(function* (vpcId: string) {
 
 export const assertEipGone = Effect.fn(function* (allocationId: string) {
   yield* ec2.describeAddresses({ AllocationIds: [allocationId] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ id: allocationId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ id: allocationId }))),
     Effect.retry(goneRetry),
     Effect.catchTag("InvalidAllocationID.NotFound", () => Effect.void),
   );
@@ -50,9 +48,7 @@ export const assertInternetGatewayGone = Effect.fn(function* (igwId: string) {
 
 export const assertRouteTableGone = Effect.fn(function* (routeTableId: string) {
   yield* ec2.describeRouteTables({ RouteTableIds: [routeTableId] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ id: routeTableId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ id: routeTableId }))),
     Effect.retry(goneRetry),
     Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
   );
@@ -68,9 +64,7 @@ export const assertSecurityGroupGone = Effect.fn(function* (groupId: string) {
 
 export const assertNetworkAclGone = Effect.fn(function* (networkAclId: string) {
   yield* ec2.describeNetworkAcls({ NetworkAclIds: [networkAclId] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ id: networkAclId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ id: networkAclId }))),
     Effect.retry(goneRetry),
     Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
   );
@@ -78,9 +72,7 @@ export const assertNetworkAclGone = Effect.fn(function* (networkAclId: string) {
 
 export const assertSubnetGone = Effect.fn(function* (subnetId: string) {
   yield* ec2.describeSubnets({ SubnetIds: [subnetId] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ id: subnetId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ id: subnetId }))),
     Effect.retry(goneRetry),
     Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
   );
@@ -88,9 +80,7 @@ export const assertSubnetGone = Effect.fn(function* (subnetId: string) {
 
 export const assertKeyPairGone = Effect.fn(function* (keyPairId: string) {
   yield* ec2.describeKeyPairs({ KeyPairIds: [keyPairId] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ id: keyPairId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ id: keyPairId }))),
     Effect.retry(goneRetry),
     Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.void),
   );
@@ -101,9 +91,7 @@ export const assertKeyPairGone = Effect.fn(function* (keyPairId: string) {
  * `terminated` (or the id no longer resolving) is the terminal, non-billing
  * state that proves the suite left nothing running.
  */
-export const assertInstanceTerminated = Effect.fn(function* (
-  instanceId: string,
-) {
+export const assertInstanceTerminated = Effect.fn(function* (instanceId: string) {
   yield* ec2.describeInstances({ InstanceIds: [instanceId] }).pipe(
     Effect.flatMap((result) => {
       const state = result.Reservations?.[0]?.Instances?.[0]?.State?.Name;

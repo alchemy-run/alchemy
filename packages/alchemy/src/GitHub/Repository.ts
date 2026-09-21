@@ -379,10 +379,7 @@ export const RepositoryProvider = () =>
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
       if (olds === undefined) return;
-      if (
-        news.owner !== olds.owner ||
-        (yield* gitHubBaseUrlChanged(olds, news))
-      ) {
+      if (news.owner !== olds.owner || (yield* gitHubBaseUrlChanged(olds, news))) {
         return { action: "replace" };
       }
     }),
@@ -412,11 +409,7 @@ export const RepositoryProvider = () =>
       // back to the prior name so we converge by renaming rather than creating
       // a duplicate.
       let observed = yield* getRepo(news.name);
-      if (
-        observed === undefined &&
-        olds?.name !== undefined &&
-        olds.name !== news.name
-      ) {
+      if (observed === undefined && olds?.name !== undefined && olds.name !== news.name) {
         observed = yield* getRepo(olds.name);
       }
 
@@ -469,12 +462,8 @@ export const RepositoryProvider = () =>
                     // understands the boolean `private` flag.
                     await octokit.rest.repos.createForAuthenticatedUser({
                       ...createInput,
-                      private: news.visibility
-                        ? news.visibility !== "public"
-                        : undefined,
-                    } as Parameters<
-                      typeof octokit.rest.repos.createForAuthenticatedUser
-                    >[0]);
+                      private: news.visibility ? news.visibility !== "public" : undefined,
+                    } as Parameters<typeof octokit.rest.repos.createForAuthenticatedUser>[0]);
               return data;
             } catch (error: any) {
               // A 422 means the name already exists — treat as a create race
@@ -491,9 +480,7 @@ export const RepositoryProvider = () =>
         }
         if (observed === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `Failed to create or locate GitHub repository ${news.owner}/${news.name}`,
-            ),
+            new Error(`Failed to create or locate GitHub repository ${news.owner}/${news.name}`),
           );
         }
       }
@@ -528,8 +515,7 @@ export const RepositoryProvider = () =>
         // retries rather than hard-failing — the branch may be created right
         // after this deploy.
         default_branch:
-          news.defaultBranch !== undefined &&
-          observed.default_branch !== news.defaultBranch
+          news.defaultBranch !== undefined && observed.default_branch !== news.defaultBranch
             ? news.defaultBranch
             : undefined,
       };
@@ -549,11 +535,9 @@ export const RepositoryProvider = () =>
             // not exist yet. Drop it and retry so the rest of the settings
             // still converge.
             if (error.status === 422 && updateInput.default_branch) {
-              const { default_branch, ...withoutBranch } = updateInput;
+              const { default_branch: _default_branch, ...withoutBranch } = updateInput;
               const { data } = await octokit.rest.repos.update(
-                withoutBranch as Parameters<
-                  typeof octokit.rest.repos.update
-                >[0],
+                withoutBranch as Parameters<typeof octokit.rest.repos.update>[0],
               );
               return data;
             }
@@ -614,9 +598,7 @@ export const RepositoryProvider = () =>
         catch: (e) => e as Error,
       });
 
-      return repos.map((repo) =>
-        attrsOf(repo as Parameters<typeof attrsOf>[0]),
-      );
+      return repos.map((repo) => attrsOf(repo as Parameters<typeof attrsOf>[0]));
     }),
 
     // Read by the numeric repository ID, which is stable across renames. This

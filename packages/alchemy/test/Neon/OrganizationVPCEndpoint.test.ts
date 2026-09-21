@@ -1,3 +1,7 @@
+import * as SDK from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { adopt } from "@/AdoptPolicy.ts";
 import {
   OrganizationVPCEndpoint,
@@ -6,10 +10,6 @@ import {
 import { providers } from "@/Neon/Providers.ts";
 import * as Output from "@/Output.ts";
 import * as Test from "@/Test/Alchemy";
-import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: providers() });
 const props = {
@@ -38,59 +38,55 @@ test(
     ]) {
       expect(
         Result.isFailure(
-          yield* validateOrganizationVPCEndpoint({ ...props, ...patch }).pipe(
-            Effect.result,
-          ),
+          yield* validateOrganizationVPCEndpoint({ ...props, ...patch }).pipe(Effect.result),
         ),
       ).toBe(true);
     }
   }),
 );
 
-test.provider(
-  "organization registration scope replacements delete the old scope first",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* OrganizationVPCEndpoint.Provider;
-      for (const patch of [
-        { orgId: "org-other" },
-        { regionId: "aws-us-west-2" },
-        { vpcEndpointId: "vpce-abcdef01234567890" },
-        { regionId: Output.literal("aws-us-west-2") },
-      ]) {
-        expect(
-          yield* provider.diff!({
-            ...context,
-            olds: props,
-            news: { ...props, ...patch },
-            output: undefined,
-          }),
-        ).toEqual({ action: "replace", deleteFirst: true });
-      }
-      for (const news of [Output.literal(props), Effect.succeed(props)]) {
-        expect(
-          yield* provider.diff!({
-            ...context,
-            olds: props,
-            news,
-            output: undefined,
-          }),
-        ).toEqual({ action: "replace", deleteFirst: true });
-      }
+test.provider("organization registration scope replacements delete the old scope first", () =>
+  Effect.gen(function* () {
+    const provider = yield* OrganizationVPCEndpoint.Provider;
+    for (const patch of [
+      { orgId: "org-other" },
+      { regionId: "aws-us-west-2" },
+      { vpcEndpointId: "vpce-abcdef01234567890" },
+      { regionId: Output.literal("aws-us-west-2") },
+    ]) {
       expect(
         yield* provider.diff!({
           ...context,
           olds: props,
-          news: { ...props, label: Output.literal("Updated") },
+          news: { ...props, ...patch },
           output: undefined,
         }),
-      ).toBeUndefined();
-    }).pipe(
-      Effect.provideService(
-        SDK.Credentials,
-        Effect.die("Unexpected Neon request in a no-I/O guard test"),
-      ),
+      ).toEqual({ action: "replace", deleteFirst: true });
+    }
+    for (const news of [Output.literal(props), Effect.succeed(props)]) {
+      expect(
+        yield* provider.diff!({
+          ...context,
+          olds: props,
+          news,
+          output: undefined,
+        }),
+      ).toEqual({ action: "replace", deleteFirst: true });
+    }
+    expect(
+      yield* provider.diff!({
+        ...context,
+        olds: props,
+        news: { ...props, label: Output.literal("Updated") },
+        output: undefined,
+      }),
+    ).toBeUndefined();
+  }).pipe(
+    Effect.provideService(
+      SDK.Credentials,
+      Effect.die("Unexpected Neon request in a no-I/O guard test"),
     ),
+  ),
 );
 
 test.provider(
@@ -119,9 +115,7 @@ test.provider(
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("InvalidOrganizationVPCEndpoint", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("InvalidOrganizationVPCEndpoint", () => Effect.succeed(true)),
           ),
       ).toBe(true);
     }).pipe(
@@ -136,10 +130,7 @@ const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
 const regionId = process.env.NEON_GOVERNANCE_TEST_VPC_ENDPOINT_REGION;
 const vpcEndpointId = process.env.NEON_GOVERNANCE_TEST_VPC_ENDPOINT_ID;
 const enabled =
-  !!orgId &&
-  !!regionId &&
-  !!vpcEndpointId &&
-  process.env.NEON_GOVERNANCE_TEST_NETWORK === "1";
+  !!orgId && !!regionId && !!vpcEndpointId && process.env.NEON_GOVERNANCE_TEST_NETWORK === "1";
 const disposable = process.env.NEON_GOVERNANCE_TEST_VPC_UNREGISTER === "1";
 
 // The ordinary fixture must already be registered; unregistering it is irreversible.
@@ -160,34 +151,26 @@ test.provider.skipIf(!enabled || disposable)(
       };
       const baseline = yield* SDK.getOrganizationVPCEndpointDetails(request);
       const application = (label: string, takeOwnership = false) =>
-        OrganizationVPCEndpoint("Network", { ...scope, label }).pipe(
-          adopt(takeOwnership),
-        );
+        OrganizationVPCEndpoint("Network", { ...scope, label }).pipe(adopt(takeOwnership));
       expect(
         Result.isFailure(
-          yield* stack
-            .plan(application("Alchemy governance fixture"))
-            .pipe(Effect.result),
+          yield* stack.plan(application("Alchemy governance fixture")).pipe(Effect.result),
         ),
       ).toBe(true);
-      const adopted = yield* stack.deploy(
-        application("Alchemy governance fixture", true),
-      );
+      const adopted = yield* stack.deploy(application("Alchemy governance fixture", true));
       expect(adopted.initialLabel).toBe(baseline.label);
-      expect(
-        (yield* SDK.getOrganizationVPCEndpointDetails(request)).label,
-      ).toBe("Alchemy governance fixture");
+      expect((yield* SDK.getOrganizationVPCEndpointDetails(request)).label).toBe(
+        "Alchemy governance fixture",
+      );
       yield* stack.deploy(application("Alchemy governance updated"));
       yield* SDK.assignOrganizationVPCEndpoint({
         ...request,
         label: "External fixture label",
       });
-      expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(
-        true,
+      expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
+      expect((yield* SDK.getOrganizationVPCEndpointDetails(request)).label).toBe(
+        "External fixture label",
       );
-      expect(
-        (yield* SDK.getOrganizationVPCEndpointDetails(request)).label,
-      ).toBe("External fixture label");
       yield* SDK.assignOrganizationVPCEndpoint({
         ...request,
         label: "Alchemy governance updated",
@@ -196,9 +179,7 @@ test.provider.skipIf(!enabled || disposable)(
       const restored = yield* SDK.getOrganizationVPCEndpointDetails(request);
       expect(restored.label).toBe(baseline.label);
       expect(restored.vpc_endpoint_id).toBe(baseline.vpc_endpoint_id);
-      expect(restored.num_restricted_projects).toBe(
-        baseline.num_restricted_projects,
-      );
+      expect(restored.num_restricted_projects).toBe(baseline.num_restricted_projects);
       yield* stack.destroy();
     }),
   { timeout: 120_000, exclusive: true },
@@ -221,9 +202,7 @@ test.provider.skipIf(!enabled || !disposable)(
       };
       const list = yield* SDK.listOrganizationVPCEndpoints(request);
       expect(
-        list.endpoints.some(
-          (endpoint) => endpoint.vpc_endpoint_id === scope.vpcEndpointId,
-        ),
+        list.endpoints.some((endpoint) => endpoint.vpc_endpoint_id === scope.vpcEndpointId),
       ).toBe(false);
       const created = yield* stack.deploy(
         OrganizationVPCEndpoint("Network", {
@@ -232,9 +211,9 @@ test.provider.skipIf(!enabled || !disposable)(
         }),
       );
       expect(created.initialLabel).toBeNull();
-      expect(
-        (yield* SDK.getOrganizationVPCEndpointDetails(request)).label,
-      ).toBe("Alchemy disposable fixture");
+      expect((yield* SDK.getOrganizationVPCEndpointDetails(request)).label).toBe(
+        "Alchemy disposable fixture",
+      );
       yield* stack.destroy();
       expect(
         (yield* SDK.listOrganizationVPCEndpoints(request)).endpoints.some(

@@ -1,10 +1,10 @@
-import * as DocDB from "@/AWS/DocDB";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DocDB from "@/AWS/DocDB";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -29,9 +29,7 @@ const MONGODB_OPTIONAL_DEPS = [
   "mongodb-client-encryption",
 ];
 
-export class DocDBTestFunction extends Lambda.Function<Lambda.Function>()(
-  "DocDBTestFunction",
-) {}
+export class DocDBTestFunction extends Lambda.Function<Lambda.Function>()("DocDBTestFunction") {}
 
 export default DocDBTestFunction.make(
   {
@@ -43,14 +41,11 @@ export default DocDBTestFunction.make(
     const describeDBClusters = yield* DocDB.DescribeDBClusters();
     const describeDBInstances = yield* DocDB.DescribeDBInstances();
     const describeEvents = yield* DocDB.DescribeEvents();
-    const describeDBClusterSnapshots =
-      yield* DocDB.DescribeDBClusterSnapshots();
+    const describeDBClusterSnapshots = yield* DocDB.DescribeDBClusterSnapshots();
     const deleteDBClusterSnapshot = yield* DocDB.DeleteDBClusterSnapshot();
     const copyDBClusterSnapshot = yield* DocDB.CopyDBClusterSnapshot();
-    const describePendingMaintenanceActions =
-      yield* DocDB.DescribePendingMaintenanceActions();
-    const applyPendingMaintenanceAction =
-      yield* DocDB.ApplyPendingMaintenanceAction();
+    const describePendingMaintenanceActions = yield* DocDB.DescribePendingMaintenanceActions();
+    const applyPendingMaintenanceAction = yield* DocDB.ApplyPendingMaintenanceAction();
 
     const bound = {
       describeDBClusters,
@@ -83,9 +78,7 @@ export default DocDBTestFunction.make(
             DBClusterIdentifier: NONEXISTENT_CLUSTER_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -105,9 +98,7 @@ export default DocDBTestFunction.make(
             DBInstanceIdentifier: NONEXISTENT_INSTANCE_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBInstanceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBInstanceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -129,9 +120,7 @@ export default DocDBTestFunction.make(
             DBClusterSnapshotIdentifier: NONEXISTENT_SNAPSHOT_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -144,9 +133,7 @@ export default DocDBTestFunction.make(
             TargetDBClusterSnapshotIdentifier: `${NONEXISTENT_SNAPSHOT_ID}-copy`,
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -169,9 +156,7 @@ export default DocDBTestFunction.make(
             OptInType: "next-maintenance",
           }).pipe(
             Effect.map(() => "Applied"),
-            Effect.catchTag("ResourceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

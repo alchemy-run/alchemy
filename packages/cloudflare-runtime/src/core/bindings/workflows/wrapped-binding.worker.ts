@@ -15,11 +15,8 @@ class WorkflowImpl implements Workflow {
     return instanceHandle;
   }
 
-  async create(
-    options?: WorkflowInstanceCreateOptions,
-  ): Promise<WorkflowInstance> {
-    using result = (await this.binding.create(options)) as WorkflowInstance &
-      Disposable;
+  async create(options?: WorkflowInstanceCreateOptions): Promise<WorkflowInstance> {
+    using result = (await this.binding.create(options)) as WorkflowInstance & Disposable;
 
     return new InstanceImpl(result.id, this.binding);
   }
@@ -56,9 +53,7 @@ class WorkflowImpl implements Workflow {
     return this.binding.unsafeSetIntrospectionOperations(sessionId, operations);
   }
 
-  async unsafeGetIntrospectionInstances(
-    sessionId: string,
-  ): Promise<Array<string>> {
+  async unsafeGetIntrospectionInstances(sessionId: string): Promise<Array<string>> {
     return this.binding.unsafeGetIntrospectionInstances(sessionId);
   }
 
@@ -82,10 +77,7 @@ class WorkflowImpl implements Workflow {
     return await this.binding.unsafeWaitForStatus(instanceId, status);
   }
 
-  public async unsafeGetOutputOrError(
-    instanceId: string,
-    isOutput: boolean,
-  ): Promise<unknown> {
+  public async unsafeGetOutputOrError(instanceId: string, isOutput: boolean): Promise<unknown> {
     return this.binding.unsafeGetOutputOrError(instanceId, isOutput);
   }
 }
@@ -115,9 +107,7 @@ class InstanceImpl implements WorkflowInstance {
     await instance.terminate();
   }
 
-  public async restart(
-    options?: WorkflowInstanceRestartOptions,
-  ): Promise<void> {
+  public async restart(options?: WorkflowInstanceRestartOptions): Promise<void> {
     using instance = await this.getInstance();
     await instance.restart(options);
   }
@@ -135,10 +125,7 @@ class InstanceImpl implements WorkflowInstance {
     return await instance.subscribe(options);
   }
 
-  public async sendEvent(args: {
-    payload: unknown;
-    type: string;
-  }): Promise<void> {
+  public async sendEvent(args: { payload: unknown; type: string }): Promise<void> {
     using instance = await this.getInstance();
     await instance.sendEvent(args);
   }
@@ -149,8 +136,6 @@ class InstanceImpl implements WorkflowInstance {
   }
 }
 
-export default function makeBinding(env: {
-  binding: WorkflowBinding;
-}): Workflow {
+export default function makeBinding(env: { binding: WorkflowBinding }): Workflow {
   return new WorkflowImpl(env.binding);
 }

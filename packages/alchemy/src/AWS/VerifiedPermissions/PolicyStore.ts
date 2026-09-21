@@ -93,9 +93,7 @@ export interface PolicyStore extends Resource<
  *
  * @resource
  */
-export const PolicyStore = Resource<PolicyStore>(
-  "AWS.VerifiedPermissions.PolicyStore",
-);
+export const PolicyStore = Resource<PolicyStore>("AWS.VerifiedPermissions.PolicyStore");
 
 export const PolicyStoreProvider = () =>
   Provider.effect(
@@ -104,11 +102,7 @@ export const PolicyStoreProvider = () =>
       const observe = Effect.fn(function* (policyStoreId: string) {
         return yield* avp
           .getPolicyStore({ policyStoreId, tags: true })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return PolicyStore.Provider.of({
@@ -116,12 +110,8 @@ export const PolicyStoreProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* avp.listPolicyStores
-              .pages({})
-              .pipe(Stream.runCollect);
-            const items = Array.from(pages).flatMap(
-              (page) => page.policyStores ?? [],
-            );
+            const pages = yield* avp.listPolicyStores.pages({}).pipe(Stream.runCollect);
+            const items = Array.from(pages).flatMap((page) => page.policyStores ?? []);
             return items.map((item) => ({
               policyStoreId: item.policyStoreId,
               policyStoreArn: item.arn,
@@ -154,9 +144,7 @@ export const PolicyStoreProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative
           let store =
-            output?.policyStoreId !== undefined
-              ? yield* observe(output.policyStoreId)
-              : undefined;
+            output?.policyStoreId !== undefined ? yield* observe(output.policyStoreId) : undefined;
 
           // 2. ENSURE — createPolicyStore returns id + arn directly
           if (store === undefined) {

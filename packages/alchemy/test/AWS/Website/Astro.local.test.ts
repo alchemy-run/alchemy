@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -18,13 +18,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "astro-app");
 // hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "astro.config.mjs",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src", "public"];
 
 describe("AWS.Website.Astro local", () => {
   test.provider(
@@ -57,9 +51,7 @@ describe("AWS.Website.Astro local", () => {
         // The site is the framework's own dev server: a localhost URL and
         // no cloud rows at all (proof no AWS call ran).
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         // The preferred `dev.port` was honored.
         expect(url).toContain(":43117");
         expect(deployed.site.distribution).toBeUndefined();
@@ -72,11 +64,9 @@ describe("AWS.Website.Astro local", () => {
           label: "dev SSR home page",
         });
         // API route through the dev server.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "ASTRO_AWS_API_MARKER",
-          { label: "API route (dev)" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "ASTRO_AWS_API_MARKER", {
+          label: "API route (dev)",
+        });
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
         });
@@ -90,11 +80,10 @@ describe("AWS.Website.Astro local", () => {
           helloPath,
           hello.replace("ASTRO_AWS_API_MARKER", "ASTRO_AWS_API_MARKER_V2"),
         );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "ASTRO_AWS_API_MARKER_V2",
-          { timeout: "90 seconds", label: "API route after HMR edit" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "ASTRO_AWS_API_MARKER_V2", {
+          timeout: "90 seconds",
+          label: "API route after HMR edit",
+        });
         // The route still round-trips its query after the reload.
         yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {
           label: "API route query echo after HMR edit",

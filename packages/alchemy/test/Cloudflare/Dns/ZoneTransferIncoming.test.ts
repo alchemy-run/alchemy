@@ -1,23 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Incoming zone transfers require a SECONDARY zone, and secondary zone
 // signup is not allowed on the testing account (`POST /zones` with
@@ -32,16 +28,12 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -60,9 +52,7 @@ test.provider(
   "list enumerates incoming configs across all zones",
   (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneTransferIncoming,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneTransferIncoming);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -90,9 +80,9 @@ test.provider.skipIf(!!secondaryZoneId)(
       yield* stack.destroy();
 
       // The GET on a zone that was never linked reports the typed tag.
-      const error = yield* retryForbidden(
-        dns.getZoneTransferIncoming({ zoneId }),
-      ).pipe(Effect.flip);
+      const error = yield* retryForbidden(dns.getZoneTransferIncoming({ zoneId })).pipe(
+        Effect.flip,
+      );
       expect(error._tag).toEqual("IncomingZoneTransferNotFound");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -113,15 +103,12 @@ test.provider.skipIf(!secondaryZoneId)(
             ip: "192.0.2.53",
             port: 53,
           });
-          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming(
-            "Incoming",
-            {
-              zoneId,
-              name: `${zoneName}.`,
-              peers: [peer.peerId],
-              autoRefreshSeconds: 86400,
-            },
-          );
+          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming("Incoming", {
+            zoneId,
+            name: `${zoneName}.`,
+            peers: [peer.peerId],
+            autoRefreshSeconds: 86400,
+          });
           return { incoming, peer };
         }),
       );
@@ -139,15 +126,12 @@ test.provider.skipIf(!secondaryZoneId)(
             ip: "192.0.2.53",
             port: 53,
           });
-          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming(
-            "Incoming",
-            {
-              zoneId,
-              name: `${zoneName}.`,
-              peers: [peer.peerId],
-              autoRefreshSeconds: 43200,
-            },
-          );
+          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming("Incoming", {
+            zoneId,
+            name: `${zoneName}.`,
+            peers: [peer.peerId],
+            autoRefreshSeconds: 43200,
+          });
           return incoming;
         }),
       );
@@ -156,9 +140,7 @@ test.provider.skipIf(!secondaryZoneId)(
       yield* stack.destroy();
 
       // Once deleted, the GET reports the typed not-found tag.
-      const gone = yield* retryForbidden(
-        dns.getZoneTransferIncoming({ zoneId }),
-      ).pipe(Effect.flip);
+      const gone = yield* retryForbidden(dns.getZoneTransferIncoming({ zoneId })).pipe(Effect.flip);
       expect(gone._tag).toEqual("IncomingZoneTransferNotFound");
 
       // Re-running destroy is idempotent.

@@ -207,16 +207,12 @@ export interface Firewall extends Resource<
  */
 export const Firewall = Resource<Firewall>("Hetzner.Firewall");
 
-export class FirewallNotCreated extends Data.TaggedError(
-  "Hetzner.FirewallNotCreated",
-)<{
+export class FirewallNotCreated extends Data.TaggedError("Hetzner.FirewallNotCreated")<{
   name: string;
 }> {}
 
 type FirewallAttributes = Firewall["Attributes"];
-type ObservedFirewall =
-  | GetFirewallResponseFirewall
-  | ListFirewallsResponseFirewallsItem;
+type ObservedFirewall = GetFirewallResponseFirewall | ListFirewallsResponseFirewallsItem;
 
 const NAME_MAX_LENGTH = 128;
 
@@ -235,10 +231,7 @@ const compactLabels = (
     ),
   );
 
-const desiredLabels = Effect.fn(function* (
-  id: string,
-  user: Record<string, string> | undefined,
-) {
+const desiredLabels = Effect.fn(function* (id: string, user: Record<string, string> | undefined) {
   const internal = yield* createInternalLabels(id);
   return { ...toLabels(user), ...internal };
 });
@@ -266,9 +259,7 @@ const normalizeRule = (rule: {
   };
 };
 
-const fromObservedRule = (
-  rule: GetFirewallResponseFirewallRulesItem,
-): FirewallRule =>
+const fromObservedRule = (rule: GetFirewallResponseFirewallRulesItem): FirewallRule =>
   normalizeRule({
     description: rule.description,
     direction: rule.direction,
@@ -281,20 +272,14 @@ const fromObservedRule = (
 const toWireRule = (rule: FirewallRule): CreateFirewallRequestRulesItem => {
   const description = rule.description;
   const port =
-    (rule.protocol === "tcp" || rule.protocol === "udp") && rule.port
-      ? rule.port
-      : undefined;
+    (rule.protocol === "tcp" || rule.protocol === "udp") && rule.port ? rule.port : undefined;
   return {
     direction: rule.direction,
     protocol: rule.protocol,
     ...(description !== undefined ? { description } : {}),
     ...(port !== undefined ? { port } : {}),
-    ...(rule.sourceIps !== undefined
-      ? { source_ips: [...rule.sourceIps] }
-      : {}),
-    ...(rule.destinationIps !== undefined
-      ? { destination_ips: [...rule.destinationIps] }
-      : {}),
+    ...(rule.sourceIps !== undefined ? { source_ips: [...rule.sourceIps] } : {}),
+    ...(rule.destinationIps !== undefined ? { destination_ips: [...rule.destinationIps] } : {}),
   };
 };
 
@@ -321,9 +306,7 @@ const serverIdOf = (value: unknown): number | undefined => {
   return undefined;
 };
 
-const desiredServerIds = (
-  applyTo: FirewallProps["applyTo"] | undefined,
-): number[] => {
+const desiredServerIds = (applyTo: FirewallProps["applyTo"] | undefined): number[] => {
   const ids = new Set<number>();
   for (const item of applyTo ?? []) {
     const id = serverIdOf(item);
@@ -352,9 +335,7 @@ const toAppliedTo = (
     serverId,
   }));
 
-const toServerApplyItems = (
-  ids: ReadonlyArray<number>,
-): CreateFirewallRequestApplyToItem[] =>
+const toServerApplyItems = (ids: ReadonlyArray<number>): CreateFirewallRequestApplyToItem[] =>
   ids.map((id) => ({ type: "server" as const, server: { id } }));
 
 const detachItems = (
@@ -364,10 +345,7 @@ const detachItems = (
   for (const item of appliedTo) {
     if (item.type === "server" && item.server?.id !== undefined) {
       items.push({ type: "server", server: { id: item.server.id } });
-    } else if (
-      item.type === "label_selector" &&
-      item.label_selector?.selector !== undefined
-    ) {
+    } else if (item.type === "label_selector" && item.label_selector?.selector !== undefined) {
       items.push({
         type: "label_selector",
         label_selector: { selector: item.label_selector.selector },
@@ -411,11 +389,7 @@ const findByLabels = (id: string) =>
     return firewalls[0];
   });
 
-const observe = (input: {
-  id: string;
-  name: string;
-  output: FirewallAttributes | undefined;
-}) =>
+const observe = (input: { id: string; name: string; output: FirewallAttributes | undefined }) =>
   Effect.gen(function* () {
     if (input.output?.id !== undefined) {
       const byId = yield* getById(input.output.id);
@@ -440,9 +414,7 @@ const ensureFirewall = Effect.fn(function* (input: {
       name: input.name,
       labels: input.labels,
       ...(input.rules.length > 0 ? { rules: input.rules.map(toWireRule) } : {}),
-      ...(input.serverIds.length > 0
-        ? { apply_to: toServerApplyItems(input.serverIds) }
-        : {}),
+      ...(input.serverIds.length > 0 ? { apply_to: toServerApplyItems(input.serverIds) } : {}),
     })
     .pipe(
       Effect.catchTag("Conflict", () =>
@@ -477,10 +449,7 @@ const syncNameAndLabels = Effect.fn(function* (input: {
   desiredLabels: Record<string, string>;
 }) {
   const nameChanged = input.observedName !== input.desiredName;
-  const { upsert, removed } = diffLabels(
-    input.observedLabels,
-    input.desiredLabels,
-  );
+  const { upsert, removed } = diffLabels(input.observedLabels, input.desiredLabels);
   const labelsChanged = upsert.length > 0 || removed.length > 0;
   if (!nameChanged && !labelsChanged) return;
   yield* Services.firewalls.updateFirewall({
@@ -513,19 +482,17 @@ const syncApplyTo = Effect.fn(function* (input: {
   const toAdd = [...desiredIds].filter((id) => !observedIds.has(id));
   const toRemove = [...observedIds].filter((id) => !desiredIds.has(id));
   if (toAdd.length > 0) {
-    const { actions } =
-      yield* Services.firewallActions.applyFirewallToResources({
-        id: input.firewallId,
-        apply_to: toServerApplyItems(toAdd),
-      });
+    const { actions } = yield* Services.firewallActions.applyFirewallToResources({
+      id: input.firewallId,
+      apply_to: toServerApplyItems(toAdd),
+    });
     yield* waitActions(actions);
   }
   if (toRemove.length > 0) {
-    const { actions } =
-      yield* Services.firewallActions.removeFirewallFromResources({
-        id: input.firewallId,
-        remove_from: toServerApplyItems(toRemove),
-      });
+    const { actions } = yield* Services.firewallActions.removeFirewallFromResources({
+      id: input.firewallId,
+      remove_from: toServerApplyItems(toRemove),
+    });
     yield* waitActions(actions);
   }
 });
@@ -542,9 +509,7 @@ const detachAll = Effect.fn(function* (
       remove_from: removeFrom,
     })
     .pipe(
-      Effect.catchTag(["NotFound", "UnprocessableEntity"], () =>
-        Effect.succeed({ actions: [] }),
-      ),
+      Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.succeed({ actions: [] })),
     );
   yield* waitActions(result.actions);
 });
@@ -560,8 +525,7 @@ export const FirewallProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      const oldName =
-        output?.name ?? (yield* createFirewallName(id, olds?.name));
+      const oldName = output?.name ?? (yield* createFirewallName(id, olds?.name));
       const newName = news.name ?? oldName;
       if (oldName !== newName) {
         return { action: "update" } as const;
@@ -615,8 +579,7 @@ export const FirewallProvider = () =>
       return ours ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name =
-        news.name ?? output?.name ?? (yield* createFirewallName(id, news.name));
+      const name = news.name ?? output?.name ?? (yield* createFirewallName(id, news.name));
       const labels = yield* desiredLabels(id, news.labels);
       const rules = desiredRules(news.rules);
       const serverIds = desiredServerIds(news.applyTo);

@@ -1,23 +1,19 @@
+import * as databrew from "@distilled.cloud/aws/databrew";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Dataset, Project, Recipe } from "@/AWS/DataBrew";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import * as databrew from "@distilled.cloud/aws/databrew";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getProject = (name: string) =>
   databrew
     .describeProject({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const brewRole = () =>
   Role("DataBrewProjectRole", {
@@ -71,10 +67,7 @@ test.provider(
         return { bucket, role, dataset, recipe };
       });
 
-      const withProject = (sample?: {
-        type: "FIRST_N" | "LAST_N" | "RANDOM";
-        size?: number;
-      }) =>
+      const withProject = (sample?: { type: "FIRST_N" | "LAST_N" | "RANDOM"; size?: number }) =>
         Effect.gen(function* () {
           const base = yield* foundation;
           const project = yield* Project("Explore", {
@@ -102,9 +95,7 @@ test.provider(
       const created = yield* stack.deploy(withProject());
 
       expect(created.project.projectName).toBeDefined();
-      expect(created.project.projectArn).toContain(
-        `:project/${created.project.projectName}`,
-      );
+      expect(created.project.projectArn).toContain(`:project/${created.project.projectName}`);
 
       // out-of-band verification
       const observed = yield* getProject(created.project.projectName);

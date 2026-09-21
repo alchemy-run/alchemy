@@ -30,10 +30,7 @@ export interface GetCollection extends Binding.Service<
   (
     collection: Collection,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      aoss.CollectionDetail | undefined,
-      aoss.BatchGetCollectionError
-    >
+    () => Effect.Effect<aoss.CollectionDetail | undefined, aoss.BatchGetCollectionError>
   >
 > {}
 export const GetCollection = Binding.Service<GetCollection>(

@@ -73,24 +73,22 @@ export const layer = <Image extends Container.Decl.Any>(
   const id = (container as any)["~alchemy/Id"] as string;
   // Provide the *started* instance under the same tag `yield* MyContainer`
   // resolves (keyed by logical id) so the two compose.
-  return Layer.effect(
-    ContainerTag(id),
-    startContainer(container, options),
-  ) as Layer.Layer<InstanceType<Image>>;
+  return Layer.effect(ContainerTag(id), startContainer(container, options)) as Layer.Layer<
+    InstanceType<Image>
+  >;
 };
 
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
-export const startContainer = Effect.fn(function* <
-  Image extends Container.Decl.Any,
->(containerEff: Image, options?: ContainerStartupOptions) {
+export const startContainer = Effect.fn(function* <Image extends Container.Decl.Any>(
+  containerEff: Image,
+  options?: ContainerStartupOptions,
+) {
   const bindEff = (containerEff as any)["~alchemy/Container/Binding"] as
     | Effect.Effect<Effect.Effect<Container>, never, any>
     | undefined;
-  const bound = yield* (
-    bindEff ?? (containerEff as any as Effect.Effect<any, never, never>)
-  );
+  const bound = yield* bindEff ?? (containerEff as any as Effect.Effect<any, never, never>);
   const container: Container = Effect.isEffect(bound)
     ? yield* bound as Effect.Effect<Container>
     : (bound as Container);
@@ -122,8 +120,7 @@ export const startContainer = Effect.fn(function* <
 
   // Error classification, mirroring native's string matchers in
   // `@cloudflare/containers` (`isErrorOfType` against these exact phrases).
-  const errString = (e: unknown) =>
-    (e instanceof Error ? e.message : String(e)).toLowerCase();
+  const errString = (e: unknown) => (e instanceof Error ? e.message : String(e)).toLowerCase();
   const isNoInstanceError = (e: unknown) =>
     errString(e).includes(
       "there is no container instance that can be provided to this durable object",
@@ -170,8 +167,7 @@ export const startContainer = Effect.fn(function* <
   // is correct: a container only ever runs inside a Durable Object, so this is
   // an honest dependency rather than a silent fallback.
   const doState = yield* DurableObjectState;
-  const coordinationKey: object =
-    (doState.container as object | undefined) ?? doState;
+  const coordinationKey: object = (doState.container as object | undefined) ?? doState;
   const { startMutex, readyPorts } = getStartCoordination(coordinationKey);
 
   const launchMonitor = Effect.forkDetach(
@@ -207,12 +203,8 @@ export const startContainer = Effect.fn(function* <
         // A rate limit is transient — back off well clear of the per-second
         // window and try again a few times before surfacing it.
         Effect.retry({
-          while: (
-            e:
-              | ContainerError
-              | NoContainerInstanceError
-              | ContainerRateLimitedError,
-          ) => e._tag === "ContainerRateLimitedError",
+          while: (e: ContainerError | NoContainerInstanceError | ContainerRateLimitedError) =>
+            e._tag === "ContainerRateLimitedError",
           schedule: Schedule.spaced(RATE_LIMIT_BACKOFF),
           times: RATE_LIMIT_RETRIES,
         }),
@@ -239,18 +231,14 @@ export const startContainer = Effect.fn(function* <
   const probePort = (portNumber: number) =>
     container.getTcpPort(portNumber).pipe(
       Effect.andThen((port: Fetcher) =>
-        port.fetch(
-          HttpClientRequest.get("http://containerstarthealthcheck") as any,
-        ),
+        port.fetch(HttpClientRequest.get("http://containerstarthealthcheck") as any),
       ),
       Effect.timeout(READINESS_PROBE_TIMEOUT),
       Effect.catchDefect((defect: unknown) =>
         container.running.pipe(
           Effect.andThen((running) =>
             Effect.fail<ReadinessError>(
-              !running &&
-                !isRateLimitedError(defect) &&
-                !isNoInstanceError(defect)
+              !running && !isRateLimitedError(defect) && !isNoInstanceError(defect)
                 ? new ContainerCrashedError({
                     message: `Container exited while waiting for port ${portNumber}`,
                     cause: defect,
@@ -315,9 +303,7 @@ export const startContainer = Effect.fn(function* <
     readyPorts.has(portNumber)
       ? Effect.void
       : probePort(portNumber).pipe(
-          Effect.tapError((err) =>
-            Effect.logDebug(`Container not ready (will retry): ${err}`),
-          ),
+          Effect.tapError((err) => Effect.logDebug(`Container not ready (will retry): ${err}`)),
           Effect.retry({
             while: isTransientReadiness,
             schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
@@ -339,12 +325,8 @@ export const startContainer = Effect.fn(function* <
   const ensureReady = (portNumber: number) =>
     ensureRunning.pipe(
       Effect.retry({
-        while: (
-          e:
-            | ContainerError
-            | NoContainerInstanceError
-            | ContainerRateLimitedError,
-        ) => e._tag === "NoContainerInstanceError",
+        while: (e: ContainerError | NoContainerInstanceError | ContainerRateLimitedError) =>
+          e._tag === "NoContainerInstanceError",
         schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
         times: GET_CONTAINER_RETRIES,
       }),
@@ -354,9 +336,7 @@ export const startContainer = Effect.fn(function* <
   const getTcpPort = (portNumber: number) =>
     Effect.succeed({
       fetch: ((
-        request:
-          | HttpClientRequest.HttpClientRequest
-          | HttpServerRequest.HttpServerRequest,
+        request: HttpClientRequest.HttpClientRequest | HttpServerRequest.HttpServerRequest,
       ) =>
         // Block until the port is ready (bounded), THEN forward the real
         // request exactly once. Readiness is a cheap healthcheck, so the user
@@ -378,8 +358,7 @@ export const startContainer = Effect.fn(function* <
           // limit, or exhausted no-instance budget is surfaced immediately so a
           // crash-looping container fails fast instead of re-starting 3× more.
           Effect.retry({
-            while: (e) =>
-              e._tag === "ContainerError" || e._tag === "HttpClientError",
+            while: (e) => e._tag === "ContainerError" || e._tag === "HttpClientError",
             schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
             times: REQUEST_RETRIES,
           }),
@@ -413,8 +392,7 @@ export const startContainer = Effect.fn(function* <
     fetch: getTcpPort(3000),
   };
   return makeFetchRpcStub<Container.Instance<InstanceType<Image>>>({
-    fetch: (request) =>
-      getTcpPort(3000).pipe(Effect.flatMap((port) => port.fetch(request))),
+    fetch: (request) => getTcpPort(3000).pipe(Effect.flatMap((port) => port.fetch(request))),
     baseUrl: "http://container",
     base: base as Record<string, unknown>,
   });

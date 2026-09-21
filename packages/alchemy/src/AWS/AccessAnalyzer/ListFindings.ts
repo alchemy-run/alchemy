@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Analyzer } from "./Analyzer.ts";
 
 /** `ListFindings` request with `analyzerArn` injected from the bound {@link Analyzer}. */
-export interface ListFindingsRequest extends Omit<
-  aa.ListFindingsRequest,
-  "analyzerArn"
-> {}
+export interface ListFindingsRequest extends Omit<aa.ListFindingsRequest, "analyzerArn"> {}
 
 /**
  * Runtime binding for `access-analyzer:ListFindings`.
@@ -30,12 +27,8 @@ export interface ListFindings extends Binding.Service<
   (
     analyzer: Analyzer,
   ) => Effect.Effect<
-    (
-      request?: ListFindingsRequest,
-    ) => Effect.Effect<aa.ListFindingsResponse, aa.ListFindingsError>
+    (request?: ListFindingsRequest) => Effect.Effect<aa.ListFindingsResponse, aa.ListFindingsError>
   >
 > {}
 
-export const ListFindings = Binding.Service<ListFindings>(
-  "AWS.AccessAnalyzer.ListFindings",
-);
+export const ListFindings = Binding.Service<ListFindings>("AWS.AccessAnalyzer.ListFindings");

@@ -40,12 +40,4 @@ export {
   type Matchers,
 } from "./Expect.ts";
 export { currentFile } from "./Registry.ts";
-export type {
-  FileSuite,
-  Hook,
-  LogEntry,
-  Mode,
-  Suite,
-  TestBody,
-  TestCase,
-} from "./Model.ts";
+export type { FileSuite, Hook, LogEntry, Mode, Suite, TestBody, TestCase } from "./Model.ts";

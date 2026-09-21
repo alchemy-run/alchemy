@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { defaultProviderMode } from "../ProviderMode.ts";
-import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { AIGateway } from "./AIGateway.ts";
 import {
@@ -17,11 +16,9 @@ import {
   bindBackendEnvironment,
 } from "./BackendConnection.ts";
 import { Credential, validateCredential } from "./Credential.ts";
+import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import { FunctionEnvironment } from "./FunctionEnvironment.ts";
-import {
-  makeLanguageModelLayer,
-  type LanguageModelOptions,
-} from "./LanguageModel.ts";
+import { makeLanguageModelLayer, type LanguageModelOptions } from "./LanguageModel.ts";
 
 export interface QueryAIGatewayClient {
   /** Bare gateway root for SDKs that handle their own routing. */
@@ -35,9 +32,7 @@ export interface QueryAIGatewayClient {
   /** Redacted branch-service bearer credential with ai_gateway:invoke access. */
   token: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
   /** Effect AI using Chat Completions, with no inference during deployment. */
-  model(
-    options: LanguageModelOptions,
-  ): Layer.Layer<LanguageModel, never, RuntimeContext>;
+  model(options: LanguageModelOptions): Layer.Layer<LanguageModel, never, RuntimeContext>;
 }
 
 /**
@@ -80,27 +75,19 @@ export interface QueryAIGateway extends Binding.Service<
   "Neon.QueryAIGateway",
   (gateway: AIGateway) => Effect.Effect<QueryAIGatewayClient>
 > {}
-export const QueryAIGateway = Binding.Service<QueryAIGateway>(
-  "Neon.QueryAIGateway",
-);
+export const QueryAIGateway = Binding.Service<QueryAIGateway>("Neon.QueryAIGateway");
 
 const client = (
   baseUrl: QueryAIGatewayClient["baseUrl"],
   token: QueryAIGatewayClient["token"],
 ): QueryAIGatewayClient => {
-  const chatBaseUrl = baseUrl.pipe(
-    Effect.map((base) => `${base.replace(/\/$/, "")}/v1`),
-  );
+  const chatBaseUrl = baseUrl.pipe(Effect.map((base) => `${base.replace(/\/$/, "")}/v1`));
   return {
     baseUrl,
     token,
     chatBaseUrl,
-    responsesBaseUrl: baseUrl.pipe(
-      Effect.map((base) => `${base.replace(/\/$/, "")}/openai/v1`),
-    ),
-    anthropicBaseUrl: baseUrl.pipe(
-      Effect.map((base) => `${base.replace(/\/$/, "")}/anthropic`),
-    ),
+    responsesBaseUrl: baseUrl.pipe(Effect.map((base) => `${base.replace(/\/$/, "")}/openai/v1`)),
+    anthropicBaseUrl: baseUrl.pipe(Effect.map((base) => `${base.replace(/\/$/, "")}/anthropic`)),
     model: (options) =>
       makeLanguageModelLayer({
         ...options,
@@ -126,13 +113,8 @@ export const QueryAIGatewayHttp = Layer.effect(
             new Error("QueryAIGatewayHttp requires a Function or Worker host"),
           );
         const mode = host.Mode ?? (yield* defaultProviderMode);
-        const injected =
-          !gateway.credential &&
-          usesInjectedCredentials(host, gateway.Props, mode);
-        const env: Record<
-          string,
-          Output.Output<string | Redacted.Redacted<string>>
-        > = {
+        const injected = !gateway.credential && usesInjectedCredentials(host, gateway.Props, mode);
+        const env: Record<string, Output.Output<string | Redacted.Redacted<string>>> = {
           [urlKey]: gateway.baseUrl,
           [injectedKey]: Output.literal(injected ? "yes" : "no"),
         };
@@ -161,14 +143,7 @@ export const QueryAIGatewayHttp = Layer.effect(
             credential.apiToken,
           ).pipe(
             Output.mapEffect(
-              ([
-                projectId,
-                branchId,
-                scopes,
-                targetProjectId,
-                targetBranchId,
-                token,
-              ]) =>
+              ([projectId, branchId, scopes, targetProjectId, targetBranchId, token]) =>
                 validateCredential(
                   { projectId, branchId, scopes },
                   { projectId: targetProjectId, branchId: targetBranchId },
@@ -177,15 +152,11 @@ export const QueryAIGatewayHttp = Layer.effect(
             ),
           );
         }
-        yield* bindBackendEnvironment(
-          `Neon.QueryAIGateway:${gateway.FQN}`,
-          env,
-        );
+        yield* bindBackendEnvironment(`Neon.QueryAIGateway:${gateway.FQN}`, env);
       }
       const baseUrl = backendString(urlKey);
       const token = Effect.gen(function* () {
-        if ((yield* backendString(injectedKey)) !== "yes")
-          return yield* backendSecret(tokenKey);
+        if ((yield* backendString(injectedKey)) !== "yes") return yield* backendSecret(tokenKey);
         const expected = (yield* baseUrl).replace(/\/$/, "");
         const env = Option.getOrUndefined(environment);
         if (env?.NEON_AI_GATEWAY_BASE_URL?.replace(/\/$/, "") !== expected)
@@ -193,9 +164,7 @@ export const QueryAIGatewayHttp = Layer.effect(
             new Error("AI Gateway injection does not match the target branch"),
           );
         if (!env.NEON_AI_GATEWAY_TOKEN)
-          return yield* Effect.die(
-            new Error("Neon did not inject an AI Gateway credential"),
-          );
+          return yield* Effect.die(new Error("Neon did not inject an AI Gateway credential"));
         return Redacted.make(env.NEON_AI_GATEWAY_TOKEN);
       });
       return client(baseUrl, token);

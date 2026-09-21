@@ -133,40 +133,29 @@ export interface DataIntegration extends Resource<
  *
  * @resource
  */
-export const DataIntegration = Resource<DataIntegration>(
-  "AWS.AppIntegrations.DataIntegration",
-);
+export const DataIntegration = Resource<DataIntegration>("AWS.AppIntegrations.DataIntegration");
 
 /**
  * Raised when the AppIntegrations API returns a data integration without
  * the fields required to build the resource attributes.
  */
-export class DataIntegrationIncomplete extends Data.TaggedError(
-  "DataIntegrationIncomplete",
-)<{ message: string }> {}
+export class DataIntegrationIncomplete extends Data.TaggedError("DataIntegrationIncomplete")<{
+  message: string;
+}> {}
 
 export const DataIntegrationProvider = () =>
   Provider.effect(
     DataIntegration,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get a single data integration by ARN or ID; undefined if absent. */
       const observe = (arnOrId: string) =>
         appintegrations
           .getDataIntegration({ Identifier: arnOrId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       /** Find a data integration ARN by name via list enumeration. */
       const findByName = (name: string) =>
@@ -177,9 +166,7 @@ export const DataIntegrationProvider = () =>
           Effect.map((chunk) => Array.from(chunk)[0]?.Arn),
         );
 
-      const toAttrs = Effect.fn(function* (
-        live: appintegrations.GetDataIntegrationResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (live: appintegrations.GetDataIntegrationResponse) {
         if (
           live.Arn === undefined ||
           live.Id === undefined ||
@@ -211,43 +198,31 @@ export const DataIntegrationProvider = () =>
       });
 
       return DataIntegration.Provider.of({
-        stables: [
-          "dataIntegrationId",
-          "dataIntegrationArn",
-          "kmsKey",
-          "sourceURI",
-        ],
+        stables: ["dataIntegrationId", "dataIntegrationArn", "kmsKey", "sourceURI"],
 
         // The list API only returns Arn/Name/SourceURI summaries — hydrate
         // each into the full attributes shape, tolerating per-item NotFound
         // races.
         list: () =>
           Effect.gen(function* () {
-            const arns = yield* appintegrations.listDataIntegrations
-              .items({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((item) =>
-                    item.Arn !== undefined ? [item.Arn] : [],
-                  ),
-                ),
-              );
+            const arns = yield* appintegrations.listDataIntegrations.items({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((item) => (item.Arn !== undefined ? [item.Arn] : [])),
+              ),
+            );
             const items = yield* Effect.forEach(
               arns,
               (arn) =>
                 observe(arn).pipe(
                   Effect.flatMap((live) =>
-                    live === undefined
-                      ? Effect.succeed(undefined)
-                      : toAttrs(live),
+                    live === undefined ? Effect.succeed(undefined) : toAttrs(live),
                   ),
                 ),
               { concurrency: 10 },
             );
             return items.filter(
-              (item): item is DataIntegration["Attributes"] =>
-                item !== undefined,
+              (item): item is DataIntegration["Attributes"] => item !== undefined,
             );
           }),
 
@@ -271,12 +246,9 @@ export const DataIntegrationProvider = () =>
           if (
             olds.kmsKey !== news.kmsKey ||
             olds.sourceURI !== news.sourceURI ||
-            JSON.stringify(olds.scheduleConfig) !==
-              JSON.stringify(news.scheduleConfig) ||
-            JSON.stringify(olds.fileConfiguration) !==
-              JSON.stringify(news.fileConfiguration) ||
-            JSON.stringify(olds.objectConfiguration) !==
-              JSON.stringify(news.objectConfiguration)
+            JSON.stringify(olds.scheduleConfig) !== JSON.stringify(news.scheduleConfig) ||
+            JSON.stringify(olds.fileConfiguration) !== JSON.stringify(news.fileConfiguration) ||
+            JSON.stringify(olds.objectConfiguration) !== JSON.stringify(news.objectConfiguration)
           ) {
             return { action: "replace" } as const;
           }
@@ -291,12 +263,10 @@ export const DataIntegrationProvider = () =>
           // 1. Observe — prefer the cached ID; fall back to enumerating by
           //    name so a lost-state re-run converges.
           let identifier: string | undefined = output?.dataIntegrationId;
-          let live =
-            identifier === undefined ? undefined : yield* observe(identifier);
+          let live = identifier === undefined ? undefined : yield* observe(identifier);
           if (live === undefined) {
             identifier = yield* findByName(name);
-            live =
-              identifier === undefined ? undefined : yield* observe(identifier);
+            live = identifier === undefined ? undefined : yield* observe(identifier);
           }
 
           // 2. Ensure — create if missing.
@@ -334,17 +304,11 @@ export const DataIntegrationProvider = () =>
           // 3. Sync mutable aspects — only the name and description can be
           //    updated in place. The API cannot clear a description (min
           //    length 1), so only push a defined value that differs.
-          const update: Omit<
-            appintegrations.UpdateDataIntegrationRequest,
-            "Identifier"
-          > = {};
+          const update: Omit<appintegrations.UpdateDataIntegrationRequest, "Identifier"> = {};
           if (live.Name !== name) {
             update.Name = name;
           }
-          if (
-            news.description !== undefined &&
-            news.description !== live.Description
-          ) {
+          if (news.description !== undefined && news.description !== live.Description) {
             update.Description = news.description;
           }
           if (Object.keys(update).length > 0) {
@@ -380,9 +344,7 @@ export const DataIntegrationProvider = () =>
             .deleteDataIntegration({
               DataIntegrationIdentifier: output.dataIntegrationId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

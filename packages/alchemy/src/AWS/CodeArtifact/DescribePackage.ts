@@ -40,13 +40,8 @@ export interface DescribePackage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribePackageRequest,
-    ) => Effect.Effect<
-      codeartifact.DescribePackageResult,
-      codeartifact.DescribePackageError
-    >
+    ) => Effect.Effect<codeartifact.DescribePackageResult, codeartifact.DescribePackageError>
   >
 > {}
 
-export const DescribePackage = Binding.Service<DescribePackage>(
-  "AWS.CodeArtifact.DescribePackage",
-);
+export const DescribePackage = Binding.Service<DescribePackage>("AWS.CodeArtifact.DescribePackage");

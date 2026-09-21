@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,13 +6,12 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { Db } from "./fixtures/db";
-import DsqlDirectFunctionLive, {
-  DsqlDirectFunction,
-} from "./fixtures/direct-handler";
-import DsqlDrizzleFunctionLive, {
-  DsqlDrizzleFunction,
-} from "./fixtures/drizzle-handler";
+import DsqlDirectFunctionLive, { DsqlDirectFunction } from "./fixtures/direct-handler";
+import DsqlDrizzleFunctionLive, { DsqlDrizzleFunction } from "./fixtures/drizzle-handler";
 
 // DSQL clusters are serverless and pay-per-use: provisioning reaches ACTIVE
 // in seconds, so the FULL fixture (cluster + IAM roles + two Lambdas bundling
@@ -38,9 +34,7 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   }
 }
 
-class FixtureReadinessFailed extends Data.TaggedError(
-  "FixtureReadinessFailed",
-)<{
+class FixtureReadinessFailed extends Data.TaggedError("FixtureReadinessFailed")<{
   readonly status: number;
   readonly body: string;
 }> {
@@ -62,9 +56,7 @@ const send = (request: () => HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -77,9 +69,9 @@ const send = (request: () => HttpClientRequest.HttpClientRequest) =>
   );
 
 const postJson = (url: string, body: unknown) =>
-  send(() =>
-    HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), body),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(() => HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), body)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
 const waitForFixture = (url: string) =>
   Effect.suspend(() => HttpClient.get(url)).pipe(
@@ -109,14 +101,10 @@ const waitForFixture = (url: string) =>
 describe("DSQL.Connect", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "DSQL.Connect setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("DSQL.Connect setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "DSQL.Connect setup: deploying DSQL cluster + 2 Lambda fixtures",
-      );
+      yield* Effect.logInfo("DSQL.Connect setup: deploying DSQL cluster + 2 Lambda fixtures");
       const outputs = yield* sharedStack.deploy(
         Effect.gen(function* () {
           const cluster = yield* Db;
@@ -127,11 +115,7 @@ describe("DSQL.Connect", () => {
             drizzleUrl: drizzleFn.functionUrl,
             directUrl: directFn.functionUrl,
           };
-        }).pipe(
-          Effect.provide(
-            Layer.mergeAll(DsqlDrizzleFunctionLive, DsqlDirectFunctionLive),
-          ),
-        ),
+        }).pipe(Effect.provide(Layer.mergeAll(DsqlDrizzleFunctionLive, DsqlDirectFunctionLive))),
       );
 
       expect(outputs.drizzleUrl).toBeTruthy();
@@ -144,9 +128,7 @@ describe("DSQL.Connect", () => {
       // Bounded: retry transient 5xx responses for at most 90 seconds. Each
       // attempt creates a fresh request; non-transient statuses fail directly.
       yield* waitForFixture(`${drizzleUrl}/health`);
-      yield* Effect.logInfo(
-        `DSQL.Connect setup: fixtures ready (cluster ${clusterId})`,
-      );
+      yield* Effect.logInfo(`DSQL.Connect setup: fixtures ready (cluster ${clusterId})`);
     }),
     { timeout: 900_000 },
   );
@@ -163,17 +145,12 @@ describe("DSQL.Connect", () => {
             Effect.flatMap((cluster) =>
               cluster.status === "DELETING" || cluster.status === "DELETED"
                 ? Effect.void
-                : Effect.fail(
-                    new ClusterStillPresent({ clusterId: clusterId! }),
-                  ),
+                : Effect.fail(new ClusterStillPresent({ clusterId: clusterId! })),
             ),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "ClusterStillPresent",
-              schedule: Schedule.max([
-                Schedule.spaced("5 seconds"),
-                Schedule.recurs(12),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
             }),
           ),
           testOptions,
@@ -199,9 +176,9 @@ describe("DSQL.Connect", () => {
         })) as { success: boolean };
         expect(insert.success).toBe(true);
 
-        const select = (yield* send(() =>
-          HttpClientRequest.get(`${drizzleUrl}/select?id=1`),
-        ).pipe(Effect.flatMap((r) => r.json))) as {
+        const select = (yield* send(() => HttpClientRequest.get(`${drizzleUrl}/select?id=1`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as {
           rows: { id: number; title: string }[];
         };
         expect(select.rows).toHaveLength(1);
@@ -214,9 +191,9 @@ describe("DSQL.Connect", () => {
     "resolves connection info with a fresh IAM auth token",
     (_stack) =>
       Effect.gen(function* () {
-        const info = (yield* send(() =>
-          HttpClientRequest.get(`${directUrl}/info`),
-        ).pipe(Effect.flatMap((r) => r.json))) as {
+        const info = (yield* send(() => HttpClientRequest.get(`${directUrl}/info`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as {
           host: string;
           port: number;
           database?: string;

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface GetJobBookmarkRequest extends Omit<
-  glue.GetJobBookmarkRequest,
-  "JobName"
-> {}
+export interface GetJobBookmarkRequest extends Omit<glue.GetJobBookmarkRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:GetJobBookmark`.
@@ -46,6 +43,4 @@ export interface GetJobBookmark extends Binding.Service<
   >
 > {}
 
-export const GetJobBookmark = Binding.Service<GetJobBookmark>(
-  "AWS.Glue.GetJobBookmark",
-);
+export const GetJobBookmark = Binding.Service<GetJobBookmark>("AWS.Glue.GetJobBookmark");

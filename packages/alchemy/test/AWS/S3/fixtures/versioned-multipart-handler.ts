@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class S3VersionedMultipartFunction extends Lambda.Function<S3VersionedMultipartFunction>()(
   "S3VersionedMultipartFunction",
@@ -26,58 +26,35 @@ export default S3VersionedMultipartFunction.make(
   Effect.gen(function* () {
     const props = { versioning: "Enabled", forceDestroy: true } as const;
     const buckets = {
-      CreateMultipartUpload: yield* S3.Bucket(
-        "VersionedMultipartCreateBucket",
-        props,
-      ),
+      CreateMultipartUpload: yield* S3.Bucket("VersionedMultipartCreateBucket", props),
       UploadPart: yield* S3.Bucket("VersionedMultipartUploadPartBucket", props),
       UploadPartCopy: yield* S3.Bucket("VersionedMultipartCopyBucket", props),
-      UploadPartCopySource: yield* S3.Bucket(
-        "VersionedMultipartCopySourceBucket",
-        props,
-      ),
+      UploadPartCopySource: yield* S3.Bucket("VersionedMultipartCopySourceBucket", props),
       UploadPartCopyUnboundSource: yield* S3.Bucket(
         "VersionedMultipartCopyUnboundSourceBucket",
         props,
       ),
       ListParts: yield* S3.Bucket("VersionedMultipartListPartsBucket", props),
-      ListMultipartUploads: yield* S3.Bucket(
-        "VersionedMultipartListUploadsBucket",
-        props,
-      ),
-      CompleteMultipartUpload: yield* S3.Bucket(
-        "VersionedMultipartCompleteBucket",
-        props,
-      ),
-      AbortMultipartUpload: yield* S3.Bucket(
-        "VersionedMultipartAbortBucket",
-        props,
-      ),
+      ListMultipartUploads: yield* S3.Bucket("VersionedMultipartListUploadsBucket", props),
+      CompleteMultipartUpload: yield* S3.Bucket("VersionedMultipartCompleteBucket", props),
+      AbortMultipartUpload: yield* S3.Bucket("VersionedMultipartAbortBucket", props),
     };
-    const create = yield* S3.CreateMultipartUpload(
-      buckets.CreateMultipartUpload,
-    );
+    const create = yield* S3.CreateMultipartUpload(buckets.CreateMultipartUpload);
     const upload = yield* S3.UploadPart(buckets.UploadPart);
     const copy = yield* S3.UploadPartCopy(buckets.UploadPartCopy);
     yield* S3.GetObject(buckets.UploadPartCopySource);
     const parts = yield* S3.ListParts(buckets.ListParts);
-    const uploads = yield* S3.ListMultipartUploads(
-      buckets.ListMultipartUploads,
-    );
-    const complete = yield* S3.CompleteMultipartUpload(
-      buckets.CompleteMultipartUpload,
-    );
+    const uploads = yield* S3.ListMultipartUploads(buckets.ListMultipartUploads);
+    const complete = yield* S3.CompleteMultipartUpload(buckets.CompleteMultipartUpload);
     const abort = yield* S3.AbortMultipartUpload(buckets.AbortMultipartUpload);
-    const info = yield* Effect.forEach(
-      Object.entries(buckets),
-      ([binding, bucket]) =>
-        Effect.gen(function* () {
-          return {
-            binding,
-            bucketName: yield* bucket.bucketName,
-            bucketArn: yield* bucket.bucketArn,
-          };
-        }),
+    const info = yield* Effect.forEach(Object.entries(buckets), ([binding, bucket]) =>
+      Effect.gen(function* () {
+        return {
+          binding,
+          bucketName: yield* bucket.bucketName,
+          bucketArn: yield* bucket.bucketArn,
+        };
+      }),
     );
 
     return {
@@ -94,9 +71,7 @@ export default S3VersionedMultipartFunction.make(
               };
             }),
           );
-          if (
-            resolved.some((bucket) => !bucket.bucketName || !bucket.bucketArn)
-          ) {
+          if (resolved.some((bucket) => !bucket.bucketName || !bucket.bucketArn)) {
             return HttpServerResponse.text("Outputs not hydrated yet", {
               status: 503,
             });
@@ -127,9 +102,7 @@ export default S3VersionedMultipartFunction.make(
               }),
             )(body);
             // Expand fixture bytes in Lambda to stay below invocation payload limits.
-            const Body = yield* Effect.sync(() =>
-              input.Body.repeat(input.Repeat ?? 1),
-            );
+            const Body = yield* Effect.sync(() => input.Body.repeat(input.Repeat ?? 1));
             return yield* upload({
               Key: input.Key,
               UploadId: input.UploadId,
@@ -153,15 +126,10 @@ export default S3VersionedMultipartFunction.make(
             return yield* copy(input).pipe(
               Effect.flatMap(HttpServerResponse.json),
               Effect.catchTag("AccessDeniedException", () =>
-                HttpServerResponse.json(
-                  { tag: "AccessDeniedException" },
-                  { status: 403 },
-                ),
+                HttpServerResponse.json({ tag: "AccessDeniedException" }, { status: 403 }),
               ),
-              Effect.catchTag(
-                ["NoSuchUpload", "NoSuchVersion", "NoSuchKey"],
-                (error) =>
-                  HttpServerResponse.json({ tag: error._tag }, { status: 404 }),
+              Effect.catchTag(["NoSuchUpload", "NoSuchVersion", "NoSuchKey"], (error) =>
+                HttpServerResponse.json({ tag: error._tag }, { status: 404 }),
               ),
               Effect.catchTag("InvalidRequest", (error) =>
                 HttpServerResponse.json({ tag: error._tag }, { status: 400 }),
@@ -219,15 +187,11 @@ export default S3VersionedMultipartFunction.make(
             );
           }
           case "/abort": {
-            const input =
-              yield* Schema.decodeUnknownEffect(uploadRequest)(body);
+            const input = yield* Schema.decodeUnknownEffect(uploadRequest)(body);
             return yield* abort(input).pipe(
               Effect.flatMap(() => HttpServerResponse.json({ aborted: true })),
               Effect.catchTag("NoSuchUpload", () =>
-                HttpServerResponse.json(
-                  { tag: "NoSuchUpload" },
-                  { status: 404 },
-                ),
+                HttpServerResponse.json({ tag: "NoSuchUpload" }, { status: 404 }),
               ),
             );
           }

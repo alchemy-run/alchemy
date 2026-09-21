@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -9,6 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EntityResolutionTestFunctionLive, {
   EntityResolutionTestFunction,
   FIXTURE_BUCKET_NAME,
@@ -20,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "EntityResolutionBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -46,43 +43,30 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("EntityResolution Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "EntityResolution bindings setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("EntityResolution bindings setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "EntityResolution bindings setup: deploying fixture",
-      );
+      yield* Effect.logInfo("EntityResolution bindings setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* EntityResolutionTestFunction;
@@ -162,32 +146,28 @@ describe.sequential("EntityResolution Bindings", () => {
   });
 
   describe("ListMatchingJobs / ListIdMappingJobs", () => {
-    test.provider(
-      "both workflow-scoped listings answer (fresh workflows have no jobs)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/jobs")) as {
-            matchingJobs: number;
-            idMappingJobs: number;
-          };
-          expect(response.matchingJobs).toBe(0);
-          expect(response.idMappingJobs).toBe(0);
-        }),
+    test.provider("both workflow-scoped listings answer (fresh workflows have no jobs)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/jobs")) as {
+          matchingJobs: number;
+          idMappingJobs: number;
+        };
+        expect(response.matchingJobs).toBe(0);
+        expect(response.idMappingJobs).toBe(0);
+      }),
     );
   });
 
   describe("GetMatchingJob / GetIdMappingJob", () => {
-    test.provider(
-      "a bogus job id surfaces the typed ResourceNotFoundException",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/jobs/not-found")) as {
-            matching: string;
-            idMapping: string;
-          };
-          expect(response.matching).toBe("ResourceNotFoundException");
-          expect(response.idMapping).toBe("ResourceNotFoundException");
-        }),
+    test.provider("a bogus job id surfaces the typed ResourceNotFoundException", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/jobs/not-found")) as {
+          matching: string;
+          idMapping: string;
+        };
+        expect(response.matching).toBe("ResourceNotFoundException");
+        expect(response.idMapping).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
@@ -213,48 +193,44 @@ describe.sequential("EntityResolution Bindings", () => {
   });
 
   describe("GenerateMatchId", () => {
-    test.provider(
-      "real-time generation matches two records by email",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/generate-match-id")) as {
-            result: string;
-            matchGroups?: number;
-            failedRecords?: number;
-            message?: string | null;
-          };
-          // Either the account supports real-time generation on this
-          // workflow (both records land in one match group) or the service
-          // rejects it with a typed tag — both prove the grant + plumbing
-          // (an IAM gap would be a 500).
-          expect(
-            ["ok", "ValidationException", "ResourceNotFoundException"],
-            response.message ?? undefined,
-          ).toContain(response.result);
-          if (response.result === "ok") {
-            expect(response.matchGroups).toBeGreaterThanOrEqual(1);
-          }
-        }),
+    test.provider("real-time generation matches two records by email", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/generate-match-id")) as {
+          result: string;
+          matchGroups?: number;
+          failedRecords?: number;
+          message?: string | null;
+        };
+        // Either the account supports real-time generation on this
+        // workflow (both records land in one match group) or the service
+        // rejects it with a typed tag — both prove the grant + plumbing
+        // (an IAM gap would be a 500).
+        expect(
+          ["ok", "ValidationException", "ResourceNotFoundException"],
+          response.message ?? undefined,
+        ).toContain(response.result);
+        if (response.result === "ok") {
+          expect(response.matchGroups).toBeGreaterThanOrEqual(1);
+        }
+      }),
     );
   });
 
   describe("BatchDeleteUniqueId", () => {
-    test.provider(
-      "deleting unknown unique ids answers per-id results",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/delete-unique-ids")) as {
-            result: string;
-            status?: string;
-            deleted?: number;
-            errors?: number;
-            message?: string | null;
-          };
-          expect(
-            ["ok", "ValidationException", "ResourceNotFoundException"],
-            response.message ?? undefined,
-          ).toContain(response.result);
-        }),
+    test.provider("deleting unknown unique ids answers per-id results", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/delete-unique-ids")) as {
+          result: string;
+          status?: string;
+          deleted?: number;
+          errors?: number;
+          message?: string | null;
+        };
+        expect(
+          ["ok", "ValidationException", "ResourceNotFoundException"],
+          response.message ?? undefined,
+        ).toContain(response.result);
+      }),
     );
   });
 

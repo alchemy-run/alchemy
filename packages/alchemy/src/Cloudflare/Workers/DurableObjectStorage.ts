@@ -14,24 +14,16 @@ import {
 } from "./DurableObjectTransactionContext.ts";
 
 /** A native transaction failure or invalid use of a transaction's owner. */
-export class DurableObjectStorageError extends Data.TaggedError(
-  "DurableObjectStorageError",
-)<{
+export class DurableObjectStorageError extends Data.TaggedError("DurableObjectStorageError")<{
   readonly operation: string;
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
 // Pre-existing sibling fibers do not inherit the transaction's context.
-const activeStorageTransactions = new WeakMap<
-  cf.DurableObjectStorage,
-  ActiveStorageTransaction
->();
+const activeStorageTransactions = new WeakMap<cf.DurableObjectStorage, ActiveStorageTransaction>();
 
-const checkTransactionOwner = (
-  transaction: ActiveStorageTransaction,
-  allowRolledBack = false,
-) =>
+const checkTransactionOwner = (transaction: ActiveStorageTransaction, allowRolledBack = false) =>
   Effect.withFiber((fiber) =>
     transaction.active &&
     transaction.owner === fiber &&
@@ -60,14 +52,11 @@ function withStorageTransaction<A, E, R>(
 ): Effect.Effect<A, E | DurableObjectStorageError, R>;
 function withStorageTransaction<A, E, R>(
   storage: cf.DurableObjectStorage,
-  body:
-    | Effect.Effect<A, E, R>
-    | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
+  body: Effect.Effect<A, E, R> | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
 ): Effect.Effect<A, E | DurableObjectStorageError, R> {
   return Effect.gen(function* () {
     const transactions = yield* ActiveStorageTransactions;
-    const existing =
-      transactions.get(storage) ?? activeStorageTransactions.get(storage);
+    const existing = transactions.get(storage) ?? activeStorageTransactions.get(storage);
     const evaluate = (transaction: ActiveStorageTransaction) =>
       Effect.suspend(() =>
         typeof body === "function"
@@ -136,78 +125,76 @@ function withStorageTransaction<A, E, R>(
           }),
         );
 
-        return yield* Effect.callback<A, E | DurableObjectStorageError>(
-          (resume) => {
-            const reject = (cause: unknown) => {
-              release();
-              resume(
-                failure !== undefined && cause === failure
-                  ? Effect.failCause(failure.cause)
-                  : Effect.fail(
-                      new DurableObjectStorageError({
-                        operation: "transaction",
-                        message: "The native storage transaction failed",
-                        cause,
-                      }),
-                    ),
-              );
-            };
-
-            try {
-              native = storage.transaction((txn) => {
-                if (cancelled) {
-                  throw new DurableObjectStorageError({
-                    operation: "transaction",
-                    message: "The storage transaction caller was interrupted",
-                  });
-                }
-                const transaction: ActiveStorageTransaction = {
-                  transaction: txn,
-                  owner: undefined,
-                  active: true,
-                  rolledBack: false,
-                  alarmTablesEnsured: false,
-                  alarmDirty: false,
-                };
-                currentTransaction = transaction;
-                activeStorageTransactions.set(storage, transaction);
-                const callbackContext = Context.add(
-                  context,
-                  ActiveStorageTransactions,
-                  new Map(transactions).set(storage, transaction),
-                );
-
-                return new Promise<A>((resolve, rejectCallback) => {
-                  callbackFiber = Effect.runForkWith(callbackContext)(
-                    Effect.withFiber((fiber) => {
-                      transaction.owner = fiber;
-                      return evaluate(transaction).pipe(
-                        Effect.scoped,
-                        Effect.tap(() => flushDurableObjectAlarm(storage)),
-                      );
+        return yield* Effect.callback<A, E | DurableObjectStorageError>((resume) => {
+          const reject = (cause: unknown) => {
+            release();
+            resume(
+              failure !== undefined && cause === failure
+                ? Effect.failCause(failure.cause)
+                : Effect.fail(
+                    new DurableObjectStorageError({
+                      operation: "transaction",
+                      message: "The native storage transaction failed",
+                      cause,
                     }),
-                    { scheduler },
-                  );
-                  callbackFiber.addObserver((exit) => {
-                    transaction.active = false;
-                    if (Exit.isSuccess(exit)) {
-                      resolve(exit.value);
-                    } else {
-                      failure = exit;
-                      rejectCallback(exit);
-                    }
-                  });
+                  ),
+            );
+          };
+
+          try {
+            native = storage.transaction((txn) => {
+              if (cancelled) {
+                throw new DurableObjectStorageError({
+                  operation: "transaction",
+                  message: "The storage transaction caller was interrupted",
+                });
+              }
+              const transaction: ActiveStorageTransaction = {
+                transaction: txn,
+                owner: undefined,
+                active: true,
+                rolledBack: false,
+                alarmTablesEnsured: false,
+                alarmDirty: false,
+              };
+              currentTransaction = transaction;
+              activeStorageTransactions.set(storage, transaction);
+              const callbackContext = Context.add(
+                context,
+                ActiveStorageTransactions,
+                new Map(transactions).set(storage, transaction),
+              );
+
+              return new Promise<A>((resolve, rejectCallback) => {
+                callbackFiber = Effect.runForkWith(callbackContext)(
+                  Effect.withFiber((fiber) => {
+                    transaction.owner = fiber;
+                    return evaluate(transaction).pipe(
+                      Effect.scoped,
+                      Effect.tap(() => flushDurableObjectAlarm(storage)),
+                    );
+                  }),
+                  { scheduler },
+                );
+                callbackFiber.addObserver((exit) => {
+                  transaction.active = false;
+                  if (Exit.isSuccess(exit)) {
+                    resolve(exit.value);
+                  } else {
+                    failure = exit;
+                    rejectCallback(exit);
+                  }
                 });
               });
-              native.then((value) => {
-                release();
-                resume(Effect.succeed(value));
-              }, reject);
-            } catch (cause) {
-              reject(cause);
-            }
-          },
-        );
+            });
+            native.then((value) => {
+              release();
+              resume(Effect.succeed(value));
+            }, reject);
+          } catch (cause) {
+            reject(cause);
+          }
+        });
       }),
     );
   });
@@ -219,9 +206,7 @@ function withStorageTransaction<A, E, R>(
 
 export type SqlStorageValue = cf.SqlStorageValue;
 
-export interface SqlCursor<
-  T extends Record<string, SqlStorageValue>,
-> extends Stream.Stream<T> {
+export interface SqlCursor<T extends Record<string, SqlStorageValue>> extends Stream.Stream<T> {
   next(): Effect.Effect<
     { done?: false; value: T } | { done: true; value?: never },
     never,
@@ -268,10 +253,7 @@ const fromSqlCursor = <T extends Record<string, SqlStorageValue>>(
   }) as SqlCursor<T>;
 };
 
-const fromSqlStorage = (
-  sql: cf.SqlStorage,
-  checkOwner: Effect.Effect<void>,
-): SqlStorage => ({
+const fromSqlStorage = (sql: cf.SqlStorage, checkOwner: Effect.Effect<void>): SqlStorage => ({
   raw: sql,
   exec: <T extends Record<string, SqlStorageValue>>(
     query: string,
@@ -365,9 +347,7 @@ export interface DurableObjectStorage {
     keys: string[],
     options?: cf.DurableObjectPutOptions,
   ): Effect.Effect<number, never, RuntimeContext>;
-  deleteAll(
-    options?: cf.DurableObjectPutOptions,
-  ): Effect.Effect<void, never, RuntimeContext>;
+  deleteAll(options?: cf.DurableObjectPutOptions): Effect.Effect<void, never, RuntimeContext>;
   /**
    * Run an Effect inside a native storage transaction with the caller's context.
    * On SQLite-backed storage, SQL, KV, and alarm writes to this storage commit
@@ -396,12 +376,8 @@ export interface DurableObjectStorage {
   sql: SqlStorage;
   kv: cf.SyncKvStorage;
   getCurrentBookmark(): Effect.Effect<string, never, RuntimeContext>;
-  getBookmarkForTime(
-    timestamp: number | Date,
-  ): Effect.Effect<string, never, RuntimeContext>;
-  onNextSessionRestoreBookmark(
-    bookmark: string,
-  ): Effect.Effect<string, never, RuntimeContext>;
+  getBookmarkForTime(timestamp: number | Date): Effect.Effect<string, never, RuntimeContext>;
+  onNextSessionRestoreBookmark(bookmark: string): Effect.Effect<string, never, RuntimeContext>;
 }
 
 // ---------------------------------------------------------------------------
@@ -421,18 +397,13 @@ const makeDurableObjectTransaction = (
   ),
   flushAlarm: Effect.Effect<void> = Effect.void,
 ): DurableObjectTransaction => {
-  const use = <A>(effect: Effect.Effect<A>) =>
-    Effect.andThen(checkOwner, effect);
-  const useAlarm = <A>(effect: Effect.Effect<A>) =>
-    use(Effect.andThen(flushAlarm, effect));
+  const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
+  const useAlarm = <A>(effect: Effect.Effect<A>) => use(Effect.andThen(flushAlarm, effect));
 
   return {
-    get: ((
-      keyOrKeys: string | string[],
-      options?: cf.DurableObjectGetOptions,
-    ) => use(Effect.promise(() => txn.get(keyOrKeys as any, options)))) as any,
-    list: (options?: cf.DurableObjectListOptions) =>
-      use(Effect.promise(() => txn.list(options))),
+    get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
+      use(Effect.promise(() => txn.get(keyOrKeys as any, options)))) as any,
+    list: (options?: cf.DurableObjectListOptions) => use(Effect.promise(() => txn.list(options))),
     put: ((
       keyOrEntries: string | Record<string, unknown>,
       valueOrOptions?: unknown,
@@ -440,28 +411,18 @@ const makeDurableObjectTransaction = (
     ) =>
       use(
         typeof keyOrEntries === "string"
-          ? Effect.promise(() =>
-              txn.put(keyOrEntries, valueOrOptions, maybeOptions),
-            )
+          ? Effect.promise(() => txn.put(keyOrEntries, valueOrOptions, maybeOptions))
           : Effect.promise(() =>
-              txn.put(
-                keyOrEntries,
-                valueOrOptions as cf.DurableObjectPutOptions | undefined,
-              ),
+              txn.put(keyOrEntries, valueOrOptions as cf.DurableObjectPutOptions | undefined),
             ),
       )) as any,
-    delete: ((
-      keyOrKeys: string | string[],
-      options?: cf.DurableObjectPutOptions,
-    ) =>
+    delete: ((keyOrKeys: string | string[], options?: cf.DurableObjectPutOptions) =>
       use(Effect.promise(() => txn.delete(keyOrKeys as any, options)))) as any,
     rollback: () => rollback,
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
       useAlarm(Effect.promise(() => txn.getAlarm(options))),
-    setAlarm: (
-      scheduledTime: number | Date,
-      options?: cf.DurableObjectSetAlarmOptions,
-    ) => useAlarm(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
+    setAlarm: (scheduledTime: number | Date, options?: cf.DurableObjectSetAlarmOptions) =>
+      useAlarm(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
       useAlarm(Effect.promise(() => txn.deleteAlarm(options))),
   };
@@ -478,16 +439,12 @@ export const fromDurableObjectStorage = (
       ? Effect.void
       : checkTransactionOwner(transaction).pipe(Effect.orDie);
   });
-  const use = <A>(effect: Effect.Effect<A>) =>
-    Effect.andThen(checkOwner, effect);
+  const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
   const useAlarm = <A>(effect: Effect.Effect<A>) =>
     use(Effect.andThen(flushDurableObjectAlarm(storage), effect));
 
   return {
-    get: ((
-      keyOrKeys: string | string[],
-      options?: cf.DurableObjectGetOptions,
-    ) =>
+    get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
       use(Effect.promise(() => storage.get(keyOrKeys as any, options)))) as any,
     list: (options?: cf.DurableObjectListOptions) =>
       use(Effect.promise(() => storage.list(options))),
@@ -498,47 +455,28 @@ export const fromDurableObjectStorage = (
     ) =>
       use(
         typeof keyOrEntries === "string"
-          ? Effect.promise(() =>
-              storage.put(keyOrEntries, valueOrOptions, maybeOptions),
-            )
+          ? Effect.promise(() => storage.put(keyOrEntries, valueOrOptions, maybeOptions))
           : Effect.promise(() =>
-              storage.put(
-                keyOrEntries,
-                valueOrOptions as cf.DurableObjectPutOptions | undefined,
-              ),
+              storage.put(keyOrEntries, valueOrOptions as cf.DurableObjectPutOptions | undefined),
             ),
       )) as any,
-    delete: ((
-      keyOrKeys: string | string[],
-      options?: cf.DurableObjectPutOptions,
-    ) =>
-      use(
-        Effect.promise(() => storage.delete(keyOrKeys as any, options)),
-      )) as any,
+    delete: ((keyOrKeys: string | string[], options?: cf.DurableObjectPutOptions) =>
+      use(Effect.promise(() => storage.delete(keyOrKeys as any, options)))) as any,
     deleteAll: (options?: cf.DurableObjectPutOptions) =>
       use(Effect.promise(() => storage.deleteAll(options))),
     transaction: <A, E, R>(
-      body:
-        | Effect.Effect<A, E, R>
-        | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
-    ) =>
-      withStorageTransaction(storage, (txn) =>
-        typeof body === "function" ? body(txn) : body,
-      ),
+      body: Effect.Effect<A, E, R> | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
+    ) => withStorageTransaction(storage, (txn) => (typeof body === "function" ? body(txn) : body)),
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
       useAlarm(Effect.promise(() => storage.getAlarm(options))),
-    setAlarm: (
-      scheduledTime: number | Date,
-      options?: cf.DurableObjectSetAlarmOptions,
-    ) =>
+    setAlarm: (scheduledTime: number | Date, options?: cf.DurableObjectSetAlarmOptions) =>
       useAlarm(Effect.promise(() => storage.setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
       useAlarm(Effect.promise(() => storage.deleteAlarm(options))),
     sync: () => use(Effect.promise(() => storage.sync())),
     sql: fromSqlStorage(storage.sql, checkOwner),
     kv: storage.kv,
-    getCurrentBookmark: () =>
-      use(Effect.promise(() => storage.getCurrentBookmark())),
+    getCurrentBookmark: () => use(Effect.promise(() => storage.getCurrentBookmark())),
     getBookmarkForTime: (timestamp: number | Date) =>
       use(Effect.promise(() => storage.getBookmarkForTime(timestamp))),
     onNextSessionRestoreBookmark: (bookmark: string) =>

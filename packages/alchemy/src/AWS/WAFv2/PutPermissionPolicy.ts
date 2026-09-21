@@ -49,10 +49,7 @@ export interface PutPermissionPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutPermissionPolicyRequest,
-    ) => Effect.Effect<
-      WAFV2.PutPermissionPolicyResponse,
-      WAFV2.PutPermissionPolicyError
-    >
+    ) => Effect.Effect<WAFV2.PutPermissionPolicyResponse, WAFV2.PutPermissionPolicyError>
   >
 > {}
 

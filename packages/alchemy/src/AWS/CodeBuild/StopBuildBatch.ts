@@ -27,6 +27,4 @@ export interface StopBuildBatch extends Binding.Service<
     ) => Effect.Effect<SVC.StopBuildBatchOutput, SVC.StopBuildBatchError>
   >
 > {}
-export const StopBuildBatch = Binding.Service<StopBuildBatch>(
-  "AWS.CodeBuild.StopBuildBatch",
-);
+export const StopBuildBatch = Binding.Service<StopBuildBatch>("AWS.CodeBuild.StopBuildBatch");

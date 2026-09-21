@@ -3,8 +3,7 @@ import type { Input } from "../../Input.ts";
 import type { Worker } from "./Worker.ts";
 
 type WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
-const WorkerEntrypointTypeId: WorkerEntrypointTypeId =
-  "Cloudflare.WorkerEntrypoint";
+const WorkerEntrypointTypeId: WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
 
 export interface WorkerEntrypointOptions {
   /**
@@ -152,9 +151,7 @@ export const WorkerEntrypoint = <
 };
 
 /** Structural guard for {@link WorkerEntrypointBinding} `env` values. */
-export const isWorkerEntrypoint = (
-  value: unknown,
-): value is WorkerEntrypointBinding<any> =>
+export const isWorkerEntrypoint = (value: unknown): value is WorkerEntrypointBinding<any> =>
   typeof value === "object" &&
   value !== null &&
   (value as { kind?: unknown }).kind === WorkerEntrypointTypeId;

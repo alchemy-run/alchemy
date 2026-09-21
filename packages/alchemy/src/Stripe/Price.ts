@@ -22,9 +22,9 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
+import { isMissingStripeResource } from "./missing.ts";
 import type { Product } from "./Product.ts";
 import type { Providers } from "./Providers.ts";
-import { isMissingStripeResource } from "./missing.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -201,9 +201,7 @@ export type Price = Resource<
  */
 export const Price = Resource<Price>("Stripe.Price");
 
-export class PriceNotResolved extends Data.TaggedError(
-  "Stripe.PriceNotResolved",
-)<{
+export class PriceNotResolved extends Data.TaggedError("Stripe.PriceNotResolved")<{
   product: string;
   currency: string;
 }> {}
@@ -224,9 +222,7 @@ const alchemyProductId = (product: string | Product): string => {
   return String(id);
 };
 
-const toRecurring = (
-  recurring: StripePrice["recurring"],
-): PriceRecurring | undefined => {
+const toRecurring = (recurring: StripePrice["recurring"]): PriceRecurring | undefined => {
   if (recurring == null) return undefined;
   return {
     interval: recurring.interval as PriceInterval,
@@ -258,9 +254,7 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPrice({ price }).pipe(
-    Effect.catchIf(isMissingPrice, () => Effect.succeed(undefined)),
-  );
+  GetPrice({ price }).pipe(Effect.catchIf(isMissingPrice, () => Effect.succeed(undefined)));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const prices: StripePrice[] = [];
@@ -284,10 +278,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllPrices = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const prices: StripePrice[] = [];
   for (const price of [...active, ...inactive]) {
@@ -310,10 +303,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -343,29 +333,20 @@ const recurringEqual = (
     return false;
   }
   if ((news.meter ?? undefined) !== (observed.meter ?? undefined)) return false;
-  if (
-    (news.trialPeriodDays ?? undefined) !==
-    (observed.trialPeriodDays ?? undefined)
-  ) {
+  if ((news.trialPeriodDays ?? undefined) !== (observed.trialPeriodDays ?? undefined)) {
     return false;
   }
   return true;
 };
 
-const shouldReplace = (
-  news: PriceProps,
-  output: Price["Attributes"] | undefined,
-) => {
+const shouldReplace = (news: PriceProps, output: Price["Attributes"] | undefined) => {
   if (output === undefined) return false;
   if (alchemyProductId(news.product) !== output.product) return true;
   if (news.currency !== output.currency) return true;
   if (news.unitAmount !== undefined && news.unitAmount !== output.unitAmount) {
     return true;
   }
-  if (
-    news.unitAmountDecimal !== undefined &&
-    news.unitAmountDecimal !== output.unitAmountDecimal
-  ) {
+  if (news.unitAmountDecimal !== undefined && news.unitAmountDecimal !== output.unitAmountDecimal) {
     return true;
   }
   if (!recurringEqual(news.recurring, output.recurring)) return true;
@@ -391,9 +372,7 @@ export const PriceProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -432,9 +411,7 @@ export const PriceProvider = () =>
           currency: news.currency,
           active: desiredActive,
           metadata,
-          ...(news.unitAmount !== undefined
-            ? { unit_amount: news.unitAmount }
-            : {}),
+          ...(news.unitAmount !== undefined ? { unit_amount: news.unitAmount } : {}),
           ...(news.unitAmountDecimal !== undefined
             ? { unit_amount_decimal: news.unitAmountDecimal }
             : {}),
@@ -448,9 +425,7 @@ export const PriceProvider = () =>
                   ...(news.recurring.usageType !== undefined
                     ? { usage_type: news.recurring.usageType }
                     : {}),
-                  ...(news.recurring.meter !== undefined
-                    ? { meter: news.recurring.meter }
-                    : {}),
+                  ...(news.recurring.meter !== undefined ? { meter: news.recurring.meter } : {}),
                   ...(news.recurring.trialPeriodDays !== undefined
                     ? { trial_period_days: news.recurring.trialPeriodDays }
                     : {}),
@@ -482,12 +457,7 @@ export const PriceProvider = () =>
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
 
-      if (
-        !activeChanged &&
-        !nicknameChanged &&
-        !lookupKeyChanged &&
-        !metadataChanged
-      ) {
+      if (!activeChanged && !nicknameChanged && !lookupKeyChanged && !metadataChanged) {
         return toAttrs(current);
       }
 
@@ -495,15 +465,11 @@ export const PriceProvider = () =>
         price: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
-        ...(lookupKeyChanged
-          ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
-          : {}),
+        ...(lookupKeyChanged ? { lookup_key: desiredLookupKey, transfer_lookup_key: true } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

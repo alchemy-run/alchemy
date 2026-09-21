@@ -33,11 +33,11 @@ describe("sortServerModules", () => {
       { name: "server/index.js", content: "", hash: "" },
       { name: "server/a.js", content: "", hash: "" },
     ];
-    expect(
-      sortServerModules(modules, "server/index.js").map(
-        (module) => module.name,
-      ),
-    ).toEqual(["server/index.js", "server/a.js", "server/z.js"]);
+    expect(sortServerModules(modules, "server/index.js").map((module) => module.name)).toEqual([
+      "server/index.js",
+      "server/a.js",
+      "server/z.js",
+    ]);
   });
 });
 
@@ -50,9 +50,7 @@ describe("build output persistence", () => {
       clientDirectory: "/project/dist/client",
       serverModules: [
         await run(toOutputFile("server/index.js", "export default {};")),
-        await run(
-          toOutputFile("server/data.bin", new Uint8Array([0, 1, 2, 255])),
-        ),
+        await run(toOutputFile("server/data.bin", new Uint8Array([0, 1, 2, 255]))),
       ],
       externalWorkspaces: new Set(["/workspaces/b", "/workspaces/a"]),
     };
@@ -66,9 +64,7 @@ describe("build output persistence", () => {
     expect(Buffer.isBuffer(binary.content)).toBe(true);
     expect(Array.from(binary.content as Buffer)).toEqual([0, 1, 2, 255]);
     expect(binary.hash).toBe(output.serverModules![1]!.hash);
-    expect(parsed.externalWorkspaces).toEqual(
-      new Set(["/workspaces/a", "/workspaces/b"]),
-    );
+    expect(parsed.externalWorkspaces).toEqual(new Set(["/workspaces/a", "/workspaces/b"]));
   });
 
   it("creates the target's parent directory when it does not exist", async () => {

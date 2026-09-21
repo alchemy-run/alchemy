@@ -1,3 +1,6 @@
+import { fileURLToPath } from "node:url";
+import { watchImport } from "@alchemy.run/node-utils/watch-import";
+import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -9,13 +12,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { watchImport } from "@alchemy.run/node-utils/watch-import";
-import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
-import { fileURLToPath } from "node:url";
-
-import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { resolveStackEntrypoint } from "../Alchemist/Entrypoint.ts";
+import * as Stacks from "../Alchemist/routes/stack.ts";
 import { StackModuleLoader } from "../Alchemist/Session.ts";
+import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -25,23 +25,19 @@ import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
-import * as Stacks from "../Alchemist/routes/stack.ts";
-import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
-import { ConsoleLogLive } from "./GlobalLog.ts";
+import * as CliKit from "./CliKit/index.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
-import * as CliKit from "./CliKit/index.ts";
 import { stackOutputsView } from "./components/view/StackOutputs.tsx";
+import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
+import { ConsoleLogLive } from "./GlobalLog.ts";
 import { selectCliServices } from "./selectCli.ts";
 
 // Interactive dev/deploy runs use the Sigil progress UI; CI, redirected output,
 // and other non-interactive terminals still select the append-only renderer.
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
-  Layer.provideMerge(
-    Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
-    CliKit.layer(),
-  ),
+  Layer.provideMerge(Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction), CliKit.layer()),
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),
   // Dev runs live in this exec child, not the `alchemy` CLI process, so
@@ -57,9 +53,7 @@ const services = Layer.mergeAll(
   // terminal whenever telemetry was enabled.
   Layer.provideMerge(TelemetryLive, ConsoleLogLive),
 ).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive),
-  ),
+  Layer.provideMerge(Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive)),
   Layer.provideMerge(
     Layer.mergeAll(
       PlatformServices,
@@ -101,11 +95,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     : applyPlan.pipe(
         Effect.catchCause((cause) =>
           Console.error(
-            describeFailure(
-              "apply",
-              cause,
-              "keeping dev alive so healthy resources keep serving",
-            ),
+            describeFailure("apply", cause, "keeping dev alive so healthy resources keep serving"),
           ).pipe(Effect.as(undefined)),
         ),
       );
@@ -123,9 +113,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
  * past generation on every later change.
  */
 const nextChange = (watcher: {
-  subscribe: (
-    listener: (change: { paths: ReadonlySet<string> }) => void,
-  ) => () => void;
+  subscribe: (listener: (change: { paths: ReadonlySet<string> }) => void) => () => void;
 }) =>
   Effect.callback<ReadonlySet<string>>((resume) => {
     const unsubscribe = watcher.subscribe(({ paths }) => {
@@ -157,9 +145,7 @@ const runNodeDevWatcher = Effect.fn(function* (options: DevOptions) {
   // `/tmp`), so the project root the graph is scoped to must be real too.
   // Scope to the invocation directory, not the entrypoint's directory: a
   // config under `infra/` commonly imports application code from `src/`.
-  const entrypoint = yield* fs.realPath(
-    yield* resolveStackEntrypoint(options.main),
-  );
+  const entrypoint = yield* fs.realPath(yield* resolveStackEntrypoint(options.main));
   const root = yield* fs.realPath(initialCwd);
   const nodeModules = `${path.sep}node_modules${path.sep}`;
   return yield* Effect.acquireRelease(
@@ -191,9 +177,7 @@ const runNodeDevWatcher = Effect.fn(function* (options: DevOptions) {
       );
       return Effect.forever(
         Effect.raceFirst(generation, nextChange(watcher)).pipe(
-          Effect.flatMap((paths) =>
-            paths === undefined ? Effect.void : logReload(paths),
-          ),
+          Effect.flatMap((paths) => (paths === undefined ? Effect.void : logReload(paths))),
         ),
       );
     }),
@@ -216,10 +200,7 @@ const runBunDevWatcher = (options: DevOptions) =>
     (tracker) => Effect.promise(() => tracker.close()),
   ).pipe(
     Effect.flatMap((tracker) =>
-      Effect.raceFirst(
-        devKeepAlive(runDev(options)).pipe(Effect.scoped),
-        nextChange(tracker),
-      ),
+      Effect.raceFirst(devKeepAlive(runDev(options)).pipe(Effect.scoped), nextChange(tracker)),
     ),
     Effect.flatMap((paths) =>
       paths === undefined
@@ -241,36 +222,24 @@ const runBunDevWatcher = (options: DevOptions) =>
  * interrupts the fiber running this code, so `catchCause` never gets to
  * park it (a parked `Effect.never` is interrupted straight away too).
  */
-const describeFailure = (
-  what: string,
-  cause: Cause.Cause<unknown>,
-  next: string,
-) =>
+const describeFailure = (what: string, cause: Cause.Cause<unknown>, next: string) =>
   Cause.hasInterruptsOnly(cause)
     ? `alchemy dev: ${what} was interrupted internally (a bug in a provider or the engine — please report it with the trace below); ${next}.\n${Cause.pretty(cause)}`
     : `alchemy dev: ${what} failed; ${next}.\n${Cause.pretty(cause)}`;
 
 // A mid-edit import or planning failure must keep the watch process alive so
 // the next save can restart it. Ctrl+C still tears the run down.
-export const devKeepAlive = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+export const devKeepAlive = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   effect.pipe(
     Effect.catchCause((cause) =>
       Console.error(
-        describeFailure(
-          "run",
-          cause,
-          "waiting for the next file change to retry",
-        ),
+        describeFailure("run", cause, "waiting for the next file change to retry"),
       ).pipe(Effect.andThen(Effect.never)),
     ),
   );
 
 const makeExec = () => {
-  const options = Schema.decodeSync(DevOptions)(
-    JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
-  );
+  const options = Schema.decodeSync(DevOptions)(JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!));
   return Effect.gen(function* () {
     yield* installShutdownFeedback;
     // Subscribe to the spawner's sidecar log stream BEFORE the stack runs:
@@ -280,9 +249,7 @@ const makeExec = () => {
     // to log/{stage}/{timestamp}.log; per-resource output lands in
     // log/{stage}/{fqn…}/ via the local providers.
     const devLog = yield* (yield* makeDevLogOpener)(options.stage);
-    yield* forwardSidecarLogs((entry) =>
-      devLog.writeLine(`[${entry.channel}] ${entry.line}`),
-    );
+    yield* forwardSidecarLogs((entry) => devLog.writeLine(`[${entry.channel}] ${entry.line}`));
     // Single-pass runs park nothing. Otherwise Node reloads the stack graph in
     // this process; Bun exits for the supervisor to respawn (see above).
     return yield* (yield* devOnce)
@@ -294,7 +261,4 @@ const makeExec = () => {
 };
 
 /** Fully wired sidecar CLI program. */
-export const exec: () => Effect.Effect<
-  void,
-  Effect.Error<ReturnType<typeof makeExec>>
-> = makeExec;
+export const exec: () => Effect.Effect<void, Effect.Error<ReturnType<typeof makeExec>>> = makeExec;

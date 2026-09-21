@@ -16,9 +16,10 @@ export const fetchResolverTags = (arn: string) =>
     Stream.runCollect,
     Effect.map(
       (chunk) =>
-        Object.fromEntries(
-          Array.from(chunk).map((tag) => [tag.Key, tag.Value]),
-        ) as Record<string, string>,
+        Object.fromEntries(Array.from(chunk).map((tag) => [tag.Key, tag.Value])) as Record<
+          string,
+          string
+        >,
     ),
     Effect.catch(() => Effect.succeed({} as Record<string, string>)),
   );
@@ -29,10 +30,7 @@ export const fetchResolverTags = (arn: string) =>
  *
  * @internal
  */
-export const syncResolverTags = Effect.fn(function* (
-  arn: string,
-  desired: Record<string, string>,
-) {
+export const syncResolverTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
   const observed = yield* fetchResolverTags(arn);
   const { upsert, removed } = diffTags(observed, desired);
   if (upsert.length > 0) {
@@ -56,10 +54,7 @@ export const toResolverTagList = (tags: Record<string, string>): r53r.Tag[] =>
  *
  * @internal
  */
-export const sameStringSet = (
-  a: readonly string[],
-  b: readonly string[],
-): boolean => {
+export const sameStringSet = (a: readonly string[], b: readonly string[]): boolean => {
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();

@@ -1,18 +1,15 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The MNM config is an account singleton served from an eventually-consistent
 // store: an immediate `list()` right after a create (or a destroy) can still
@@ -24,14 +21,9 @@ const listUntil = <A>(
   label: string,
 ) =>
   list().pipe(
-    Effect.flatMap((all) =>
-      matches(all) ? Effect.succeed(all) : Effect.fail(new Error(label)),
-    ),
+    Effect.flatMap((all) => (matches(all) ? Effect.succeed(all) : Effect.fail(new Error(label)))),
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("3 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
       times: 12,
     }),
   );
@@ -56,9 +48,7 @@ describe.sequential("MagicNetworkMonitoring.Config list", () => {
           }).pipe(adopt(true)),
         );
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.MagicNetworkMonitoring.Config,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.MagicNetworkMonitoring.Config);
         // Account singleton: when present, exactly one element with the full
         // Attributes shape (the same object `read` returns). Poll through
         // the create's read-after-write lag, including a sibling test's leftover

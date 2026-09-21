@@ -1,31 +1,29 @@
-import * as AWS from "@/AWS";
-import { Vault } from "@/AWS/Glacier";
-import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Alchemy";
 import * as glacier from "@distilled.cloud/aws/glacier";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Vault } from "@/AWS/Glacier";
+import { Topic } from "@/AWS/SNS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete/sync paths depend on. Runs in
 // every CI pass at near-zero cost.
-test.provider(
-  "describeVault on a nonexistent vault fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        glacier.describeVault({
-          accountId: "-",
-          vaultName: "alchemy-nonexistent-glacier-vault-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeVault on a nonexistent vault fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      glacier.describeVault({
+        accountId: "-",
+        vaultName: "alchemy-nonexistent-glacier-vault-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Ungated entitlement probe: AWS rejects the vault-based S3 Glacier API on
@@ -39,9 +37,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const vaultName = "alchemy-glacier-entitlement-probe";
-      const created = yield* Effect.result(
-        glacier.createVault({ accountId: "-", vaultName }),
-      );
+      const created = yield* Effect.result(glacier.createVault({ accountId: "-", vaultName }));
       if (Result.isFailure(created)) {
         expect(created.failure._tag).toBe("NoLongerSupportedException");
         return;
@@ -60,24 +56,17 @@ class VaultStillExists extends Data.TaggedError("VaultStillExists")<{
 // ResourceNotFoundException once deletion has propagated.
 const assertVaultDeleted = (vaultName: string) =>
   Effect.gen(function* () {
-    const exists = yield* glacier
-      .describeVault({ accountId: "-", vaultName })
-      .pipe(
-        Effect.map(() => true),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(false),
-        ),
-      );
+    const exists = yield* glacier.describeVault({ accountId: "-", vaultName }).pipe(
+      Effect.map(() => true),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+    );
     if (exists) {
       yield* Effect.fail(new VaultStillExists({ vaultName }));
     }
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VaultStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -130,12 +119,8 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
         accountId: "-",
         vaultName: step1.vault.vaultName,
       });
-      expect(notifications.vaultNotificationConfig?.SNSTopic).toBe(
-        step1.topic.topicArn,
-      );
-      expect(notifications.vaultNotificationConfig?.Events).toEqual([
-        "ArchiveRetrievalCompleted",
-      ]);
+      expect(notifications.vaultNotificationConfig?.SNSTopic).toBe(step1.topic.topicArn);
+      expect(notifications.vaultNotificationConfig?.Events).toEqual(["ArchiveRetrievalCompleted"]);
 
       const tags = yield* glacier.listTagsForVault({
         accountId: "-",
@@ -165,10 +150,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
             accessPolicy: denyArchiveDeletes(vaultArn),
             notificationConfig: {
               snsTopic: topic.topicArn,
-              events: [
-                "ArchiveRetrievalCompleted",
-                "InventoryRetrievalCompleted",
-              ],
+              events: ["ArchiveRetrievalCompleted", "InventoryRetrievalCompleted"],
             },
           });
           return { vault };
@@ -186,11 +168,10 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
         accountId: "-",
         vaultName: step2.vault.vaultName,
       });
-      expect(
-        [
-          ...(updatedNotifications.vaultNotificationConfig?.Events ?? []),
-        ].sort(),
-      ).toEqual(["ArchiveRetrievalCompleted", "InventoryRetrievalCompleted"]);
+      expect([...(updatedNotifications.vaultNotificationConfig?.Events ?? [])].sort()).toEqual([
+        "ArchiveRetrievalCompleted",
+        "InventoryRetrievalCompleted",
+      ]);
 
       const updatedTags = yield* glacier.listTagsForVault({
         accountId: "-",

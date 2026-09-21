@@ -148,10 +148,7 @@ export const ObjectLambdaAccessPointProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (
         id: string,
-        props: Pick<
-          ObjectLambdaAccessPointProps,
-          "objectLambdaAccessPointName"
-        >,
+        props: Pick<ObjectLambdaAccessPointProps, "objectLambdaAccessPointName">,
       ) {
         // Object Lambda Access Point names: 3-45 chars, lowercase.
         return (
@@ -160,21 +157,13 @@ export const ObjectLambdaAccessPointProvider = () =>
         );
       });
 
-      const objectLambdaArn = (
-        region: string,
-        accountId: string,
-        name: string,
-      ) =>
+      const objectLambdaArn = (region: string, accountId: string, name: string) =>
         `arn:aws:s3-object-lambda:${region}:${accountId}:accesspoint/${name}`;
 
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPointForObjectLambda({ AccountId: accountId, Name: name })
-          .pipe(
-            Effect.catchTag("NoSuchAccessPoint", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
 
       const desiredConfiguration = (
         props: ObjectLambdaAccessPointProps,
@@ -192,13 +181,10 @@ export const ObjectLambdaAccessPointProvider = () =>
           supportingAccessPoint: cfg.SupportingAccessPoint,
           metrics: cfg.CloudWatchMetricsEnabled ?? false,
           features: Arr.sort(cfg.AllowedFeatures ?? [], Order.String),
-          transformations: Arr.map(
-            cfg.TransformationConfigurations,
-            (transformation) => ({
-              actions: Arr.sort(transformation.Actions, Order.String),
-              lambda: transformation.ContentTransformation.AwsLambda,
-            }),
-          ),
+          transformations: Arr.map(cfg.TransformationConfigurations, (transformation) => ({
+            actions: Arr.sort(transformation.Actions, Order.String),
+            lambda: transformation.ContentTransformation.AwsLambda,
+          })),
         });
 
       return ObjectLambdaAccessPoint.Provider.of({
@@ -219,8 +205,7 @@ export const ObjectLambdaAccessPointProvider = () =>
               (page.ObjectLambdaAccessPointList ?? []).map((olap) => ({
                 objectLambdaAccessPointName: olap.Name,
                 objectLambdaAccessPointArn:
-                  olap.ObjectLambdaAccessPointArn ??
-                  objectLambdaArn(region, accountId, olap.Name),
+                  olap.ObjectLambdaAccessPointArn ?? objectLambdaArn(region, accountId, olap.Name),
                 alias: olap.Alias?.Value,
                 region,
                 accountId,
@@ -231,18 +216,12 @@ export const ObjectLambdaAccessPointProvider = () =>
         // treated as ours (ownership is scoped by the deterministic name).
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.objectLambdaAccessPointName ??
-            (yield* createName(id, olds ?? {}));
+          const name = output?.objectLambdaAccessPointName ?? (yield* createName(id, olds ?? {}));
           const live = yield* observeAccessPoint(accountId, name);
           if (live === undefined) return undefined;
           return {
             objectLambdaAccessPointName: name,
-            objectLambdaAccessPointArn: objectLambdaArn(
-              region,
-              accountId,
-              name,
-            ),
+            objectLambdaAccessPointArn: objectLambdaArn(region, accountId, name),
             alias: live.Alias?.Value,
             region,
             accountId,
@@ -260,9 +239,7 @@ export const ObjectLambdaAccessPointProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.objectLambdaAccessPointName ??
-            (yield* createName(id, news));
+          const name = output?.objectLambdaAccessPointName ?? (yield* createName(id, news));
           const desired = desiredConfiguration(news);
 
           // 1. OBSERVE — cloud state is authoritative.
@@ -277,12 +254,7 @@ export const ObjectLambdaAccessPointProvider = () =>
                 Name: name,
                 Configuration: desired,
               })
-              .pipe(
-                Effect.catchTag(
-                  "AccessPointAlreadyOwnedByYou",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("AccessPointAlreadyOwnedByYou", () => Effect.void));
             live = yield* retryWhileObjectLambdaPropagates(
               s3control.getAccessPointForObjectLambda({
                 AccountId: accountId,
@@ -313,11 +285,7 @@ export const ObjectLambdaAccessPointProvider = () =>
           yield* session.note(name);
           return {
             objectLambdaAccessPointName: name,
-            objectLambdaAccessPointArn: objectLambdaArn(
-              region,
-              accountId,
-              name,
-            ),
+            objectLambdaAccessPointArn: objectLambdaArn(region, accountId, name),
             alias: live.Alias?.Value,
             region,
             accountId,

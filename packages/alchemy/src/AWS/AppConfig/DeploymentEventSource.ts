@@ -149,7 +149,5 @@ export const DeploymentEventSource = Binding.Service<DeploymentEventSource>(
 export type DeploymentEventSourceService = <Req = never>(
   target: Application | Environment,
   props: DeploymentEventSourceProps,
-  process: (
-    events: Stream.Stream<DeploymentEventRecord>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<DeploymentEventRecord>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

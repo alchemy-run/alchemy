@@ -123,19 +123,11 @@ export const SequenceStoreProvider = () =>
   Provider.effect(
     SequenceStore,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
-      const toAttrs = (store: {
-        id: string;
-        arn: string;
-        name?: string;
-        creationTime: Date;
-      }) => ({
+      const toAttrs = (store: { id: string; arn: string; name?: string; creationTime: Date }) => ({
         sequenceStoreId: store.id,
         sequenceStoreArn: store.arn,
         name: store.name ?? "",
@@ -143,12 +135,7 @@ export const SequenceStoreProvider = () =>
       });
 
       return SequenceStore.Provider.of({
-        stables: [
-          "sequenceStoreId",
-          "sequenceStoreArn",
-          "name",
-          "creationTime",
-        ],
+        stables: ["sequenceStoreId", "sequenceStoreArn", "name", "creationTime"],
         list: () =>
           omics.listSequenceStores.items({}).pipe(
             Stream.map(toAttrs),
@@ -159,11 +146,7 @@ export const SequenceStoreProvider = () =>
           if (output?.sequenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getSequenceStore({ id: output.sequenceStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -182,8 +165,7 @@ export const SequenceStoreProvider = () =>
             prev.sseConfig?.type !== news.sseConfig?.type ||
             prev.sseConfig?.keyArn !== news.sseConfig?.keyArn ||
             (prev.fallbackLocation ?? "") !== (news.fallbackLocation ?? "") ||
-            (prev.eTagAlgorithmFamily ?? "") !==
-              (news.eTagAlgorithmFamily ?? "")
+            (prev.eTagAlgorithmFamily ?? "") !== (news.eTagAlgorithmFamily ?? "")
           ) {
             return { action: "replace" } as const;
           }
@@ -199,9 +181,7 @@ export const SequenceStoreProvider = () =>
               : yield* omics
                   .getSequenceStore({ id: output.sequenceStoreId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
 
           if (store === undefined) {
@@ -224,9 +204,7 @@ export const SequenceStoreProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteSequenceStore({ id: output.sequenceStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -48,20 +45,13 @@ const expectGone = (accountId: string, name: string) =>
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "NamespaceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
 // Namespace reads are served eventually-consistently — poll (bounded)
 // until the live description converges to the expected value.
-const expectDescription = (
-  accountId: string,
-  name: string,
-  expected: string | undefined,
-) =>
+const expectDescription = (accountId: string, name: string, expected: string | undefined) =>
   getNamespace(accountId, name).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -104,9 +94,7 @@ test.provider(
       );
 
       expect(updated.namespace.name).toEqual(initial.namespace.name);
-      expect(updated.namespace.description).toEqual(
-        "alchemy aisearch namespace test",
-      );
+      expect(updated.namespace.description).toEqual("alchemy aisearch namespace test");
 
       yield* expectDescription(
         accountId,
@@ -115,9 +103,7 @@ test.provider(
       );
 
       // Redeploying identical props is a no-op (still the same namespace).
-      const noop = yield* stack.deploy(
-        program({ description: "alchemy aisearch namespace test" }),
-      );
+      const noop = yield* stack.deploy(program({ description: "alchemy aisearch namespace test" }));
       expect(noop.namespace.name).toEqual(initial.namespace.name);
 
       // Clearing the description converges back to unset.
@@ -181,9 +167,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(program());
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.AI.SearchNamespace,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.AI.SearchNamespace);
       const all = yield* provider.list();
 
       expect(all.some((ns) => ns.name === deployed.namespace.name)).toBe(true);
@@ -232,15 +216,13 @@ test.provider(
       // is a planner no-op, so change a mutable prop to force reconcile —
       // it must observe the namespace as missing and recreate it instead
       // of failing on a 404.
-      yield* aisearch
-        .deleteNamespace({ accountId, name: initial.namespace.name })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
-          }),
-        );
+      yield* aisearch.deleteNamespace({ accountId, name: initial.namespace.name }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
       yield* expectGone(accountId, initial.namespace.name);
 
       const healed = yield* stack.deploy(
@@ -248,11 +230,7 @@ test.provider(
       );
 
       expect(healed.namespace.name).toEqual(initial.namespace.name);
-      yield* expectDescription(
-        accountId,
-        healed.namespace.name,
-        "healed after out-of-band delete",
-      );
+      yield* expectDescription(accountId, healed.namespace.name, "healed after out-of-band delete");
 
       yield* stack.destroy();
 

@@ -1,4 +1,3 @@
-import { stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import { buildPortableExample } from "./Fixture.ts";
 
 for (const slug of ["nextjs", "vocs"] as const) {
@@ -16,9 +16,7 @@ for (const slug of ["nextjs", "vocs"] as const) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const next = slug === "nextjs";
-        const artifact = yield* stageWebsiteArtifact(
-          yield* buildPortableExample(slug),
-        );
+        const artifact = yield* stageWebsiteArtifact(yield* buildPortableExample(slug));
         const probe = [
           'import assert from "node:assert/strict";',
           'import fs from "node:fs";',
@@ -54,10 +52,7 @@ for (const slug of ["nextjs", "vocs"] as const) {
           'console.log("NEON_LINUX_ARTIFACT_OK"); process.exit(0);',
           "} catch (error) { console.error(error); process.exit(1); }",
         ].join("\n");
-        yield* fs.writeFileString(
-          path.join(artifact.directory, "probe.mjs"),
-          probe,
-        );
+        yield* fs.writeFileString(path.join(artifact.directory, "probe.mjs"), probe);
         const proc = yield* ChildProcess.make("docker", [
           "run",
           "--rm",

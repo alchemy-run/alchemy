@@ -3,8 +3,7 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the React Router build. */
-export const REACT_ROUTER_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/react-router";
+export const REACT_ROUTER_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/react-router";
 
 /** The AWS Lambda deploy target for the React Router build. */
 export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
@@ -87,10 +86,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
  *
  * @resource
  */
-export const ReactRouter = (
-  id: string,
-  props: InputProps<ReactRouterProps> = {},
-) =>
+export const ReactRouter = (id: string, props: InputProps<ReactRouterProps> = {}) =>
   makeFrameworkSite(id, props, {
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,

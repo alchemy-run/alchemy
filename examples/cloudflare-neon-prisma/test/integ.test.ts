@@ -1,9 +1,9 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
 import * as Prisma from "alchemy/Prisma";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -12,11 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(
-    Cloudflare.providers(),
-    Prisma.providers(),
-    Neon.providers(),
-  ),
+  providers: Layer.mergeAll(Cloudflare.providers(), Prisma.providers(), Neon.providers()),
   state: Alchemy.localState(),
 });
 
@@ -60,9 +56,7 @@ test(
     };
     expect(Array.isArray(initialBody.users)).toBe(true);
 
-    const createResponse = yield* HttpClient.execute(
-      HttpClientRequest.post(baseUrl),
-    );
+    const createResponse = yield* HttpClient.execute(HttpClientRequest.post(baseUrl));
     expect(createResponse.status).toBe(200);
     const { user: createdUser } = (yield* createResponse.json) as unknown as {
       user: UserRow;
@@ -109,9 +103,7 @@ test(
     const finalBody = (yield* finalResponse.json) as unknown as {
       users: UserRow[];
     };
-    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(
-      false,
-    );
+    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(false);
   }),
   { timeout: 120_000 },
 );

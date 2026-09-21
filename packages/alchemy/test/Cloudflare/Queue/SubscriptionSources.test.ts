@@ -1,25 +1,25 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import type { SubscriptionResourceSource } from "@/Cloudflare/Queues/Subscription";
-import * as TestCore from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as ai from "@distilled.cloud/cloudflare/ai";
-import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as images from "@distilled.cloud/cloudflare/images";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, test as unitTest } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
-import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import type { SubscriptionResourceSource } from "@/Cloudflare/Queues/Subscription";
+import * as Test from "@/Test/Alchemy";
+import * as TestCore from "@/Test/Core";
 import {
   hasReadySubscriptionEvent,
   makeSubscriptionCleanup,
@@ -38,9 +38,7 @@ type _Bucket = Assert<Accepts<Cloudflare.R2.Bucket>>;
 type _Job = Assert<Accepts<Cloudflare.R2.SuperSlurperJob>>;
 type _Index = Assert<Accepts<Cloudflare.Vectorize.Index>>;
 type _Model = Assert<Accepts<Cloudflare.AI.Model>>;
-type _SearchModel = Assert<
-  Cloudflare.AI.SearchModel extends string ? true : false
->;
+type _SearchModel = Assert<Cloudflare.AI.SearchModel extends string ? true : false>;
 type _SearchModelIsNotResource = Assert<
   Accepts<Cloudflare.AI.SearchModel> extends false ? true : false
 >;
@@ -149,12 +147,10 @@ const verifySource = (source: {
       yield* images.getV1Variant({ accountId, variantId: source.variantName });
     else if (source.namespaceId)
       yield* kv.getNamespace({ accountId, namespaceId: source.namespaceId });
-    else if (source.bucketName)
-      yield* r2.getBucket({ accountId, bucketName: source.bucketName });
+    else if (source.bucketName) yield* r2.getBucket({ accountId, bucketName: source.bucketName });
     else if (source.indexName)
       yield* vectorize.getIndex({ accountId, indexName: source.indexName });
-    else if (source.modelName)
-      yield* ai.getModelSchema({ accountId, model: source.modelName });
+    else if (source.modelName) yield* ai.getModelSchema({ accountId, model: source.modelName });
     else if (source.workerName)
       yield* workers.getScriptScriptAndVersionSetting({
         accountId,
@@ -176,19 +172,14 @@ const triggerEvent = (kind: Kind, accountId: string, name: string) =>
       const namespace = yield* Effect.acquireRelease(
         kv.createNamespace({ accountId, title: eventName }),
         (namespace) =>
-          kv
-            .deleteNamespace({ accountId, namespaceId: namespace.id })
-            .pipe(Effect.orDie),
+          kv.deleteNamespace({ accountId, namespaceId: namespace.id }).pipe(Effect.orDie),
       );
       return namespace.id;
     }
     if (kind === "r2") {
       const bucket = yield* Effect.acquireRelease(
         r2.createBucket({ accountId, name: eventName }),
-        () =>
-          r2
-            .deleteBucket({ accountId, bucketName: eventName })
-            .pipe(Effect.orDie),
+        () => r2.deleteBucket({ accountId, bucketName: eventName }).pipe(Effect.orDie),
       );
       return bucket.name!;
     }
@@ -199,10 +190,7 @@ const triggerEvent = (kind: Kind, accountId: string, name: string) =>
           name: eventName,
           config: { dimensions: 32, metric: "cosine" },
         }),
-        () =>
-          vectorize
-            .deleteIndex({ accountId, indexName: eventName })
-            .pipe(Effect.orDie),
+        () => vectorize.deleteIndex({ accountId, indexName: eventName }).pipe(Effect.orDie),
       );
       yield* Effect.logInfo("Vectorize index created", {
         name: index.name,
@@ -213,11 +201,7 @@ const triggerEvent = (kind: Kind, accountId: string, name: string) =>
     return yield* Effect.fail(new Error(`No lifecycle trigger for ${kind}`));
   });
 
-const pullEvents = (
-  accountId: string,
-  queueId: string,
-  received: SubscriptionEvent[] = [],
-) =>
+const pullEvents = (accountId: string, queueId: string, received: SubscriptionEvent[] = []) =>
   Effect.gen(function* () {
     const batch = yield* queues
       .pullMessage({
@@ -241,9 +225,7 @@ const pullEvents = (
     if (events.length) {
       yield* Effect.logInfo("Subscription events received", events);
     }
-    const acks = (batch.messages ?? []).flatMap(({ leaseId }) =>
-      leaseId ? [{ leaseId }] : [],
-    );
+    const acks = (batch.messages ?? []).flatMap(({ leaseId }) => (leaseId ? [{ leaseId }] : []));
     if (acks.length) {
       const result = yield* queues.ackMessage({ accountId, queueId, acks });
       expect(result.ackCount).toBe(acks.length);
@@ -309,14 +291,7 @@ const waitForDelivery = (
 
 // Account-wide subscriptions are unique per product, regardless of the selected resource.
 describe.sequential("resource subscription sources", () => {
-  for (const kind of [
-    "images",
-    "kv",
-    "r2",
-    "vectorize",
-    "model",
-    "worker",
-  ] as const) {
+  for (const kind of ["images", "kv", "r2", "vectorize", "model", "worker"] as const) {
     test.provider(
       `${kind} direct source and persisted ref retain identity and ownership`,
       (stack) =>
@@ -354,21 +329,14 @@ describe.sequential("resource subscription sources", () => {
           expect(initial.subscription.source).toEqual(expected);
           const plan = yield* stack.plan(program(false));
           expect(plan.resources.Source.downstream).toContain("Events");
-          expect(plan.resources.Events.state).toHaveProperty(
-            "props.sourceAccountId",
-            accountId,
-          );
-          expect(plan.resources.Events.state).toHaveProperty(
-            "props.source",
-            expected,
-          );
+          expect(plan.resources.Events.state).toHaveProperty("props.sourceAccountId", accountId);
+          expect(plan.resources.Events.state).toHaveProperty("props.source", expected);
           const observed = yield* queues.getSubscription({
             accountId,
             subscriptionId: initial.subscription.subscriptionId,
           });
           expect(observed.source).toEqual(expect.objectContaining(expected));
-          const receivesLifecycle =
-            kind === "kv" || kind === "r2" || kind === "vectorize";
+          const receivesLifecycle = kind === "kv" || kind === "r2" || kind === "vectorize";
           if (receivesLifecycle) {
             yield* queues.createConsumer({
               accountId,
@@ -378,9 +346,7 @@ describe.sequential("resource subscription sources", () => {
             yield* pullEvents(accountId, initial.queue.queueId);
           }
           const referenced = yield* stack.deploy(program(true));
-          expect(referenced.subscription.subscriptionId).toBe(
-            initial.subscription.subscriptionId,
-          );
+          expect(referenced.subscription.subscriptionId).toBe(initial.subscription.subscriptionId);
           if (receivesLifecycle) {
             yield* Effect.gen(function* () {
               yield* waitForDelivery(
@@ -391,13 +357,7 @@ describe.sequential("resource subscription sources", () => {
                 // Allow the observed Vectorize propagation interval before probing.
                 kind === "vectorize" ? configuredAt + 60_000 : 0,
               );
-              const identities = [
-                yield* triggerEvent(
-                  kind,
-                  accountId,
-                  referenced.queue.queueName,
-                ),
-              ];
+              const identities = [yield* triggerEvent(kind, accountId, referenced.queue.queueName)];
               if (kind === "vectorize") {
                 for (const suffix of ["second", "third"]) {
                   identities.push(
@@ -423,11 +383,7 @@ describe.sequential("resource subscription sources", () => {
                       }),
                     ),
                 );
-              yield* pullEvents(
-                accountId,
-                referenced.queue.queueId,
-                events,
-              ).pipe(
+              yield* pullEvents(accountId, referenced.queue.queueId, events).pipe(
                 Effect.repeat({
                   schedule: Schedule.spaced("5 seconds"),
                   times: 10,
@@ -456,15 +412,12 @@ describe.sequential("resource subscription sources", () => {
                         queueId: referenced.queue.queueId,
                       }),
                     }).pipe(
-                      Effect.tap((state) =>
-                        Effect.logInfo("Subscription delivery state", state),
-                      ),
+                      Effect.tap((state) => Effect.logInfo("Subscription delivery state", state)),
                       Effect.timeout("5 seconds"),
                       Effect.catch((error) =>
-                        Effect.logWarning(
-                          "Subscription delivery state unavailable",
-                          { error: error._tag },
-                        ),
+                        Effect.logWarning("Subscription delivery state unavailable", {
+                          error: error._tag,
+                        }),
                       ),
                     );
                   }),
@@ -477,12 +430,8 @@ describe.sequential("resource subscription sources", () => {
           yield* gone(accountId, initial.subscription.subscriptionId);
           yield* verifySource(initial.resource);
           yield* stack.destroy();
-          if (kind === "model")
-            yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
-        }).pipe(
-          Effect.scoped,
-          Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
-        ),
+          if (kind === "model") yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
       { timeout: 120_000, exclusive: true },
     );
   }
@@ -521,11 +470,7 @@ describe.sequential("resource subscription sources", () => {
         yield* stack.destroy();
         yield* verifySource(source);
         yield* host.destroy();
-      }).pipe(
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
-      );
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie)));
     },
     { timeout: 120_000, exclusive: true },
   );
@@ -589,17 +534,13 @@ describe.sequential("resource subscription sources", () => {
           .pipe(Effect.exit);
         expect(Exit.isFailure(mismatch)).toBe(true);
         if (Exit.isFailure(mismatch))
-          expect(Cause.pretty(mismatch.cause)).toContain(
-            "SubscriptionSourceAccountMismatch",
-          );
+          expect(Cause.pretty(mismatch.cause)).toContain("SubscriptionSourceAccountMismatch");
         yield* stack.destroy();
         yield* verifySource(hosted.source);
         yield* host.destroy();
       }).pipe(
         Effect.scoped,
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
+        Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie)),
       );
     },
     { timeout: 120_000, exclusive: true },
@@ -619,14 +560,11 @@ describe.sequential("resource subscription sources", () => {
         const owner = yield* host.deploy(
           Effect.gen(function* () {
             const queue = yield* Cloudflare.Queues.Queue("Queue");
-            const subscription = yield* Cloudflare.Queues.Subscription(
-              "OwnedEvents",
-              {
-                source: { type: "kv" },
-                events: ["namespace.created"],
-                queueId: queue.queueId,
-              },
-            );
+            const subscription = yield* Cloudflare.Queues.Subscription("OwnedEvents", {
+              source: { type: "kv" },
+              events: ["namespace.created"],
+              queueId: queue.queueId,
+            });
             return { queue, subscription };
           }),
         );
@@ -645,9 +583,7 @@ describe.sequential("resource subscription sources", () => {
           .pipe(Effect.exit);
         expect(Exit.isFailure(result)).toBe(true);
         if (Exit.isFailure(result))
-          expect(Cause.pretty(result.cause)).toContain(
-            "SubscriptionAlreadyExists",
-          );
+          expect(Cause.pretty(result.cause)).toContain("SubscriptionAlreadyExists");
         yield* stack.destroy();
         const observed = yield* queues.getSubscription({
           accountId: owner.subscription.accountId,
@@ -656,11 +592,7 @@ describe.sequential("resource subscription sources", () => {
         expect(observed.destination.queueId).toBe(owner.queue.queueId);
         expect(observed.name).toBe(owner.subscription.name);
         yield* host.destroy();
-      }).pipe(
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
-      );
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie)));
     },
     { timeout: 120_000, exclusive: true },
   );
@@ -677,21 +609,16 @@ describe("subscription cleanup", () => {
   unitTest.effect("preserves cleanup failures", () =>
     Effect.gen(function* () {
       const cleanup = makeSubscriptionCleanup();
-      const result = yield* cleanup(
-        Effect.fail(new Error("delete failed")),
-      ).pipe(Effect.exit);
+      const result = yield* cleanup(Effect.fail(new Error("delete failed"))).pipe(Effect.exit);
       expect(Exit.isFailure(result)).toBe(true);
-      if (Exit.isFailure(result))
-        expect(Cause.pretty(result.cause)).toContain("delete failed");
+      if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("delete failed");
     }),
   );
 
   unitTest.effect("bounds a stalled release inside scope finalization", () =>
     Effect.gen(function* () {
       const cleanup = makeSubscriptionCleanup();
-      const fiber = yield* Effect.acquireRelease(Effect.void, () =>
-        cleanup(Effect.never),
-      ).pipe(
+      const fiber = yield* Effect.acquireRelease(Effect.void, () => cleanup(Effect.never)).pipe(
         Effect.scoped,
         Effect.exit,
         Effect.forkChild({ startImmediately: true }),
@@ -699,8 +626,7 @@ describe("subscription cleanup", () => {
       yield* TestClock.adjust("5 seconds");
       const result = yield* Fiber.join(fiber);
       expect(Exit.isFailure(result)).toBe(true);
-      if (Exit.isFailure(result))
-        expect(Cause.pretty(result.cause)).toContain("TimeoutError");
+      if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("TimeoutError");
     }),
   );
 
@@ -726,9 +652,7 @@ describe("subscription cleanup", () => {
         expect(Exit.isFailure(result)).toBe(true);
         expect(started).toBe(false);
         if (Exit.isFailure(result))
-          expect(Cause.pretty(result.cause)).toContain(
-            "Subscription cleanup deadline exceeded",
-          );
+          expect(Cause.pretty(result.cause)).toContain("Subscription cleanup deadline exceeded");
       }),
   );
 });
@@ -756,54 +680,38 @@ describe("subscription event identity", () => {
     "an early event from the current subscription does not establish settled routing",
     () => {
       expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [{ identity: expected.identity, createdAt: 49_000 }],
-          {
-            ...expected,
-            readyAfter: 60_000,
-          },
-        ),
+        hasReadySubscriptionEvent([event], [{ identity: expected.identity, createdAt: 49_000 }], {
+          ...expected,
+          readyAfter: 60_000,
+        }),
       ).toBe(false);
     },
   );
 
-  unitTest(
-    "an early probe delivered later cannot substitute for a fresh probe",
-    () => {
-      expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [
-            { identity: expected.identity, createdAt: 49_000 },
-            { identity: "fresh-probe", createdAt: 61_000 },
-          ],
-          { ...expected, readyAfter: 60_000 },
-        ),
-      ).toBe(false);
-    },
-  );
+  unitTest("an early probe delivered later cannot substitute for a fresh probe", () => {
+    expect(
+      hasReadySubscriptionEvent(
+        [event],
+        [
+          { identity: expected.identity, createdAt: 49_000 },
+          { identity: "fresh-probe", createdAt: 61_000 },
+        ],
+        { ...expected, readyAfter: 60_000 },
+      ),
+    ).toBe(false);
+  });
 
-  unitTest(
-    "a fresh matching probe establishes readiness after the propagation interval",
-    () => {
-      expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [{ identity: expected.identity, createdAt: 61_000 }],
-          {
-            ...expected,
-            readyAfter: 60_000,
-          },
-        ),
-      ).toBe(true);
-    },
-  );
+  unitTest("a fresh matching probe establishes readiness after the propagation interval", () => {
+    expect(
+      hasReadySubscriptionEvent([event], [{ identity: expected.identity, createdAt: 61_000 }], {
+        ...expected,
+        readyAfter: 60_000,
+      }),
+    ).toBe(true);
+  });
 
   unitTest("matches the exact Vectorize event envelope", () => {
-    const decoded = Schema.decodeUnknownSync(SubscriptionEvent)(
-      JSON.stringify(event),
-    );
+    const decoded = Schema.decodeUnknownSync(SubscriptionEvent)(JSON.stringify(event));
     expect(matchesSubscriptionEvent(decoded, expected)).toBe(true);
   });
 
@@ -843,114 +751,94 @@ describe("subscription event identity", () => {
     ).toBe(false);
   });
 
-  unitTest(
-    "rejects another account even when its name contains the expected account",
-    () => {
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...event,
-            metadata: { ...event.metadata, accountId: "other" },
-            payload: { name: expected.identity, id: expected.accountId },
-          },
-          expected,
-        ),
-      ).toBe(false);
-    },
-  );
-
-  unitTest("requires the exact event type and product source", () => {
+  unitTest("rejects another account even when its name contains the expected account", () => {
     expect(
       matchesSubscriptionEvent(
-        { ...event, type: `${event.type}.other` },
+        {
+          ...event,
+          metadata: { ...event.metadata, accountId: "other" },
+          payload: { name: expected.identity, id: expected.accountId },
+        },
         expected,
       ),
     ).toBe(false);
-    expect(
-      matchesSubscriptionEvent({ ...event, source: { type: "r2" } }, expected),
-    ).toBe(false);
   });
 
-  unitTest(
-    "matches an Images upload by exact payload id and subscription",
-    () => {
-      const image = {
-        ...event,
-        type: "cf.images.image.uploaded",
-        source: { type: "images" },
-        payload: { id: "subscription-final" },
-      };
-      const target = {
-        ...expected,
-        source: "images" as const,
-        type: "image.uploaded",
-        identity: "subscription-final",
-      };
-      expect(matchesSubscriptionEvent(image, target)).toBe(true);
-      expect(
-        matchesSubscriptionEvent(
-          { ...image, payload: { id: "subscription-probe-0" } },
-          target,
-        ),
-      ).toBe(false);
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...image,
-            metadata: {
-              ...image.metadata,
-              eventSubscriptionId: "old-subscription",
-            },
-          },
-          target,
-        ),
-      ).toBe(false);
-      expect(
-        matchesSubscriptionEvent(
-          { ...image, payload: { name: target.identity } },
-          target,
-        ),
-      ).toBe(false);
-    },
-  );
+  unitTest("requires the exact event type and product source", () => {
+    expect(matchesSubscriptionEvent({ ...event, type: `${event.type}.other` }, expected)).toBe(
+      false,
+    );
+    expect(matchesSubscriptionEvent({ ...event, source: { type: "r2" } }, expected)).toBe(false);
+  });
 
-  unitTest(
-    "matches KV ids and R2 names in their documented payload fields",
-    () => {
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...event,
-            type: "cf.kv.namespace.created",
-            source: { type: "kv" },
-            payload: { id: "namespace-id", name: "namespace-name" },
+  unitTest("matches an Images upload by exact payload id and subscription", () => {
+    const image = {
+      ...event,
+      type: "cf.images.image.uploaded",
+      source: { type: "images" },
+      payload: { id: "subscription-final" },
+    };
+    const target = {
+      ...expected,
+      source: "images" as const,
+      type: "image.uploaded",
+      identity: "subscription-final",
+    };
+    expect(matchesSubscriptionEvent(image, target)).toBe(true);
+    expect(
+      matchesSubscriptionEvent({ ...image, payload: { id: "subscription-probe-0" } }, target),
+    ).toBe(false);
+    expect(
+      matchesSubscriptionEvent(
+        {
+          ...image,
+          metadata: {
+            ...image.metadata,
+            eventSubscriptionId: "old-subscription",
           },
-          {
-            ...expected,
-            source: "kv",
-            type: "namespace.created",
-            identity: "namespace-id",
-          },
-        ),
-      ).toBe(true);
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...event,
-            type: "cf.r2.bucket.created",
-            source: { type: "r2" },
-            payload: { name: "bucket-name" },
-          },
-          {
-            ...expected,
-            source: "r2",
-            type: "bucket.created",
-            identity: "bucket-name",
-          },
-        ),
-      ).toBe(true);
-    },
-  );
+        },
+        target,
+      ),
+    ).toBe(false);
+    expect(matchesSubscriptionEvent({ ...image, payload: { name: target.identity } }, target)).toBe(
+      false,
+    );
+  });
+
+  unitTest("matches KV ids and R2 names in their documented payload fields", () => {
+    expect(
+      matchesSubscriptionEvent(
+        {
+          ...event,
+          type: "cf.kv.namespace.created",
+          source: { type: "kv" },
+          payload: { id: "namespace-id", name: "namespace-name" },
+        },
+        {
+          ...expected,
+          source: "kv",
+          type: "namespace.created",
+          identity: "namespace-id",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      matchesSubscriptionEvent(
+        {
+          ...event,
+          type: "cf.r2.bucket.created",
+          source: { type: "r2" },
+          payload: { name: "bucket-name" },
+        },
+        {
+          ...expected,
+          source: "r2",
+          type: "bucket.created",
+          identity: "bucket-name",
+        },
+      ),
+    ).toBe(true);
+  });
 });
 
 // Native routing experiments are opt-in; control-plane reads are not delivery barriers.
@@ -978,10 +866,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
                 accountId,
                 queueName: `alchemy-vectorize-replacement-${suffix}`,
               }),
-              (queue) =>
-                queues
-                  .deleteQueue({ accountId, queueId: queue.queueId! })
-                  .pipe(cleanup),
+              (queue) => queues.deleteQueue({ accountId, queueId: queue.queueId! }).pipe(cleanup),
             );
             yield* queues.createConsumer({
               accountId,
@@ -1021,10 +906,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
                 name,
                 config: { dimensions: 32, metric: "cosine" },
               }),
-              () =>
-                vectorize
-                  .deleteIndex({ accountId, indexName: name })
-                  .pipe(cleanup),
+              () => vectorize.deleteIndex({ accountId, indexName: name }).pipe(cleanup),
             );
             yield* Effect.logInfo(`Native ${change} create`, {
               elapsedMs: (yield* Clock.currentTimeMillis) - start,
@@ -1051,9 +933,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
               );
             for (const message of batch.messages ?? []) {
               if (message.body) {
-                const event = yield* Schema.decodeUnknownEffect(
-                  SubscriptionEvent,
-                )(message.body);
+                const event = yield* Schema.decodeUnknownEffect(SubscriptionEvent)(message.body);
                 expect(event.type).toBe("cf.vectorize.index.created");
                 expect(event.source.type).toBe("vectorize");
                 expect(event.metadata.accountId).toBe(accountId);
@@ -1103,10 +983,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
           }),
         );
         expect(initiallyReady()).toBe(true);
-        const observe = Effect.fn(function* (
-          subscriptionId: string,
-          phase: string,
-        ) {
+        const observe = Effect.fn(function* (subscriptionId: string, phase: string) {
           const observed = yield* queues.getSubscription({
             accountId,
             subscriptionId,
@@ -1136,10 +1013,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
               subscriptionId: old.id,
               destination: { type: "queues.queue", queueId: b },
             });
-            const moved = yield* observe(
-              old.id,
-              "destination-updated-while-disabled",
-            );
+            const moved = yield* observe(old.id, "destination-updated-while-disabled");
             expect(moved.enabled).toBe(false);
             expect(moved.destination.queueId).toBe(b);
             const resumed = yield* queues.patchSubscription({
@@ -1163,20 +1037,13 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
             accountId,
             subscriptionId: old.id,
           });
-          yield* queues
-            .getSubscription({ accountId, subscriptionId: old.id })
-            .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new Error("Deleted subscription still exists")),
-              ),
-              Effect.catchTag("SubscriptionNotFound", () => Effect.void),
-            );
+          yield* queues.getSubscription({ accountId, subscriptionId: old.id }).pipe(
+            Effect.flatMap(() => Effect.fail(new Error("Deleted subscription still exists"))),
+            Effect.catchTag("SubscriptionNotFound", () => Effect.void),
+          );
           return yield* makeSubscription(b);
         });
-        const observed = yield* observe(
-          current.id,
-          "active-at-new-destination",
-        );
+        const observed = yield* observe(current.id, "active-at-new-destination");
         expect(observed.destination.queueId).toBe(b);
         expect(observed.enabled).toBe(true);
         yield* Effect.logInfo(`Native ${change} identities`, {
@@ -1198,9 +1065,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
             times: 5,
           }),
         );
-        const deliveries = received.filter(({ event }) =>
-          identities.includes(event.payload.name!),
-        );
+        const deliveries = received.filter(({ event }) => identities.includes(event.payload.name!));
         yield* Effect.logInfo(`Native ${change} result`, {
           identities,
           deliveries,
@@ -1221,13 +1086,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
         Effect.timeout("90 seconds"),
         Effect.scoped,
         Effect.ensuring(
-          stack
-            .destroy()
-            .pipe(
-              Effect.timeout("5 seconds"),
-              Effect.orDie,
-              Effect.interruptible,
-            ),
+          stack.destroy().pipe(Effect.timeout("5 seconds"), Effect.orDie, Effect.interruptible),
         ),
       ),
     { timeout: 120_000, exclusive: true },

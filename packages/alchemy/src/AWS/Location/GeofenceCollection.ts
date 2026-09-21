@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -79,14 +74,9 @@ export interface GeofenceCollection extends Resource<
  *
  * @resource
  */
-export const GeofenceCollection = Resource<GeofenceCollection>(
-  "AWS.Location.GeofenceCollection",
-);
+export const GeofenceCollection = Resource<GeofenceCollection>("AWS.Location.GeofenceCollection");
 
-const createCollectionName = (
-  id: string,
-  props: { collectionName?: string | undefined },
-) =>
+const createCollectionName = (id: string, props: { collectionName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.collectionName) return props.collectionName;
     return yield* createPhysicalName({ id, maxLength: 100 });
@@ -95,11 +85,7 @@ const createCollectionName = (
 const readCollection = Effect.fn(function* (collectionName: string) {
   const found = yield* location
     .describeGeofenceCollection({ CollectionName: collectionName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     collectionName: found.CollectionName,
@@ -118,35 +104,27 @@ export const GeofenceCollectionProvider = () =>
         stables: ["collectionName", "collectionArn"],
         list: () =>
           Effect.gen(function* () {
-            const names = yield* location.listGeofenceCollections
-              .pages({})
-              .pipe(
-                EffectStream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.Entries ?? []).map((entry) => entry.CollectionName),
-                  ),
+            const names = yield* location.listGeofenceCollections.pages({}).pipe(
+              EffectStream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Entries ?? []).map((entry) => entry.CollectionName),
                 ),
-              );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readCollection(name),
-              { concurrency: 10 },
+              ),
             );
+            const hydrated = yield* Effect.forEach(names, (name) => readCollection(name), {
+              concurrency: 10,
+            });
             return hydrated.filter(
-              (attrs): attrs is GeofenceCollection["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is GeofenceCollection["Attributes"] => attrs !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const collectionName =
-            output?.collectionName ??
-            (yield* createCollectionName(id, olds ?? {}));
+            output?.collectionName ?? (yield* createCollectionName(id, olds ?? {}));
           const state = yield* readCollection(collectionName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return;
@@ -157,8 +135,7 @@ export const GeofenceCollectionProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const collectionName =
-            output?.collectionName ?? (yield* createCollectionName(id, news));
+          const collectionName = output?.collectionName ?? (yield* createCollectionName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -176,9 +153,7 @@ export const GeofenceCollectionProvider = () =>
             state = yield* readCollection(collectionName);
             if (state === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `failed to read created geofence collection ${collectionName}`,
-                ),
+                new Error(`failed to read created geofence collection ${collectionName}`),
               );
             }
           }
@@ -209,9 +184,7 @@ export const GeofenceCollectionProvider = () =>
           const final = yield* readCollection(collectionName);
           if (!final) {
             return yield* Effect.fail(
-              new Error(
-                `failed to read reconciled geofence collection ${collectionName}`,
-              ),
+              new Error(`failed to read reconciled geofence collection ${collectionName}`),
             );
           }
           return final;
@@ -221,9 +194,7 @@ export const GeofenceCollectionProvider = () =>
             .deleteGeofenceCollection({
               CollectionName: output.collectionName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -1,6 +1,5 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 
@@ -15,9 +14,6 @@ import cloudflare_workers from "./cloudflare_workers.ts";
 export const WorkerConfigProvider = () =>
   cloudflare_workers.pipe(
     Effect.map(({ env }) =>
-      reifyBoundConfigProvider(
-        ConfigProvider.fromUnknown(env),
-        env as Record<string, unknown>,
-      ),
+      reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env as Record<string, unknown>),
     ),
   );

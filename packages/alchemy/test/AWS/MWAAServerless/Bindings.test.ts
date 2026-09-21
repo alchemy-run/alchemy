@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -10,6 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MwaaServerlessTestFunctionLive, {
   BINDINGS_BUCKET_NAME,
   BINDINGS_WORKFLOW_NAME,
@@ -24,10 +24,7 @@ const sharedStack = Core.scratchStack(testOptions, "MWAAServerlessBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -46,31 +43,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // Direct distilled calls in beforeAll/afterAll run OUTSIDE test.provider, so
 // the AWS client context (credentials, region) must be provided explicitly.
@@ -126,14 +114,10 @@ const cleanupOutOfBand = Effect.gen(function* () {
 describe.sequential("MWAAServerless Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "MWAAServerless test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("MWAAServerless test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "MWAAServerless test setup: uploading workflow definition",
-      );
+      yield* Effect.logInfo("MWAAServerless test setup: uploading workflow definition");
       yield* withAws(ensureDefinitionUploaded);
 
       yield* Effect.logInfo("MWAAServerless test setup: deploying fixture");
@@ -148,9 +132,7 @@ describe.sequential("MWAAServerless Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `MWAAServerless test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`MWAAServerless test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -158,9 +140,7 @@ describe.sequential("MWAAServerless Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `MWAAServerless test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`MWAAServerless test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -168,12 +148,9 @@ describe.sequential("MWAAServerless Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(
-    sharedStack
-      .destroy()
-      .pipe(Effect.andThen(Effect.orDie(withAws(cleanupOutOfBand)))),
-    { timeout: 240_000 },
-  );
+  afterAll(sharedStack.destroy().pipe(Effect.andThen(Effect.orDie(withAws(cleanupOutOfBand)))), {
+    timeout: 240_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all 7 capabilities initialize in the runtime", (_stack) =>
@@ -211,19 +188,9 @@ describe.sequential("MWAAServerless Bindings", () => {
   // (`ok`), which proves the same thing.
   describe("typed not-found probes", () => {
     const probes: ReadonlyArray<
-      readonly [
-        name: string,
-        method: "GET" | "POST",
-        path: string,
-        tags: readonly string[],
-      ]
+      readonly [name: string, method: "GET" | "POST", path: string, tags: readonly string[]]
     > = [
-      [
-        "GetWorkflowRun",
-        "GET",
-        "/run-fake",
-        ["ResourceNotFoundException", "ValidationException"],
-      ],
+      ["GetWorkflowRun", "GET", "/run-fake", ["ResourceNotFoundException", "ValidationException"]],
       [
         "ListTaskInstances",
         "GET",
@@ -245,16 +212,15 @@ describe.sequential("MWAAServerless Bindings", () => {
     ] as const;
 
     for (const [name, method, path, tags] of probes) {
-      test.provider(
-        `${name} answers with a typed outcome (not AccessDenied)`,
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* method === "GET"
-              ? getJson(path)
-              : postJson(path)) as { tag: string; detail: string };
-            expect(response.detail).not.toContain("not authorized");
-            expect(tags).toContain(response.tag);
-          }),
+      test.provider(`${name} answers with a typed outcome (not AccessDenied)`, (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* method === "GET" ? getJson(path) : postJson(path)) as {
+            tag: string;
+            detail: string;
+          };
+          expect(response.detail).not.toContain("not authorized");
+          expect(tags).toContain(response.tag);
+        }),
       );
     }
   });
@@ -272,18 +238,17 @@ describe.sequential("MWAAServerless Bindings", () => {
           expect(started.runId).toBeTruthy();
 
           // 2. GetWorkflowRun observes the run through the binding.
-          const detail = (yield* getJson(
-            `/run-detail?id=${started.runId}`,
-          )) as { runId: string; status?: string };
+          const detail = (yield* getJson(`/run-detail?id=${started.runId}`)) as {
+            runId: string;
+            status?: string;
+          };
           expect(detail.runId).toBe(started.runId);
 
           // 3. StopWorkflowRun — a typed outcome either way: `ok` when the
           //    run was still stoppable, or a typed conflict/validation error
           //    if it already reached a terminal state. Reaching the service
           //    (not AccessDenied) is what the binding must prove.
-          const stopped = (yield* postJson(
-            `/run-stop?id=${started.runId}`,
-          )) as { tag: string };
+          const stopped = (yield* postJson(`/run-stop?id=${started.runId}`)) as { tag: string };
           expect(stopped.tag).not.toBe("AccessDeniedException");
 
           // 4. The run shows up in ListWorkflowRuns.
@@ -295,18 +260,16 @@ describe.sequential("MWAAServerless Bindings", () => {
   });
 
   describe("consumeWorkflowRunEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeWorkflowRunEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeWorkflowRunEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

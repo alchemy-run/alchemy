@@ -1,12 +1,12 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as MediaLive from "@/AWS/MediaLive";
 import type * as medialive from "@distilled.cloud/aws/medialive";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as MediaLive from "@/AWS/MediaLive";
 
 const main = path.resolve(import.meta.dirname, "channel-handler.ts");
 
@@ -105,9 +105,7 @@ export default MediaLiveChannelTestFunction.make(
         Resolution: "SD",
         MaximumBitrate: "MAX_10_MBPS",
       },
-      destinations: [
-        { Id: "dest1", Settings: [{ Url: "udp://10.220.171.28:5000" }] },
-      ],
+      destinations: [{ Id: "dest1", Settings: [{ Url: "udp://10.220.171.28:5000" }] }],
       encoderSettings: ENCODER_SETTINGS,
       tags: { fixture: "medialive-channel-bindings" },
     });
@@ -202,14 +200,12 @@ export default MediaLiveChannelTestFunction.make(
                 })),
               ),
             ),
-            Effect.catchTag(
-              ["BadRequestException", "UnprocessableEntityException"],
-              (e) =>
-                Effect.succeed({
-                  created: 0,
-                  cleared: false,
-                  tag: e._tag as string | undefined,
-                }),
+            Effect.catchTag(["BadRequestException", "UnprocessableEntityException"], (e) =>
+              Effect.succeed({
+                created: 0,
+                cleared: false,
+                tag: e._tag as string | undefined,
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);

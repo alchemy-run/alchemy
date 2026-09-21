@@ -5,10 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { App } from "./App.ts";
-import {
-  GetArtifactUrl,
-  type GetArtifactUrlRequest,
-} from "./GetArtifactUrl.ts";
+import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts";
 
 // Bespoke (not via makeAmplifyHttpBinding): GetArtifactUrl addresses the
 // artifact by its globally-unique `artifactId` alone — there is no `appId`
@@ -27,19 +24,17 @@ export const GetArtifactUrlHttp = Layer.effect(
               {
                 Effect: "Allow",
                 Action: ["amplify:GetArtifactUrl"],
-                Resource: [
-                  Output.interpolate`${app.appArn}/branches/*/jobs/*/artifacts/*`,
-                ],
+                Resource: [Output.interpolate`${app.appArn}/branches/*/jobs/*/artifacts/*`],
               },
             ],
           });
         }
       }
-      return Effect.fn(`AWS.Amplify.GetArtifactUrl(${app.LogicalId})`)(
-        function* (request: GetArtifactUrlRequest) {
-          return yield* getArtifactUrl(request);
-        },
-      );
+      return Effect.fn(`AWS.Amplify.GetArtifactUrl(${app.LogicalId})`)(function* (
+        request: GetArtifactUrlRequest,
+      ) {
+        return yield* getArtifactUrl(request);
+      });
     });
   }),
 );

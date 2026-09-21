@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create, update, delete vpc service", (stack) =>
   Effect.gen(function* () {
@@ -190,9 +187,7 @@ test.provider("list enumerates the deployed vpc service", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.VpcService.VpcService,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.VpcService.VpcService);
     const all = yield* provider.list();
 
     const found = all.find((s) => s.serviceId === service.serviceId);
@@ -205,15 +200,11 @@ test.provider("list enumerates the deployed vpc service", (stack) =>
   }).pipe(logLevel),
 );
 
-const waitForServiceToBeDeleted = Effect.fn(function* (
-  serviceId: string,
-  accountId: string,
-) {
+const waitForServiceToBeDeleted = Effect.fn(function* (serviceId: string, accountId: string) {
   yield* connectivity.getDirectoryService({ accountId, serviceId }).pipe(
     Effect.flatMap(() => Effect.fail(new VpcServiceStillExists())),
     Effect.retry({
-      while: (e): e is VpcServiceStillExists =>
-        e instanceof VpcServiceStillExists,
+      while: (e): e is VpcServiceStillExists => e instanceof VpcServiceStillExists,
       schedule: Schedule.exponential(100),
     }),
     Effect.catch(() => Effect.void),

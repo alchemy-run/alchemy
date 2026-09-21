@@ -1,4 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
@@ -6,6 +5,7 @@ import * as Stream from "effect/Stream";
 import { Chat } from "effect/unstable/ai";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
 import { ChatBackendRpcs } from "./ChatRpcs.ts";
 import { Gateway } from "./Gateway.ts";
 
@@ -49,9 +49,7 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObject<ChatBack
           persistence.getOrCreate("thread").pipe(
             // `streamText` on a persisted chat saves the appended turn
             // back to `state.storage` when the stream finalizes.
-            Effect.map((chat) =>
-              chat.streamText({ prompt }).pipe(Stream.provide(languageModel)),
-            ),
+            Effect.map((chat) => chat.streamText({ prompt }).pipe(Stream.provide(languageModel))),
             Stream.unwrap,
             Stream.orDie,
           ),

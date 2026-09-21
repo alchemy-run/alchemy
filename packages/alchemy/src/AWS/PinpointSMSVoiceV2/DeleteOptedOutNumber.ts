@@ -43,10 +43,7 @@ export interface DeleteOptedOutNumber extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteOptedOutNumberRequest,
-    ) => Effect.Effect<
-      smsvoice.DeleteOptedOutNumberResult,
-      smsvoice.DeleteOptedOutNumberError
-    >
+    ) => Effect.Effect<smsvoice.DeleteOptedOutNumberResult, smsvoice.DeleteOptedOutNumberError>
   >
 > {}
 export const DeleteOptedOutNumber = Binding.Service<DeleteOptedOutNumber>(

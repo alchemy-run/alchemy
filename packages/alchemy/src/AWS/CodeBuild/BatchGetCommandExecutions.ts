@@ -27,13 +27,9 @@ export interface BatchGetCommandExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.BatchGetCommandExecutionsInput,
-    ) => Effect.Effect<
-      SVC.BatchGetCommandExecutionsOutput,
-      SVC.BatchGetCommandExecutionsError
-    >
+    ) => Effect.Effect<SVC.BatchGetCommandExecutionsOutput, SVC.BatchGetCommandExecutionsError>
   >
 > {}
-export const BatchGetCommandExecutions =
-  Binding.Service<BatchGetCommandExecutions>(
-    "AWS.CodeBuild.BatchGetCommandExecutions",
-  );
+export const BatchGetCommandExecutions = Binding.Service<BatchGetCommandExecutions>(
+  "AWS.CodeBuild.BatchGetCommandExecutions",
+);

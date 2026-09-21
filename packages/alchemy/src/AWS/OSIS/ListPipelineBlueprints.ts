@@ -29,10 +29,7 @@ export interface ListPipelineBlueprints extends Binding.Service<
   () => Effect.Effect<
     (
       request?: osis.ListPipelineBlueprintsRequest,
-    ) => Effect.Effect<
-      osis.ListPipelineBlueprintsResponse,
-      osis.ListPipelineBlueprintsError
-    >
+    ) => Effect.Effect<osis.ListPipelineBlueprintsResponse, osis.ListPipelineBlueprintsError>
   >
 > {}
 export const ListPipelineBlueprints = Binding.Service<ListPipelineBlueprints>(

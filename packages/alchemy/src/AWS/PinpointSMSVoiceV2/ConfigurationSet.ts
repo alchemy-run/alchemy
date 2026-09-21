@@ -123,21 +123,16 @@ export const ConfigurationSetProvider = () =>
           .describeConfigurationSets({ ConfigurationSetNames: [name] })
           .pipe(
             retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
-        return result?.ConfigurationSets?.find(
-          (cs) => cs.ConfigurationSetName === name,
-        );
+        return result?.ConfigurationSets?.find((cs) => cs.ConfigurationSetName === name);
       });
 
       return {
         stables: ["configurationSetName", "configurationSetArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.configurationSetName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.configurationSetName ?? (yield* toName(id, olds ?? {}));
           const observed = yield* getByName(name);
           if (observed === undefined) return undefined;
           const attrs = {
@@ -156,8 +151,7 @@ export const ConfigurationSetProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.configurationSetName ?? (yield* toName(id, news));
+          const name = output?.configurationSetName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -203,13 +197,11 @@ export const ConfigurationSetProvider = () =>
             news.defaultMessageType === undefined &&
             observed.DefaultMessageType !== undefined
           ) {
-            yield* smsvoice
-              .deleteDefaultMessageType({ ConfigurationSetName: name })
-              .pipe(
-                retrySmsVoiceThrottled,
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                Effect.asVoid,
-              );
+            yield* smsvoice.deleteDefaultMessageType({ ConfigurationSetName: name }).pipe(
+              retrySmsVoiceThrottled,
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.asVoid,
+            );
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

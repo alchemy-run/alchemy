@@ -1,15 +1,15 @@
-import { Auth } from "@/Neon/Auth.ts";
-import { AuthTrustedDomain } from "@/Neon/AuthTrustedDomain.ts";
-import { Branch } from "@/Neon/Branch.ts";
-import { Project } from "@/Neon/Project.ts";
-import { providers } from "@/Neon/Providers.ts";
-import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { Auth } from "@/Neon/Auth.ts";
+import { AuthTrustedDomain } from "@/Neon/AuthTrustedDomain.ts";
+import { Branch } from "@/Neon/Branch.ts";
+import { Project } from "@/Neon/Project.ts";
+import { providers } from "@/Neon/Providers.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -38,9 +38,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const first = yield* stack.deploy(
-        application(false, "https://auth.example.com"),
-      );
+      const first = yield* stack.deploy(application(false, "https://auth.example.com"));
       const request = {
         project_id: first.auth.projectId,
         branch_id: first.auth.branchId,
@@ -49,36 +47,24 @@ test.provider(
       expect(current.auth_provider).toBe("better_auth");
       expect(current.base_url).toBe(first.auth.baseUrl);
       expect(first.auth.jwksUrl).toMatch(/^https:\/\//);
-      expect(
-        (yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost,
-      ).toBe(false);
+      expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
 
-      const unchanged = yield* stack.deploy(
-        application(false, "https://auth.example.com"),
-      );
+      const unchanged = yield* stack.deploy(application(false, "https://auth.example.com"));
       expect(unchanged.auth.baseUrl).toBe(first.auth.baseUrl);
       yield* SDK.updateNeonAuthAllowLocalhost({
         ...request,
         allow_localhost: true,
       });
-      const updated = yield* stack.deploy(
-        application(false, "https://next.example.com"),
-      );
+      const updated = yield* stack.deploy(application(false, "https://next.example.com"));
       expect(updated.auth.baseUrl).toBe(first.auth.baseUrl);
-      expect(
-        (yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost,
-      ).toBe(false);
+      expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
       const domains = yield* SDK.listBranchNeonAuthTrustedDomains(request);
-      expect(
-        domains.domains.some(
-          (entry) => entry.domain === "https://next.example.com",
-        ),
-      ).toBe(true);
-      expect(
-        domains.domains.some(
-          (entry) => entry.domain === "https://auth.example.com",
-        ),
-      ).toBe(false);
+      expect(domains.domains.some((entry) => entry.domain === "https://next.example.com")).toBe(
+        true,
+      );
+      expect(domains.domains.some((entry) => entry.domain === "https://auth.example.com")).toBe(
+        false,
+      );
 
       yield* stack.destroy();
       const gone = yield* SDK.getNeonAuth(request).pipe(
@@ -121,18 +107,14 @@ test.provider(
       const implicit = yield* stack.deploy(program());
       expect(implicit.auth.baseUrl).toBe(first.auth.baseUrl);
       expect(implicit.auth.database).toBe(first.auth.database);
-      expect((yield* SDK.getNeonAuthEmailProvider(request)).type).toBe(
-        "shared",
-      );
+      expect((yield* SDK.getNeonAuthEmailProvider(request)).type).toBe("shared");
       const refused = yield* stack.deploy(program(undefined, true)).pipe(
         Effect.as(false),
         Effect.catchTag("InvalidManagedAuth", () => Effect.succeed(true)),
       );
       expect(refused).toBe(true);
       expect((yield* SDK.getNeonAuth(request)).name).toBe("Equivalent Auth");
-      expect(
-        (yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost,
-      ).toBe(false);
+      expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
       yield* stack.destroy();
       expect(
         yield* SDK.getNeonAuth(request).pipe(
@@ -150,9 +132,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { auth, project } = yield* stack.deploy(
-        application(false, "https://auth.example.com"),
-      );
+      const { auth, project } = yield* stack.deploy(application(false, "https://auth.example.com"));
       const http = yield* HttpClient.HttpClient;
       const baseUrl = auth.baseUrl.replace(/\/$/, "");
       const authPath = baseUrl.endsWith("/auth") ? baseUrl : `${baseUrl}/auth`;
@@ -177,11 +157,7 @@ test.provider(
             }),
           ),
         );
-      const denied = yield* post(
-        "sign-up/email",
-        credentials,
-        "https://untrusted.example.com",
-      );
+      const denied = yield* post("sign-up/email", credentials, "https://untrusted.example.com");
       expect(denied.status).toBe(403);
       const signup = yield* post("sign-up/email", credentials);
       expect(signup.status).toBe(200);
@@ -195,9 +171,7 @@ test.provider(
       });
       expect(token.status).toBe(200);
       const jwt = yield* token.json.pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(Schema.Struct({ token: Schema.String })),
-        ),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ token: Schema.String }))),
       );
       const payloadJson = yield* Effect.sync(() =>
         Buffer.from(jwt.token.split(".")[1], "base64url").toString("utf8"),
@@ -213,16 +187,9 @@ test.provider(
       )(payloadJson);
       expect(payload.iss).toBe(new URL(auth.baseUrl).origin);
       expect(payload.sub.length).toBeGreaterThan(0);
-      expect(payload.exp).toBeGreaterThan(
-        yield* Effect.sync(() => Date.now() / 1000),
-      );
+      expect(payload.exp).toBeGreaterThan(yield* Effect.sync(() => Date.now() / 1000));
       expect((yield* http.get(auth.jwksUrl)).status).toBe(200);
-      const signout = yield* post(
-        "sign-out",
-        {},
-        "https://auth.example.com",
-        cookie,
-      );
+      const signout = yield* post("sign-out", {}, "https://auth.example.com", cookie);
       expect(signout.status).toBe(200);
       const revoked = yield* http.get(`${authPath}/token`, {
         headers: { cookie: cookie ?? "" },

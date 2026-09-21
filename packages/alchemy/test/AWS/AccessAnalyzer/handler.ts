@@ -1,11 +1,11 @@
-import * as AccessAnalyzer from "@/AWS/AccessAnalyzer";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AccessAnalyzer from "@/AWS/AccessAnalyzer";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -77,8 +77,7 @@ export default AccessAnalyzerTestFunction.make(
 
     // --- analyzer-scoped bindings ---
     const listFindingsV2 = yield* AccessAnalyzer.ListFindingsV2(analyzer);
-    const getFindingsStatistics =
-      yield* AccessAnalyzer.GetFindingsStatistics(analyzer);
+    const getFindingsStatistics = yield* AccessAnalyzer.GetFindingsStatistics(analyzer);
     const applyArchiveRule = yield* AccessAnalyzer.ApplyArchiveRule(analyzer);
     // Bound (compile + IAM coverage) but not routed: these need live
     // findings, access previews, or an external-access analyzer to drive
@@ -88,21 +87,15 @@ export default AccessAnalyzerTestFunction.make(
     const getFindingV1 = yield* AccessAnalyzer.GetFinding(analyzer);
     const updateFindings = yield* AccessAnalyzer.UpdateFindings(analyzer);
     const startResourceScan = yield* AccessAnalyzer.StartResourceScan(analyzer);
-    const getAnalyzedResource =
-      yield* AccessAnalyzer.GetAnalyzedResource(analyzer);
-    const listAnalyzedResources =
-      yield* AccessAnalyzer.ListAnalyzedResources(analyzer);
-    const createAccessPreview =
-      yield* AccessAnalyzer.CreateAccessPreview(analyzer);
+    const getAnalyzedResource = yield* AccessAnalyzer.GetAnalyzedResource(analyzer);
+    const listAnalyzedResources = yield* AccessAnalyzer.ListAnalyzedResources(analyzer);
+    const createAccessPreview = yield* AccessAnalyzer.CreateAccessPreview(analyzer);
     const getAccessPreview = yield* AccessAnalyzer.GetAccessPreview(analyzer);
-    const listAccessPreviews =
-      yield* AccessAnalyzer.ListAccessPreviews(analyzer);
-    const listAccessPreviewFindings =
-      yield* AccessAnalyzer.ListAccessPreviewFindings(analyzer);
+    const listAccessPreviews = yield* AccessAnalyzer.ListAccessPreviews(analyzer);
+    const listAccessPreviewFindings = yield* AccessAnalyzer.ListAccessPreviewFindings(analyzer);
     const generateFindingRecommendation =
       yield* AccessAnalyzer.GenerateFindingRecommendation(analyzer);
-    const getFindingRecommendation =
-      yield* AccessAnalyzer.GetFindingRecommendation(analyzer);
+    const getFindingRecommendation = yield* AccessAnalyzer.GetFindingRecommendation(analyzer);
 
     // --- account-level bindings ---
     const validatePolicy = yield* AccessAnalyzer.ValidatePolicy();
@@ -112,8 +105,7 @@ export default AccessAnalyzerTestFunction.make(
     const startPolicyGeneration = yield* AccessAnalyzer.StartPolicyGeneration();
     const getGeneratedPolicy = yield* AccessAnalyzer.GetGeneratedPolicy();
     const listPolicyGenerations = yield* AccessAnalyzer.ListPolicyGenerations();
-    const cancelPolicyGeneration =
-      yield* AccessAnalyzer.CancelPolicyGeneration();
+    const cancelPolicyGeneration = yield* AccessAnalyzer.CancelPolicyGeneration();
 
     // --- event source ---
     // Deploy-time: creates the EventBridge rule (default bus) targeting this
@@ -172,10 +164,7 @@ export default AccessAnalyzerTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/list-analyzed-resources"
-        ) {
+        if (request.method === "GET" && pathname === "/list-analyzed-resources") {
           const result = yield* listAnalyzedResources({ maxResults: 25 });
           return yield* HttpServerResponse.json({
             count: result.analyzedResources.length,
@@ -188,9 +177,7 @@ export default AccessAnalyzerTestFunction.make(
             id: "00000000-0000-0000-0000-000000000000",
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ found: false }),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ found: false })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -226,10 +213,7 @@ export default AccessAnalyzerTestFunction.make(
           return yield* HttpServerResponse.json({ result: result.result });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/check-access-not-granted"
-        ) {
+        if (request.method === "POST" && pathname === "/check-access-not-granted") {
           const result = yield* checkAccessNotGranted({
             policyDocument: IDENTITY_POLICY,
             policyType: "IDENTITY_POLICY",
@@ -238,10 +222,7 @@ export default AccessAnalyzerTestFunction.make(
           return yield* HttpServerResponse.json({ result: result.result });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/check-no-public-access"
-        ) {
+        if (request.method === "POST" && pathname === "/check-no-public-access") {
           const result = yield* checkNoPublicAccess({
             policyDocument: PRIVATE_BUCKET_POLICY,
             resourceType: "AWS::S3::Bucket",
@@ -249,10 +230,7 @@ export default AccessAnalyzerTestFunction.make(
           return yield* HttpServerResponse.json({ result: result.result });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/list-policy-generations"
-        ) {
+        if (request.method === "GET" && pathname === "/list-policy-generations") {
           const result = yield* listPolicyGenerations();
           return yield* HttpServerResponse.json({
             count: result.policyGenerations.length,
@@ -282,22 +260,16 @@ export default AccessAnalyzerTestFunction.make(
                 Effect.as("Started"),
               ),
             ),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed(e._tag)),
           );
           const bogusJob = { jobId: "00000000-0000-0000-0000-000000000000" };
           const getTag = yield* getGeneratedPolicy(bogusJob).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed(e._tag)),
           );
           const cancelTag = yield* cancelPolicyGeneration(bogusJob).pipe(
             Effect.map(() => "Canceled"),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({
             startTag,

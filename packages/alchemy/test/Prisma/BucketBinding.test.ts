@@ -1,10 +1,3 @@
-import { bucketAccessKeyLogicalId } from "@/Prisma/BucketBinding";
-import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
-import type { ReadBucketClient } from "@/Prisma/ReadBucket";
-import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
-import type { WriteBucketClient } from "@/Prisma/WriteBucket";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -13,19 +6,22 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Prisma from "@/Prisma";
+import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
+import { bucketAccessKeyLogicalId } from "@/Prisma/BucketBinding";
+import type { ReadBucketClient } from "@/Prisma/ReadBucket";
+import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
+import type { WriteBucketClient } from "@/Prisma/WriteBucket";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
 // The access-level split is a type-level contract first: a Read client must
 // not offer a way to write, and a Write client must not offer a way to read.
-type _ReadHasNoWrites = Expect<
-  Equal<Extract<keyof ReadBucketClient, "put" | "delete">, never>
->;
+type _ReadHasNoWrites = Expect<Equal<Extract<keyof ReadBucketClient, "put" | "delete">, never>>;
 type _WriteHasNoReads = Expect<
   Equal<Extract<keyof WriteBucketClient, "get" | "head" | "list">, never>
 >;
@@ -41,15 +37,9 @@ const bucket = {
 
 describe("Prisma bucket binding identity", () => {
   it("derives a stable bucket key logical id per bucket and access level", () => {
-    expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
-      "UploadsReadBucketAccessKey",
-    );
-    expect(bucketAccessKeyLogicalId(bucket, "Write")).toBe(
-      "UploadsWriteBucketAccessKey",
-    );
-    expect(bucketAccessKeyLogicalId(bucket, "ReadWrite")).toBe(
-      "UploadsReadWriteBucketAccessKey",
-    );
+    expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe("UploadsReadBucketAccessKey");
+    expect(bucketAccessKeyLogicalId(bucket, "Write")).toBe("UploadsWriteBucketAccessKey");
+    expect(bucketAccessKeyLogicalId(bucket, "ReadWrite")).toBe("UploadsReadWriteBucketAccessKey");
     // Stable across calls: the deployed bundle has to derive the same id.
     expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
       bucketAccessKeyLogicalId({ LogicalId: "Uploads" }, "Read"),
@@ -74,10 +64,7 @@ const runLive = wantsLive && hasLiveCredentials;
 const HOOK_TIMEOUT = 1_200_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 if (wantsLive && !hasLiveCredentials) {
   test(
@@ -105,17 +92,13 @@ class AppNotReady extends Data.TaggedError("AppNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 /** Retry an HTTP call until it returns 200 (rides out the app endpoint's deploy propagation). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new AppNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new AppNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -166,9 +149,7 @@ const put = (base: string, key: string, value: string, options?: PutQuery) => {
   }
   return untilOk(
     HttpClient.execute(
-      HttpClientRequest.put(`${base}/put?${params}`).pipe(
-        HttpClientRequest.bodyText(value),
-      ),
+      HttpClientRequest.put(`${base}/put?${params}`).pipe(HttpClientRequest.bodyText(value)),
     ),
   );
 };
@@ -176,9 +157,7 @@ const put = (base: string, key: string, value: string, options?: PutQuery) => {
 const del = (base: string, key: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.make("DELETE")(
-        `${base}/del?key=${encodeURIComponent(key)}`,
-      ),
+      HttpClientRequest.make("DELETE")(`${base}/del?key=${encodeURIComponent(key)}`),
     ),
   );
 
@@ -313,9 +292,7 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     const payload = `${label}-presigned-payload`;
     const putUrl = yield* presign(writeBase, "presign-put", pk, "text/plain");
     const uploaded = yield* HttpClient.execute(
-      HttpClientRequest.put(putUrl).pipe(
-        HttpClientRequest.bodyText(payload, "text/plain"),
-      ),
+      HttpClientRequest.put(putUrl).pipe(HttpClientRequest.bodyText(payload, "text/plain")),
     );
     expect(uploaded.status).toBe(200);
 

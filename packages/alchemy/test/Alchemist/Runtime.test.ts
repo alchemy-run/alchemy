@@ -1,6 +1,6 @@
-import * as Alchemist from "@/Alchemist";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Alchemist from "@/Alchemist";
 
 describe("Alchemist runtime", () => {
   test("provides every service required by the programmatic stack API", () => {

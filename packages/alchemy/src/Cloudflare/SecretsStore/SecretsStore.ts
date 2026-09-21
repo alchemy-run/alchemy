@@ -81,9 +81,7 @@ export const StoreProviderLive = () =>
       // Observe — Cloudflare permits exactly one Secrets Store per
       // account. Reuse the cached store if it still exists, otherwise
       // reuse the first one listed.
-      const cached = output?.storeId
-        ? yield* findStoreById(acct, output.storeId)
-        : undefined;
+      const cached = output?.storeId ? yield* findStoreById(acct, output.storeId) : undefined;
       const observed = cached ?? (yield* firstStore(acct));
 
       if (observed) {
@@ -104,11 +102,7 @@ export const StoreProviderLive = () =>
           // account's default Secrets Store.
           name: "default_secrets_store",
         })
-        .pipe(
-          Effect.catchTag("MaximumStoresExceeded", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)));
 
       if (response) {
         return {

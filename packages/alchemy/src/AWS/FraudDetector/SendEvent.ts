@@ -8,10 +8,7 @@ import type { EventType } from "./EventType.ts";
  * everything else (the event id, timestamp, entities, variable values, and
  * optional label) is the raw distilled request.
  */
-export interface SendEventRequest extends Omit<
-  frauddetector.SendEventRequest,
-  "eventTypeName"
-> {}
+export interface SendEventRequest extends Omit<frauddetector.SendEventRequest, "eventTypeName"> {}
 
 /**
  * Store an event in Amazon Fraud Detector without generating a prediction —
@@ -57,12 +54,7 @@ export interface SendEvent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendEventRequest,
-    ) => Effect.Effect<
-      frauddetector.SendEventResult,
-      frauddetector.SendEventError
-    >
+    ) => Effect.Effect<frauddetector.SendEventResult, frauddetector.SendEventError>
   >
 > {}
-export const SendEvent = Binding.Service<SendEvent>(
-  "AWS.FraudDetector.SendEvent",
-);
+export const SendEvent = Binding.Service<SendEvent>("AWS.FraudDetector.SendEvent");

@@ -1,3 +1,9 @@
+import * as speed from "@distilled.cloud/cloudflare/speed";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
@@ -5,12 +11,6 @@ import type { TestScheduleAttributes } from "@/Cloudflare/Speed/TestSchedule";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as speed from "@distilled.cloud/cloudflare/speed";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -23,13 +23,9 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 // fresh daily budget.
 const runSpeedScheduleTests = !!process.env.RUN_SPEED_SCHEDULE_TESTS;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test URLs. Schedules are keyed per (url, region), so each
 // test owns a disjoint page path — reruns and parallel runs never collide and
@@ -49,9 +45,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -106,13 +100,8 @@ const deployUnlessQuotaReached = (
   stack
     .deploy(eff)
     .pipe(
-      Effect.catchCause(
-        (
-          cause,
-        ): Effect.Effect<TestScheduleAttributes | undefined, any, never> =>
-          findQuotaError(cause)
-            ? Effect.succeed(undefined)
-            : Effect.failCause(cause),
+      Effect.catchCause((cause): Effect.Effect<TestScheduleAttributes | undefined, any, never> =>
+        findQuotaError(cause) ? Effect.succeed(undefined) : Effect.failCause(cause),
       ),
     );
 
@@ -316,9 +305,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r): speed.CreateScheduleResponse | undefined => r),
-          Effect.catchTag("TestScheduleQuotaReached", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("TestScheduleQuotaReached", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
             schedule: forbiddenRetrySchedule,
@@ -403,9 +390,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
         return;
       }
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Speed.TestSchedule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Speed.TestSchedule);
       // Ride out fresh-token 403 blips on the account-wide enumeration.
       const all = yield* provider.list().pipe(
         Effect.retry({
@@ -419,9 +404,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       expect(
         all.some(
           (s) =>
-            s.zoneId === schedule.zoneId &&
-            s.url === schedule.url &&
-            s.region === schedule.region,
+            s.zoneId === schedule.zoneId && s.url === schedule.url && s.region === schedule.region,
         ),
       ).toBe(true);
 
@@ -437,9 +420,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -448,18 +429,13 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);
 
 /**
  * Pull the typed {@link speed.TestScheduleQuotaReached} value out of a Cause
  * regardless of whether the engine raised it as a typed failure or a defect.
  */
-const findQuotaError = (
-  cause: Cause.Cause<unknown>,
-): speed.TestScheduleQuotaReached | undefined =>
+const findQuotaError = (cause: Cause.Cause<unknown>): speed.TestScheduleQuotaReached | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ElbBindingsFunctionLive, {
   bundleKey,
   CA_BUNDLE_PEM,
@@ -19,10 +19,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ELBv2Bindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -48,9 +45,7 @@ const callRoute = (method: "GET" | "POST", path: string) =>
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       Effect.map((json) => json as unknown as RouteResult),
       Effect.repeat({

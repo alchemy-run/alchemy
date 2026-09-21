@@ -33,8 +33,7 @@ export const StoredStateStoreCredentials = Schema.Struct({
   /** Cloudflare account ID the `url`/`authToken` were minted against. */
   accountId: Schema.optional(Schema.String),
 });
-export type StoredStateStoreCredentials =
-  typeof StoredStateStoreCredentials.Type;
+export type StoredStateStoreCredentials = typeof StoredStateStoreCredentials.Type;
 
 /**
  * `true` when cached state-store credentials must not be trusted for the
@@ -49,5 +48,4 @@ export type StoredStateStoreCredentials =
 export const isStateStoreCredentialsStale = (
   credentials: StoredStateStoreCredentials,
   currentAccountId: string,
-): boolean =>
-  credentials.accountId == null || credentials.accountId !== currentAccountId;
+): boolean => credentials.accountId == null || credentials.accountId !== currentAccountId;

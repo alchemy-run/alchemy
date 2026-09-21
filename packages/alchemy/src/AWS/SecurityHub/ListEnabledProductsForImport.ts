@@ -33,7 +33,6 @@ export interface ListEnabledProductsForImport extends Binding.Service<
     >
   >
 > {}
-export const ListEnabledProductsForImport =
-  Binding.Service<ListEnabledProductsForImport>(
-    "AWS.SecurityHub.ListEnabledProductsForImport",
-  );
+export const ListEnabledProductsForImport = Binding.Service<ListEnabledProductsForImport>(
+  "AWS.SecurityHub.ListEnabledProductsForImport",
+);

@@ -23,8 +23,7 @@ export const ReadNamespaceHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpKVNamespaceBinding({
       permissionGroups: ["Workers KV Storage Read"],
-      makeClient: (token, namespaceId) =>
-        makeReadKVHttpClient(makeKVAuth(token), namespaceId),
+      makeClient: (token, namespaceId) => makeReadKVHttpClient(makeKVAuth(token), namespaceId),
     }),
   ),
 );
@@ -39,9 +38,7 @@ export const makeReadKVHttpClient = (
   const getOne = (key: string, type: string) =>
     scope.pipe(
       Effect.flatMap(({ accountId, namespaceId }) =>
-        authorize(
-          kv.getNamespaceValue({ accountId, namespaceId, keyName: key }),
-        ).pipe(
+        authorize(kv.getNamespaceValue({ accountId, namespaceId, keyName: key })).pipe(
           Effect.flatMap((res) => materializeBody(res.body, type)),
           Effect.catchTag("KeyNotFound", () => Effect.succeed(null)),
         ),
@@ -76,19 +73,13 @@ export const makeReadKVHttpClient = (
     scope.pipe(
       Effect.flatMap(({ accountId, namespaceId }) =>
         Effect.all({
-          value: authorize(
-            kv.getNamespaceValue({ accountId, namespaceId, keyName: key }),
-          ).pipe(
+          value: authorize(kv.getNamespaceValue({ accountId, namespaceId, keyName: key })).pipe(
             Effect.flatMap((res) => materializeBody(res.body, type)),
             Effect.catchTag("KeyNotFound", () => Effect.succeed(null)),
           ),
           metadata: authorize(
             kv.getNamespaceMetadata({ accountId, namespaceId, keyName: key }),
-          ).pipe(
-            Effect.catchTag(["KeyNotFound", "NamespaceNotFound"], () =>
-              Effect.succeed(null),
-            ),
-          ),
+          ).pipe(Effect.catchTag(["KeyNotFound", "NamespaceNotFound"], () => Effect.succeed(null))),
         }),
       ),
       Effect.mapError(toKVNamespaceError),
@@ -166,9 +157,7 @@ const materializeBody = (
   type === "stream"
     ? Effect.sync(() => Stream.toReadableStream(body))
     : Effect.tryPromise(() => {
-        const response = new Response(
-          Stream.toReadableStream(body) as BodyInit,
-        );
+        const response = new Response(Stream.toReadableStream(body) as BodyInit);
         return type === "arrayBuffer"
           ? response.arrayBuffer()
           : type === "json"

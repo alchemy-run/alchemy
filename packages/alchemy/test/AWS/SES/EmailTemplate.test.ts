@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { EmailTemplate } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EmailTemplate } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,9 +49,7 @@ test.provider(
       });
       expect(observed.TemplateContent.Subject).toBe("Welcome, {{name}}!");
       expect(observed.TemplateContent.Html).toBe("<h1>Hi {{name}}</h1>");
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("WelcomeTemplate");
 
@@ -70,9 +68,7 @@ test.provider(
         TemplateName: template.templateName,
       });
       expect(updated.TemplateContent.Subject).toBe("Hello again, {{name}}!");
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.Extra).toBe("1");
 
       yield* stack.destroy();

@@ -43,6 +43,4 @@ export interface EvaluateCode extends Binding.Service<
     ) => Effect.Effect<appsync.EvaluateCodeResponse, appsync.EvaluateCodeError>
   >
 > {}
-export const EvaluateCode = Binding.Service<EvaluateCode>(
-  "AWS.AppSync.EvaluateCode",
-);
+export const EvaluateCode = Binding.Service<EvaluateCode>("AWS.AppSync.EvaluateCode");

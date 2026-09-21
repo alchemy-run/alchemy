@@ -25,9 +25,7 @@ const parseIpv4 = (address: string): bigint | undefined => {
   const octets = address.split(".");
   if (
     octets.length !== 4 ||
-    octets.some(
-      (octet) => !/^(0|[1-9]\d{0,2})$/.test(octet) || Number(octet) > 255,
-    )
+    octets.some((octet) => !/^(0|[1-9]\d{0,2})$/.test(octet) || Number(octet) > 255)
   )
     return undefined;
   return octets.reduce((value, octet) => (value << 8n) | BigInt(octet), 0n);
@@ -53,19 +51,12 @@ const parseIpv6 = (address: string): bigint | undefined => {
 
   // A double colon must replace at least one 16-bit word.
   const words =
-    halves.length === 1
-      ? left
-      : [...left, ...Array<string>(8 - count).fill("0"), ...right];
-  return words.reduce(
-    (value, word) => (value << 16n) | BigInt(`0x${word}`),
-    0n,
-  );
+    halves.length === 1 ? left : [...left, ...Array<string>(8 - count).fill("0"), ...right];
+  return words.reduce((value, word) => (value << 16n) | BigInt(`0x${word}`), 0n);
 };
 
 const formatIpv4 = (address: bigint): string =>
-  [24n, 16n, 8n, 0n]
-    .map((shift) => Number((address >> shift) & 255n))
-    .join(".");
+  [24n, 16n, 8n, 0n].map((shift) => Number((address >> shift) & 255n)).join(".");
 
 const formatIpv6 = (address: bigint): string => {
   const words = Array.from({ length: 8 }, (_, index) =>

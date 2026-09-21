@@ -31,11 +31,9 @@ export const GetLexiconHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(`AWS.Polly.GetLexicon(${lexicon.LogicalId})`)(
-        function* () {
-          return yield* getLexicon({ Name: yield* Name });
-        },
-      );
+      return Effect.fn(`AWS.Polly.GetLexicon(${lexicon.LogicalId})`)(function* () {
+        return yield* getLexicon({ Name: yield* Name });
+      });
     });
   }),
 );

@@ -27,10 +27,7 @@ export interface DescribeProducts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.DescribeProductsRequest,
-    ) => Effect.Effect<
-      securityhub.DescribeProductsResponse,
-      securityhub.DescribeProductsError
-    >
+    ) => Effect.Effect<securityhub.DescribeProductsResponse, securityhub.DescribeProductsError>
   >
 > {}
 export const DescribeProducts = Binding.Service<DescribeProducts>(

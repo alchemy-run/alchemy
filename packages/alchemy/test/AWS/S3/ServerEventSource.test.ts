@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ECS from "@distilled.cloud/aws/ecs";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -11,6 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ServerEventTask, {
   ACKNOWLEDGED_PREFIX,
   artifactKey,
@@ -28,11 +28,7 @@ const testOptions = {
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stackName = "S3ServerEventSource";
-const stack = Core.scratchStack(
-  testOptions,
-  stackName,
-  "test/AWS/S3/ServerEventSource.test.ts",
-);
+const stack = Core.scratchStack(testOptions, stackName, "test/AWS/S3/ServerEventSource.test.ts");
 
 interface Deployment {
   bucketName: string;
@@ -62,9 +58,7 @@ describe
           const vpc = network.Vpcs?.find((candidate) => candidate.IsDefault);
           if (!vpc?.VpcId) {
             return yield* Effect.fail(
-              new Error(
-                "Server event acceptance requires an existing default VPC",
-              ),
+              new Error("Server event acceptance requires an existing default VPC"),
             );
           }
           const vpcId = AWS.EC2.VpcId(vpc.VpcId);
@@ -80,9 +74,7 @@ describe
             .sort();
           if (subnetIds.length === 0) {
             return yield* Effect.fail(
-              new Error(
-                "Server event acceptance requires an available public default subnet",
-              ),
+              new Error("Server event acceptance requires an available public default subnet"),
             );
           }
 
@@ -90,16 +82,12 @@ describe
             Effect.gen(function* () {
               const bucket = yield* ServerEventBucket;
               const cluster = yield* AWS.ECS.Cluster("S3ServerEventCluster");
-              const securityGroup = yield* AWS.EC2.SecurityGroup(
-                "S3ServerEventSecurityGroup",
-                {
-                  vpcId,
-                  description:
-                    "S3 notification consumer with outbound access only",
-                  ingress: [],
-                  egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
-                },
-              );
+              const securityGroup = yield* AWS.EC2.SecurityGroup("S3ServerEventSecurityGroup", {
+                vpcId,
+                description: "S3 notification consumer with outbound access only",
+                ingress: [],
+                egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
+              });
               const task = yield* ServerEventTask;
               const service = yield* AWS.ECS.Service("S3ServerEventService", {
                 cluster,
@@ -149,9 +137,7 @@ describe
           if (deployed) {
             yield* S3.headBucket({ Bucket: deployed.bucketName }).pipe(
               Effect.flatMap(() =>
-                Effect.fail(
-                  new FixtureResourceStillExists({ resource: "bucket" }),
-                ),
+                Effect.fail(new FixtureResourceStillExists({ resource: "bucket" })),
               ),
               Effect.retry({
                 while: (error) => error._tag === "FixtureResourceStillExists",
@@ -165,9 +151,7 @@ describe
               clusters: [deployed.clusterArn],
             });
             expect(
-              (clusters.clusters ?? []).filter(
-                (cluster) => cluster.status !== "INACTIVE",
-              ),
+              (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE"),
             ).toEqual([]);
           }
           if (queueUrl) {
@@ -176,9 +160,7 @@ describe
               AttributeNames: ["QueueArn"],
             }).pipe(
               Effect.flatMap(() =>
-                Effect.fail(
-                  new FixtureResourceStillExists({ resource: "queue" }),
-                ),
+                Effect.fail(new FixtureResourceStillExists({ resource: "queue" })),
               ),
               Effect.retry({
                 while: (error) => error._tag === "FixtureResourceStillExists",
@@ -219,10 +201,7 @@ describe
           expect(notifications.QueueConfigurations).toHaveLength(1);
           expect(notifications.LambdaFunctionConfigurations ?? []).toEqual([]);
           const configuration = notifications.QueueConfigurations![0]!;
-          expect(configuration.Events).toEqual([
-            "s3:ObjectCreated:*",
-            "s3:ObjectRemoved:*",
-          ]);
+          expect(configuration.Events).toEqual(["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]);
           expect(
             configuration.Filter?.Key?.FilterRules?.map((rule) => ({
               ...rule,
@@ -238,9 +217,7 @@ describe
             AttributeNames: ["Policy", "QueueArn"],
           });
           expect(attributes.Attributes?.QueueArn).toBe(configuration.QueueArn);
-          const policy = yield* Effect.try(() =>
-            JSON.parse(attributes.Attributes!.Policy!),
-          );
+          const policy = yield* Effect.try(() => JSON.parse(attributes.Attributes!.Policy!));
           expect(policy).toEqual({
             Version: "2012-10-17",
             Statement: [
@@ -326,20 +303,16 @@ describe
               versionId: first.VersionId!,
             },
           ]);
-          expect(removed.every((record) => record.content === undefined)).toBe(
-            true,
-          );
-          expect(
-            removed.every((record) => record.readVersionId === undefined),
-          ).toBe(true);
+          expect(removed.every((record) => record.content === undefined)).toBe(true);
+          expect(removed.every((record) => record.readVersionId === undefined)).toBe(true);
 
           const versions = yield* S3.listObjectVersions({
             Bucket,
             Prefix: key,
           });
-          expect(
-            (versions.Versions ?? []).map((version) => version.VersionId),
-          ).toEqual([second.VersionId]);
+          expect((versions.Versions ?? []).map((version) => version.VersionId)).toEqual([
+            second.VersionId,
+          ]);
           expect(versions.DeleteMarkers).toHaveLength(1);
           expect(versions.DeleteMarkers![0]!.VersionId).toBe(marker.VersionId);
           expect(versions.DeleteMarkers![0]!.IsLatest).toBe(true);
@@ -453,12 +426,7 @@ describe
                 versionId: overwritten.VersionId!,
               },
             ]);
-            yield* assertCreation(
-              records[0]!,
-              content,
-              completed.VersionId!,
-              completed.ETag,
-            );
+            yield* assertCreation(records[0]!, content, completed.VersionId!, completed.ETag);
             yield* assertCreation(
               records[1]!,
               "after multipart",
@@ -518,12 +486,7 @@ describe
               versionId: marker.VersionId!,
             },
           ]);
-          yield* assertCreation(
-            records[0]!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(records[0]!, content, source.VersionId!, source.ETag);
           for (const record of records.slice(1)) {
             expect(record.content).toBeUndefined();
             expect(record.readVersionId).toBeUndefined();
@@ -539,9 +502,7 @@ describe
           expect(versions.Versions![0]!.IsLatest).toBe(true);
           const restored = yield* S3.getObject({ Bucket, Key: key });
           expect(restored.VersionId).toBe(source.VersionId);
-          expect(
-            yield* Stream.mkString(Stream.decodeText(restored.Body!)),
-          ).toBe(content);
+          expect(yield* Stream.mkString(Stream.decodeText(restored.Body!))).toBe(content);
           yield* assertArtifactCount(key, 3);
         }),
       { timeout: 120_000 },
@@ -566,12 +527,7 @@ describe
             versionId: source.VersionId!,
           };
           const [original] = yield* waitForArtifacts([identity]);
-          yield* assertCreation(
-            original!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(original!, content, source.VersionId!, source.ETag);
           const delivery = yield* findDelivery(identity);
           yield* waitForAcknowledgements([delivery.messageId]);
           const Key = yield* Effect.sync(() =>
@@ -612,9 +568,7 @@ describe
           });
           expect(replay.Failed ?? []).toEqual([]);
           expect(replay.Successful).toHaveLength(2);
-          yield* waitForAcknowledgements(
-            replay.Successful!.map((entry) => entry.MessageId),
-          );
+          yield* waitForAcknowledgements(replay.Successful!.map((entry) => entry.MessageId));
           const after = yield* S3.headObject({ Bucket, Key });
           expect(after.VersionId).toBe(before.VersionId);
           expect(after.ETag).toBe(before.ETag);
@@ -661,9 +615,7 @@ describe
           });
           expect(sent.MessageId).toBeTruthy();
           yield* waitForAcknowledgements([sent.MessageId!]);
-          const observed = yield* readEvidence(
-            `${RECEIVED_PREFIX}${sent.MessageId!}.json`,
-          );
+          const observed = yield* readEvidence(`${RECEIVED_PREFIX}${sent.MessageId!}.json`);
           expect(observed).toBe(body);
           yield* assertArtifactCount(key, 0);
 
@@ -681,12 +633,7 @@ describe
               versionId: source.VersionId!,
             },
           ]);
-          yield* assertCreation(
-            record!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(record!, content, source.VersionId!, source.ETag);
           yield* assertArtifactCount(key, 1);
         }),
       { timeout: 120_000 },
@@ -742,9 +689,7 @@ describe
           // Check a bounded quiet window after the positive control arrives.
           yield* Effect.forEach(excludedKeys, (excludedKey) =>
             assertArtifactCount(excludedKey, 0),
-          ).pipe(
-            Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 4 }),
-          );
+          ).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 4 }));
           yield* assertArtifactCount(key, 2);
         }),
       { timeout: 120_000 },
@@ -777,18 +722,14 @@ const assertCreation = Effect.fn(function* (
 ) {
   expect(record.content).toBe(content);
   expect(record.readVersionId).toBe(versionId);
-  const size = yield* Effect.sync(
-    () => new TextEncoder().encode(content).byteLength,
-  );
+  const size = yield* Effect.sync(() => new TextEncoder().encode(content).byteLength);
   expect(record.size).toBe(size);
   expect(eTag).toBeTruthy();
   expect(record.eTag).toBe(eTag!.replace(/^"|"$/g, ""));
 });
 
 const assertArtifactCount = Effect.fn(function* (key: string, count: number) {
-  const Prefix = yield* Effect.sync(
-    () => `${PROCESSED_PREFIX}${encodeURIComponent(key)}/`,
-  );
+  const Prefix = yield* Effect.sync(() => `${PROCESSED_PREFIX}${encodeURIComponent(key)}/`);
   const artifacts = yield* S3.listObjectsV2({
     Bucket: deployed!.bucketName,
     Prefix,
@@ -802,9 +743,7 @@ const readEvidence = Effect.fn(function* (Key: string) {
     Bucket: deployed!.bucketName,
     Key,
   }).pipe(
-    Effect.catchTag("NoSuchKey", () =>
-      Effect.fail(new EvidenceNotReady({ key: Key })),
-    ),
+    Effect.catchTag("NoSuchKey", () => Effect.fail(new EvidenceNotReady({ key: Key }))),
     Effect.retry({
       while: (error) => error._tag === "EvidenceNotReady",
       schedule: Schedule.spaced("2 seconds"),
@@ -846,9 +785,7 @@ const deliverySchema = Schema.fromJsonString(
   }),
 );
 
-const findDelivery = Effect.fn(function* (
-  identity: NotificationIdentity | "s3:TestEvent",
-) {
+const findDelivery = Effect.fn(function* (identity: NotificationIdentity | "s3:TestEvent") {
   const deliveries = yield* S3.listObjectsV2({
     Bucket: deployed!.bucketName,
     Prefix: RECEIVED_PREFIX,
@@ -866,11 +803,9 @@ const findDelivery = Effect.fn(function* (
         : (payload.Records ?? []).some(
             (record) =>
               record.s3.bucket.name === deployed!.bucketName &&
-              decodeURIComponent(record.s3.object.key.replace(/\+/g, " ")) ===
-                identity.key &&
+              decodeURIComponent(record.s3.object.key.replace(/\+/g, " ")) === identity.key &&
               record.s3.object.versionId === identity.versionId &&
-              `s3:${record.eventName.replace(/^s3:/, "")}` ===
-                identity.eventName,
+              `s3:${record.eventName.replace(/^s3:/, "")}` === identity.eventName,
           ),
     );
     if (matches) {
@@ -895,9 +830,7 @@ const readArtifact = Effect.fn(function* (identity: NotificationIdentity) {
     Bucket: deployed!.bucketName,
     Key,
   }).pipe(
-    Effect.catchTag("NoSuchKey", () =>
-      Effect.fail(new ArtifactNotReady(identity)),
-    ),
+    Effect.catchTag("NoSuchKey", () => Effect.fail(new ArtifactNotReady(identity))),
     Effect.retry({
       while: (error) => error._tag === "ArtifactNotReady",
       schedule: Schedule.spaced("4 seconds"),
@@ -917,13 +850,9 @@ const readArtifact = Effect.fn(function* (identity: NotificationIdentity) {
 });
 
 const waitForArtifacts = (identities: NotificationIdentity[]) =>
-  Effect.all(identities.map(readArtifact), { concurrency: 2 }).pipe(
-    Effect.timeout("45 seconds"),
-  );
+  Effect.all(identities.map(readArtifact), { concurrency: 2 }).pipe(Effect.timeout("45 seconds"));
 
-class ArtifactNotReady extends Data.TaggedError(
-  "ArtifactNotReady",
-)<NotificationIdentity> {}
+class ArtifactNotReady extends Data.TaggedError("ArtifactNotReady")<NotificationIdentity> {}
 
 class DeliveryNotReady extends Data.TaggedError("DeliveryNotReady")<{
   eventName: string;
@@ -933,8 +862,6 @@ class EvidenceNotReady extends Data.TaggedError("EvidenceNotReady")<{
   key: string;
 }> {}
 
-class FixtureResourceStillExists extends Data.TaggedError(
-  "FixtureResourceStillExists",
-)<{
+class FixtureResourceStillExists extends Data.TaggedError("FixtureResourceStillExists")<{
   resource: string;
 }> {}

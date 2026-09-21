@@ -31,10 +31,7 @@ export interface ListRecommendations extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.ListRecommendationsRequest,
-    ) => Effect.Effect<
-      devopsguru.ListRecommendationsResponse,
-      devopsguru.ListRecommendationsError
-    >
+    ) => Effect.Effect<devopsguru.ListRecommendationsResponse, devopsguru.ListRecommendationsError>
   >
 > {}
 export const ListRecommendations = Binding.Service<ListRecommendations>(

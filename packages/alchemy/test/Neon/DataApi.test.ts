@@ -1,3 +1,7 @@
+import * as SDK from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { adopt } from "@/AdoptPolicy.ts";
 import { Auth } from "@/Neon/Auth.ts";
 import { Branch } from "@/Neon/Branch.ts";
@@ -5,51 +9,45 @@ import { DataApi } from "@/Neon/DataApi.ts";
 import { Project, waitForOperations } from "@/Neon/Project.ts";
 import { providers } from "@/Neon/Providers.ts";
 import * as Test from "@/Test/Alchemy";
-import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: providers() });
 
-test.provider(
-  "Data API recovery treats incomplete uncreated identities as absent",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* DataApi.Provider;
-      const missingScope = {
-        branch: {
-          projectId: "uncreated-project",
-          branchId: "uncreated-branch",
-        },
-      };
-      const partialScope = {
-        branch: {
-          projectId: "uncreated-project",
-          branchId: "uncreated-branch",
-        },
-      };
-      yield* Effect.sync(() => {
-        Reflect.deleteProperty(missingScope, "branch");
-        Reflect.deleteProperty(partialScope.branch, "branchId");
-      });
-      for (const olds of [
-        missingScope,
-        partialScope,
-        { branch: { projectId: "", branchId: "uncreated-branch" } },
-        { project: { projectId: "" } },
-      ]) {
-        expect(
-          yield* provider.read!({
-            id: "UncreatedDataApi",
-            fqn: "UncreatedDataApi",
-            instanceId: "uncreated-data-api",
-            olds,
-            output: undefined,
-          }),
-        ).toBeUndefined();
-      }
-    }),
+test.provider("Data API recovery treats incomplete uncreated identities as absent", () =>
+  Effect.gen(function* () {
+    const provider = yield* DataApi.Provider;
+    const missingScope = {
+      branch: {
+        projectId: "uncreated-project",
+        branchId: "uncreated-branch",
+      },
+    };
+    const partialScope = {
+      branch: {
+        projectId: "uncreated-project",
+        branchId: "uncreated-branch",
+      },
+    };
+    yield* Effect.sync(() => {
+      Reflect.deleteProperty(missingScope, "branch");
+      Reflect.deleteProperty(partialScope.branch, "branchId");
+    });
+    for (const olds of [
+      missingScope,
+      partialScope,
+      { branch: { projectId: "", branchId: "uncreated-branch" } },
+      { project: { projectId: "" } },
+    ]) {
+      expect(
+        yield* provider.read!({
+          id: "UncreatedDataApi",
+          fqn: "UncreatedDataApi",
+          instanceId: "uncreated-data-api",
+          olds,
+          output: undefined,
+        }),
+      ).toBeUndefined();
+    }
+  }),
 );
 
 test.provider(
@@ -57,10 +55,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (
-        selection: "infer" | "selected" | "explicit",
-        rows = 10,
-      ) =>
+      const program = (selection: "infer" | "selected" | "explicit", rows = 10) =>
         Effect.gen(function* () {
           const project = yield* Project("SelectedDatabaseProject", {
             region: "aws-us-east-2",
@@ -74,8 +69,7 @@ test.provider(
             branch: {
               projectId: auth.projectId,
               branchId: auth.branchId,
-              databaseName:
-                selection === "selected" ? project.databaseName : undefined,
+              databaseName: selection === "selected" ? project.databaseName : undefined,
             },
             database: selection === "explicit" ? "selected_app" : undefined,
             authProvider: "neon_auth",
@@ -103,14 +97,10 @@ test.provider(
       expect(
         yield* stack.deploy(program("infer", 50)).pipe(
           Effect.as(false),
-          Effect.catchTag("InvalidDataApiConfiguration", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(10);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(10);
       yield* stack.destroy();
       expect(
         yield* SDK.getProjectBranchDataAPI(request).pipe(
@@ -161,14 +151,10 @@ test.provider(
           Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(10);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(10);
       const adopted = yield* stack.deploy(program(true));
       expect(adopted.database).toBe(auth.database);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       yield* stack.destroy();
       expect(
         yield* SDK.getProjectBranchDataAPI(request).pipe(
@@ -193,9 +179,7 @@ test.provider(
           });
           const a = yield* Branch("DataScopeA", { project });
           const authA = yield* Auth("DataScopeAuthA", { branch: a });
-          const b = second
-            ? yield* Branch("DataScopeB", { project })
-            : undefined;
+          const b = second ? yield* Branch("DataScopeB", { project }) : undefined;
           const auth = b ? yield* Auth("DataScopeAuthB", { branch: b }) : authA;
           const api = yield* DataApi("DataScopeApi", {
             branch: { projectId: auth.projectId, branchId: auth.branchId },
@@ -265,27 +249,19 @@ test.provider(
         branch_id: first.api.branchId,
         database_name: first.api.database,
       };
-      expect((yield* SDK.getProjectBranchDataAPI(request)).url).toBe(
-        first.api.url,
-      );
+      expect((yield* SDK.getProjectBranchDataAPI(request)).url).toBe(first.api.url);
       const unchanged = yield* stack.deploy(application(10));
       expect(unchanged.api.url).toBe(first.api.url);
       const updated = yield* stack.deploy(application(20));
       expect(updated.api.url).toBe(first.api.url);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       expect(
         yield* stack.deploy(application(undefined)).pipe(
           Effect.as(false),
-          Effect.catchTag("InvalidDataApiConfiguration", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       const http = yield* HttpClient.HttpClient;
       const denied = yield* http.get(first.api.url, {
         headers: { authorization: "Bearer invalid-user-token" },

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListRepositoryLinks}.
  */
-export interface ListRepositoryLinksRequest
-  extends codeconnections.ListRepositoryLinksInput {}
+export interface ListRepositoryLinksRequest extends codeconnections.ListRepositoryLinksInput {}
 
 /**
  * Runtime binding for `codeconnections:ListRepositoryLinks`.

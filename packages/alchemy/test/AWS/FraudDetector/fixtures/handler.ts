@@ -1,6 +1,3 @@
-import * as FraudDetector from "@/AWS/FraudDetector";
-import * as Lambda from "@/AWS/Lambda";
-import * as Output from "@/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as FraudDetector from "@/AWS/FraudDetector";
+import * as Lambda from "@/AWS/Lambda";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -91,30 +91,23 @@ export default FraudDetectorTestFunction.make(
       rules: [
         {
           ruleId: "high_risk",
-          expression: Output.map(
-            email.name,
-            (name) => `$${name} == "${FRAUD_EMAIL}"`,
-          ),
+          expression: Output.map(email.name, (name) => `$${name} == "${FRAUD_EMAIL}"`),
           outcomes: [review.name],
           description: "flag a known-fraud email for review",
         },
       ],
     });
 
-    const getEventPrediction =
-      yield* FraudDetector.GetEventPrediction(detector);
+    const getEventPrediction = yield* FraudDetector.GetEventPrediction(detector);
     const sendEvent = yield* FraudDetector.SendEvent(eventType);
     const getEvent = yield* FraudDetector.GetEvent(eventType);
     const updateEventLabel = yield* FraudDetector.UpdateEventLabel(eventType);
     const deleteEvent = yield* FraudDetector.DeleteEvent(eventType);
     const getListElements = yield* FraudDetector.GetListElements(blockedIps);
     const updateList = yield* FraudDetector.UpdateList(blockedIps);
-    const listEventPredictions =
-      yield* FraudDetector.ListEventPredictions(detector);
-    const getEventPredictionMetadata =
-      yield* FraudDetector.GetEventPredictionMetadata(detector);
-    const deleteEventsByEventType =
-      yield* FraudDetector.DeleteEventsByEventType(eventType);
+    const listEventPredictions = yield* FraudDetector.ListEventPredictions(detector);
+    const getEventPredictionMetadata = yield* FraudDetector.GetEventPredictionMetadata(detector);
+    const deleteEventsByEventType = yield* FraudDetector.DeleteEventsByEventType(eventType);
     const getDeleteEventsByEventTypeStatus =
       yield* FraudDetector.GetDeleteEventsByEventTypeStatus(eventType);
 
@@ -154,9 +147,7 @@ export default FraudDetectorTestFunction.make(
               [ipVarName]: body.ip ?? "1.2.3.4",
             },
           });
-          const outcomes = (result.ruleResults ?? []).flatMap(
-            (r) => r.outcomes ?? [],
-          );
+          const outcomes = (result.ruleResults ?? []).flatMap((r) => r.outcomes ?? []);
           return yield* HttpServerResponse.json({
             outcomes,
             ruleResults: result.ruleResults ?? [],
@@ -223,9 +214,7 @@ export default FraudDetectorTestFunction.make(
         if (request.method === "GET" && pathname === "/list") {
           const { elements } = yield* getListElements({});
           return yield* HttpServerResponse.json({
-            elements: (elements ?? []).map((e) =>
-              typeof e === "string" ? e : Redacted.value(e),
-            ),
+            elements: (elements ?? []).map((e) => (typeof e === "string" ? e : Redacted.value(e))),
           });
         }
 
@@ -279,8 +268,7 @@ export default FraudDetectorTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/events/purge-status") {
-          const { eventsDeletionStatus } =
-            yield* getDeleteEventsByEventTypeStatus({});
+          const { eventsDeletionStatus } = yield* getDeleteEventsByEventTypeStatus({});
           return yield* HttpServerResponse.json({
             status: eventsDeletionStatus,
           });

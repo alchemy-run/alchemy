@@ -1,6 +1,5 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -31,9 +30,7 @@ export interface ListParts extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: ListPartsRequest,
-    ) => Effect.Effect<S3.ListPartsOutput, S3.ListPartsError>
+    (request: ListPartsRequest) => Effect.Effect<S3.ListPartsOutput, S3.ListPartsError>
   >
 > {}
 export const ListParts = Binding.Service<ListParts>("AWS.S3.ListParts");

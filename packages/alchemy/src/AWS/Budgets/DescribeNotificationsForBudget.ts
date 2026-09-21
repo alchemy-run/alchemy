@@ -51,7 +51,6 @@ export interface DescribeNotificationsForBudget extends Binding.Service<
   >
 > {}
 
-export const DescribeNotificationsForBudget =
-  Binding.Service<DescribeNotificationsForBudget>(
-    "AWS.Budgets.DescribeNotificationsForBudget",
-  );
+export const DescribeNotificationsForBudget = Binding.Service<DescribeNotificationsForBudget>(
+  "AWS.Budgets.DescribeNotificationsForBudget",
+);

@@ -71,9 +71,7 @@ export interface KeyValueStore extends Resource<
  *
  * @resource
  */
-export const KeyValueStore = Resource<KeyValueStore>(
-  "AWS.CloudFront.KeyValueStore",
-);
+export const KeyValueStore = Resource<KeyValueStore>("AWS.CloudFront.KeyValueStore");
 
 export const KeyValueStoreProvider = () =>
   Provider.effect(
@@ -94,9 +92,7 @@ export const KeyValueStoreProvider = () =>
           .describeKeyValueStore({
             Name: store.Name,
           })
-          .pipe(
-            Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -104,16 +100,12 @@ export const KeyValueStoreProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
           const current = yield* cloudfront
             .describeKeyValueStore({
               Name: name,
@@ -139,8 +131,7 @@ export const KeyValueStoreProvider = () =>
             ),
           ),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.keyValueStoreName ?? (yield* createName(id, news));
+          const name = output?.keyValueStoreName ?? (yield* createName(id, news));
 
           // Observe — describe the store, falling back to a list lookup
           // by name. Trust live state, not stale `olds`.
@@ -170,9 +161,7 @@ export const KeyValueStoreProvider = () =>
                 ),
               );
             if (!created.KeyValueStore) {
-              return yield* Effect.die(
-                "createKeyValueStore returned no key value store",
-              );
+              return yield* Effect.die("createKeyValueStore returned no key value store");
             }
             yield* session.note(created.KeyValueStore.Id);
             return toAttrs(created.KeyValueStore, created.ETag, name);
@@ -186,27 +175,17 @@ export const KeyValueStoreProvider = () =>
             IfMatch: observed.ETag!,
           });
           if (!updated.KeyValueStore) {
-            return yield* Effect.die(
-              "updateKeyValueStore returned no key value store",
-            );
+            return yield* Effect.die("updateKeyValueStore returned no key value store");
           }
           yield* session.note(updated.KeyValueStore.Id);
-          return toAttrs(
-            updated.KeyValueStore,
-            updated.ETag,
-            observed.KeyValueStore.Name,
-          );
+          return toAttrs(updated.KeyValueStore, updated.ETag, observed.KeyValueStore.Name);
         }),
         delete: Effect.fn(function* ({ output }) {
           const current = yield* cloudfront
             .describeKeyValueStore({
               Name: output.keyValueStoreName,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
 
           const etag = current?.ETag;
           if (!etag) {

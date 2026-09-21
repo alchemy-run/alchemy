@@ -35,10 +35,7 @@ export interface ListAnalyzedResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAnalyzedResourcesRequest,
-    ) => Effect.Effect<
-      aa.ListAnalyzedResourcesResponse,
-      aa.ListAnalyzedResourcesError
-    >
+    ) => Effect.Effect<aa.ListAnalyzedResourcesResponse, aa.ListAnalyzedResourcesError>
   >
 > {}
 

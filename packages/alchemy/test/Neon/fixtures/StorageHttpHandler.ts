@@ -1,13 +1,13 @@
-import { ReadBucket } from "@/Neon/ReadBucket";
-import { ReadBucketHttp } from "@/Neon/ReadBucketHttp";
-import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
-import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
-import { CurrentRuntimeContext } from "@/RuntimeContext";
-import { StorageBindingError } from "@/Neon/StorageBinding";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { ReadBucket } from "@/Neon/ReadBucket";
+import { ReadBucketHttp } from "@/Neon/ReadBucketHttp";
+import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
+import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
+import { StorageBindingError } from "@/Neon/StorageBinding";
+import { CurrentRuntimeContext } from "@/RuntimeContext";
 import { StorageBucket } from "./StorageResources.ts";
 
 export const storageHttpHandler = Effect.gen(function* () {
@@ -37,9 +37,7 @@ export const storageHttpHandler = Effect.gen(function* () {
       });
     }).pipe(
       Effect.catch(() =>
-        Effect.succeed(
-          HttpServerResponse.text("Storage request failed", { status: 500 }),
-        ),
+        Effect.succeed(HttpServerResponse.text("Storage request failed", { status: 500 })),
       ),
     ),
   };

@@ -97,11 +97,7 @@ export const DeploymentProvider = () =>
             EnvironmentId: environmentId,
             DeploymentNumber: deploymentNumber,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Deployments roll out asynchronously; wait (bounded) for a terminal
@@ -111,14 +107,9 @@ export const DeploymentProvider = () =>
         environmentId: string,
         deploymentNumber: number,
       ) {
-        return yield* readDeployment(
-          applicationId,
-          environmentId,
-          deploymentNumber,
-        ).pipe(
+        return yield* readDeployment(applicationId, environmentId, deploymentNumber).pipe(
           Effect.flatMap((deployment) =>
-            deployment !== undefined &&
-            !TERMINAL_STATES.has(deployment.State ?? "")
+            deployment !== undefined && !TERMINAL_STATES.has(deployment.State ?? "")
               ? Effect.fail(
                   new DeploymentNotSettled({
                     deploymentNumber,
@@ -129,10 +120,7 @@ export const DeploymentProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof DeploymentNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(40),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
           }),
         );
       });
@@ -168,10 +156,8 @@ export const DeploymentProvider = () =>
             environmentId: output.environmentId,
             deploymentNumber: deployment.DeploymentNumber,
             configurationProfileId:
-              deployment.ConfigurationProfileId ??
-              output.configurationProfileId,
-            configurationVersion:
-              deployment.ConfigurationVersion ?? output.configurationVersion,
+              deployment.ConfigurationProfileId ?? output.configurationProfileId,
+            configurationVersion: deployment.ConfigurationVersion ?? output.configurationVersion,
             state: deployment.State ?? "",
           };
         }),
@@ -204,20 +190,13 @@ export const DeploymentProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("3 seconds"),
-                    Schedule.recurs(20),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
                 }),
               );
           }
 
           const number = observed.DeploymentNumber!;
-          const settled = yield* waitForSettled(
-            news.applicationId,
-            news.environmentId,
-            number,
-          );
+          const settled = yield* waitForSettled(news.applicationId, news.environmentId, number);
 
           yield* session.note(`deployment-${number}`);
           return {

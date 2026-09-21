@@ -15,11 +15,7 @@ export const OAUTH_ENDPOINTS = {
   revoke: "https://dash.cloudflare.com/oauth2/revoke",
 };
 
-export {
-  OAuthCredentials,
-  OAuthError,
-  type Authorization,
-} from "../../Auth/OAuthFlow.ts";
+export { OAuthCredentials, OAuthError, type Authorization } from "../../Auth/OAuthFlow.ts";
 
 /**
  * Cloudflare's browser OAuth client: a public client using PKCE, with

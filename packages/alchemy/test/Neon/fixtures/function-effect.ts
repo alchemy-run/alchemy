@@ -1,18 +1,15 @@
-import {
-  upgradeWebSocket,
-  waitUntil as nativeWaitUntil,
-} from "@neon/functions";
-import { Function } from "@/Neon/Function";
-import { FunctionRequest } from "@/Neon/FunctionEnvironment";
-import { waitUntil } from "@/Neon/waitUntil";
-import { upgrade } from "@/Neon/upgrade";
-import { Project } from "@/Neon/Project";
+import { upgradeWebSocket, waitUntil as nativeWaitUntil } from "@neon/functions";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { Postgres } from "@/SQL/Postgres";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Function } from "@/Neon/Function";
+import { FunctionRequest } from "@/Neon/FunctionEnvironment";
+import { Project } from "@/Neon/Project";
+import { upgrade } from "@/Neon/upgrade";
+import { waitUntil } from "@/Neon/waitUntil";
+import { Postgres } from "@/SQL/Postgres";
 
 const diagnosticSql = Effect.gen(function* () {
   return yield* Postgres({
@@ -40,35 +37,22 @@ export const nativeDiagnosticFetch = (request: Request) =>
     const url = yield* Effect.sync(() => new URL(request.url));
     const id = url.searchParams.get("id") ?? "native";
     if (url.pathname === "/diagnostics") {
-      const rows =
-        yield* sql`SELECT id, phase FROM alchemy_function_lifecycle ORDER BY id, phase`;
+      const rows = yield* sql`SELECT id, phase FROM alchemy_function_lifecycle ORDER BY id, phase`;
       return yield* Effect.sync(() => Response.json(rows));
     }
     yield* recordLifecycle(id, "entered");
     yield* Effect.sync(() =>
-      request.signal.addEventListener(
-        "abort",
-        () => recordNativeLifecycle(id, "abort"),
-        { once: true },
-      ),
+      request.signal.addEventListener("abort", () => recordNativeLifecycle(id, "abort"), {
+        once: true,
+      }),
     );
     if (url.pathname === "/websocket") {
       return yield* Effect.sync(() => {
         const { socket, response } = upgradeWebSocket(request);
-        socket.addEventListener("open", () =>
-          recordNativeLifecycle(id, "open"),
-        );
+        socket.addEventListener("open", () => recordNativeLifecycle(id, "open"));
         socket.addEventListener("message", (event) => socket.send(event.data));
-        socket.addEventListener(
-          "close",
-          () => recordNativeLifecycle(id, "close"),
-          { once: true },
-        );
-        socket.addEventListener(
-          "error",
-          () => recordNativeLifecycle(id, "error"),
-          { once: true },
-        );
+        socket.addEventListener("close", () => recordNativeLifecycle(id, "close"), { once: true });
+        socket.addEventListener("error", () => recordNativeLifecycle(id, "error"), { once: true });
         return response;
       });
     }
@@ -79,9 +63,7 @@ export const nativeDiagnosticFetch = (request: Request) =>
             Effect.sleep("100 millis").pipe(
               Effect.andThen(
                 Effect.sync(() => {
-                  controller.enqueue(
-                    new TextEncoder().encode("data: tick\n\n"),
-                  );
+                  controller.enqueue(new TextEncoder().encode("data: tick\n\n"));
                 }),
               ),
             ),
@@ -115,9 +97,7 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
     };
   }),
   Effect.gen(function* () {
-    const message = yield* Config.String("FUNCTION_MESSAGE").pipe(
-      Config.withDefault("effect"),
-    );
+    const message = yield* Config.String("FUNCTION_MESSAGE").pipe(Config.withDefault("effect"));
     const sql = yield* Postgres({
       url: Config.Redacted("DATABASE_URL"),
       maxConnections: 1,
@@ -181,9 +161,7 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
           }),
         );
         yield* Effect.addFinalizer(() =>
-          Effect.sync(() =>
-            nativeRequest.signal.removeEventListener("abort", onAbort),
-          ),
+          Effect.sync(() => nativeRequest.signal.removeEventListener("abort", onAbort)),
         );
         if (url.pathname === "/background") {
           yield* waitUntil(
@@ -198,22 +176,16 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         if (url.pathname === "/websocket") {
           const { socket, response } = yield* upgrade();
           yield* Effect.sync(() => {
-            socket.addEventListener("message", (event) =>
-              socket.send(event.data),
-            );
-            socket.addEventListener(
-              "close",
-              () => Effect.runFork(report("socket-closed")),
-              { once: true },
-            );
+            socket.addEventListener("message", (event) => socket.send(event.data));
+            socket.addEventListener("close", () => Effect.runFork(report("socket-closed")), {
+              once: true,
+            });
           });
           return response;
         }
         if (url.pathname === "/stream-cancel")
           return HttpServerResponse.stream(
-            Stream.fromEffectRepeat(
-              Effect.sleep("100 millis").pipe(Effect.as("tick")),
-            ).pipe(
+            Stream.fromEffectRepeat(Effect.sleep("100 millis").pipe(Effect.as("tick"))).pipe(
               Stream.encodeText,
               Stream.ensuring(report("stream-released")),
             ),
@@ -227,16 +199,11 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
             },
           );
         if (url.pathname === "/error")
-          return yield* Effect.die(
-            new Error("intentional effect function failure"),
-          );
-        if (url.pathname === "/empty")
-          return HttpServerResponse.empty({ status: 204 });
+          return yield* Effect.die(new Error("intentional effect function failure"));
+        if (url.pathname === "/empty") return HttpServerResponse.empty({ status: 204 });
         if (url.pathname === "/stream")
           return HttpServerResponse.stream(
-            Stream.make("data: first\n\n", "data: second\n\n").pipe(
-              Stream.encodeText,
-            ),
+            Stream.make("data: first\n\n", "data: second\n\n").pipe(Stream.encodeText),
             { headers: { "content-type": "text/event-stream" } },
           );
         if (url.pathname === "/slow") yield* Effect.sleep("200 millis");

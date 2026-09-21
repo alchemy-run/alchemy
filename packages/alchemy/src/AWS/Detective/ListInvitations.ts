@@ -28,12 +28,7 @@ export interface ListInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: detective.ListInvitationsRequest,
-    ) => Effect.Effect<
-      detective.ListInvitationsResponse,
-      detective.ListInvitationsError
-    >
+    ) => Effect.Effect<detective.ListInvitationsResponse, detective.ListInvitationsError>
   >
 > {}
-export const ListInvitations = Binding.Service<ListInvitations>(
-  "AWS.Detective.ListInvitations",
-);
+export const ListInvitations = Binding.Service<ListInvitations>("AWS.Detective.ListInvitations");

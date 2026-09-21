@@ -197,16 +197,10 @@ export const ServiceProvider = () =>
   Provider.effect(
     Service,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         // 63 = the Route 53 per-label limit; the service name becomes the
         // DNS label `{name}.{namespace}` for DNS namespaces
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 63, lowercase: true }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 63, lowercase: true }));
       });
 
       /** Observe by cached id, falling back to name lookup in the namespace. */
@@ -226,9 +220,7 @@ export const ServiceProvider = () =>
         }
         const summary = yield* sd.listServices
           .pages({
-            Filters: [
-              { Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" },
-            ],
+            Filters: [{ Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" }],
           })
           .pipe(
             Stream.map((page) => page.Services ?? []),
@@ -284,22 +276,12 @@ export const ServiceProvider = () =>
           .join(",");
 
       return Service.Provider.of({
-        stables: [
-          "serviceId",
-          "serviceArn",
-          "serviceName",
-          "namespaceId",
-          "namespaceName",
-        ],
+        stables: ["serviceId", "serviceArn", "serviceName", "namespaceId", "namespaceName"],
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* sd.listServices
-              .pages({})
-              .pipe(Stream.runCollect);
-            const summaries = Array.from(pages).flatMap(
-              (page) => page.Services ?? [],
-            );
+            const pages = yield* sd.listServices.pages({}).pipe(Stream.runCollect);
+            const summaries = Array.from(pages).flatMap((page) => page.Services ?? []);
             const items = yield* Effect.forEach(
               summaries,
               (summary) =>
@@ -307,9 +289,7 @@ export const ServiceProvider = () =>
                   if (summary.Id === undefined) return undefined;
                   const service = yield* sd.getService({ Id: summary.Id }).pipe(
                     Effect.map((r) => r.Service),
-                    Effect.catchTag("ServiceNotFound", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
                   );
                   if (
                     service?.Id === undefined ||
@@ -319,12 +299,8 @@ export const ServiceProvider = () =>
                   ) {
                     return undefined;
                   }
-                  const namespaceName = yield* resolveNamespaceName(
-                    service.NamespaceId,
-                  ).pipe(
-                    Effect.catchTag("NamespaceNotFound", () =>
-                      Effect.succeed(""),
-                    ),
+                  const namespaceName = yield* resolveNamespaceName(service.NamespaceId).pipe(
+                    Effect.catchTag("NamespaceNotFound", () => Effect.succeed("")),
                   );
                   return {
                     serviceId: service.Id,
@@ -336,21 +312,14 @@ export const ServiceProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return items.filter(
-              (item): item is Service["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is Service["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const namespaceId = output?.namespaceId ?? olds?.namespaceId;
           if (namespaceId === undefined) return undefined;
-          const name =
-            output?.serviceName ?? (yield* createName(id, olds ?? {}));
-          const service = yield* observeService(
-            namespaceId,
-            name,
-            output?.serviceId,
-          );
+          const name = output?.serviceName ?? (yield* createName(id, olds ?? {}));
+          const service = yield* observeService(namespaceId, name, output?.serviceId);
           if (
             service?.Id === undefined ||
             service.Arn === undefined ||
@@ -358,9 +327,7 @@ export const ServiceProvider = () =>
           ) {
             return undefined;
           }
-          const namespaceName = yield* resolveNamespaceName(
-            service.NamespaceId,
-          ).pipe(
+          const namespaceName = yield* resolveNamespaceName(service.NamespaceId).pipe(
             Effect.catchTag("NamespaceNotFound", () => Effect.succeed("")),
           );
           const attrs = {
@@ -387,9 +354,7 @@ export const ServiceProvider = () =>
           if (olds.routingPolicy !== news.routingPolicy) {
             return { action: "replace" } as const;
           }
-          if (
-            recordTypeKey(olds.dnsRecords) !== recordTypeKey(news.dnsRecords)
-          ) {
+          if (recordTypeKey(olds.dnsRecords) !== recordTypeKey(news.dnsRecords)) {
             return { action: "replace" } as const;
           }
           // healthCheckCustomConfig cannot be added, changed, or removed
@@ -411,11 +376,7 @@ export const ServiceProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative
-          let service = yield* observeService(
-            news.namespaceId,
-            name,
-            output?.serviceId,
-          );
+          let service = yield* observeService(news.namespaceId, name, output?.serviceId);
 
           // 2. ENSURE — createService is synchronous
           if (service === undefined) {
@@ -428,8 +389,7 @@ export const ServiceProvider = () =>
                 HealthCheckConfig: toDesiredHealthCheckConfig(news),
                 HealthCheckCustomConfig: news.healthCheckCustomConfig
                   ? {
-                      FailureThreshold:
-                        news.healthCheckCustomConfig.failureThreshold,
+                      FailureThreshold: news.healthCheckCustomConfig.failureThreshold,
                     }
                   : undefined,
                 Type: news.type,
@@ -443,9 +403,7 @@ export const ServiceProvider = () =>
                 // a concurrent reconciler created it — observe instead
                 Effect.catchTag("ServiceAlreadyExists", (e) =>
                   e.ServiceId !== undefined
-                    ? sd
-                        .getService({ Id: e.ServiceId })
-                        .pipe(Effect.map((r) => r.Service))
+                    ? sd.getService({ Id: e.ServiceId }).pipe(Effect.map((r) => r.Service))
                     : observeService(news.namespaceId, name, undefined),
                 ),
               );
@@ -466,11 +424,9 @@ export const ServiceProvider = () =>
           const desiredHealth = toDesiredHealthCheckConfig(news);
           const observedRecords = service.DnsConfig?.DnsRecords ?? [];
           const desiredRecords = desiredDns?.DnsRecords ?? [];
-          const dnsDelta =
-            recordKey([...observedRecords]) !== recordKey(desiredRecords);
+          const dnsDelta = recordKey([...observedRecords]) !== recordKey(desiredRecords);
           const descriptionDelta =
-            (news.description ?? undefined) !==
-            (service.Description ?? undefined);
+            (news.description ?? undefined) !== (service.Description ?? undefined);
           const observedHealth = service.HealthCheckConfig;
           const healthDelta =
             (desiredHealth === undefined) !== (observedHealth === undefined) ||
@@ -486,9 +442,7 @@ export const ServiceProvider = () =>
               Service: {
                 Description: news.description,
                 DnsConfig:
-                  desiredDns !== undefined
-                    ? { DnsRecords: desiredDns.DnsRecords }
-                    : undefined,
+                  desiredDns !== undefined ? { DnsRecords: desiredDns.DnsRecords } : undefined,
                 HealthCheckConfig: desiredHealth,
               },
             });
@@ -499,8 +453,9 @@ export const ServiceProvider = () =>
 
           // 3b. SYNC SERVICE ATTRIBUTES — diff OBSERVED custom attributes
           // against the desired map; upsert changed keys, delete undeclared
-          const observedAttributes: { [key: string]: string | undefined } =
-            yield* sd.getServiceAttributes({ ServiceId: service.Id }).pipe(
+          const observedAttributes: { [key: string]: string | undefined } = yield* sd
+            .getServiceAttributes({ ServiceId: service.Id })
+            .pipe(
               Effect.map((r) => r.ServiceAttributes?.Attributes ?? {}),
               Effect.catchTag("ServiceNotFound", () => Effect.succeed({})),
             );
@@ -550,9 +505,9 @@ export const ServiceProvider = () =>
           );
           // deregistrations still propagating surface as ResourceInUse —
           // retry through the visibility window (bounded)
-          yield* retryWhileResourceInUse(
-            sd.deleteService({ Id: output.serviceId }),
-          ).pipe(Effect.catchTag("ServiceNotFound", () => Effect.void));
+          yield* retryWhileResourceInUse(sd.deleteService({ Id: output.serviceId })).pipe(
+            Effect.catchTag("ServiceNotFound", () => Effect.void),
+          );
         }),
       });
     }),

@@ -31,10 +31,7 @@ export interface GetSubscriptionState extends Binding.Service<
   () => Effect.Effect<
     (
       request?: shield.GetSubscriptionStateRequest,
-    ) => Effect.Effect<
-      shield.GetSubscriptionStateResponse,
-      shield.GetSubscriptionStateError
-    >
+    ) => Effect.Effect<shield.GetSubscriptionStateResponse, shield.GetSubscriptionStateError>
   >
 > {}
 export const GetSubscriptionState = Binding.Service<GetSubscriptionState>(

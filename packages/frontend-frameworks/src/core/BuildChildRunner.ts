@@ -21,14 +21,10 @@ import { writeBuildOutput } from "./BuildOutput.ts";
 const payload = JSON.parse(process.argv[2] ?? "{}") as BuildChildPayload;
 
 const program = Effect.gen(function* () {
-  const module = (yield* Effect.promise(
-    () => import(payload.module),
-  )) as Partial<BuildChildModule>;
+  const module = (yield* Effect.promise(() => import(payload.module))) as Partial<BuildChildModule>;
   if (typeof module.buildInChild !== "function") {
     return yield* Effect.die(
-      new Error(
-        `Build child module ${payload.module} does not export a buildInChild function`,
-      ),
+      new Error(`Build child module ${payload.module} does not export a buildInChild function`),
     );
   }
   const output = yield* module.buildInChild(payload.config as never);

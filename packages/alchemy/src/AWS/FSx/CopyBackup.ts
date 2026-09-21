@@ -29,9 +29,7 @@ export interface CopyBackup extends Binding.Service<
   CopyBackup,
   "AWS.FSx.CopyBackup",
   () => Effect.Effect<
-    (
-      request: fsx.CopyBackupRequest,
-    ) => Effect.Effect<fsx.CopyBackupResponse, fsx.CopyBackupError>
+    (request: fsx.CopyBackupRequest) => Effect.Effect<fsx.CopyBackupResponse, fsx.CopyBackupError>
   >
 > {}
 export const CopyBackup = Binding.Service<CopyBackup>("AWS.FSx.CopyBackup");

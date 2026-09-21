@@ -22,39 +22,37 @@ export const CompleteLifecycleActionHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.AutoScaling.CompleteLifecycleAction(${group}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "autoscaling:CompleteLifecycleAction",
-                    "autoscaling:RecordLifecycleActionHeartbeat",
-                  ],
-                  Resource: [group.autoScalingGroupArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AutoScaling.CompleteLifecycleAction(${group}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "autoscaling:CompleteLifecycleAction",
+                  "autoscaling:RecordLifecycleActionHeartbeat",
+                ],
+                Resource: [group.autoScalingGroupArn],
+              },
+            ],
+          });
         }
       }
       return {
-        complete: Effect.fn(
-          `AWS.AutoScaling.CompleteLifecycleAction(${group.LogicalId})`,
-        )(function* (request: CompleteLifecycleActionRequest) {
-          return yield* complete({
-            ...request,
-            AutoScalingGroupName: yield* AutoScalingGroupName,
-          });
-        }),
-        heartbeat: Effect.fn(
-          `AWS.AutoScaling.RecordLifecycleActionHeartbeat(${group.LogicalId})`,
-        )(function* (request: RecordLifecycleActionHeartbeatRequest) {
-          return yield* heartbeat({
-            ...request,
-            AutoScalingGroupName: yield* AutoScalingGroupName,
-          });
-        }),
+        complete: Effect.fn(`AWS.AutoScaling.CompleteLifecycleAction(${group.LogicalId})`)(
+          function* (request: CompleteLifecycleActionRequest) {
+            return yield* complete({
+              ...request,
+              AutoScalingGroupName: yield* AutoScalingGroupName,
+            });
+          },
+        ),
+        heartbeat: Effect.fn(`AWS.AutoScaling.RecordLifecycleActionHeartbeat(${group.LogicalId})`)(
+          function* (request: RecordLifecycleActionHeartbeatRequest) {
+            return yield* heartbeat({
+              ...request,
+              AutoScalingGroupName: yield* AutoScalingGroupName,
+            });
+          },
+        ),
       };
     });
   }),

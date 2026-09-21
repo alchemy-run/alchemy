@@ -36,9 +36,7 @@ export interface GetCrawler extends Binding.Service<
   "AWS.Glue.GetCrawler",
   (
     crawler: Crawler,
-  ) => Effect.Effect<
-    () => Effect.Effect<glue.GetCrawlerResponse, glue.GetCrawlerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<glue.GetCrawlerResponse, glue.GetCrawlerError>>
 > {}
 
 export const GetCrawler = Binding.Service<GetCrawler>("AWS.Glue.GetCrawler");

@@ -1,8 +1,8 @@
 import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Layer from "effect/Layer";
 import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
-import { InvokeBrowser } from "./InvokeBrowser.ts";
 import type { BrowserCustom } from "./BrowserCustom.ts";
+import { InvokeBrowser } from "./InvokeBrowser.ts";
 
 export const InvokeBrowserHttp = Layer.effect(
   InvokeBrowser,

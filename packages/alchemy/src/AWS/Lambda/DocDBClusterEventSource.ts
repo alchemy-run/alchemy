@@ -27,9 +27,7 @@ export const DocDBClusterEventSource = Layer.effect(
     return Effect.fn(function* <TDoc = unknown, Req = never>(
       cluster: DBCluster,
       props: ClusterEventSourceProps,
-      process: (
-        stream: Stream.Stream<DocumentDBRecord<TDoc>>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (stream: Stream.Stream<DocumentDBRecord<TDoc>>) => Effect.Effect<void, never, Req>,
     ) {
       const ClusterArn = yield* cluster.dbClusterArn;
 
@@ -42,17 +40,15 @@ export const DocDBClusterEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.DocDB.ClusterEventSource(${cluster}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: ["secretsmanager:GetSecretValue"],
-                    Resource: [props.secretArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.DocDB.ClusterEventSource(${cluster}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["secretsmanager:GetSecretValue"],
+                  Resource: [props.secretArn],
+                },
+              ],
+            });
 
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
@@ -68,9 +64,7 @@ export const DocDBClusterEventSource = Layer.effect(
                   CollectionName: props.collectionName,
                   FullDocument: props.fullDocument ?? "Default",
                 },
-                sourceAccessConfigurations: [
-                  { Type: "BASIC_AUTH", URI: props.secretArn },
-                ],
+                sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.secretArn }],
               },
             );
           }),
@@ -81,13 +75,10 @@ export const DocDBClusterEventSource = Layer.effect(
         Effect.gen(function* () {
           const clusterArn = yield* ClusterArn;
           return (event: any) => {
-            if (
-              isDocumentDBEvent(event) &&
-              event.eventSourceArn === clusterArn
-            ) {
-              return process(
-                Stream.fromArray(event.events as DocumentDBRecord<TDoc>[]),
-              ).pipe(Effect.orDie);
+            if (isDocumentDBEvent(event) && event.eventSourceArn === clusterArn) {
+              return process(Stream.fromArray(event.events as DocumentDBRecord<TDoc>[])).pipe(
+                Effect.orDie,
+              );
             }
           };
         }),

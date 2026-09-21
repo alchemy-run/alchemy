@@ -23,11 +23,7 @@ import {
   type WorkloadImageSource,
   type WorkloadServices,
 } from "./ClusterAdapter.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
@@ -409,26 +405,19 @@ export const Deployment: Platform<
   ) => DeploymentRuntimeContext,
 });
 
-class ServiceNotReady extends Data.TaggedError(
-  "Kubernetes.ServiceNotReady",
-)<{}> {}
+class ServiceNotReady extends Data.TaggedError("Kubernetes.ServiceNotReady")<{}> {}
 
 // Bounded ~3 min wait for the cloud load balancer to publish its hostname
 // (an EKS Auto Mode NLB typically appears within 2–3 min of the Service
 // apply).
-const loadBalancerRetrySchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(36),
-]);
+const loadBalancerRetrySchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]);
 
 /**
  * Explicitly-typed pipeable retry for the LB-hostname wait. An inline
  * `Effect.retry` in the provider leaks `Retry.Return`'s conditional into
  * declaration emit and widens the provider layer to `unknown` R.
  */
-const retryUntilServiceReady = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const retryUntilServiceReady = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (error) => error instanceof ServiceNotReady,
     schedule: loadBalancerRetrySchedule,
@@ -457,10 +446,7 @@ export const DeploymentProvider = () =>
             );
 
       // Read a LoadBalancer Service's assigned hostname (bounded wait).
-      const waitForLoadBalancer = (
-        transport: ClusterTransport,
-        service: KubernetesObjectRef,
-      ) =>
+      const waitForLoadBalancer = (transport: ClusterTransport, service: KubernetesObjectRef) =>
         readObject({ transport, object: service }).pipe(
           Effect.map((response) => {
             const ingress = (
@@ -475,14 +461,10 @@ export const DeploymentProvider = () =>
             return ingress?.hostname ?? ingress?.ip;
           }),
           Effect.flatMap((hostname) =>
-            hostname
-              ? Effect.succeed(hostname)
-              : Effect.fail(new ServiceNotReady()),
+            hostname ? Effect.succeed(hostname) : Effect.fail(new ServiceNotReady()),
           ),
           retryUntilServiceReady,
-          Effect.catchTag("Kubernetes.ServiceNotReady", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("Kubernetes.ServiceNotReady", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -501,11 +483,7 @@ export const DeploymentProvider = () =>
         // composite, so enumeration is intentionally empty — `read` (below)
         // refreshes a known instance from its persisted output.
         list: () => Effect.succeed([] as Deployment["Attributes"][]),
-        diff: Effect.fn(function* ({
-          olds = {} as DeploymentProps,
-          news,
-          output,
-        }) {
+        diff: Effect.fn(function* ({ olds = {} as DeploymentProps, news, output }) {
           if (!isResolved(news)) return;
           const oldCluster = connectionIdentity(tryConnectionOf(olds.cluster));
           const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
@@ -513,11 +491,7 @@ export const DeploymentProvider = () =>
           // a change to either forces a replacement. Only compare when the
           // old value is present so a first create (empty `olds`) doesn't
           // spuriously replace.
-          if (
-            oldCluster !== undefined &&
-            newCluster !== undefined &&
-            oldCluster !== newCluster
-          ) {
+          if (oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) {
             return { action: "replace" } as const;
           }
           if (
@@ -553,9 +527,7 @@ export const DeploymentProvider = () =>
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
           const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             // Transient unreachability must not read as "gone" — keep the
             // persisted state and let reconcile converge.
             Effect.catch(() => Effect.succeed("unreachable" as const)),
@@ -577,13 +549,7 @@ export const DeploymentProvider = () =>
           if (observed === undefined) return undefined;
           return output;
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const connection = toConnection(news.cluster);
           const adapter = yield* findClusterAdapter(connection.auth.kind);
           const transport = yield* adapter.connect(connection);
@@ -591,8 +557,7 @@ export const DeploymentProvider = () =>
           const port = news.port ?? 3000;
           const serviceType = news.serviceType ?? "LoadBalancer";
 
-          const baseName =
-            output?.deploymentName ?? (yield* toBaseName(id, news));
+          const baseName = output?.deploymentName ?? (yield* toBaseName(id, news));
           const serviceAccountName = output?.serviceAccountName ?? baseName;
           const tags = {
             ...(yield* createInternalTags(id)),
@@ -695,10 +660,7 @@ export const DeploymentProvider = () =>
                     ports: [{ containerPort: port }],
                     env: Object.entries(containerEnv).map(([name, value]) => ({
                       name,
-                      value:
-                        typeof value === "string"
-                          ? value
-                          : JSON.stringify(value),
+                      value: typeof value === "string" ? value : JSON.stringify(value),
                     })),
                     resources: news.resources,
                   },
@@ -750,11 +712,7 @@ export const DeploymentProvider = () =>
             },
           };
 
-          const desiredObjects = [
-            serviceAccountObject,
-            deploymentObject,
-            serviceObject,
-          ];
+          const desiredObjects = [serviceAccountObject, deploymentObject, serviceObject];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,
@@ -762,9 +720,7 @@ export const DeploymentProvider = () =>
             desiredObjects,
           });
 
-          yield* session.note(
-            `Applied Kubernetes Deployment ${namespace}/${baseName}`,
-          );
+          yield* session.note(`Applied Kubernetes Deployment ${namespace}/${baseName}`);
 
           // Resolve the LoadBalancer URL if applicable. The cloud listener
           // is the Service `port` (Kubernetes maps `spec.ports[].port` 1:1
@@ -772,10 +728,7 @@ export const DeploymentProvider = () =>
           // `AWS.ECS.Service`'s url semantics.
           const hostname =
             serviceType === "LoadBalancer"
-              ? yield* waitForLoadBalancer(
-                  transport,
-                  toKubernetesObjectRef(serviceObject),
-                )
+              ? yield* waitForLoadBalancer(transport, toKubernetesObjectRef(serviceObject))
               : undefined;
           const url =
             hostname === undefined

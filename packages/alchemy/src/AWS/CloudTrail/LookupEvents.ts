@@ -33,12 +33,7 @@ export interface LookupEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request?: cloudtrail.LookupEventsRequest,
-    ) => Effect.Effect<
-      cloudtrail.LookupEventsResponse,
-      cloudtrail.LookupEventsError
-    >
+    ) => Effect.Effect<cloudtrail.LookupEventsResponse, cloudtrail.LookupEventsError>
   >
 > {}
-export const LookupEvents = Binding.Service<LookupEvents>(
-  "AWS.CloudTrail.LookupEvents",
-);
+export const LookupEvents = Binding.Service<LookupEvents>("AWS.CloudTrail.LookupEvents");

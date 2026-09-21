@@ -1,10 +1,10 @@
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Host } from "@/AWS/CodeConnections/Host.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as codeconnections from "@distilled.cloud/aws/codeconnections";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -67,14 +67,10 @@ test.provider(
 
       // Destroy — host is deleted; verify it is gone out-of-band.
       yield* stack.destroy();
-      const after = yield* codeconnections
-        .getHost({ HostArn: deployed.hostArn })
-        .pipe(
-          Effect.map((res) => res.Name),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const after = yield* codeconnections.getHost({ HostArn: deployed.hostArn }).pipe(
+        Effect.map((res) => res.Name),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      );
       expect(after).toBeUndefined();
     }),
   { timeout: 120_000 },

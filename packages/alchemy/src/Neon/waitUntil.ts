@@ -21,9 +21,7 @@ export const waitUntil = <A, E, R>(
             Effect.scoped,
             Effect.provideService(Layer.CurrentMemoMap, memoMap),
             Effect.timeout("15 minutes"),
-            Effect.tapCause(() =>
-              Effect.logError("Neon waitUntil task failed"),
-            ),
+            Effect.tapCause(() => Effect.logError("Neon waitUntil task failed")),
           ),
         ),
       ),

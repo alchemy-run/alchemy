@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -60,8 +57,7 @@ test.provider(
       yield* seedBaseline(accountId);
       const baseline = yield* getConfiguration(accountId);
       const baselineActivityLog = baseline.settings?.activityLog?.enabled;
-      const baselineProtocolDetection =
-        baseline.settings?.protocolDetection?.enabled;
+      const baselineProtocolDetection = baseline.settings?.protocolDetection?.enabled;
       expect(baselineActivityLog).toEqual(true);
       expect(baselineProtocolDetection).toEqual(false);
 
@@ -87,9 +83,7 @@ test.provider(
 
       const live = yield* getConfiguration(accountId);
       expect(live.settings?.activityLog?.enabled).toEqual(flippedActivityLog);
-      expect(live.settings?.protocolDetection?.enabled).toEqual(
-        flippedProtocolDetection,
-      );
+      expect(live.settings?.protocolDetection?.enabled).toEqual(flippedProtocolDetection);
 
       // Update in place — flip activityLog back; protocolDetection stays.
       const updated = yield* stack.deploy(
@@ -104,19 +98,13 @@ test.provider(
       expect(updated.initialSettings).toEqual(config.initialSettings);
 
       const liveAfter = yield* getConfiguration(accountId);
-      expect(liveAfter.settings?.activityLog?.enabled).toEqual(
-        !flippedActivityLog,
-      );
+      expect(liveAfter.settings?.activityLog?.enabled).toEqual(!flippedActivityLog);
 
       // Destroy restores the captured pre-management values.
       yield* stack.destroy();
       const restored = yield* getConfiguration(accountId);
-      expect(restored.settings?.activityLog?.enabled).toEqual(
-        baselineActivityLog,
-      );
-      expect(restored.settings?.protocolDetection?.enabled).toEqual(
-        baselineProtocolDetection,
-      );
+      expect(restored.settings?.activityLog?.enabled).toEqual(baselineActivityLog);
+      expect(restored.settings?.protocolDetection?.enabled).toEqual(baselineProtocolDetection);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -129,9 +117,7 @@ test.provider(
 
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Gateway.Configuration,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Gateway.Configuration);
       const all = yield* provider.list();
 
       // Account-wide singleton: exactly one element for the ambient account.

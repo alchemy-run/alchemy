@@ -1,6 +1,6 @@
-import * as Effect from "effect/Effect";
-import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
+import { createServer, type Server } from "node:http";
+import * as Effect from "effect/Effect";
 
 export interface OtlpCollector {
   readonly server: Server;
@@ -89,9 +89,7 @@ export const startOtlpCollector = (
         server.off("error", onError);
         const address = server.address();
         if (address === null || typeof address === "string") {
-          resume(
-            Effect.fail(new Error("OTLP test collector address unavailable")),
-          );
+          resume(Effect.fail(new Error("OTLP test collector address unavailable")));
           return;
         }
         resume(
@@ -110,9 +108,7 @@ export const startOtlpCollector = (
     ({ server, releaseResponses }) =>
       Effect.callback<void, Error>((resume) => {
         releaseResponses();
-        server.close((error) =>
-          resume(error === undefined ? Effect.void : Effect.fail(error)),
-        );
+        server.close((error) => resume(error === undefined ? Effect.void : Effect.fail(error)));
       }).pipe(Effect.orDie),
   );
 
@@ -200,8 +196,7 @@ export const startDelayedOtlpCollector = () =>
             };
           } else {
             const batch = requests[message.id]!;
-            if (message.type === "responding")
-              batch.responseStartedAt = message.at;
+            if (message.type === "responding") batch.responseStartedAt = message.at;
             else if (message.type === "finished") {
               batch.completed = true;
               completedRequests.value += 1;

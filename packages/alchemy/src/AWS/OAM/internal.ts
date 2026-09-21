@@ -6,15 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
-const mutationSchedule = Schedule.max([
-  Schedule.spaced("1 second"),
-  Schedule.recurs(20),
-]);
+const mutationSchedule = Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(20)]);
 
-const isRetryableOamMutationError = (
-  error: unknown,
-  conflict: boolean,
-): boolean => {
+const isRetryableOamMutationError = (error: unknown, conflict: boolean): boolean => {
   if (!error || typeof error !== "object") return false;
   const tag = (error as { _tag?: string })._tag;
   return (
@@ -31,28 +25,22 @@ export const retryOamMutation = <A, E, R>(
   options?: { conflict?: boolean },
 ): Effect.Effect<A, E, Exclude<R, Retry.Retry>> =>
   Retry.policy({
-    while: (error) =>
-      isRetryableOamMutationError(error, options?.conflict === true),
+    while: (error) => isRetryableOamMutationError(error, options?.conflict === true),
     schedule: mutationSchedule,
   })(effect);
 
-class SinkLinksStillAttached extends Data.TaggedError(
-  "SinkLinksStillAttached",
-)<{ readonly sinkArn: string; readonly count: number }> {}
+class SinkLinksStillAttached extends Data.TaggedError("SinkLinksStillAttached")<{
+  readonly sinkArn: string;
+  readonly count: number;
+}> {}
 
-class OamResourceStillExists extends Data.TaggedError(
-  "OamResourceStillExists",
-)<{ readonly arn: string }> {}
+class OamResourceStillExists extends Data.TaggedError("OamResourceStillExists")<{
+  readonly arn: string;
+}> {}
 
-const dependencySchedule = Schedule.max([
-  Schedule.spaced("2 seconds"),
-  Schedule.recurs(10),
-]);
+const dependencySchedule = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]);
 
-const goneSchedule = Schedule.max([
-  Schedule.spaced("1 second"),
-  Schedule.recurs(10),
-]);
+const goneSchedule = Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(10)]);
 
 /**
  * Delete a sink only after attached links have drained, then observe absence.
@@ -60,13 +48,9 @@ const goneSchedule = Schedule.max([
 export const deleteSinkAndWait = Effect.fn(function* (sinkArn: string) {
   yield* oam.listAttachedLinks.pages({ SinkIdentifier: sinkArn }).pipe(
     Stream.runCollect,
-    Effect.map((pages) =>
-      Array.from(pages).reduce((count, page) => count + page.Items.length, 0),
-    ),
+    Effect.map((pages) => Array.from(pages).reduce((count, page) => count + page.Items.length, 0)),
     Effect.flatMap((count) =>
-      count === 0
-        ? Effect.void
-        : Effect.fail(new SinkLinksStillAttached({ sinkArn, count })),
+      count === 0 ? Effect.void : Effect.fail(new SinkLinksStillAttached({ sinkArn, count })),
     ),
     Effect.retry({
       while: (error) => error._tag === "SinkLinksStillAttached",
@@ -83,13 +67,10 @@ export const deleteSinkAndWait = Effect.fn(function* (sinkArn: string) {
 
   const observe = Retry.none(oam.getSink({ Identifier: sinkArn }));
   yield* observe.pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new OamResourceStillExists({ arn: sinkArn })),
-    ),
+    Effect.flatMap(() => Effect.fail(new OamResourceStillExists({ arn: sinkArn }))),
     Effect.retry({
       while: (error) =>
-        error._tag === "OamResourceStillExists" ||
-        error._tag === "TooManyRequestsException",
+        error._tag === "OamResourceStillExists" || error._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -104,13 +85,10 @@ export const deleteLinkAndWait = Effect.fn(function* (linkArn: string) {
 
   const observe = Retry.none(oam.getLink({ Identifier: linkArn }));
   yield* observe.pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new OamResourceStillExists({ arn: linkArn })),
-    ),
+    Effect.flatMap(() => Effect.fail(new OamResourceStillExists({ arn: linkArn }))),
     Effect.retry({
       while: (error) =>
-        error._tag === "OamResourceStillExists" ||
-        error._tag === "TooManyRequestsException",
+        error._tag === "OamResourceStillExists" || error._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -141,7 +119,7 @@ export const syncOamTags = Effect.fn(function* (
   userTags: Record<string, string> | undefined,
 ) {
   const internalTags = yield* createInternalTags(id);
-  const desired = { ...(userTags ?? {}), ...internalTags };
+  const desired = { ...userTags, ...internalTags };
   const observed = yield* readOamTags(resourceArn);
   const { upsert, removed } = diffTags(observed, desired);
   if (upsert.length > 0) {
@@ -153,8 +131,6 @@ export const syncOamTags = Effect.fn(function* (
     );
   }
   if (removed.length > 0) {
-    yield* retryOamMutation(
-      oam.untagResource({ ResourceArn: resourceArn, TagKeys: removed }),
-    );
+    yield* retryOamMutation(oam.untagResource({ ResourceArn: resourceArn, TagKeys: removed }));
   }
 });

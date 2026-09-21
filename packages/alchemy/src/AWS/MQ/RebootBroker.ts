@@ -27,10 +27,6 @@ export interface RebootBroker extends Binding.Service<
   "AWS.MQ.RebootBroker",
   (
     broker: Broker,
-  ) => Effect.Effect<
-    () => Effect.Effect<mq.RebootBrokerResponse, mq.RebootBrokerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mq.RebootBrokerResponse, mq.RebootBrokerError>>
 > {}
-export const RebootBroker = Binding.Service<RebootBroker>(
-  "AWS.MQ.RebootBroker",
-);
+export const RebootBroker = Binding.Service<RebootBroker>("AWS.MQ.RebootBroker");

@@ -30,10 +30,7 @@ export interface ListQueryExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.ListQueryExecutionsInput, "WorkGroup">,
-    ) => Effect.Effect<
-      athena.ListQueryExecutionsOutput,
-      athena.ListQueryExecutionsError
-    >
+    ) => Effect.Effect<athena.ListQueryExecutionsOutput, athena.ListQueryExecutionsError>
   >
 > {}
 

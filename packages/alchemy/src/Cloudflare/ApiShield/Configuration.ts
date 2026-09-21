@@ -1,7 +1,6 @@
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -133,9 +132,7 @@ export const ConfigurationProvider = () =>
         (zoneId) =>
           apiGateway.getConfiguration({ zoneId }).pipe(
             Effect.map((observed) => {
-              const characteristics = toCharacteristics(
-                observed.authIdCharacteristics,
-              );
+              const characteristics = toCharacteristics(observed.authIdCharacteristics);
               return toAttributes(
                 zoneId,
                 observed.authIdCharacteristics,
@@ -146,30 +143,21 @@ export const ConfigurationProvider = () =>
             }),
             // API Shield is entitlement-gated and zones may be partial or
             // deleted out-of-band — skip any zone we can't read.
-            Effect.catchTag(
-              ["NotEntitled", "InvalidObjectIdentifier", "Forbidden"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["NotEntitled", "InvalidObjectIdentifier", "Forbidden"], () =>
+              Effect.succeed(undefined),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ConfigurationAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ConfigurationAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as ConfigurationProps | undefined;
       const n = news as ConfigurationProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ??
-        (typeof o?.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o?.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -180,9 +168,7 @@ export const ConfigurationProvider = () =>
       if (zoneId === undefined) return undefined;
       const observed = yield* apiGateway.getConfiguration({ zoneId }).pipe(
         // Zone deleted out-of-band — the configuration is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return undefined;
       // The configuration is a singleton that always exists with a default
@@ -233,11 +219,7 @@ export const ConfigurationProvider = () =>
       // Observe — if the zone itself is gone, so is the configuration.
       const observed = yield* apiGateway
         .getConfiguration({ zoneId })
-        .pipe(
-          Effect.catchTag("InvalidObjectIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)));
       if (observed === undefined) return;
       // Restore the pre-management characteristics; skip the call when
       // they already match (idempotent re-delete after a crashed run).
@@ -277,10 +259,7 @@ const toCharacteristics = (
  * Order-insensitive equality of two characteristic lists — Cloudflare
  * treats the configuration as a set.
  */
-const characteristicsEqual = (
-  a: AuthIdCharacteristic[],
-  b: AuthIdCharacteristic[],
-): boolean => {
+const characteristicsEqual = (a: AuthIdCharacteristic[], b: AuthIdCharacteristic[]): boolean => {
   if (a.length !== b.length) return false;
   const key = (c: AuthIdCharacteristic) => `${c.type} ${c.name}`;
   const as = a.map(key).sort();

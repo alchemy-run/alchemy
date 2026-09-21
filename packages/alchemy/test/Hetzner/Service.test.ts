@@ -1,21 +1,18 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/api.ts";
 import { Data, MARKER } from "./fixtures/shared.ts";
 import Worker from "./fixtures/worker.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -67,9 +64,7 @@ test.provider.skipIf(!hasHetznerCreds)(
 
       const body = yield* HttpClient.get(deployed.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),

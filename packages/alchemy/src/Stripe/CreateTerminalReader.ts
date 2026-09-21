@@ -30,11 +30,7 @@ export interface CreateTerminalReader extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateTerminalReaderRequest,
-    ) => Effect.Effect<
-      StripeTerminalReader,
-      CreateTerminalReaderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeTerminalReader, CreateTerminalReaderError, RuntimeContext>
   >
 > {}
 

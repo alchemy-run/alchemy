@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/aws/kinesis-video";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,18 +5,16 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import KinesisVideoTestFunctionLive, {
-  KinesisVideoTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import KinesisVideoTestFunctionLive, { KinesisVideoTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "KinesisVideoBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -41,19 +36,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -66,9 +56,7 @@ const fetchOutcome = (url: string) =>
     Effect.flatMap((response) =>
       response.status === 200
         ? (response.json as Effect.Effect<unknown>)
-        : Effect.fail(
-            new TransientUpstream({ status: response.status, body: "" }),
-          ),
+        : Effect.fail(new TransientUpstream({ status: response.status, body: "" })),
     ),
     Effect.map(
       (body) =>
@@ -93,9 +81,7 @@ const fetchOutcome = (url: string) =>
 describe("KinesisVideo Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "KinesisVideo test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("KinesisVideo test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("KinesisVideo test setup: deploying fixture");
@@ -108,9 +94,7 @@ describe("KinesisVideo Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      yield* Effect.logInfo(
-        `KinesisVideo test setup: probing readiness at ${baseUrl}/info`,
-      );
+      yield* Effect.logInfo(`KinesisVideo test setup: probing readiness at ${baseUrl}/info`);
       yield* HttpClient.get(`${baseUrl}/info`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -137,9 +121,7 @@ describe("KinesisVideo Bindings", () => {
             ComparisonValue: "KinesisVideoBindings-FixtureStream-test-",
           },
         });
-        const liveStreams = (streams.StreamInfoList ?? []).filter(
-          (s) => s.Status !== "DELETING",
-        );
+        const liveStreams = (streams.StreamInfoList ?? []).filter((s) => s.Status !== "DELETING");
         const channels = yield* kv.listSignalingChannels({
           ChannelNameCondition: {
             ComparisonOperator: "BEGINS_WITH",
@@ -160,13 +142,9 @@ describe("KinesisVideo Bindings", () => {
       }).pipe(
         Effect.retry({
           while: (e): boolean => e._tag === "FixtureStillExists",
-          schedule: Schedule.max([
-            Schedule.spaced("3 seconds"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
         }),
-        (effect) =>
-          Core.withProviders(effect, testOptions, "KinesisVideoBindings"),
+        (effect) => Core.withProviders(effect, testOptions, "KinesisVideoBindings"),
       );
     }),
     {
@@ -208,9 +186,7 @@ describe("KinesisVideo Bindings", () => {
           };
           expect(body.errorTag).toBeUndefined();
           expect(body.servers!.length).toBeGreaterThan(0);
-          const turn = body.servers!.find((s) =>
-            s.uris.some((uri) => uri.startsWith("turn")),
-          );
+          const turn = body.servers!.find((s) => s.uris.some((uri) => uri.startsWith("turn")));
           expect(turn).toBeDefined();
           expect(turn?.hasCredentials).toBe(true);
         }),
@@ -273,10 +249,9 @@ describe("KinesisVideo Bindings", () => {
           // ("No fragments found"). Both are data-plane responses, proving
           // endpoint discovery, IAM, and the signed call.
           expect(body.ok).toBe(false);
-          expect([
-            "ResourceNotFoundException",
-            "InvalidArgumentException",
-          ]).toContain(body.errorTag);
+          expect(["ResourceNotFoundException", "InvalidArgumentException"]).toContain(
+            body.errorTag,
+          );
         }),
       { timeout: 120_000 },
     );

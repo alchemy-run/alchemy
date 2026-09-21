@@ -33,10 +33,7 @@ export interface ListTagsOfResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTagsOfResourceRequest,
-    ) => Effect.Effect<
-      DynamoDB.ListTagsOfResourceOutput,
-      DynamoDB.ListTagsOfResourceError
-    >
+    ) => Effect.Effect<DynamoDB.ListTagsOfResourceOutput, DynamoDB.ListTagsOfResourceError>
   >
 > {}
 

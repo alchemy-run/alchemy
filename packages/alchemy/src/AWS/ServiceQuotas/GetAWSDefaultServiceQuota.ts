@@ -36,7 +36,6 @@ export interface GetAWSDefaultServiceQuota extends Binding.Service<
     >
   >
 > {}
-export const GetAWSDefaultServiceQuota =
-  Binding.Service<GetAWSDefaultServiceQuota>(
-    "AWS.ServiceQuotas.GetAWSDefaultServiceQuota",
-  );
+export const GetAWSDefaultServiceQuota = Binding.Service<GetAWSDefaultServiceQuota>(
+  "AWS.ServiceQuotas.GetAWSDefaultServiceQuota",
+);

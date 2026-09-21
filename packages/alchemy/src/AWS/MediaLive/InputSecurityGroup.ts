@@ -20,8 +20,7 @@ const retryWhileInUse = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "BadRequestException" || e._tag === "ConflictException",
+    while: (e) => e._tag === "BadRequestException" || e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -31,9 +30,8 @@ type IdentifiedGroup = medialive.InputSecurityGroup & {
   Arn: string;
 };
 
-const hasIdentity = (
-  isg: medialive.InputSecurityGroup,
-): isg is IdentifiedGroup => isg.Id !== undefined && isg.Arn !== undefined;
+const hasIdentity = (isg: medialive.InputSecurityGroup): isg is IdentifiedGroup =>
+  isg.Id !== undefined && isg.Arn !== undefined;
 
 export interface InputSecurityGroupProps {
   /**
@@ -98,9 +96,7 @@ export interface InputSecurityGroup extends Resource<
  *
  * @resource
  */
-export const InputSecurityGroup = Resource<InputSecurityGroup>(
-  "AWS.MediaLive.InputSecurityGroup",
-);
+export const InputSecurityGroup = Resource<InputSecurityGroup>("AWS.MediaLive.InputSecurityGroup");
 
 export const InputSecurityGroupProvider = () =>
   Provider.effect(
@@ -119,11 +115,7 @@ export const InputSecurityGroupProvider = () =>
       const getGroup = Effect.fn(function* (id: string) {
         const isg = yield* medialive
           .describeInputSecurityGroup({ InputSecurityGroupId: id })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         if (isg === undefined || isg.State === "DELETED") return undefined;
         if (!hasIdentity(isg)) return undefined;
         return isg;
@@ -162,8 +154,7 @@ export const InputSecurityGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk)
                 .filter(
-                  (isg): isg is IdentifiedGroup =>
-                    hasIdentity(isg) && isg.State !== "DELETED",
+                  (isg): isg is IdentifiedGroup => hasIdentity(isg) && isg.State !== "DELETED",
                 )
                 .map(toAttrs),
             ),
@@ -176,9 +167,7 @@ export const InputSecurityGroupProvider = () =>
               : yield* findByTags(id);
           if (isg === undefined) return undefined;
           const attrs = toAttrs(isg);
-          return (yield* hasAlchemyTags(id, toTagRecord(isg.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(isg.Tags))) ? attrs : Unowned(attrs);
         }),
 
         // No immutable props — every drift is an in-place update.

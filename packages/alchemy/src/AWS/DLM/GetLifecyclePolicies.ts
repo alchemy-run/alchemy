@@ -32,10 +32,7 @@ export interface GetLifecyclePolicies extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dlm.GetLifecyclePoliciesRequest,
-    ) => Effect.Effect<
-      dlm.GetLifecyclePoliciesResponse,
-      dlm.GetLifecyclePoliciesError
-    >
+    ) => Effect.Effect<dlm.GetLifecyclePoliciesResponse, dlm.GetLifecyclePoliciesError>
   >
 > {}
 export const GetLifecyclePolicies = Binding.Service<GetLifecyclePolicies>(

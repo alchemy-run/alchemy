@@ -1,19 +1,16 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetCustomerTaxIdsById } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -88,10 +85,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.taxId.customer,
-        created.taxId.id,
-      );
+      const gone = yield* waitUntilGone(created.taxId.customer, created.taxId.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -128,16 +122,11 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.taxId.customer,
-        deployed.taxId.id,
-      );
+      const gone = yield* waitUntilGone(deployed.taxId.customer, deployed.taxId.id);
       expect(gone).toEqual("gone");
 
       const after = yield* provider.list();
-      expect(
-        after.find((taxId) => taxId.id === deployed.taxId.id),
-      ).toBeUndefined();
+      expect(after.find((taxId) => taxId.id === deployed.taxId.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -190,18 +179,12 @@ test.provider(
       });
       expect(newFetched.value).toEqual("DE000000000");
 
-      const oldGone = yield* waitUntilGone(
-        created.taxId.customer,
-        created.taxId.id,
-      );
+      const oldGone = yield* waitUntilGone(created.taxId.customer, created.taxId.id);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.taxId.customer,
-        replaced.taxId.id,
-      );
+      const gone = yield* waitUntilGone(replaced.taxId.customer, replaced.taxId.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },

@@ -31,13 +31,9 @@ export interface DescribeClusterSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: redshift.DescribeClusterSnapshotsMessage,
-    ) => Effect.Effect<
-      redshift.SnapshotMessage,
-      redshift.DescribeClusterSnapshotsError
-    >
+    ) => Effect.Effect<redshift.SnapshotMessage, redshift.DescribeClusterSnapshotsError>
   >
 > {}
-export const DescribeClusterSnapshots =
-  Binding.Service<DescribeClusterSnapshots>(
-    "AWS.Redshift.DescribeClusterSnapshots",
-  );
+export const DescribeClusterSnapshots = Binding.Service<DescribeClusterSnapshots>(
+  "AWS.Redshift.DescribeClusterSnapshots",
+);

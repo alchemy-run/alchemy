@@ -9,8 +9,7 @@ import { API } from "typescript-api/unstable/async";
 const forbiddenPatterns = [
   {
     name: "raw filesystem/path/os imports",
-    pattern:
-      /\bfrom\s+["'](?:node:fs|node:fs\/promises|node:path|node:os|pathe)["']/,
+    pattern: /\bfrom\s+["'](?:node:fs|node:fs\/promises|node:path|node:os|pathe)["']/,
   },
   {
     name: "async/await",
@@ -38,8 +37,7 @@ const forbiddenPatterns = [
   },
   {
     name: "explicit output undefined create/update branch",
-    pattern:
-      /\b(?:output\s*(?:===|!==)\s*undefined|undefined\s*(?:===|!==)\s*output)\b/,
+    pattern: /\b(?:output\s*(?:===|!==)\s*undefined|undefined\s*(?:===|!==)\s*output)\b/,
   },
   {
     name: "bare process.cwd()",
@@ -94,9 +92,7 @@ const prismaSourceProject = Effect.gen(function* () {
   const sourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
   const configPath = path.join(sourceRoot, "tsconfig.source-conventions.json");
   const config = JSON.stringify({
-    files: documentedResources.map((resource) =>
-      path.join(sourceRoot, `${resource}.ts`),
-    ),
+    files: documentedResources.map((resource) => path.join(sourceRoot, `${resource}.ts`)),
     compilerOptions: { noResolve: true, noLib: true, types: [] },
   });
   const api = yield* Effect.acquireRelease(
@@ -135,15 +131,12 @@ describe("Prisma source conventions", () => {
         for (const { name, pattern } of forbiddenPatterns) {
           if (
             nodePlatformBoundaryFiles.has(file) &&
-            (name === "raw filesystem/path/os imports" ||
-              name === "async/await")
+            (name === "raw filesystem/path/os imports" || name === "async/await")
           ) {
             continue;
           }
           const scannedSource =
-            name === "raw filesystem/path/os imports"
-              ? source
-              : stripStringsAndComments(source);
+            name === "raw filesystem/path/os imports" ? source : stripStringsAndComments(source);
           const match = pattern.exec(scannedSource);
           if (match) {
             violations.push(`${file}: ${name}: ${match[0]}`);
@@ -162,9 +155,7 @@ describe("Prisma source conventions", () => {
       const sourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
 
       for (const resource of documentedResources) {
-        const source = yield* fs.readFileString(
-          path.join(sourceRoot, `${resource}.ts`),
-        );
+        const source = yield* fs.readFileString(path.join(sourceRoot, `${resource}.ts`));
         expect(source).toContain(`export interface ${resource}Props`);
         const constructorPattern =
           resource === "Compute"
@@ -206,9 +197,7 @@ describe("Prisma source conventions", () => {
         if (!sourceFile) throw new Error(`Missing source file ${fileName}`);
         const configInterfaces = [
           `${resource}Props`,
-          ...(resourceConfigInterfaces[
-            resource as keyof typeof resourceConfigInterfaces
-          ] ?? []),
+          ...(resourceConfigInterfaces[resource as keyof typeof resourceConfigInterfaces] ?? []),
         ];
 
         for (const interfaceName of configInterfaces) {
@@ -216,13 +205,9 @@ describe("Prisma source conventions", () => {
             .filter(ts.isInterfaceDeclaration)
             .find((node) => node.name.text === interfaceName);
           if (declaration === undefined) continue;
-          for (const property of declaration.members.filter(
-            ts.isPropertySignatureDeclaration,
-          )) {
+          for (const property of declaration.members.filter(ts.isPropertySignatureDeclaration)) {
             if (!property.jsDoc?.length) {
-              missingDocs.push(
-                `${fileName}:${interfaceName}.${property.name.getText()}`,
-              );
+              missingDocs.push(`${fileName}:${interfaceName}.${property.name.getText()}`);
             }
           }
         }
@@ -233,16 +218,11 @@ describe("Prisma source conventions", () => {
         const attrs = resourceDeclaration?.heritageClauses?.find(
           (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
         )?.types[0]?.typeArguments?.[2];
-        const attributes =
-          attrs && ts.isTypeLiteralNode(attrs) ? attrs : undefined;
+        const attributes = attrs && ts.isTypeLiteralNode(attrs) ? attrs : undefined;
         if (attributes === undefined) continue;
-        for (const property of attributes.members.filter(
-          ts.isPropertySignatureDeclaration,
-        )) {
+        for (const property of attributes.members.filter(ts.isPropertySignatureDeclaration)) {
           if (!property.jsDoc?.length) {
-            missingDocs.push(
-              `${fileName}:${resource}.Attributes.${property.name.getText()}`,
-            );
+            missingDocs.push(`${fileName}:${resource}.Attributes.${property.name.getText()}`);
           }
         }
       }
@@ -282,12 +262,8 @@ describe("Prisma source conventions", () => {
         path.resolve(import.meta.dirname, "../../src/Prisma/Types.ts"),
       );
 
-      expect(source).toContain(
-        'export type RedactedDeploymentEnvironmentValue = "[redacted]"',
-      );
-      expect(source).toContain(
-        "envVars?: Record<string, RedactedDeploymentEnvironmentValue>",
-      );
+      expect(source).toContain('export type RedactedDeploymentEnvironmentValue = "[redacted]"');
+      expect(source).toContain("envVars?: Record<string, RedactedDeploymentEnvironmentValue>");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { InstrumentationConfiguration } from "@/AWS/ApplicationSignals";
-import * as Test from "@/Test/Alchemy";
 import * as appsignals from "@distilled.cloud/aws/application-signals";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { InstrumentationConfiguration } from "@/AWS/ApplicationSignals";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,9 +33,7 @@ const getConfiguration = (locationHash: string) =>
 
 const assertGone = (locationHash: string) =>
   getConfiguration(locationHash).pipe(
-    Effect.flatMap((c) =>
-      Effect.fail(new Error(`configuration '${c.LocationHash}' still exists`)),
-    ),
+    Effect.flatMap((c) => Effect.fail(new Error(`configuration '${c.LocationHash}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
 
@@ -75,18 +73,12 @@ test.provider(
 
       const observed = yield* getConfiguration(probe.locationHash);
       expect(observed.ARN).toBe(probe.arn);
-      expect(observed.Description).toBe(
-        "alchemy instrumentation configuration test",
-      );
+      expect(observed.Description).toBe("alchemy instrumentation configuration test");
 
       // Tags: user tag + internal Alchemy branding.
       const tags = yield* appsignals
         .listTagsForResource({ ResourceArn: probe.arn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.fixture).toBe("application-signals-ic");
       expect(tags["alchemy::id"]).toBe("Probe");
 
@@ -105,11 +97,7 @@ test.provider(
       expect(retagged.arn).toBe(probe.arn);
       const updatedTags = yield* appsignals
         .listTagsForResource({ ResourceArn: probe.arn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.updated).toBe("true");
 
       // REPLACE — changing the code location replaces the configuration.

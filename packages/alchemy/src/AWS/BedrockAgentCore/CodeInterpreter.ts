@@ -118,9 +118,7 @@ export interface CodeInterpreter extends Resource<
  *
  * @resource
  */
-export const CodeInterpreter = Resource<CodeInterpreter>(
-  "AWS.BedrockAgentCore.CodeInterpreter",
-);
+export const CodeInterpreter = Resource<CodeInterpreter>("AWS.BedrockAgentCore.CodeInterpreter");
 
 export const CodeInterpreterProvider = () =>
   Provider.effect(
@@ -135,35 +133,20 @@ export const CodeInterpreterProvider = () =>
 
       // getCodeInterpreter still resolves soft-deleted interpreters —
       // DELETED/DELETING count as gone.
-      const getLiveOrUndefined = Effect.fn(function* (
-        codeInterpreterId: string,
-      ) {
+      const getLiveOrUndefined = Effect.fn(function* (codeInterpreterId: string) {
         const found = yield* control
           .getCodeInterpreter({ codeInterpreterId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return found === undefined ||
-          found.status === "DELETED" ||
-          found.status === "DELETING"
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        return found === undefined || found.status === "DELETED" || found.status === "DELETING"
           ? undefined
           : found;
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* control.listCodeInterpreters
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* control.listCodeInterpreters.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.codeInterpreterSummaries ?? [])
-          .find(
-            (s) =>
-              s.name === name &&
-              s.status !== "DELETED" &&
-              s.status !== "DELETING",
-          );
+          .find((s) => s.name === name && s.status !== "DELETED" && s.status !== "DELETING");
         return summary === undefined
           ? undefined
           : yield* getLiveOrUndefined(summary.codeInterpreterId);
@@ -181,9 +164,7 @@ export const CodeInterpreterProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* control.listCodeInterpreters
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* control.listCodeInterpreters.pages({}).pipe(Stream.runCollect);
             const summaries = Array.from(pages)
               .flatMap((page) => page.codeInterpreterSummaries ?? [])
               .filter((s) => s.status !== "DELETED" && s.status !== "DELETING");
@@ -198,9 +179,7 @@ export const CodeInterpreterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const ci = output?.codeInterpreterId
             ? yield* getLiveOrUndefined(output.codeInterpreterId)
-            : yield* findByName(
-                yield* createName(id, olds ?? ({} as CodeInterpreterProps)),
-              );
+            : yield* findByName(yield* createName(id, olds ?? ({} as CodeInterpreterProps)));
           if (ci === undefined) return undefined;
           const attrs = toAttributes(ci);
           const tags = yield* readAgentCoreTags(ci.codeInterpreterArn);
@@ -216,16 +195,10 @@ export const CodeInterpreterProvider = () =>
           const newName = yield* createName(id, newProps);
           if (
             oldName !== newName ||
-            (oldProps.description ?? undefined) !==
-              (newProps.description ?? undefined) ||
-            (oldProps.executionRoleArn ?? undefined) !==
-              (newProps.executionRoleArn ?? undefined) ||
-            JSON.stringify(
-              oldProps.networkConfiguration ?? { networkMode: "SANDBOX" },
-            ) !==
-              JSON.stringify(
-                newProps.networkConfiguration ?? { networkMode: "SANDBOX" },
-              )
+            (oldProps.description ?? undefined) !== (newProps.description ?? undefined) ||
+            (oldProps.executionRoleArn ?? undefined) !== (newProps.executionRoleArn ?? undefined) ||
+            JSON.stringify(oldProps.networkConfiguration ?? { networkMode: "SANDBOX" }) !==
+              JSON.stringify(newProps.networkConfiguration ?? { networkMode: "SANDBOX" })
           ) {
             return { action: "replace" } as const;
           }
@@ -260,9 +233,7 @@ export const CodeInterpreterProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
             ci =
               created === undefined
@@ -295,9 +266,7 @@ export const CodeInterpreterProvider = () =>
             })
             .pipe(
               retryWhileConflict,
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           // Deletion completes quickly (soft-delete to DELETED); wait until
           // it is out of the live set so a re-create of the same name works.
@@ -312,8 +281,7 @@ export const CodeInterpreterProvider = () =>
               ),
               Effect.repeat({
                 schedule: Schedule.fixed("3 seconds"),
-                until: (status) =>
-                  status === "DELETED" || status === "DELETE_FAILED",
+                until: (status) => status === "DELETED" || status === "DELETE_FAILED",
                 times: 20,
               }),
             );

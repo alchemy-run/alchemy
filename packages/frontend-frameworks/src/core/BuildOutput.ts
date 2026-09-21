@@ -1,9 +1,9 @@
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
-import * as NodeCrypto from "node:crypto";
 import type { NodeServeEntryOptions } from "./NodeServe.ts";
 
 /**
@@ -129,9 +129,7 @@ export const parseBuildOutput = (content: string): BuildOutput => {
     return module;
   });
   parsed.externalWorkspaces = new Set(
-    Array.isArray(parsed.externalWorkspaces)
-      ? (parsed.externalWorkspaces as Array<string>)
-      : [],
+    Array.isArray(parsed.externalWorkspaces) ? (parsed.externalWorkspaces as Array<string>) : [],
   );
   return parsed as BuildOutput;
 };

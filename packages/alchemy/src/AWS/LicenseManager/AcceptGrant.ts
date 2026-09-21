@@ -32,12 +32,7 @@ export interface AcceptGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: AcceptGrantRequest,
-    ) => Effect.Effect<
-      licensemanager.AcceptGrantResponse,
-      licensemanager.AcceptGrantError
-    >
+    ) => Effect.Effect<licensemanager.AcceptGrantResponse, licensemanager.AcceptGrantError>
   >
 > {}
-export const AcceptGrant = Binding.Service<AcceptGrant>(
-  "AWS.LicenseManager.AcceptGrant",
-);
+export const AcceptGrant = Binding.Service<AcceptGrant>("AWS.LicenseManager.AcceptGrant");

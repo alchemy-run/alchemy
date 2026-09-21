@@ -86,10 +86,7 @@ export interface WriteDns extends Binding.Service<
 export const WriteDns = Binding.Service<WriteDns>("Hetzner.DNS.WriteDns");
 
 /** Create-RRSet request, minus the zone id (bound at `WriteDns(zone)` time). */
-export type CreateRecordSetRequestInput = Omit<
-  CreateZoneRrsetRequest,
-  "id_or_name"
->;
+export type CreateRecordSetRequestInput = Omit<CreateZoneRrsetRequest, "id_or_name">;
 
 /** Update-RRSet (labels) request, minus the zone id and RRSet identity. */
 export type UpdateRecordSetRequestInput = Omit<
@@ -129,80 +126,48 @@ export interface WriteDnsClient {
   /** Create an RRSet. */
   createRecordSet(
     request: CreateRecordSetRequestInput,
-  ): Effect.Effect<
-    CreateZoneRrsetResponse,
-    CreateZoneRrsetError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<CreateZoneRrsetResponse, CreateZoneRrsetError, RuntimeContext>;
   /** Overwrite the RRSet's labels (PUT). */
   updateRecordSet(
     name: string,
     type: string,
     request?: UpdateRecordSetRequestInput,
-  ): Effect.Effect<
-    UpdateZoneRrsetResponse,
-    UpdateZoneRrsetError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<UpdateZoneRrsetResponse, UpdateZoneRrsetError, RuntimeContext>;
   /** Delete an RRSet by name and type. */
   deleteRecordSet(
     name: string,
     type: string,
-  ): Effect.Effect<
-    DeleteZoneRrsetResponse,
-    DeleteZoneRrsetError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<DeleteZoneRrsetResponse, DeleteZoneRrsetError, RuntimeContext>;
   /** Append records to an RRSet (creates the RRSet if it is missing). */
   addRecordSetRecords(
     name: string,
     type: string,
     request: AddRecordSetRecordsRequestInput,
-  ): Effect.Effect<
-    AddZoneRrsetRecordsResponse,
-    AddZoneRrsetRecordsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<AddZoneRrsetRecordsResponse, AddZoneRrsetRecordsError, RuntimeContext>;
   /** Remove records from an RRSet (deletes it if it becomes empty). */
   removeRecordSetRecords(
     name: string,
     type: string,
     request: RemoveRecordSetRecordsRequestInput,
-  ): Effect.Effect<
-    RemoveZoneRrsetRecordsResponse,
-    RemoveZoneRrsetRecordsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<RemoveZoneRrsetRecordsResponse, RemoveZoneRrsetRecordsError, RuntimeContext>;
   /** Replace every record in an existing RRSet. */
   setRecordSetRecords(
     name: string,
     type: string,
     request: SetRecordSetRecordsRequestInput,
-  ): Effect.Effect<
-    SetZoneRrsetRecordsResponse,
-    SetZoneRrsetRecordsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<SetZoneRrsetRecordsResponse, SetZoneRrsetRecordsError, RuntimeContext>;
   /** Update comments on existing records. */
   updateRecordSetRecords(
     name: string,
     type: string,
     request: UpdateRecordSetRecordsRequestInput,
-  ): Effect.Effect<
-    UpdateZoneRrsetRecordsResponse,
-    UpdateZoneRrsetRecordsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<UpdateZoneRrsetRecordsResponse, UpdateZoneRrsetRecordsError, RuntimeContext>;
   /** Change the RRSet TTL. Pass `null` to inherit the zone default. */
   changeRecordSetTtl(
     name: string,
     type: string,
     ttl: number | null,
-  ): Effect.Effect<
-    ChangeZoneRrsetTtlResponse,
-    ChangeZoneRrsetTtlError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<ChangeZoneRrsetTtlResponse, ChangeZoneRrsetTtlError, RuntimeContext>;
   /** Enable or disable change protection on the RRSet. */
   changeRecordSetProtection(
     name: string,

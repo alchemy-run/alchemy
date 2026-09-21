@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Domain } from "@/AWS/DataZone";
-import * as Test from "@/Test/Alchemy";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Domain } from "@/AWS/DataZone";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // existence. Both mean "absent".
 const findDomain = (identifier: string) =>
   datazone.getDomain({ identifier }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
   );
 
@@ -35,10 +33,7 @@ const assertDomainGone = (identifier: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -100,9 +95,7 @@ test.provider(
       expect(updated.domainId).toBe(result.domainId);
 
       const observed = yield* findDomain(result.domainId);
-      expect(observed!.description).toBe(
-        "alchemy datazone domain test (updated)",
-      );
+      expect(observed!.description).toBe("alchemy datazone domain test (updated)");
       expect(observed!.tags?.Update).toBe("yes");
 
       // 3. Destroy — domain and managed role are removed.

@@ -1,7 +1,7 @@
-import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node";
+import * as NodeNet from "node:net";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as NodeNet from "node:net";
+import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node";
 
 describe("Node utilities", () => {
   test("checkout .ts entries get the dev-mode hooks", () => {

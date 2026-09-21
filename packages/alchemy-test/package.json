@@ -2,13 +2,13 @@
   "name": "alchemy-test",
   "version": "0.0.0",
   "private": true,
-  "license": "Apache-2.0",
   "description": "Minimal Effect-native, vitest-compatible test harness and single-process runner for alchemy",
-  "type": "module",
-  "sideEffects": false,
+  "license": "Apache-2.0",
   "bin": {
     "alchemy-test": "./bin/alchemy-test.ts"
   },
+  "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",

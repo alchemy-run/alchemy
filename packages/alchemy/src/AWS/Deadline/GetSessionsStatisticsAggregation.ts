@@ -45,7 +45,6 @@ export interface GetSessionsStatisticsAggregation extends Binding.Service<
     >
   >
 > {}
-export const GetSessionsStatisticsAggregation =
-  Binding.Service<GetSessionsStatisticsAggregation>(
-    "AWS.Deadline.GetSessionsStatisticsAggregation",
-  );
+export const GetSessionsStatisticsAggregation = Binding.Service<GetSessionsStatisticsAggregation>(
+  "AWS.Deadline.GetSessionsStatisticsAggregation",
+);

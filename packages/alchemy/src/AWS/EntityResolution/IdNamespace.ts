@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryRolePropagation,
-  syncEntityResolutionTags,
-  toTagRecord,
-} from "./internal.ts";
+import { retryRolePropagation, syncEntityResolutionTags, toTagRecord } from "./internal.ts";
 
 export interface IdNamespaceProps {
   /**
@@ -119,9 +115,7 @@ export interface IdNamespace extends Resource<
  *
  * @resource
  */
-export const IdNamespace = Resource<IdNamespace>(
-  "AWS.EntityResolution.IdNamespace",
-);
+export const IdNamespace = Resource<IdNamespace>("AWS.EntityResolution.IdNamespace");
 
 export const IdNamespaceProvider = () =>
   Provider.effect(
@@ -131,29 +125,21 @@ export const IdNamespaceProvider = () =>
         id: string,
         props: { idNamespaceName?: string | undefined },
       ) {
-        return (
-          props.idNamespaceName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.idNamespaceName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get an ID namespace by name; typed not-found → undefined. */
       const getByName = Effect.fn(function* (idNamespaceName: string) {
         return yield* entityresolution
           .getIdNamespace({ idNamespaceName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
         stables: ["idNamespaceName", "idNamespaceArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.idNamespaceName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.idNamespaceName ?? (yield* createName(id, olds ?? {}));
           const namespace = yield* getByName(name);
           if (namespace === undefined) return undefined;
           const attrs = {
@@ -214,15 +200,13 @@ export const IdNamespaceProvider = () =>
           const desired = {
             description: news.description ?? undefined,
             inputSourceConfig: news.inputSourceConfig ?? undefined,
-            idMappingWorkflowProperties:
-              news.idMappingWorkflowProperties ?? undefined,
+            idMappingWorkflowProperties: news.idMappingWorkflowProperties ?? undefined,
             roleArn: news.roleArn ?? undefined,
           };
           const observed = {
             description: namespace.description ?? undefined,
             inputSourceConfig: namespace.inputSourceConfig ?? undefined,
-            idMappingWorkflowProperties:
-              namespace.idMappingWorkflowProperties ?? undefined,
+            idMappingWorkflowProperties: namespace.idMappingWorkflowProperties ?? undefined,
             roleArn: namespace.roleArn ?? undefined,
           };
           if (!deepEqual(observed, desired)) {
@@ -256,10 +240,7 @@ export const IdNamespaceProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
             );
         }),

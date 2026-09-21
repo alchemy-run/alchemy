@@ -35,10 +35,7 @@ export interface ListTargetsByRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTargetsByRuleRequest,
-    ) => Effect.Effect<
-      eventbridge.ListTargetsByRuleResponse,
-      eventbridge.ListTargetsByRuleError
-    >
+    ) => Effect.Effect<eventbridge.ListTargetsByRuleResponse, eventbridge.ListTargetsByRuleError>
   >
 > {}
 export const ListTargetsByRule = Binding.Service<ListTargetsByRule>(

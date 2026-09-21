@@ -1,18 +1,15 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -27,11 +24,7 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId?: string,
-) =>
+const readVariables = (projectId: string, environmentId: string, serviceId?: string) =>
   railway
     .variables({
       projectId,
@@ -41,9 +34,7 @@ const readVariables = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed({} as Record<string, string>)),
     );
 
 const waitUntilVariableGone = (
@@ -53,9 +44,7 @@ const waitUntilVariableGone = (
   serviceId?: string,
 ) =>
   readVariables(projectId, environmentId, serviceId).pipe(
-    Effect.map((vars) =>
-      Object.hasOwn(vars, name) ? ("found" as const) : ("gone" as const),
-    ),
+    Effect.map((vars) => (Object.hasOwn(vars, name) ? ("found" as const) : ("gone" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -64,19 +53,14 @@ const waitUntilVariableGone = (
   );
 
 const isPostgresUri = (value: string | undefined) =>
-  value !== undefined &&
-  (value.startsWith("postgres://") || value.startsWith("postgresql://"));
+  value !== undefined && (value.startsWith("postgres://") || value.startsWith("postgresql://"));
 
 test.provider(
   "upserting DATABASE_URL: Railway.ref(Db, DATABASE_URL) stores the template, not a resolved URI",
   (stack) =>
     Effect.gen(function* () {
-      expect(Railway.ref({ LogicalId: "Db" }, "DATABASE_URL")).toEqual(
-        "${{Db.DATABASE_URL}}",
-      );
-      expect(Railway.ref("shared", "SENTRY_DSN")).toEqual(
-        "${{shared.SENTRY_DSN}}",
-      );
+      expect(Railway.ref({ LogicalId: "Db" }, "DATABASE_URL")).toEqual("${{Db.DATABASE_URL}}");
+      expect(Railway.ref("shared", "SENTRY_DSN")).toEqual("${{shared.SENTRY_DSN}}");
 
       yield* stack.destroy();
 

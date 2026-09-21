@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetAccessToken}.
  */
-export interface GetAccessTokenRequest
-  extends licensemanager.GetAccessTokenRequest {}
+export interface GetAccessTokenRequest extends licensemanager.GetAccessTokenRequest {}
 
 /**
  * Runtime binding for `license-manager:GetAccessToken` — exchange a
@@ -34,12 +33,7 @@ export interface GetAccessToken extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetAccessTokenRequest,
-    ) => Effect.Effect<
-      licensemanager.GetAccessTokenResponse,
-      licensemanager.GetAccessTokenError
-    >
+    ) => Effect.Effect<licensemanager.GetAccessTokenResponse, licensemanager.GetAccessTokenError>
   >
 > {}
-export const GetAccessToken = Binding.Service<GetAccessToken>(
-  "AWS.LicenseManager.GetAccessToken",
-);
+export const GetAccessToken = Binding.Service<GetAccessToken>("AWS.LicenseManager.GetAccessToken");

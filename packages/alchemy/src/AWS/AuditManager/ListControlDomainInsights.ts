@@ -30,7 +30,6 @@ export interface ListControlDomainInsights extends Binding.Service<
   >
 > {}
 
-export const ListControlDomainInsights =
-  Binding.Service<ListControlDomainInsights>(
-    "AWS.AuditManager.ListControlDomainInsights",
-  );
+export const ListControlDomainInsights = Binding.Service<ListControlDomainInsights>(
+  "AWS.AuditManager.ListControlDomainInsights",
+);

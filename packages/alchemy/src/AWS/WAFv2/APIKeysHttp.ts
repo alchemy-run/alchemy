@@ -1,11 +1,6 @@
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Layer from "effect/Layer";
-import {
-  CreateAPIKey,
-  DeleteAPIKey,
-  GetDecryptedAPIKey,
-  ListAPIKeys,
-} from "./APIKeys.ts";
+import { CreateAPIKey, DeleteAPIKey, GetDecryptedAPIKey, ListAPIKeys } from "./APIKeys.ts";
 import { makeWafv2AccountHttpBinding } from "./BindingHttp.ts";
 
 export const CreateAPIKeyHttp = Layer.effect(

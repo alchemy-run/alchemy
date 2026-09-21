@@ -2,14 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
-
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import * as Stacks from "../../Alchemist/routes/stack.ts";
 import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { stackOutputsView } from "../components/view/StackOutputs.tsx";
-
 import { exitDeclined } from "./errors.ts";
 import {
   configPath,
@@ -65,9 +63,7 @@ const detailed = Flag.Boolean("detailed").pipe(
 );
 
 const detectDrift = Flag.Boolean("detect-drift").pipe(
-  Flag.withDescription(
-    "Detect infrastructure drift and offer to repair it before deploying",
-  ),
+  Flag.withDescription("Detect infrastructure drift and offer to repair it before deploying"),
   Flag.withDefault(false),
 );
 
@@ -98,9 +94,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
     return true;
   }
 
-  let decision: "repair" | "deploy" | "cancel" = options.yes
-    ? "repair"
-    : "cancel";
+  let decision: "repair" | "deploy" | "cancel" = options.yes ? "repair" : "cancel";
   if (!options.yes) {
     const terminal = yield* CliKit.CliKit;
     if (terminal.terminal.input) {
@@ -126,11 +120,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
             initialValue: "repair" as const,
           }),
         )
-        .pipe(
-          Effect.catchTag("TerminalCancelled", () =>
-            Effect.succeed("cancel" as const),
-          ),
-        );
+        .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
     } else {
       yield* cli.displayPlan(snapshot.repairPlan.native, {
         detailed: options.detailed,
@@ -163,11 +153,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     envFile: Option.getOrUndefined(options.envFile),
   };
 
-  const operation = options.destroy
-    ? "Destroy"
-    : options.dryRun
-      ? "Plan"
-      : "Deploy";
+  const operation = options.destroy ? "Destroy" : options.dryRun ? "Plan" : "Deploy";
   const withPlanningProgress = renderPlanning({
     operation,
     stage: options.stage,
@@ -176,9 +162,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
   if (options.detectDrift && !options.destroy) {
     const proceed = yield* detectAndMaybeRepairDrift(target, options);
     if (!proceed) {
-      yield* CliKit.accessors.output.info(
-        "Deploy aborted: drift was detected and not approved.",
-      );
+      yield* CliKit.accessors.output.info("Deploy aborted: drift was detected and not approved.");
       return yield* exitDeclined;
     }
   }
@@ -200,9 +184,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
       Effect.tap((approved) =>
         approved
           ? Effect.void
-          : CliKit.accessors.output.info(
-              `${operation} aborted: plan declined.`,
-            ),
+          : CliKit.accessors.output.info(`${operation} aborted: plan declined.`),
       ),
       Effect.catchTag("NonInteractiveTerminal", () =>
         CliKit.accessors.output
@@ -215,9 +197,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     if (!approved) return yield* exitDeclined;
   }
 
-  const result = yield* Stacks.apply(snapshot).pipe(
-    renderApply(snapshot.native, display),
-  );
+  const result = yield* Stacks.apply(snapshot).pipe(renderApply(snapshot.native, display));
   if (result !== undefined) {
     const kit = yield* CliKit.CliKit;
     yield* kit.output.print(stackOutputsView(result));

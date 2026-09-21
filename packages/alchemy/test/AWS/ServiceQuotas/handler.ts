@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as ServiceQuotas from "@/AWS/ServiceQuotas";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as ServiceQuotas from "@/AWS/ServiceQuotas";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -21,14 +21,12 @@ export default ServiceQuotasTestFunction.make(
   },
   Effect.gen(function* () {
     const getServiceQuota = yield* ServiceQuotas.GetServiceQuota();
-    const getAWSDefaultServiceQuota =
-      yield* ServiceQuotas.GetAWSDefaultServiceQuota();
+    const getAWSDefaultServiceQuota = yield* ServiceQuotas.GetAWSDefaultServiceQuota();
     const listServices = yield* ServiceQuotas.ListServices();
     const listServiceQuotas = yield* ServiceQuotas.ListServiceQuotas();
     const listRequestedServiceQuotaChangeHistoryByQuota =
       yield* ServiceQuotas.ListRequestedServiceQuotaChangeHistoryByQuota();
-    const requestServiceQuotaIncrease =
-      yield* ServiceQuotas.RequestServiceQuotaIncrease();
+    const requestServiceQuotaIncrease = yield* ServiceQuotas.RequestServiceQuotaIncrease();
 
     return {
       fetch: Effect.gen(function* () {
@@ -65,10 +63,7 @@ export default ServiceQuotasTestFunction.make(
             // The typed not-found tag round-trips as a 404 so the test can
             // assert the binding surfaces distilled's typed error union.
             Effect.catchTag("NoSuchResourceException", () =>
-              HttpServerResponse.json(
-                { tag: "NoSuchResourceException" },
-                { status: 404 },
-              ),
+              HttpServerResponse.json({ tag: "NoSuchResourceException" }, { status: 404 }),
             ),
           );
         }
@@ -93,10 +88,7 @@ export default ServiceQuotasTestFunction.make(
               }),
             ),
             Effect.catchTag("NoSuchResourceException", () =>
-              HttpServerResponse.json(
-                { tag: "NoSuchResourceException" },
-                { status: 404 },
-              ),
+              HttpServerResponse.json({ tag: "NoSuchResourceException" }, { status: 404 }),
             ),
           );
         }
@@ -126,10 +118,7 @@ export default ServiceQuotasTestFunction.make(
               }),
             ),
             Effect.catchTag("NoSuchResourceException", () =>
-              HttpServerResponse.json(
-                { tag: "NoSuchResourceException" },
-                { status: 404 },
-              ),
+              HttpServerResponse.json({ tag: "NoSuchResourceException" }, { status: 404 }),
             ),
           );
         }
@@ -153,10 +142,7 @@ export default ServiceQuotasTestFunction.make(
               }),
             ),
             Effect.catchTag("NoSuchResourceException", () =>
-              HttpServerResponse.json(
-                { tag: "NoSuchResourceException" },
-                { status: 404 },
-              ),
+              HttpServerResponse.json({ tag: "NoSuchResourceException" }, { status: 404 }),
             ),
           );
         }
@@ -186,10 +172,7 @@ export default ServiceQuotasTestFunction.make(
               }),
             ),
             Effect.catchTag("NoSuchResourceException", () =>
-              HttpServerResponse.json(
-                { tag: "NoSuchResourceException" },
-                { status: 404 },
-              ),
+              HttpServerResponse.json({ tag: "NoSuchResourceException" }, { status: 404 }),
             ),
           );
         }

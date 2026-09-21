@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AdminAccount, pinFms } from "@/AWS/FMS/AdminAccount.ts";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as fms from "@distilled.cloud/aws/fms";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { AdminAccount, pinFms } from "@/AWS/FMS/AdminAccount.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -90,9 +90,7 @@ test.provider.skipIf(!process.env.AWS_TEST_FMS)(
       // retries boundedly (~64s), so re-run destroy until it goes through.
       yield* stack
         .destroy()
-        .pipe(
-          Effect.retry({ schedule: Schedule.spaced("30 seconds"), times: 25 }),
-        );
+        .pipe(Effect.retry({ schedule: Schedule.spaced("30 seconds"), times: 25 }));
       // Offboarding propagates asynchronously — `getAdminAccount` keeps
       // returning the old admin for ~90s after disassociate succeeds.
       const after = yield* getAdmin.pipe(

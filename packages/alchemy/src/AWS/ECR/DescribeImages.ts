@@ -40,6 +40,4 @@ export interface DescribeImages extends Binding.Service<
   >
 > {}
 
-export const DescribeImages = Binding.Service<DescribeImages>(
-  "AWS.ECR.DescribeImages",
-);
+export const DescribeImages = Binding.Service<DescribeImages>("AWS.ECR.DescribeImages");

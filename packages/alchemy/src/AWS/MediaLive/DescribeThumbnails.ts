@@ -37,10 +37,7 @@ export interface DescribeThumbnails extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<medialive.DescribeThumbnailsRequest, "ChannelId">,
-    ) => Effect.Effect<
-      medialive.DescribeThumbnailsResponse,
-      medialive.DescribeThumbnailsError
-    >
+    ) => Effect.Effect<medialive.DescribeThumbnailsResponse, medialive.DescribeThumbnailsError>
   >
 > {}
 export const DescribeThumbnails = Binding.Service<DescribeThumbnails>(

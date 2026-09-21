@@ -106,9 +106,7 @@ export const consumeImagingEvents = <StreamReq = never, Req = never>(
     props.id ?? "MedicalImagingEvents",
     {
       source: ["aws.medical-imaging"],
-      ...(props.detailTypes !== undefined
-        ? { "detail-type": [...props.detailTypes] }
-        : {}),
+      ...(props.detailTypes !== undefined ? { "detail-type": [...props.detailTypes] } : {}),
       ...(props.datastoreIds !== undefined
         ? { detail: { datastoreId: [...props.datastoreIds] } }
         : {}),

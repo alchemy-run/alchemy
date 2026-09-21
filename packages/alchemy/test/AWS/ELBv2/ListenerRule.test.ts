@@ -1,20 +1,17 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2";
 import { Listener, ListenerRule, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Alchemy";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Create a path-pattern rule and a host-header rule on a listener, update the
 // path rule's condition + action in place, change its priority via
@@ -27,20 +24,16 @@ test.provider(
 
       const azResult = yield* EC2.describeAvailabilityZones({});
       const azs =
-        azResult.AvailabilityZones?.filter(
-          (az) => az.State === "available",
-        ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available").flatMap((az) =>
+          az.ZoneName ? [az.ZoneName] : [],
+        ) ?? [];
       const [az1, az2] = azs;
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
 
       const defaultVpc = yield* getDefaultVpc;
 
-      const stage = (
-        pathPriority: number,
-        pathValue: string,
-        pathTargetFixed: boolean,
-      ) =>
+      const stage = (pathPriority: number, pathValue: string, pathTargetFixed: boolean) =>
         stack.deploy(
           Effect.gen(function* () {
             const subnet1 = yield* Subnet("RSubnet1", {
@@ -121,9 +114,7 @@ test.provider(
       let rule = yield* describePath;
       expect(rule?.Priority).toBe("10");
       expect(rule?.Conditions?.[0]?.Field).toBe("path-pattern");
-      expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual([
-        "/api/*",
-      ]);
+      expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual(["/api/*"]);
       expect(rule?.Actions?.some((x) => x.Type === "forward")).toBe(true);
 
       // STAGE 2: change the path value + action (forward -> fixedResponse) in
@@ -132,21 +123,15 @@ test.provider(
 
       rule = yield* describePath;
       expect(rule?.Priority).toBe("15");
-      expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual([
-        "/v2/*",
-      ]);
-      expect(rule?.Actions?.some((x) => x.Type === "fixed-response")).toBe(
-        true,
-      );
+      expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual(["/v2/*"]);
+      expect(rule?.Actions?.some((x) => x.Type === "fixed-response")).toBe(true);
 
       yield* stack.destroy();
 
-      const after = yield* elbv2
-        .describeRules({ RuleArns: [pathRuleArn] })
-        .pipe(
-          Effect.map((r) => r.Rules?.length ?? 0),
-          Effect.catchTag("RuleNotFoundException", () => Effect.succeed(0)),
-        );
+      const after = yield* elbv2.describeRules({ RuleArns: [pathRuleArn] }).pipe(
+        Effect.map((r) => r.Rules?.length ?? 0),
+        Effect.catchTag("RuleNotFoundException", () => Effect.succeed(0)),
+      );
       expect(after).toBe(0);
     }).pipe(logLevel),
   { timeout: 600_000 },

@@ -1,18 +1,15 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   machines
@@ -127,15 +124,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const volumeGone = yield* waitUntilVolumeGone(
-        created.appName,
-        created.mounts[0]!.volumeId,
-      );
+      const volumeGone = yield* waitUntilVolumeGone(created.appName, created.mounts[0]!.volumeId);
       expect(volumeGone).toEqual("gone");
-      const machineGone = yield* waitUntilMachineGone(
-        created.appName,
-        created.machineId,
-      );
+      const machineGone = yield* waitUntilMachineGone(created.appName, created.machineId);
       expect(machineGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
@@ -193,10 +184,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilVolumeGone(
-        replaced.appName,
-        replaced.mounts[0]!.volumeId,
-      );
+      const gone = yield* waitUntilVolumeGone(replaced.appName, replaced.mounts[0]!.volumeId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
@@ -226,18 +214,12 @@ test.provider(
       expect(created.machineIds).toHaveLength(2);
       expect(created.machineIds[0]).toEqual(created.machineId);
       expect(created.replicas).toHaveLength(2);
-      expect(created.replicas[0]?.mounts[0]?.volumeId).toEqual(
-        expect.any(String),
-      );
-      expect(created.replicas[1]?.mounts[0]?.volumeId).toEqual(
-        expect.any(String),
-      );
+      expect(created.replicas[0]?.mounts[0]?.volumeId).toEqual(expect.any(String));
+      expect(created.replicas[1]?.mounts[0]?.volumeId).toEqual(expect.any(String));
       expect(created.replicas[0]?.mounts[0]?.volumeId).not.toEqual(
         created.replicas[1]?.mounts[0]?.volumeId,
       );
-      expect(created.replicas[0]?.mounts[0]?.name).toEqual(
-        created.replicas[1]?.mounts[0]?.name,
-      );
+      expect(created.replicas[0]?.mounts[0]?.name).toEqual(created.replicas[1]?.mounts[0]?.name);
 
       const left = yield* machines.getVolumeById({
         app_name: created.appName,
@@ -267,9 +249,7 @@ test.provider(
 
       expect(scaled.count).toEqual(1);
       expect(scaled.machineIds).toEqual([created.machineId]);
-      expect(scaled.mounts[0]?.volumeId).toEqual(
-        created.replicas[0]?.mounts[0]?.volumeId,
-      );
+      expect(scaled.mounts[0]?.volumeId).toEqual(created.replicas[0]?.mounts[0]?.volumeId);
 
       const extraGone = yield* waitUntilMachineGone(
         created.appName,
@@ -284,9 +264,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Fly.Machine);
       const all = yield* provider.list();
-      const found = all.find(
-        (machine) => machine.machineId === scaled.machineId,
-      );
+      const found = all.find((machine) => machine.machineId === scaled.machineId);
       expect(found).toBeDefined();
       expect(found?.count).toEqual(1);
 

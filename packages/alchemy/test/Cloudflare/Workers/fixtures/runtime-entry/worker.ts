@@ -1,6 +1,6 @@
-import { Worker } from "@/Cloudflare/Workers/Worker";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Worker } from "@/Cloudflare/Workers/Worker";
 
 export default class RuntimeEntryWorker extends Worker<RuntimeEntryWorker>()(
   "RuntimeEntryWorker",

@@ -48,7 +48,6 @@ export interface GetComplianceDetailsByConfigRule extends Binding.Service<
   >
 > {}
 
-export const GetComplianceDetailsByConfigRule =
-  Binding.Service<GetComplianceDetailsByConfigRule>(
-    "AWS.Config.GetComplianceDetailsByConfigRule",
-  );
+export const GetComplianceDetailsByConfigRule = Binding.Service<GetComplianceDetailsByConfigRule>(
+  "AWS.Config.GetComplianceDetailsByConfigRule",
+);

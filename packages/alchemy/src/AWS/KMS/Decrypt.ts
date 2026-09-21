@@ -75,9 +75,7 @@ export interface Decrypt extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: DecryptRequest,
-    ) => Effect.Effect<kms.DecryptResponse, kms.DecryptError>
+    (request: DecryptRequest) => Effect.Effect<kms.DecryptResponse, kms.DecryptError>
   >
 > {}
 

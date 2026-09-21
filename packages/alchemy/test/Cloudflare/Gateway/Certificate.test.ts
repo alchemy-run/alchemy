@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import type { CertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import type { CertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -20,10 +20,7 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 // RUN_GATEWAY_CERT_TESTS=1 to run it against an account with fresh daily budget.
 const runGatewayCertTests = !!process.env.RUN_GATEWAY_CERT_TESTS;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -40,16 +37,11 @@ const getCertificate = (accountId: string, certificateId: string) =>
 // (Cloudflare code 2027, "Certificate not found in SSL store").
 const expectGone = (accountId: string, certificateId: string) =>
   getCertificate(accountId, certificateId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "CertificateNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "CertificateNotDeleted" } as const)),
     Effect.catchTag("GatewayCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -86,13 +78,8 @@ const deployUnlessQuotaReached = (
   stack
     .deploy(eff)
     .pipe(
-      Effect.catchCause(
-        (
-          cause,
-        ): Effect.Effect<CertificateAttributes | undefined, any, never> =>
-          findQuotaError(cause)
-            ? Effect.succeed(undefined)
-            : Effect.failCause(cause),
+      Effect.catchCause((cause): Effect.Effect<CertificateAttributes | undefined, any, never> =>
+        findQuotaError(cause) ? Effect.succeed(undefined) : Effect.failCause(cause),
       ),
     );
 
@@ -212,9 +199,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Gateway.Certificate,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Gateway.Certificate);
       const all = yield* provider.list();
 
       // Always a well-typed array of Attributes scoped to this account.

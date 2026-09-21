@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup.ts";
-import * as Drift from "@/Drift.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rds from "@distilled.cloud/aws/rds";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup.ts";
+import * as Drift from "@/Drift.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -93,9 +93,7 @@ const assertGroupGone = Effect.fn(function* (name: string) {
     })
     .pipe(
       Effect.as(false),
-      Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-        Effect.succeed(true),
-      ),
+      Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(true)),
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
         times: 8,
@@ -129,9 +127,7 @@ test.provider("list enumerates the deployed DB parameter group", (stack) =>
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
-    expect(
-      all.some((g) => g.dbParameterGroupName === group.dbParameterGroupName),
-    ).toBe(true);
+    expect(all.some((g) => g.dbParameterGroupName === group.dbParameterGroupName)).toBe(true);
 
     for (const g of all) {
       expect(typeof g.dbParameterGroupName).toBe("string");
@@ -214,9 +210,7 @@ test.provider(
       const adopted = yield* stack.deploy(program);
       expect(adopted.parameters).toEqual({});
       expect(yield* userParameters(name)).toEqual({});
-      expect(
-        (yield* stack.plan(program)).resources.AdoptedParameters1589?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program)).resources.AdoptedParameters1589?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertGroupGone(name);
     }),
@@ -276,9 +270,7 @@ test.provider(
         attr: { parameters: {} },
       });
 
-      const changed = yield* stack.deploy(
-        program({ work_mem: "16384", max_connections: "250" }),
-      );
+      const changed = yield* stack.deploy(program({ work_mem: "16384", max_connections: "250" }));
       expect(changed.dbParameterGroupName).toBe(name);
       expect(changed.dbParameterGroupArn).toBe(created.dbParameterGroupArn);
       expect(changed.parameters).toEqual({
@@ -292,16 +284,14 @@ test.provider(
       expect(yield* userParameters(name)).toEqual(resetStatic.parameters);
       const afterReset = (yield* groupParameters(name)).get("max_connections");
       expect(afterReset?.Source).toBe(defaults.get("max_connections")?.Source);
-      expect(afterReset?.ParameterValue).toBe(
-        defaults.get("max_connections")?.ParameterValue,
-      );
+      expect(afterReset?.ParameterValue).toBe(defaults.get("max_connections")?.ParameterValue);
 
       const cleared = yield* stack.deploy(program());
       expect(cleared.parameters).toEqual({});
       expect(yield* userParameters(name)).toEqual({});
-      expect(
-        (yield* groupParameters(name)).get("work_mem")?.ParameterValue,
-      ).toBe(defaults.get("work_mem")?.ParameterValue);
+      expect((yield* groupParameters(name)).get("work_mem")?.ParameterValue).toBe(
+        defaults.get("work_mem")?.ParameterValue,
+      );
       yield* stack.destroy();
       yield* assertGroupGone(name);
     }),
@@ -327,18 +317,15 @@ test.provider(
       expect(parameter?.IsModifiable).toBe(true);
       if (parameter?.ParameterValue === undefined) {
         return yield* Effect.fail(
-          new Error(
-            "RDS did not report the log_autovacuum_min_duration default",
-          ),
+          new Error("RDS did not report the log_autovacuum_min_duration default"),
         );
       }
       const desired = { log_autovacuum_min_duration: parameter.ParameterValue };
       const managed = yield* stack.deploy(program(desired));
       expect(managed.parameters).toEqual(desired);
-      expect(
-        (yield* groupParameters(name)).get("log_autovacuum_min_duration")
-          ?.Source,
-      ).toBe("engine-default");
+      expect((yield* groupParameters(name)).get("log_autovacuum_min_duration")?.Source).toBe(
+        "engine-default",
+      );
       const initial = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
@@ -348,8 +335,7 @@ test.provider(
         attr: { parameters: desired },
       });
 
-      const driftedValue =
-        parameter.ParameterValue === "8192" ? "16384" : "8192";
+      const driftedValue = parameter.ParameterValue === "8192" ? "16384" : "8192";
       yield* modifyParameters(name, [
         {
           ParameterName: "log_autovacuum_min_duration",
@@ -365,8 +351,7 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
-            driftedValue &&
+          parameters.get("log_autovacuum_min_duration")?.ParameterValue === driftedValue &&
           parameters.get("max_connections")?.ParameterValue === "200",
       );
       const drift = yield* Drift.detect({
@@ -387,8 +372,7 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.Source ===
-            "engine-default" &&
+          parameters.get("log_autovacuum_min_duration")?.Source === "engine-default" &&
           parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
             desired.log_autovacuum_min_duration,
       );
@@ -437,9 +421,7 @@ test.provider(
       const adopted = yield* stack.deploy(program);
       expect(adopted.parameters).toEqual({});
       expect(yield* userParameters(name)).toEqual({});
-      expect(
-        (yield* stack.plan(program)).resources.AdoptedParameters1590?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program)).resources.AdoptedParameters1590?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertGroupGone(name);
     }),
@@ -489,8 +471,7 @@ test.provider(
       expect(clean.resources.DriftParameters1590?.action).toBe("noop");
       expect(clean.resources.StableReference1590?.action).toBe("noop");
 
-      const driftedValue =
-        desired.log_autovacuum_min_duration === "8192" ? "16384" : "8192";
+      const driftedValue = desired.log_autovacuum_min_duration === "8192" ? "16384" : "8192";
       yield* modifyParameters(name, [
         {
           ParameterName: "log_autovacuum_min_duration",
@@ -506,8 +487,7 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
-            driftedValue &&
+          parameters.get("log_autovacuum_min_duration")?.ParameterValue === driftedValue &&
           parameters.get("max_connections")?.ParameterValue === "200",
       );
       // No refresh before planning: persisted props and outputs still match.
@@ -521,15 +501,12 @@ test.provider(
 
       const repaired = yield* stack.deploy(program(desired));
       expect(repaired.group.dbParameterGroupName).toBe(name);
-      expect(repaired.group.dbParameterGroupArn).toBe(
-        created.group.dbParameterGroupArn,
-      );
+      expect(repaired.group.dbParameterGroupArn).toBe(created.group.dbParameterGroupArn);
       expect(repaired.group.parameters).toEqual(desired);
       expect(yield* userParameters(name)).toEqual(desired);
-      expect(
-        (yield* stack.plan(program(desired))).resources.DriftParameters1590
-          ?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(desired))).resources.DriftParameters1590?.action).toBe(
+        "noop",
+      );
 
       yield* resetParameters(name, [
         {
@@ -540,10 +517,8 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.Source ===
-            "engine-default" &&
-          parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
-            defaultValue,
+          parameters.get("log_autovacuum_min_duration")?.Source === "engine-default" &&
+          parameters.get("log_autovacuum_min_duration")?.ParameterValue === defaultValue,
       );
       const resetDrift = yield* stack.plan(program(desired));
       expect(resetDrift.resources.DriftParameters1590?.action).toBe("update");
@@ -570,8 +545,7 @@ test.provider(
       ]);
       yield* waitForParameters(
         name,
-        (parameters) =>
-          parameters.get("max_connections")?.ParameterValue === "200",
+        (parameters) => parameters.get("max_connections")?.ParameterValue === "200",
       );
       const omittedDrift = yield* stack.plan(program());
       expect(omittedDrift.resources.DriftParameters1590?.action).toBe("update");
@@ -579,9 +553,7 @@ test.provider(
       const cleared = yield* stack.deploy(program());
       expect(cleared.group.parameters).toEqual({});
       expect(yield* userParameters(name)).toEqual({});
-      expect(
-        (yield* stack.plan(program())).resources.DriftParameters1590?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program())).resources.DriftParameters1590?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertGroupGone(name);
       yield* assertGroupGone(created.dependent.dbParameterGroupName);
@@ -601,29 +573,23 @@ test.provider(
         });
       const created = yield* stack.deploy(program());
       const name = created.dbParameterGroupName;
-      const parameter = (yield* groupParameters(name)).get(
-        "log_autovacuum_min_duration",
-      );
+      const parameter = (yield* groupParameters(name)).get("log_autovacuum_min_duration");
       expect(parameter?.Source).toBe("engine-default");
       expect(parameter?.ApplyType).toBe("dynamic");
       expect(parameter?.IsModifiable).toBe(true);
       if (parameter?.ParameterValue === undefined) {
         return yield* Effect.fail(
-          new Error(
-            "RDS did not report the log_autovacuum_min_duration default",
-          ),
+          new Error("RDS did not report the log_autovacuum_min_duration default"),
         );
       }
       const desired = { log_autovacuum_min_duration: parameter.ParameterValue };
       yield* stack.deploy(program(desired));
-      expect(
-        (yield* groupParameters(name)).get("log_autovacuum_min_duration")
-          ?.Source,
-      ).toBe("engine-default");
-      expect(
-        (yield* stack.plan(program(desired))).resources.DefaultParameters1590
-          ?.action,
-      ).toBe("noop");
+      expect((yield* groupParameters(name)).get("log_autovacuum_min_duration")?.Source).toBe(
+        "engine-default",
+      );
+      expect((yield* stack.plan(program(desired))).resources.DefaultParameters1590?.action).toBe(
+        "noop",
+      );
       const initial = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
@@ -633,8 +599,7 @@ test.provider(
         attr: { parameters: desired },
       });
 
-      const driftedValue =
-        desired.log_autovacuum_min_duration === "8192" ? "16384" : "8192";
+      const driftedValue = desired.log_autovacuum_min_duration === "8192" ? "16384" : "8192";
       yield* modifyParameters(name, [
         {
           ParameterName: "log_autovacuum_min_duration",
@@ -645,8 +610,7 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
-          driftedValue,
+          parameters.get("log_autovacuum_min_duration")?.ParameterValue === driftedValue,
       );
       const drift = yield* stack.plan(program(desired));
       expect(drift.resources.DefaultParameters1590?.action).toBe("update");
@@ -667,16 +631,14 @@ test.provider(
       yield* waitForParameters(
         name,
         (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.Source ===
-            "engine-default" &&
+          parameters.get("log_autovacuum_min_duration")?.Source === "engine-default" &&
           parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
             desired.log_autovacuum_min_duration,
       );
       expect(yield* userParameters(name)).toEqual({});
-      expect(
-        (yield* stack.plan(program(desired))).resources.DefaultParameters1590
-          ?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(desired))).resources.DefaultParameters1590?.action).toBe(
+        "noop",
+      );
       const reset = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
@@ -732,21 +694,15 @@ test.provider(
 
       const recreated = yield* stack.deploy(program);
       expect(recreated.group.dbParameterGroupName).toBe(name);
-      expect(recreated.group.dbParameterGroupArn).toBe(
-        created.group.dbParameterGroupArn,
-      );
-      expect(recreated.dependent.dbParameterGroupName).toBe(
-        created.dependent.dbParameterGroupName,
-      );
+      expect(recreated.group.dbParameterGroupArn).toBe(created.group.dbParameterGroupArn);
+      expect(recreated.dependent.dbParameterGroupName).toBe(created.dependent.dbParameterGroupName);
       const live = yield* rds.describeDBParameterGroups({
         DBParameterGroupName: name,
       });
       expect(live.DBParameterGroups?.[0]?.DBParameterGroupArn).toBe(
         created.group.dbParameterGroupArn,
       );
-      expect(
-        (yield* stack.plan(program)).resources.MissingReference1590?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program)).resources.MissingReference1590?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertGroupGone(name);
       yield* assertGroupGone(created.dependent.dbParameterGroupName);

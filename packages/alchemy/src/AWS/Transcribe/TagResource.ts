@@ -29,12 +29,7 @@ export interface TagResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.TagResourceRequest,
-    ) => Effect.Effect<
-      transcribe.TagResourceResponse,
-      transcribe.TagResourceError
-    >
+    ) => Effect.Effect<transcribe.TagResourceResponse, transcribe.TagResourceError>
   >
 > {}
-export const TagResource = Binding.Service<TagResource>(
-  "AWS.Transcribe.TagResource",
-);
+export const TagResource = Binding.Service<TagResource>("AWS.Transcribe.TagResource");

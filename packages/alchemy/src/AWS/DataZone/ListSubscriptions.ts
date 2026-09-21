@@ -34,10 +34,7 @@ export interface ListSubscriptions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSubscriptionsRequest,
-    ) => Effect.Effect<
-      datazone.ListSubscriptionsOutput,
-      datazone.ListSubscriptionsError
-    >
+    ) => Effect.Effect<datazone.ListSubscriptionsOutput, datazone.ListSubscriptionsError>
   >
 > {}
 export const ListSubscriptions = Binding.Service<ListSubscriptions>(

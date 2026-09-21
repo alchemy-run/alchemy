@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import { describe, expect } from "alchemy-test";
@@ -14,13 +9,15 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The worker echoes the version-key header the transform rule sets, so a
 // plain fetch proves the rule rewrote the request end-to-end.
@@ -39,9 +36,7 @@ const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone;
 });
@@ -51,20 +46,13 @@ const resolveZone = Effect.gen(function* () {
  * `{ description, expression, value }` (value = the header-value
  * expression), sorted by description.
  */
-const listAffinityRules = Effect.fn(function* (
-  zoneId: string,
-  scriptName: string,
-) {
+const listAffinityRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
     .pipe(Effect.catch(() => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? [])
     .flatMap((rule) => {
-      if (
-        !(rule.description ?? "").startsWith(
-          `alchemy:worker:${scriptName}:affinity`,
-        )
-      ) {
+      if (!(rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:affinity`)) {
         return [];
       }
       const headers =
@@ -83,10 +71,7 @@ const listAffinityRules = Effect.fn(function* (
         {
           description: rule.description as string,
           expression: rule.expression ?? "",
-          value:
-            typeof header?.expression === "string"
-              ? header.expression
-              : undefined,
+          value: typeof header?.expression === "string" ? header.expression : undefined,
         },
       ];
     })
@@ -175,9 +160,7 @@ const expectBody = Effect.fn(function* (
         Effect.flatMap((body) =>
           response.status === 200 && check(body)
             ? Effect.void
-            : Effect.fail(
-                new BodyMismatch({ url, body: `${response.status}: ${body}` }),
-              ),
+            : Effect.fail(new BodyMismatch({ url, body: `${response.status}: ${body}` })),
         ),
       ),
     ),
@@ -191,180 +174,170 @@ const expectBody = Effect.fn(function* (
 });
 
 // These lifecycle tests mutate the same zone-level transform ruleset.
-describe
-  .skipIf(!!process.env.FAST)
-  .sequential("Cloudflare.Worker version affinity", () => {
-    test.provider(
-      "affinity rules converge across sources and clean up on destroy",
-      (stack) =>
-        Effect.gen(function* () {
-          const zone = yield* resolveZone;
-          const host = `wa-b-${suffix}.${zoneName}`;
-          const routeHost = `*.wa-rt-${suffix}.${zoneName}`;
+describe.skipIf(!!process.env.FAST).sequential("Cloudflare.Worker version affinity", () => {
+  test.provider(
+    "affinity rules converge across sources and clean up on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zone = yield* resolveZone;
+        const host = `wa-b-${suffix}.${zoneName}`;
+        const routeHost = `*.wa-rt-${suffix}.${zoneName}`;
 
-          yield* stack.destroy();
+        yield* stack.destroy();
 
-          const deploy = (
-            affinity: Cloudflare.WorkerVersionAffinity | undefined,
-          ) =>
-            stack.deploy(
-              Effect.gen(function* () {
-                return yield* Cloudflare.Worker("AffinityWorker", {
-                  script,
-                  workersDev: false,
-                  domain: host,
-                  routes: [{ pattern: `${routeHost}/*` }],
-                  version: { traffic: 50, affinity },
-                });
-              }),
-            );
-
-          // Sticky by session cookie, falling back to sticky IP: one rule
-          // per condition, scoped to this Worker's hostnames in the zone.
-          const v1 = yield* deploy({ cookie: "session_id", ip: true });
-          expect(v1.affinityZoneIds).toEqual([zone.id]);
-          const prefix = `alchemy:worker:${v1.workerName}:affinity`;
-          const hostExpr = `(http.host eq "${host}" or http.host wildcard "${routeHost}")`;
-          expect(yield* listAffinityRules(zone.id, v1.workerName)).toEqual([
-            {
-              description: `${prefix}:ip`,
-              expression: `${hostExpr} and not (len(http.request.cookies["session_id"]) > 0)`,
-              value: "to_string(ip.src)",
-            },
-            {
-              description: `${prefix}:key`,
-              expression: `${hostExpr} and len(http.request.cookies["session_id"]) > 0`,
-              value: `http.request.cookies["session_id"][0]`,
-            },
-          ]);
-
-          // The rule rewrites live zone traffic: the worker echoes the
-          // version-key header, so a request carrying the cookie echoes the
-          // cookie value and a bare request echoes the client IP.
-          const client = yield* domainClient(host);
-          yield* expectBody(
-            client,
-            `https://${host}`,
-            { cookie: "session_id=alchemy-test-key" },
-            (body) => body === "alchemy-test-key",
-            "5 seconds",
-          );
-          yield* expectBody(
-            client,
-            `https://${host}`,
-            {},
-            (body) => body !== "no-key" && /^[0-9a-fA-F.:]+$/.test(body),
-          );
-
-          // Switching the source converges in place: the header rule
-          // replaces the cookie rule and the IP fallback goes away.
-          const v2 = yield* deploy({ header: "X-User-Id" });
-          expect(v2.affinityZoneIds).toEqual([zone.id]);
-          expect(yield* listAffinityRules(zone.id, v2.workerName)).toEqual([
-            {
-              description: `${prefix}:key`,
-              expression: `${hostExpr} and len(http.request.headers["x-user-id"]) > 0`,
-              value: `http.request.headers["x-user-id"][0]`,
-            },
-          ]);
-
-          // Removing affinity removes the rules while the rollout continues.
-          const v3 = yield* deploy(undefined);
-          expect(v3.affinityZoneIds).toBeUndefined();
-          expect(yield* listAffinityRules(zone.id, v3.workerName)).toEqual([]);
-
-          // Re-add, then destroy — teardown must remove the rules too.
-          const v4 = yield* deploy({ cookie: "session_id" });
-          expect(yield* listAffinityRules(zone.id, v4.workerName)).toHaveLength(
-            1,
-          );
-          yield* stack.destroy();
-          expect(yield* listAffinityRules(zone.id, v4.workerName)).toEqual([]);
-        }).pipe(logLevel),
-      { timeout: 600_000 },
-    );
-
-    test.provider(
-      "rejects affinity on a workers.dev-only worker",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-
-          const error = yield* stack
-            .deploy(
-              Effect.gen(function* () {
-                return yield* Cloudflare.Worker("DevOnlyAffinity", {
-                  script,
-                  version: { traffic: 50, affinity: { cookie: "session_id" } },
-                });
-              }),
-            )
-            .pipe(Effect.flip);
-
-          expect(error).toBeInstanceOf(WorkerVersionConfigError);
-          expect(String(error)).toContain("zone Transform Rule");
-
-          yield* stack.destroy();
-        }).pipe(logLevel),
-      { timeout: 180_000 },
-    );
-
-    test.provider(
-      "a canary version worker pins users on the parent's zone",
-      (stack) =>
-        Effect.gen(function* () {
-          const zone = yield* resolveZone;
-          const host = `wa-p-${suffix}.${zoneName}`;
-
-          yield* stack.destroy();
-
-          const parentWorker = (marker: string) =>
-            Cloudflare.Worker("AffinityParent", {
-              script: `export default { fetch() { return new Response("${marker}"); } };`,
-              workersDev: false,
-              domain: host,
-            });
-
-          // Parent + canary in one stack: the canary carries the affinity,
-          // and the rule lands on the parent's zone under the parent's name.
-          const v1 = yield* stack.deploy(
+        const deploy = (affinity: Cloudflare.WorkerVersionAffinity | undefined) =>
+          stack.deploy(
             Effect.gen(function* () {
-              const parent = yield* parentWorker("parent-v1");
-              const canary = yield* Cloudflare.Worker("AffinityCanary", {
+              return yield* Cloudflare.Worker("AffinityWorker", {
                 script,
-                version: {
-                  parent,
-                  traffic: 25,
-                  affinity: { cookie: "session_id" },
-                },
+                workersDev: false,
+                domain: host,
+                routes: [{ pattern: `${routeHost}/*` }],
+                version: { traffic: 50, affinity },
               });
-              return { parent, canary };
             }),
           );
-          expect(v1.canary.affinityZoneIds).toEqual([zone.id]);
-          const rules = yield* listAffinityRules(zone.id, v1.parent.workerName);
-          expect(rules).toHaveLength(1);
-          expect(rules[0].description).toEqual(
-            `alchemy:worker:${v1.parent.workerName}:affinity:key`,
-          );
-          expect(rules[0].expression).toEqual(
-            `http.host eq "${host}" and len(http.request.cookies["session_id"]) > 0`,
-          );
 
-          // Releasing the canary deletes the version resource — its delete
-          // must also clear the rules it owned on the parent's zone.
-          const v2 = yield* stack.deploy(
+        // Sticky by session cookie, falling back to sticky IP: one rule
+        // per condition, scoped to this Worker's hostnames in the zone.
+        const v1 = yield* deploy({ cookie: "session_id", ip: true });
+        expect(v1.affinityZoneIds).toEqual([zone.id]);
+        const prefix = `alchemy:worker:${v1.workerName}:affinity`;
+        const hostExpr = `(http.host eq "${host}" or http.host wildcard "${routeHost}")`;
+        expect(yield* listAffinityRules(zone.id, v1.workerName)).toEqual([
+          {
+            description: `${prefix}:ip`,
+            expression: `${hostExpr} and not (len(http.request.cookies["session_id"]) > 0)`,
+            value: "to_string(ip.src)",
+          },
+          {
+            description: `${prefix}:key`,
+            expression: `${hostExpr} and len(http.request.cookies["session_id"]) > 0`,
+            value: `http.request.cookies["session_id"][0]`,
+          },
+        ]);
+
+        // The rule rewrites live zone traffic: the worker echoes the
+        // version-key header, so a request carrying the cookie echoes the
+        // cookie value and a bare request echoes the client IP.
+        const client = yield* domainClient(host);
+        yield* expectBody(
+          client,
+          `https://${host}`,
+          { cookie: "session_id=alchemy-test-key" },
+          (body) => body === "alchemy-test-key",
+          "5 seconds",
+        );
+        yield* expectBody(
+          client,
+          `https://${host}`,
+          {},
+          (body) => body !== "no-key" && /^[0-9a-fA-F.:]+$/.test(body),
+        );
+
+        // Switching the source converges in place: the header rule
+        // replaces the cookie rule and the IP fallback goes away.
+        const v2 = yield* deploy({ header: "X-User-Id" });
+        expect(v2.affinityZoneIds).toEqual([zone.id]);
+        expect(yield* listAffinityRules(zone.id, v2.workerName)).toEqual([
+          {
+            description: `${prefix}:key`,
+            expression: `${hostExpr} and len(http.request.headers["x-user-id"]) > 0`,
+            value: `http.request.headers["x-user-id"][0]`,
+          },
+        ]);
+
+        // Removing affinity removes the rules while the rollout continues.
+        const v3 = yield* deploy(undefined);
+        expect(v3.affinityZoneIds).toBeUndefined();
+        expect(yield* listAffinityRules(zone.id, v3.workerName)).toEqual([]);
+
+        // Re-add, then destroy — teardown must remove the rules too.
+        const v4 = yield* deploy({ cookie: "session_id" });
+        expect(yield* listAffinityRules(zone.id, v4.workerName)).toHaveLength(1);
+        yield* stack.destroy();
+        expect(yield* listAffinityRules(zone.id, v4.workerName)).toEqual([]);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
+
+  test.provider(
+    "rejects affinity on a workers.dev-only worker",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const error = yield* stack
+          .deploy(
             Effect.gen(function* () {
-              const parent = yield* parentWorker("parent-v1");
-              return { parent };
+              return yield* Cloudflare.Worker("DevOnlyAffinity", {
+                script,
+                version: { traffic: 50, affinity: { cookie: "session_id" } },
+              });
             }),
-          );
-          expect(
-            yield* listAffinityRules(zone.id, v2.parent.workerName),
-          ).toEqual([]);
+          )
+          .pipe(Effect.flip);
 
-          yield* stack.destroy();
-        }).pipe(logLevel),
-      { timeout: 420_000 },
-    );
-  });
+        expect(error).toBeInstanceOf(WorkerVersionConfigError);
+        expect(String(error)).toContain("zone Transform Rule");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
+    "a canary version worker pins users on the parent's zone",
+    (stack) =>
+      Effect.gen(function* () {
+        const zone = yield* resolveZone;
+        const host = `wa-p-${suffix}.${zoneName}`;
+
+        yield* stack.destroy();
+
+        const parentWorker = (marker: string) =>
+          Cloudflare.Worker("AffinityParent", {
+            script: `export default { fetch() { return new Response("${marker}"); } };`,
+            workersDev: false,
+            domain: host,
+          });
+
+        // Parent + canary in one stack: the canary carries the affinity,
+        // and the rule lands on the parent's zone under the parent's name.
+        const v1 = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* parentWorker("parent-v1");
+            const canary = yield* Cloudflare.Worker("AffinityCanary", {
+              script,
+              version: {
+                parent,
+                traffic: 25,
+                affinity: { cookie: "session_id" },
+              },
+            });
+            return { parent, canary };
+          }),
+        );
+        expect(v1.canary.affinityZoneIds).toEqual([zone.id]);
+        const rules = yield* listAffinityRules(zone.id, v1.parent.workerName);
+        expect(rules).toHaveLength(1);
+        expect(rules[0].description).toEqual(`alchemy:worker:${v1.parent.workerName}:affinity:key`);
+        expect(rules[0].expression).toEqual(
+          `http.host eq "${host}" and len(http.request.cookies["session_id"]) > 0`,
+        );
+
+        // Releasing the canary deletes the version resource — its delete
+        // must also clear the rules it owned on the parent's zone.
+        const v2 = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* parentWorker("parent-v1");
+            return { parent };
+          }),
+        );
+        expect(yield* listAffinityRules(zone.id, v2.parent.workerName)).toEqual([]);
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 420_000 },
+  );
+});

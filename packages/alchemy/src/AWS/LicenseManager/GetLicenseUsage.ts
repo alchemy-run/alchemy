@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetLicenseUsage}.
  */
-export interface GetLicenseUsageRequest
-  extends licensemanager.GetLicenseUsageRequest {}
+export interface GetLicenseUsageRequest extends licensemanager.GetLicenseUsageRequest {}
 
 /**
  * Runtime binding for `license-manager:GetLicenseUsage` — read the
@@ -34,10 +33,7 @@ export interface GetLicenseUsage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetLicenseUsageRequest,
-    ) => Effect.Effect<
-      licensemanager.GetLicenseUsageResponse,
-      licensemanager.GetLicenseUsageError
-    >
+    ) => Effect.Effect<licensemanager.GetLicenseUsageResponse, licensemanager.GetLicenseUsageError>
   >
 > {}
 export const GetLicenseUsage = Binding.Service<GetLicenseUsage>(

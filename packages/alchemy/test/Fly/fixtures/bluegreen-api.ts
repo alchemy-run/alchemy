@@ -1,9 +1,9 @@
-import * as Fly from "@/Fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export const Site = Fly.App("Site");
 export class Api extends Fly.Service<Api>()("Api") {}
@@ -48,8 +48,7 @@ export const apiLayer = (version: string) =>
         fetch: Effect.gen(function* () {
           const version = yield* Config.String("VERSION").pipe(Effect.orDie);
           const request = yield* HttpServerRequest;
-          if (request.url.startsWith("/health"))
-            return HttpServerResponse.text("ok");
+          if (request.url.startsWith("/health")) return HttpServerResponse.text("ok");
           if (request.url.startsWith("/active"))
             return HttpServerResponse.text(String(yield* Ref.get(active)));
           if (request.url.startsWith("/slow")) {

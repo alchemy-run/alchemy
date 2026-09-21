@@ -1,24 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as pipes from "@distilled.cloud/aws/pipes";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const unwrap = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const firstFilterPattern = (
-  described: pipes.DescribePipeResponse,
-): string | undefined =>
+const firstFilterPattern = (described: pipes.DescribePipeResponse): string | undefined =>
   unwrap(described.SourceParameters?.FilterCriteria?.Filters?.[0]?.Pattern);
 
 // Read/receive statements the pipes.amazonaws.com role needs on the source
@@ -41,11 +33,7 @@ const pipeRole = (source: AWS.SQS.Queue, target: AWS.SQS.Queue) =>
         Statement: [
           {
             Effect: "Allow",
-            Action: [
-              "sqs:ReceiveMessage",
-              "sqs:DeleteMessage",
-              "sqs:GetQueueAttributes",
-            ],
+            Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
             Resource: [source.queueArn],
           },
         ],
@@ -102,9 +90,7 @@ describe("AWS.Pipes.Pipe", () => {
         });
         expect(describedA.CurrentState).toEqual("RUNNING");
         expect(firstFilterPattern(describedA)).toEqual(filterA);
-        expect(
-          describedA.SourceParameters?.SqsQueueParameters?.BatchSize,
-        ).toEqual(1);
+        expect(describedA.SourceParameters?.SqsQueueParameters?.BatchSize).toEqual(1);
 
         // Update the filter criteria in place (same source → no replace).
         const updated = yield* deployPipe(filterB);
@@ -198,12 +184,10 @@ describe("AWS.Pipes.Pipe", () => {
         expect(described.Source).toEqual(second.sourceB.queueArn);
 
         // The replaced pipe is deleted.
-        const oldGone = yield* pipes
-          .describePipe({ Name: first.pipe.pipeName })
-          .pipe(
-            Effect.map(() => false),
-            Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
-          );
+        const oldGone = yield* pipes.describePipe({ Name: first.pipe.pipeName }).pipe(
+          Effect.map(() => false),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
+        );
         expect(oldGone).toBe(true);
 
         yield* stack.destroy();

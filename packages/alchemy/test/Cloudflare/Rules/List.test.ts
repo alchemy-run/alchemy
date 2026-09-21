@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as rules from "@distilled.cloud/cloudflare/rules";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -8,13 +5,13 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -48,10 +45,7 @@ const expectGone = (accountId: string, listId: string) =>
     Effect.catchTag("ListNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ListNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -65,10 +59,7 @@ test.provider("create and delete an ip list with default name", (stack) =>
       Cloudflare.Rules.List("DefaultList", {
         kind: "ip",
         description: "alchemy rules list create test",
-        items: [
-          { ip: "203.0.113.7", comment: "scanner" },
-          { ip: "198.51.100.0/24" },
-        ],
+        items: [{ ip: "203.0.113.7", comment: "scanner" }, { ip: "198.51.100.0/24" }],
       }),
     );
 
@@ -85,9 +76,7 @@ test.provider("create and delete an ip list with default name", (stack) =>
     expect(live.kind).toEqual("ip");
 
     const items = yield* getItems(accountId, list.listId);
-    const ips = items
-      .map((item) => ("ip" in item ? item.ip : undefined))
-      .sort();
+    const ips = items.map((item) => ("ip" in item ? item.ip : undefined)).sort();
     expect(ips).toEqual(["198.51.100.0/24", "203.0.113.7"]);
 
     yield* stack.destroy();
@@ -130,16 +119,10 @@ test.provider("update description and items in place (same listId)", (stack) =>
     expect(updated.numItems).toEqual(2);
 
     const items = yield* getItems(accountId, updated.listId);
-    const ips = items
-      .map((item) => ("ip" in item ? item.ip : undefined))
-      .sort();
+    const ips = items.map((item) => ("ip" in item ? item.ip : undefined)).sort();
     expect(ips).toEqual(["192.0.2.0/24", "203.0.113.2"]);
-    const kept = items.find(
-      (item) => "ip" in item && item.ip === "203.0.113.2",
-    );
-    expect(kept && "comment" in kept ? kept.comment : undefined).toEqual(
-      "kept",
-    );
+    const kept = items.find((item) => "ip" in item && item.ip === "203.0.113.2");
+    expect(kept && "comment" in kept ? kept.comment : undefined).toEqual("kept");
 
     // Redeploying identical props is a no-op (still the same list).
     const noop = yield* stack.deploy(

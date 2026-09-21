@@ -28,12 +28,7 @@ export interface ListResourceTypes extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ram.ListResourceTypesRequest,
-    ) => Effect.Effect<
-      ram.ListResourceTypesResponse,
-      ram.ListResourceTypesError
-    >
+    ) => Effect.Effect<ram.ListResourceTypesResponse, ram.ListResourceTypesError>
   >
 > {}
-export const ListResourceTypes = Binding.Service<ListResourceTypes>(
-  "AWS.RAM.ListResourceTypes",
-);
+export const ListResourceTypes = Binding.Service<ListResourceTypes>("AWS.RAM.ListResourceTypes");

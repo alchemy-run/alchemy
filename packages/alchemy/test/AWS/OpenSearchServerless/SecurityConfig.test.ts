@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { SecurityConfig } from "@/AWS/OpenSearchServerless";
-import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { SecurityConfig } from "@/AWS/OpenSearchServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -85,12 +85,8 @@ test.provider(
         id: created.config.configId,
       });
       expect(observed.securityConfigDetail?.type).toBe("saml");
-      expect(observed.securityConfigDetail?.samlOptions?.sessionTimeout).toBe(
-        120,
-      );
-      expect(observed.securityConfigDetail?.samlOptions?.groupAttribute).toBe(
-        "groups",
-      );
+      expect(observed.securityConfigDetail?.samlOptions?.sessionTimeout).toBe(120);
+      expect(observed.securityConfigDetail?.samlOptions?.groupAttribute).toBe("groups");
 
       // No-op redeploy: version must not change.
       const noop = yield* deployConfig("alchemy test saml config");
@@ -99,18 +95,13 @@ test.provider(
       // Update the SAML session timeout (a samlOptions change is what bumps
       // the config version — description-only updates keep it, verified
       // against the live API) and the description.
-      const updated = yield* deployConfig(
-        "alchemy test saml config v2",
-        "3 hours",
-      );
+      const updated = yield* deployConfig("alchemy test saml config v2", "3 hours");
       expect(updated.config.configVersion).not.toBe(initialVersion);
       expect(updated.config.description).toBe("alchemy test saml config v2");
       const observedUpdated = yield* aoss.getSecurityConfig({
         id: updated.config.configId,
       });
-      expect(
-        observedUpdated.securityConfigDetail?.samlOptions?.sessionTimeout,
-      ).toBe(180);
+      expect(observedUpdated.securityConfigDetail?.samlOptions?.sessionTimeout).toBe(180);
 
       // Destroy and verify deletion out-of-band.
       const configId = created.config.configId;

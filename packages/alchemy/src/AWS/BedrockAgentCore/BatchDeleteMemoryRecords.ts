@@ -50,7 +50,6 @@ export interface BatchDeleteMemoryRecords extends Binding.Service<
     >
   >
 > {}
-export const BatchDeleteMemoryRecords =
-  Binding.Service<BatchDeleteMemoryRecords>(
-    "AWS.BedrockAgentCore.BatchDeleteMemoryRecords",
-  );
+export const BatchDeleteMemoryRecords = Binding.Service<BatchDeleteMemoryRecords>(
+  "AWS.BedrockAgentCore.BatchDeleteMemoryRecords",
+);

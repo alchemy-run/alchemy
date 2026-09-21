@@ -1,6 +1,3 @@
-import * as CloudFront from "@/AWS/CloudFront";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CloudFront from "@/AWS/CloudFront";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -62,8 +62,7 @@ export default CloudFrontTestFunction.make(
       },
     });
 
-    const createInvalidation =
-      yield* CloudFront.CreateInvalidation(distribution);
+    const createInvalidation = yield* CloudFront.CreateInvalidation(distribution);
     const getInvalidation = yield* CloudFront.GetInvalidation(distribution);
     const listInvalidations = yield* CloudFront.ListInvalidations(distribution);
 
@@ -109,20 +108,13 @@ export default CloudFrontTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/invalidations") {
-          const response = yield* listInvalidations({}).pipe(
-            Effect.retry(authorizationPolicy),
-          );
+          const response = yield* listInvalidations({}).pipe(Effect.retry(authorizationPolicy));
           return yield* HttpServerResponse.json({
-            invalidationIds: (response.InvalidationList?.Items ?? []).map(
-              (item) => item.Id,
-            ),
+            invalidationIds: (response.InvalidationList?.Items ?? []).map((item) => item.Id),
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

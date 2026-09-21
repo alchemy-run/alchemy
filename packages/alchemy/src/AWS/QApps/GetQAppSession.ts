@@ -41,6 +41,4 @@ export interface GetQAppSession extends Binding.Service<
   >
 > {}
 
-export const GetQAppSession = Binding.Service<GetQAppSession>(
-  "AWS.QApps.GetQAppSession",
-);
+export const GetQAppSession = Binding.Service<GetQAppSession>("AWS.QApps.GetQAppSession");

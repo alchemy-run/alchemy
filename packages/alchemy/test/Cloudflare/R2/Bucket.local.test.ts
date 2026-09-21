@@ -1,7 +1,3 @@
-import { Action } from "@/Action";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,7 +7,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import { Action } from "@/Action";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command (see
@@ -21,10 +21,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -44,10 +41,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -74,10 +68,7 @@ test.provider(
             forceDestroy: true,
           });
           const worker = yield* Cloudflare.Worker("r2-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/r2-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/r2-local-worker.ts"),
             env: { BUCKET: bucket },
           });
           return { bucket, worker };
@@ -89,9 +80,7 @@ test.provider(
       expect(deployed.bucket.bucketName).toMatch(/^dev:/);
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip`,
-      )) as {
+      const body = (yield* getJsonReady(`${deployed.worker.url}/roundtrip`)) as {
         text: string;
         etag: string | null;
         size: number | null;
@@ -156,10 +145,7 @@ test.provider(
           const seeded = yield* Seed({});
 
           const worker = yield* Cloudflare.Worker("r2-action-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/r2-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/r2-local-worker.ts"),
             env: { BUCKET: bucket },
           });
           return { bucket, worker, seeded };
@@ -174,9 +160,9 @@ test.provider(
 
       // The worker's native binding reads the same simulator storage the
       // Action's gateway wrote to.
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/get?key=seeded.txt`,
-      )) as { text: string | null };
+      const body = (yield* getJsonReady(`${deployed.worker.url}/get?key=seeded.txt`)) as {
+        text: string | null;
+      };
       expect(body.text).toBe("from-action");
 
       yield* stack.destroy();
@@ -203,10 +189,7 @@ test.provider(
             forceDestroy: true,
           }).pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("r2-live-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/r2-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/r2-local-worker.ts"),
             env: { BUCKET: bucket },
           });
           return { bucket, worker };
@@ -235,12 +218,10 @@ test.provider(
       yield* stack.destroy();
 
       // Destroy emptied and deleted the real bucket (stamped live mode).
-      const gone = yield* r2
-        .getBucket({ accountId, bucketName: deployed.bucket.bucketName })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-        );
+      const gone = yield* r2.getBucket({ accountId, bucketName: deployed.bucket.bucketName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 120_000 },

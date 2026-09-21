@@ -6,10 +6,7 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link ListCategories} — `instanceId` is injected from the bound Q App.
  */
-export interface ListCategoriesRequest extends Omit<
-  qapps.ListCategoriesInput,
-  "instanceId"
-> {}
+export interface ListCategoriesRequest extends Omit<qapps.ListCategoriesInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:ListCategories`.
@@ -41,6 +38,4 @@ export interface ListCategories extends Binding.Service<
   >
 > {}
 
-export const ListCategories = Binding.Service<ListCategories>(
-  "AWS.QApps.ListCategories",
-);
+export const ListCategories = Binding.Service<ListCategories>("AWS.QApps.ListCategories");

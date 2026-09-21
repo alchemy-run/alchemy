@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create and delete index with explicit dimensions", (stack) =>
   Effect.gen(function* () {
@@ -134,16 +131,11 @@ test.provider("list enumerates the deployed index", (stack) =>
 const waitForDelete = (accountId: string, indexName: string) =>
   vectorize.getIndex({ accountId, indexName }).pipe(
     Effect.flatMap((index) =>
-      index.name === indexName
-        ? Effect.fail({ _tag: "IndexNotDeleted" } as const)
-        : Effect.void,
+      index.name === indexName ? Effect.fail({ _tag: "IndexNotDeleted" } as const) : Effect.void,
     ),
     Effect.catchTag(["NotFound", "Gone"], () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "IndexNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

@@ -29,12 +29,7 @@ export interface GetTemplate extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<cloudformation.GetTemplateInput, "StackName">,
-    ) => Effect.Effect<
-      cloudformation.GetTemplateOutput,
-      cloudformation.GetTemplateError
-    >
+    ) => Effect.Effect<cloudformation.GetTemplateOutput, cloudformation.GetTemplateError>
   >
 > {}
-export const GetTemplate = Binding.Service<GetTemplate>(
-  "AWS.CloudFormation.GetTemplate",
-);
+export const GetTemplate = Binding.Service<GetTemplate>("AWS.CloudFormation.GetTemplate");

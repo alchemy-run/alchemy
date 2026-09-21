@@ -18,9 +18,7 @@ export const packageWebsiteInChild = Effect.fn(
     yield* fs.writeFileString(inputPath, JSON.stringify(props));
     const runner = yield* path.fromFileUrl(
       new URL(
-        import.meta.url.endsWith(".ts")
-          ? "./PackageRunner.ts"
-          : "./PackageRunner.js",
+        import.meta.url.endsWith(".ts") ? "./PackageRunner.ts" : "./PackageRunner.js",
         import.meta.url,
       ),
     );
@@ -29,10 +27,7 @@ export const packageWebsiteInChild = Effect.fn(
       [
         "--max-old-space-size=1536",
         ...(runner.endsWith(".ts")
-          ? [
-              "--experimental-transform-types",
-              "--no-warnings=ExperimentalWarning",
-            ]
+          ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
           : []),
         runner,
         inputPath,
@@ -41,8 +36,7 @@ export const packageWebsiteInChild = Effect.fn(
       { stdin: "ignore", stdout: "ignore", stderr: "inherit" },
     );
     const code = yield* child.exitCode;
-    if (code !== 0)
-      return yield* Effect.fail(new Error(`Website packaging exited ${code}`));
+    if (code !== 0) return yield* Effect.fail(new Error(`Website packaging exited ${code}`));
     const archive = yield* fs.readFile(outputPath);
     return { archive, hash: yield* sha256(archive) };
   },

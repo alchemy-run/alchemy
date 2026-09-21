@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetReservationCoverage}.
  */
-export interface GetReservationCoverageRequest
-  extends ce.GetReservationCoverageRequest {}
+export interface GetReservationCoverageRequest extends ce.GetReservationCoverageRequest {}
 
 /**
  * Runtime binding for `ce:GetReservationCoverage`.
@@ -36,10 +35,7 @@ export interface GetReservationCoverage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetReservationCoverageRequest,
-    ) => Effect.Effect<
-      ce.GetReservationCoverageResponse,
-      ce.GetReservationCoverageError
-    >
+    ) => Effect.Effect<ce.GetReservationCoverageResponse, ce.GetReservationCoverageError>
   >
 > {}
 

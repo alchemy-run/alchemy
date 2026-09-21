@@ -89,9 +89,7 @@ export const makeOmicsResourceHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${res.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${res.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({ ...request, [options.key]: yield* Id } as I);
       });
     });

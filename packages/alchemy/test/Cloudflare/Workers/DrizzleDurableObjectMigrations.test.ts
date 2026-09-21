@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DrizzleDurableObjectWorker from "./fixtures/drizzle-do/worker.ts";
 
@@ -60,9 +60,7 @@ for (const dev of [true, false]) {
             Effect.flatMap((body) =>
               body.includes(`"ok":true`)
                 ? Effect.succeed((JSON.parse(body) as { id: number }).id)
-                : Effect.fail(
-                    new Error(`Worker not ready: ${body.slice(0, 200)}`),
-                  ),
+                : Effect.fail(new Error(`Worker not ready: ${body.slice(0, 200)}`)),
             ),
             Effect.retry({ schedule: readinessSchedule, times: 15 }),
           );
@@ -79,9 +77,7 @@ for (const dev of [true, false]) {
         expect(body.names).toEqual(["gimli", "legolas"]);
 
         // Relational query through the `relations` config.
-        const withPosts = yield* client.get(
-          `${url}/users-with-posts?do=${instance}`,
-        );
+        const withPosts = yield* client.get(`${url}/users-with-posts?do=${instance}`);
         expect(withPosts.status).toBe(200);
         const relational = (yield* withPosts.json) as {
           users: { name: string; posts: string[] }[];
@@ -93,14 +89,10 @@ for (const dev of [true, false]) {
 
         // Typed error handling: a failing query is caught inside the DO with
         // Effect.catchTag rather than escaping as a defect.
-        const missing = yield* client.get(
-          `${url}/missing-table?do=${instance}`,
-        );
+        const missing = yield* client.get(`${url}/missing-table?do=${instance}`);
         expect(missing.status).toBe(200);
         const caught = (yield* missing.json) as { result: string };
-        expect(caught.result).toMatch(
-          /^caught:(SqlError|EffectDrizzleQueryError)$/,
-        );
+        expect(caught.result).toMatch(/^caught:(SqlError|EffectDrizzleQueryError)$/);
       }),
       { timeout: 120_000 },
     );
@@ -110,11 +102,8 @@ for (const dev of [true, false]) {
         const { url } = yield* stack;
         if (dev) expect(url).toMatch(/^http:\/\/localhost:\d+$/);
         const client = yield* HttpClient.HttpClient;
-        const instance =
-          instanceName ?? (yield* Effect.sync(() => crypto.randomUUID()));
-        const ready = yield* requestWorker(
-          HttpClientRequest.get(`${url}/users?do=${instance}`),
-        );
+        const instance = instanceName ?? (yield* Effect.sync(() => crypto.randomUUID()));
+        const ready = yield* requestWorker(HttpClientRequest.get(`${url}/users?do=${instance}`));
         expect(ready.status).toBe(200);
         expect(yield* ready.json).toEqual({ names: [] });
         return yield* client.get(`${url}/${route}&do=${instance}`).pipe(

@@ -27,8 +27,9 @@ export default {
         if (width !== null) {
           transformer = transformer.transform({ width: Number(width) });
         }
-        const format = (url.searchParams.get("format") ??
-          "image/png") as Parameters<typeof transformer.output>[0]["format"];
+        const format = (url.searchParams.get("format") ?? "image/png") as Parameters<
+          typeof transformer.output
+        >[0]["format"];
         try {
           const result = await transformer.output({ format });
           return result.response() as unknown as Response;

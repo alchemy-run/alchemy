@@ -1,10 +1,10 @@
-import * as Fly from "@/Fly";
-import type { Input } from "@/Input";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
+import type { Input } from "@/Input";
 
 export const Site = Fly.App("Site");
 export const TRIGGER_SECRET = "RUNTIME_WRITER_TRIGGER";
@@ -61,15 +61,10 @@ export const writerLayer = (triggerDigest?: Input<string | undefined>) =>
           }
           return yield* Effect.gen(function* () {
             const trigger = yield* Config.Redacted(TRIGGER_SECRET);
-            if (
-              request.headers.authorization !==
-              `Bearer ${Redacted.value(trigger)}`
-            ) {
+            if (request.headers.authorization !== `Bearer ${Redacted.value(trigger)}`) {
               return HttpServerResponse.empty({ status: 401 });
             }
-            const machineId = yield* Effect.sync(
-              () => process.env.FLY_MACHINE_ID,
-            );
+            const machineId = yield* Effect.sync(() => process.env.FLY_MACHINE_ID);
             if (!machineId) {
               return HttpServerResponse.empty({ status: 503 });
             }
@@ -80,16 +75,9 @@ export const writerLayer = (triggerDigest?: Input<string | undefined>) =>
                 marker: "ready",
               });
             }
-            const updated = yield* write.update(
-              yield* name,
-              Redacted.make("fixture-token-three"),
-            );
+            const updated = yield* write.update(yield* name, Redacted.make("fixture-token-three"));
             const version = updated.version ?? updated.Version;
-            if (
-              version === undefined ||
-              !Number.isSafeInteger(version) ||
-              version <= 0
-            ) {
+            if (version === undefined || !Number.isSafeInteger(version) || version <= 0) {
               return HttpServerResponse.empty({ status: 502 });
             }
             return yield* HttpServerResponse.json({
@@ -99,9 +87,7 @@ export const writerLayer = (triggerDigest?: Input<string | undefined>) =>
             });
           }).pipe(
             // SDK failures may contain request details; never return or log them.
-            Effect.catch(() =>
-              Effect.succeed(HttpServerResponse.empty({ status: 502 })),
-            ),
+            Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 502 }))),
           );
         }),
       };

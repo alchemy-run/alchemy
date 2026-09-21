@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EksTestFunctionLive, { EksTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -13,10 +13,7 @@ const sharedStack = Core.scratchStack(testOptions, "EksBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -30,10 +27,7 @@ const getJson = (path: string) =>
     // The fixture occasionally answers a transient 5xx under load (cold
     // re-init, IAM propagation on the freshly attached policy). Bounded retry.
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((response) => response.json),
   );
@@ -61,9 +55,7 @@ describe.sequential("EKS Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `EKS test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`EKS test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -71,9 +63,7 @@ describe.sequential("EKS Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `EKS test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`EKS test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -151,17 +141,15 @@ describe.sequential("EKS Bindings", () => {
   });
 
   describe("DescribeAddonConfiguration", () => {
-    test.provider(
-      "reads the configuration schema for a live vpc-cni version",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/addon-schema")) as {
-            addonVersion?: string;
-            hasSchema?: boolean;
-          };
-          expect(response.addonVersion).toBeTruthy();
-          expect(response.hasSchema).toBe(true);
-        }),
+    test.provider("reads the configuration schema for a live vpc-cni version", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/addon-schema")) as {
+          addonVersion?: string;
+          hasSchema?: boolean;
+        };
+        expect(response.addonVersion).toBeTruthy();
+        expect(response.hasSchema).toBe(true);
+      }),
     );
   });
 });

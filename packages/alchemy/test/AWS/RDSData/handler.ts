@@ -1,12 +1,12 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RDS from "@/AWS/RDS";
-import * as RDSData from "@/AWS/RDSData";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RDS from "@/AWS/RDS";
+import * as RDSData from "@/AWS/RDSData";
 import { RDSDataInfra } from "./infra.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
@@ -44,10 +44,7 @@ export default RDSDataTestFunction.make(
     const options = { secret, database: "app" };
 
     const executeStatement = yield* RDSData.ExecuteStatement(cluster, options);
-    const batchExecuteStatement = yield* RDSData.BatchExecuteStatement(
-      cluster,
-      options,
-    );
+    const batchExecuteStatement = yield* RDSData.BatchExecuteStatement(cluster, options);
     const beginTransaction = yield* RDSData.BeginTransaction(cluster, options);
     const commitTransaction = yield* RDSData.CommitTransaction(cluster, {
       secret,
@@ -90,8 +87,7 @@ export default RDSDataTestFunction.make(
             port: info.port,
             database: info.database,
             username: info.username,
-            hasPassword:
-              typeof info.password === "string" && info.password.length > 0,
+            hasPassword: typeof info.password === "string" && info.password.length > 0,
             ssl: info.ssl,
           });
         }

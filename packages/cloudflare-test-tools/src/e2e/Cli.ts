@@ -27,9 +27,7 @@ const dev = Command.make(
     const framework = yield* Framework;
     // Thread the fixture's project root (Options.root) into Framework.dev,
     // mirroring what Server/buildAndPersist do for `live`/`build`.
-    const root = yield* Options.load().pipe(
-      Effect.flatMap(Options.resolveRoot),
-    );
+    const root = yield* Options.load().pipe(Effect.flatMap(Options.resolveRoot));
     const { url } = yield* framework.dev({ port: port.valueOrUndefined, root });
     yield* Effect.log(`Dev server running at ${url}`);
     yield* Effect.never;

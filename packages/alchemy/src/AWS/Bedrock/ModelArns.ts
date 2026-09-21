@@ -28,11 +28,7 @@ const INFERENCE_PROFILE_GEO_PREFIXES = new Set([
  * - a full ARN (foundation model, inference profile, application inference
  *   profile, imported/custom model, or prompt ARN) — passed through as-is
  */
-export const bedrockModelArns = (
-  region: string,
-  accountId: string,
-  modelId: string,
-): string[] => {
+export const bedrockModelArns = (region: string, accountId: string, modelId: string): string[] => {
   if (modelId.startsWith("arn:")) {
     return [modelId];
   }

@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create, update rules, and delete group", (stack) =>
   Effect.gen(function* () {
@@ -48,10 +45,7 @@ test.provider("create, update rules, and delete group", (stack) =>
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Access.Group("BasicGroup", {
-          include: [
-            { emailDomain: { domain: "example.com" } },
-            { geo: { countryCode: "US" } },
-          ],
+          include: [{ emailDomain: { domain: "example.com" } }, { geo: { countryCode: "US" } }],
           exclude: [{ email: { email: "intern@example.com" } }],
           require: [{ emailDomain: { domain: "example.com" } }],
         });
@@ -71,9 +65,7 @@ test.provider("create, update rules, and delete group", (stack) =>
 
     const afterDestroy = yield* zeroTrust
       .getAccessGroupForAccount({ accountId, groupId: group.groupId })
-      .pipe(
-        Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)));
     expect(afterDestroy?.id ?? undefined).toBeUndefined();
   }).pipe(logLevel),
 );

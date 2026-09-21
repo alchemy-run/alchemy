@@ -84,9 +84,7 @@ export class InvalidOrganizationVPCEndpoint extends Data.TaggedError(
 }> {}
 
 /** @internal */
-export const validateOrganizationVPCEndpoint = (
-  props: OrganizationVPCEndpointProps,
-) =>
+export const validateOrganizationVPCEndpoint = (props: OrganizationVPCEndpointProps) =>
   /^[a-z0-9-]{1,60}$/.test(props.orgId) &&
   /^aws-[a-z0-9-]+$/.test(props.regionId) &&
   /^vpce-[a-f0-9]+$/.test(props.vpcEndpointId) &&
@@ -99,21 +97,13 @@ export const validateOrganizationVPCEndpoint = (
         }),
       );
 
-const request = (scope: {
-  orgId: string;
-  regionId: string;
-  vpcEndpointId: string;
-}) => ({
+const request = (scope: { orgId: string; regionId: string; vpcEndpointId: string }) => ({
   org_id: scope.orgId,
   region_id: scope.regionId,
   vpc_endpoint_id: scope.vpcEndpointId,
 });
 
-const observe = (scope: {
-  orgId: string;
-  regionId: string;
-  vpcEndpointId: string;
-}) =>
+const observe = (scope: { orgId: string; regionId: string; vpcEndpointId: string }) =>
   Neon.getOrganizationVPCEndpointDetails(request(scope)).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -123,11 +113,7 @@ export const OrganizationVPCEndpointProvider = () =>
     stables: ["orgId", "regionId", "vpcEndpointId", "initialLabel"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const previous = output ?? olds;
-      if (
-        !("orgId" in news) ||
-        !("regionId" in news) ||
-        !("vpcEndpointId" in news)
-      ) {
+      if (!("orgId" in news) || !("regionId" in news) || !("vpcEndpointId" in news)) {
         return { action: "replace", deleteFirst: true } as const;
       }
       for (const key of ["orgId", "regionId", "vpcEndpointId"] as const) {
@@ -189,8 +175,7 @@ export const OrganizationVPCEndpointProvider = () =>
         observed?.label !== news.label
       ) {
         return yield* new InvalidOrganizationVPCEndpoint({
-          message:
-            "VPC registration changed since its adoption baseline was captured",
+          message: "VPC registration changed since its adoption baseline was captured",
         });
       }
       if (!observed && output) {
@@ -211,8 +196,7 @@ export const OrganizationVPCEndpointProvider = () =>
               if (!raced || raced.label !== news.label) return yield* error;
               if (!output)
                 return yield* new OwnedBySomeoneElse({
-                  message:
-                    "A registration appeared during creation; explicit adoption is required",
+                  message: "A registration appeared during creation; explicit adoption is required",
                   resourceType: "Neon.OrganizationVPCEndpoint",
                 });
             }),
@@ -238,18 +222,10 @@ export const OrganizationVPCEndpointProvider = () =>
     delete: Effect.fn(function* ({ output, olds }) {
       const observed = yield* observe(output);
       if (!observed) return;
-      if (
-        output.initialLabel !== null &&
-        observed.label === output.initialLabel
-      )
-        return;
-      if (
-        observed.label !== output.managedLabel &&
-        observed.label !== olds.label
-      ) {
+      if (output.initialLabel !== null && observed.label === output.initialLabel) return;
+      if (observed.label !== output.managedLabel && observed.label !== olds.label) {
         return yield* new InvalidOrganizationVPCEndpoint({
-          message:
-            "Refusing cleanup of an externally relabeled VPC registration",
+          message: "Refusing cleanup of an externally relabeled VPC registration",
         });
       }
       if (output.initialLabel !== null) {
@@ -267,8 +243,7 @@ export const OrganizationVPCEndpointProvider = () =>
       } else {
         if (observed.num_restricted_projects !== 0) {
           return yield* new InvalidOrganizationVPCEndpoint({
-            message:
-              "Remove project VPC restrictions before unregistering this endpoint",
+            message: "Remove project VPC restrictions before unregistering this endpoint",
           });
         }
         yield* Neon.deleteOrganizationVPCEndpoint(request(output)).pipe(

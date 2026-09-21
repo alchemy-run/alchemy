@@ -39,7 +39,6 @@ export interface DescribePodIdentityAssociation extends Binding.Service<
     >
   >
 > {}
-export const DescribePodIdentityAssociation =
-  Binding.Service<DescribePodIdentityAssociation>(
-    "AWS.EKS.DescribePodIdentityAssociation",
-  );
+export const DescribePodIdentityAssociation = Binding.Service<DescribePodIdentityAssociation>(
+  "AWS.EKS.DescribePodIdentityAssociation",
+);

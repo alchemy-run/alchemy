@@ -50,9 +50,7 @@ export const runPostgresMigrations = (
     input,
     stamped,
     withExecutor: (apply) =>
-      withPostgresClient(target, (client) =>
-        apply(makePgMigrationExecutor(client)),
-      ),
+      withPostgresClient(target, (client) => apply(makePgMigrationExecutor(client))),
   });
 
 export const runPostgresImports = (
@@ -96,9 +94,7 @@ const withPostgresClient = <A, E, R>(
         const client = yield* Effect.sync(
           () =>
             new Client({
-              connectionString: stripPgSslQueryParams(
-                Redacted.value(role.connectionUrl),
-              ),
+              connectionString: stripPgSslQueryParams(Redacted.value(role.connectionUrl)),
               ssl: { rejectUnauthorized: true },
             }),
         );
@@ -119,10 +115,7 @@ const withPostgresClient = <A, E, R>(
 
 const withTemporaryPostgresRole = <A, E, R>(
   target: PostgresMigrationTarget,
-  use: (role: {
-    id: string;
-    connectionUrl: Redacted.Redacted<string>;
-  }) => Effect.Effect<A, E, R>,
+  use: (role: { id: string; connectionUrl: Redacted.Redacted<string> }) => Effect.Effect<A, E, R>,
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
@@ -159,10 +152,7 @@ const withTemporaryPostgresRole = <A, E, R>(
           // Already-deleted roles are a success: nothing to clean up.
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(5),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(5)]),
           }),
           // Migrations succeeded; don't fail the parent over a release-step
           // hiccup. The role's TTL bounds the orphan window; log loudly so
@@ -181,8 +171,7 @@ const withTemporaryPostgresRole = <A, E, R>(
 
 const pgExec = (client: Client, sql: string, values?: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
-    try: () =>
-      client.query(sql, values as Array<unknown>).then(() => undefined),
+    try: () => client.query(sql, values as Array<unknown>).then(() => undefined),
     catch: toMigrationError,
   });
 

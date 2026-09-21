@@ -1,3 +1,6 @@
+import * as NodeFs from "node:fs";
+import * as NodePath from "node:path";
+import { pathToFileURL } from "node:url";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -30,9 +33,6 @@
  */
 import type { BindingHooks } from "@alchemy.run/cloudflare-runtime/core";
 import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
-import * as NodeFs from "node:fs";
-import * as NodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import { generateWorkerShim } from "./WorkerShim.ts";
 
 export interface CloudflareAdapterResult {
@@ -60,11 +60,7 @@ export interface CloudflareAdapterOptions {
    * assets layer so the fallback governs (see `WorkerShim.ts`).
    * @default "none"
    */
-  readonly notFoundHandling?:
-    | "none"
-    | "404-page"
-    | "single-page-application"
-    | undefined;
+  readonly notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;
   /**
    * With `notFoundHandling: "404-page"`: `"spa"` renders the app shell as the
    * fallback, `"plaintext"` writes a plain `Not Found` page.
@@ -111,16 +107,11 @@ export interface CloudflareAdapter extends Adapter {
  * that runs `adapt` (harness build, alchemy source build), so the fork's
  * dangling-handle isolation buys nothing here.
  */
-const generateFallbackInProcess = async (
-  builder: Builder,
-  dest: string,
-): Promise<void> => {
+const generateFallbackInProcess = async (builder: Builder, dest: string): Promise<void> => {
   const kit = builder.config;
   const serverRoot = NodePath.join(kit.outDir, "output", "server");
   const load = async (file: string): Promise<Record<string, any>> =>
-    await import(
-      /* @vite-ignore */ pathToFileURL(NodePath.join(serverRoot, file)).href
-    );
+    await import(/* @vite-ignore */ pathToFileURL(NodePath.join(serverRoot, file)).href);
   const { set_building } = await load("internal.js");
   const { Server } = await load("index.js");
   const { manifest } = await load("manifest-full.js");
@@ -142,25 +133,19 @@ const generateFallbackInProcess = async (
   const server = new Server(manifest);
   await server.init({ env });
   const origin = kit.paths.origin || "http://sveltekit-prerender";
-  const response: Response = await server.respond(
-    new Request(`${origin}/[fallback]`),
-    {
-      getClientAddress: () => {
-        throw new Error("Cannot read clientAddress during prerendering");
-      },
-      prerendering: {
-        fallback: true,
-        dependencies: new Map(),
-        remote_responses: new Map(),
-      },
-      read: (file: string) =>
-        NodeFs.readFileSync(NodePath.join(kit.files.assets, file)),
+  const response: Response = await server.respond(new Request(`${origin}/[fallback]`), {
+    getClientAddress: () => {
+      throw new Error("Cannot read clientAddress during prerendering");
     },
-  );
+    prerendering: {
+      fallback: true,
+      dependencies: new Map(),
+      remote_responses: new Map(),
+    },
+    read: (file: string) => NodeFs.readFileSync(NodePath.join(kit.files.assets, file)),
+  });
   if (!response.ok) {
-    throw new Error(
-      `Could not create a fallback page — failed with status ${response.status}`,
-    );
+    throw new Error(`Could not create a fallback page — failed with status ${response.status}`);
   }
   NodeFs.writeFileSync(dest, await response.text());
 };
@@ -200,10 +185,7 @@ export const makeCloudflareAdapter = (
       builder.writeClient(assetsDest);
       builder.writePrerendered(assetsDest);
       if (options.notFoundHandling === "single-page-application") {
-        await generateFallbackInProcess(
-          builder,
-          NodePath.join(assetsDest, "index.html"),
-        );
+        await generateFallbackInProcess(builder, NodePath.join(assetsDest, "index.html"));
       }
 
       // pre-built server instance: kit 3.0 no longer exposes the internal
@@ -251,10 +233,7 @@ export const makeCloudflareAdapter = (
         });
         builder.instrument({
           entrypoint: workerEntry,
-          instrumentation: NodePath.join(
-            builder.getServerDirectory(),
-            "instrumentation.server.js",
-          ),
+          instrumentation: NodePath.join(builder.getServerDirectory(), "instrumentation.server.js"),
           initializer,
         });
       }
@@ -268,19 +247,13 @@ export const makeCloudflareAdapter = (
 
       // _redirects
       const userRedirects = readOptionalFile(NodePath.join(root, "_redirects"));
-      const redirects = generateRedirects(
-        builder.prerendered.redirects,
-        userRedirects,
-      );
+      const redirects = generateRedirects(builder.prerendered.redirects, userRedirects);
       if (redirects !== undefined) {
         NodeFs.writeFileSync(NodePath.join(dest, "_redirects"), redirects);
       }
 
       // Workers-mode assets ignore file
-      NodeFs.writeFileSync(
-        NodePath.join(dest, ".assetsignore"),
-        generateAssetsIgnore(),
-      );
+      NodeFs.writeFileSync(NodePath.join(dest, ".assetsignore"), generateAssetsIgnore());
 
       result.current = { dest, workerEntry };
     },
@@ -308,11 +281,7 @@ const posixify = (str: string): string => str.replace(/\\/g, "/");
  * Add a rule block for `url` to a `_headers` file, merging into an existing
  * block for the same URL if present (upstream `append_headers`).
  */
-export const appendHeaders = (
-  url: string,
-  rules: Array<string>,
-  content: string,
-): string => {
+export const appendHeaders = (url: string, rules: Array<string>, content: string): string => {
   const regex = new RegExp(`^(${url.replaceAll("*", "\\*")})$`, "m");
   const formattedHeaders = rules.map((rule) => `  ${rule}`).join("\n");
 
@@ -464,8 +433,7 @@ export interface CloudflareEmulator extends Emulator {
  * never load the runtime machinery.
  */
 const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
-  const { getPlatformProxy } =
-    await import("@alchemy.run/cloudflare-runtime/core/platform-proxy");
+  const { getPlatformProxy } = await import("@alchemy.run/cloudflare-runtime/core/platform-proxy");
   return await getPlatformProxy({
     name: options.name,
     ...(options.compatibilityDate !== undefined
@@ -477,9 +445,7 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
     bindings: options.bindings as BindingHooks,
     ...(options.services !== undefined
       ? {
-          services: options.services as Parameters<
-            typeof getPlatformProxy
-          >[0]["services"],
+          services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
         }
       : undefined),
   });
@@ -490,16 +456,12 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
  * upstream), because prerendered pages must not depend on request-time
  * bindings.
  */
-const guardPrerenderEnv = (
-  env: Record<string, unknown>,
-): Record<string, unknown> => {
+const guardPrerenderEnv = (env: Record<string, unknown>): Record<string, unknown> => {
   const guarded: Record<string, unknown> = {};
   for (const key of Object.keys(env)) {
     Object.defineProperty(guarded, key, {
       get: () => {
-        throw new Error(
-          `Cannot access platform.env.${key} in a prerenderable route`,
-        );
+        throw new Error(`Cannot access platform.env.${key} in a prerenderable route`);
       },
     });
   }

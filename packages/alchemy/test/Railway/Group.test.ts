@@ -1,20 +1,17 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { projectGroups } from "@/Railway/GraphQL.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { projectGroups } from "@/Railway/GraphQL.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -46,18 +43,14 @@ const readConfigGroups = (environmentId: string, projectId: string) =>
 
 const readProjectGroups = (projectId: string) =>
   projectGroups(projectId, { id: true, groupId: true, name: true }).pipe(
-    Effect.map((groups) =>
-      groups.filter((group) => group.name != null && group.name.length > 0),
-    ),
+    Effect.map((groups) => groups.filter((group) => group.name != null && group.name.length > 0)),
     railway.catchTags(["RailwayNotFound"], () => Effect.succeed([])),
   );
 
 const readService = (serviceId: string) =>
   railway
     .service({ id: serviceId }, { id: true, groupId: true })
-    .pipe(
-      railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-    );
+    .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)));
 
 const waitUntilGroupGone = (
   projectId: string,
@@ -69,13 +62,9 @@ const waitUntilGroupGone = (
     const config = yield* readConfigGroups(environmentId, projectId);
     const listed = yield* readProjectGroups(projectId);
     const inConfig =
-      Object.hasOwn(config, groupId) ||
-      Object.values(config).some((row) => row.name === name);
+      Object.hasOwn(config, groupId) || Object.values(config).some((row) => row.name === name);
     const inProject = listed.some(
-      (group) =>
-        group.id === groupId ||
-        group.groupId === groupId ||
-        group.name === name,
+      (group) => group.id === groupId || group.groupId === groupId || group.name === name,
     );
     return inConfig || inProject ? ("found" as const) : ("gone" as const);
   }).pipe(
@@ -113,9 +102,7 @@ test.provider(
       expect(created.backend.groupId).toEqual(expect.any(String));
       expect(created.backend.groupId.length).toBeGreaterThan(0);
       expect(created.backend.projectId).toEqual(created.project.projectId);
-      expect(created.backend.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.backend.environmentId).toEqual(created.environment.environmentId);
       expect(created.backend.name).toEqual(expect.any(String));
       expect(created.backend.name.length).toBeGreaterThan(0);
       expect(created.backend.serviceIds).toEqual([created.api.serviceId]);
@@ -177,13 +164,9 @@ test.provider(
 
       expect(updated.backend.groupId).toEqual(created.backend.groupId);
       expect(updated.backend.projectId).toEqual(created.backend.projectId);
-      expect(updated.backend.environmentId).toEqual(
-        created.backend.environmentId,
-      );
+      expect(updated.backend.environmentId).toEqual(created.backend.environmentId);
       expect(updated.backend.name).toEqual(created.backend.name);
-      expect(updated.backend.serviceIds.sort()).toEqual(
-        created.backend.serviceIds.sort(),
-      );
+      expect(updated.backend.serviceIds.sort()).toEqual(created.backend.serviceIds.sort());
 
       yield* stack.destroy();
 

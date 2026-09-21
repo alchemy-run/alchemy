@@ -45,7 +45,6 @@ export interface GetDASHStreamingSessionURL extends Binding.Service<
   >
 > {}
 
-export const GetDASHStreamingSessionURL =
-  Binding.Service<GetDASHStreamingSessionURL>(
-    "AWS.KinesisVideo.GetDASHStreamingSessionURL",
-  );
+export const GetDASHStreamingSessionURL = Binding.Service<GetDASHStreamingSessionURL>(
+  "AWS.KinesisVideo.GetDASHStreamingSessionURL",
+);

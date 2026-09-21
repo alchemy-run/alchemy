@@ -30,12 +30,7 @@ export interface GetQueryResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudtrail.GetQueryResultsRequest, "EventDataStore">,
-    ) => Effect.Effect<
-      cloudtrail.GetQueryResultsResponse,
-      cloudtrail.GetQueryResultsError
-    >
+    ) => Effect.Effect<cloudtrail.GetQueryResultsResponse, cloudtrail.GetQueryResultsError>
   >
 > {}
-export const GetQueryResults = Binding.Service<GetQueryResults>(
-  "AWS.CloudTrail.GetQueryResults",
-);
+export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.CloudTrail.GetQueryResults");

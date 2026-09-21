@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
 import { CounterRpcs } from "./group.ts";
 
 export const MyDB = Cloudflare.D1.Database("MyDB");
@@ -47,11 +47,9 @@ export const CounterLive = Counter.make(
           .run()
           .pipe(Effect.asVoid);
 
-      const readDO = () =>
-        state.storage.get<number>(DO_COUNT_KEY).pipe(Effect.map((v) => v ?? 0));
+      const readDO = () => state.storage.get<number>(DO_COUNT_KEY).pipe(Effect.map((v) => v ?? 0));
 
-      const writeDO = (value: number) =>
-        state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
+      const writeDO = (value: number) => state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
 
       const handlers = CounterRpcs.toLayer({
         incrementD1: ({ key }) =>

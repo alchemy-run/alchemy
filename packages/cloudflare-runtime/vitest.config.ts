@@ -1,10 +1,9 @@
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import path from "node:path";
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
-const sourceRoot = (...parts: Array<string>) =>
-  path.resolve(import.meta.dirname, "src", ...parts);
+const sourceRoot = (...parts: Array<string>) => path.resolve(import.meta.dirname, "src", ...parts);
 
 const coreRoot = sourceRoot("core");
 const rolldownRoot = sourceRoot("rolldown");
@@ -72,9 +71,7 @@ export default defineConfig({
         plugins: [
           cloudflareTest({
             wrangler: {
-              configPath: sourceRoot(
-                "internal/workers-shared/workers/asset-worker/wrangler.jsonc",
-              ),
+              configPath: sourceRoot("internal/workers-shared/workers/asset-worker/wrangler.jsonc"),
             },
           }),
         ],
@@ -110,9 +107,7 @@ export default defineConfig({
               compatibilityFlags: ["service_binding_extra_handlers"],
             },
             wrangler: {
-              configPath: sourceRoot(
-                "internal/workflows-shared/wrangler.jsonc",
-              ),
+              configPath: sourceRoot("internal/workflows-shared/wrangler.jsonc"),
             },
           }),
         ],

@@ -147,9 +147,7 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
     case "ecs":
       return Output.map((url: string | undefined) => {
         if (!url) {
-          throw new Error(
-            "SsrSite ECS origins require a service created with `public: true`.",
-          );
+          throw new Error("SsrSite ECS origins require a service created with `public: true`.");
         }
         return url;
       })(server.service.url as any) as any;
@@ -159,9 +157,7 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
 };
 
 const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
-  Output.map((url: string) => new URL(url).hostname)(
-    serverUrlOf(server) as any,
-  ) as any;
+  Output.map((url: string) => new URL(url).hostname)(serverUrlOf(server) as any) as any;
 
 /**
  * A server-rendered website behind CloudFront.
@@ -298,9 +294,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
 
     if (domain && domain.dns === false && !domain.cert) {
       return yield* Effect.fail(
-        new Error(
-          "SsrSite domain configuration with `dns: false` requires `cert`.",
-        ),
+        new Error("SsrSite domain configuration with `dns: false` requires `cert`."),
       );
     }
 
@@ -311,10 +305,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
           : undefined
         : yield* Certificate("Certificate", {
             domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             hostedZoneId: domain.hostedZoneId,
             tags: props.tags,
           });
@@ -326,8 +317,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
           id: "server",
           domainName: serverOriginHost,
           customOriginConfig: {
-            originProtocolPolicy:
-              props.server.originProtocolPolicy ?? "https-only",
+            originProtocolPolicy: props.server.originProtocolPolicy ?? "https-only",
           },
         },
         ...(assetBucket && assetOac
@@ -346,18 +336,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
         targetOriginId: "server",
         viewerProtocolPolicy: "redirect-to-https",
         compress: true,
-        allowedMethods: [
-          "DELETE",
-          "GET",
-          "HEAD",
-          "OPTIONS",
-          "PATCH",
-          "POST",
-          "PUT",
-        ],
+        allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         cachedMethods: ["GET", "HEAD"],
-        cachePolicyId:
-          props.cachePolicyId ?? MANAGED_CACHING_DISABLED_POLICY_ID,
+        cachePolicyId: props.cachePolicyId ?? MANAGED_CACHING_DISABLED_POLICY_ID,
         originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
       },
       orderedCacheBehaviors:
@@ -407,11 +388,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
     const records =
       domain && domain.dns !== false
         ? yield* Effect.forEach(
-            [
-              domain.name,
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
                 // Optional — the Record provider infers the most specific

@@ -56,6 +56,4 @@ export interface FilterLogEvents extends Binding.Service<
     ) => Effect.Effect<Logs.FilterLogEventsResponse, Logs.FilterLogEventsError>
   >
 > {}
-export const FilterLogEvents = Binding.Service<FilterLogEvents>(
-  "AWS.Logs.FilterLogEvents",
-);
+export const FilterLogEvents = Binding.Service<FilterLogEvents>("AWS.Logs.FilterLogEvents");

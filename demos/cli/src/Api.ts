@@ -66,9 +66,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
   }).pipe(
-    Effect.provide([
-      Cloudflare.KV.ReadWriteNamespaceBinding,
-      Cloudflare.R2.ReadWriteBucketBinding,
-    ]),
+    Effect.provide([Cloudflare.KV.ReadWriteNamespaceBinding, Cloudflare.R2.ReadWriteBucketBinding]),
   ),
 ) {}

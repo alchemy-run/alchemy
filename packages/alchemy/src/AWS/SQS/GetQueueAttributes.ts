@@ -39,13 +39,8 @@ export interface GetQueueAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetQueueAttributesRequest,
-    ) => Effect.Effect<
-      sqs.GetQueueAttributesResult,
-      sqs.GetQueueAttributesError
-    >
+    ) => Effect.Effect<sqs.GetQueueAttributesResult, sqs.GetQueueAttributesError>
   >
 > {}
 
-export const GetQueueAttributes = Binding.Service<GetQueueAttributes>(
-  "AWS.SQS.GetQueueAttributes",
-);
+export const GetQueueAttributes = Binding.Service<GetQueueAttributes>("AWS.SQS.GetQueueAttributes");

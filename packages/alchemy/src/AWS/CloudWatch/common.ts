@@ -6,11 +6,7 @@ import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 
 export type CloudWatchTags = Record<string, string>;
 
-export const createName = (
-  id: string,
-  providedName: string | undefined,
-  maxLength: number,
-) =>
+export const createName = (id: string, providedName: string | undefined, maxLength: number) =>
   providedName
     ? Effect.succeed(providedName)
     : createPhysicalName({
@@ -18,9 +14,7 @@ export const createName = (
         maxLength,
       });
 
-export const toTagRecord = (
-  tags: cloudwatch.Tag[] | undefined,
-): CloudWatchTags =>
+export const toTagRecord = (tags: cloudwatch.Tag[] | undefined): CloudWatchTags =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
@@ -79,8 +73,7 @@ export const readResourceTags = (resourceArn: string) =>
     })
     .pipe(Effect.map((response) => toTagRecord(response.Tags)));
 
-export const createTagList = (tags: Record<string, string>) =>
-  createTagsList(tags);
+export const createTagList = (tags: Record<string, string>) => createTagsList(tags);
 
 export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -95,28 +88,20 @@ export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const normalizeDimensions = (dimensions: cloudwatch.Dimension[] | undefined) =>
   [...(dimensions ?? [])].sort((a, b) =>
-    `${a.Name ?? ""}:${a.Value ?? ""}`.localeCompare(
-      `${b.Name ?? ""}:${b.Value ?? ""}`,
-    ),
+    `${a.Name ?? ""}:${a.Value ?? ""}`.localeCompare(`${b.Name ?? ""}:${b.Value ?? ""}`),
   );
 
 const normalizeSingleMetricDetector = (
   input: Pick<
     cloudwatch.PutAnomalyDetectorInput,
-    | "Namespace"
-    | "MetricName"
-    | "Dimensions"
-    | "Stat"
-    | "SingleMetricAnomalyDetector"
+    "Namespace" | "MetricName" | "Dimensions" | "Stat" | "SingleMetricAnomalyDetector"
   >,
 ) => {
   const singleMetric = input.SingleMetricAnomalyDetector;
   return {
     Namespace: singleMetric?.Namespace ?? input.Namespace,
     MetricName: singleMetric?.MetricName ?? input.MetricName,
-    Dimensions: normalizeDimensions(
-      singleMetric?.Dimensions ?? input.Dimensions,
-    ),
+    Dimensions: normalizeDimensions(singleMetric?.Dimensions ?? input.Dimensions),
     Stat: singleMetric?.Stat ?? input.Stat,
   };
 };

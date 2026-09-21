@@ -30,10 +30,6 @@ import type { Rule } from "./Rule.ts";
 export interface GetRule extends Binding.Service<
   GetRule,
   "AWS.Rbin.GetRule",
-  (
-    rule: Rule,
-  ) => Effect.Effect<
-    () => Effect.Effect<rbin.GetRuleResponse, rbin.GetRuleError>
-  >
+  (rule: Rule) => Effect.Effect<() => Effect.Effect<rbin.GetRuleResponse, rbin.GetRuleError>>
 > {}
 export const GetRule = Binding.Service<GetRule>("AWS.Rbin.GetRule");

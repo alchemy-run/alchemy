@@ -1,11 +1,11 @@
-import * as ComprehendMedical from "@/AWS/ComprehendMedical";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ComprehendMedical from "@/AWS/ComprehendMedical";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -31,38 +31,29 @@ export default ComprehendMedicalTestFunction.make(
     const inferRxNorm = yield* ComprehendMedical.InferRxNorm();
     const inferSNOMEDCT = yield* ComprehendMedical.InferSNOMEDCT();
 
-    const listEntitiesJobs =
-      yield* ComprehendMedical.ListEntitiesDetectionV2Jobs();
+    const listEntitiesJobs = yield* ComprehendMedical.ListEntitiesDetectionV2Jobs();
     const listICD10CMJobs = yield* ComprehendMedical.ListICD10CMInferenceJobs();
     const listPHIJobs = yield* ComprehendMedical.ListPHIDetectionJobs();
     const listRxNormJobs = yield* ComprehendMedical.ListRxNormInferenceJobs();
-    const listSNOMEDCTJobs =
-      yield* ComprehendMedical.ListSNOMEDCTInferenceJobs();
+    const listSNOMEDCTJobs = yield* ComprehendMedical.ListSNOMEDCTInferenceJobs();
 
-    const describeEntitiesJob =
-      yield* ComprehendMedical.DescribeEntitiesDetectionV2Job();
-    const describeICD10CMJob =
-      yield* ComprehendMedical.DescribeICD10CMInferenceJob();
+    const describeEntitiesJob = yield* ComprehendMedical.DescribeEntitiesDetectionV2Job();
+    const describeICD10CMJob = yield* ComprehendMedical.DescribeICD10CMInferenceJob();
     const describePHIJob = yield* ComprehendMedical.DescribePHIDetectionJob();
-    const describeRxNormJob =
-      yield* ComprehendMedical.DescribeRxNormInferenceJob();
-    const describeSNOMEDCTJob =
-      yield* ComprehendMedical.DescribeSNOMEDCTInferenceJob();
+    const describeRxNormJob = yield* ComprehendMedical.DescribeRxNormInferenceJob();
+    const describeSNOMEDCTJob = yield* ComprehendMedical.DescribeSNOMEDCTInferenceJob();
 
-    const stopEntitiesJob =
-      yield* ComprehendMedical.StopEntitiesDetectionV2Job();
+    const stopEntitiesJob = yield* ComprehendMedical.StopEntitiesDetectionV2Job();
     const stopICD10CMJob = yield* ComprehendMedical.StopICD10CMInferenceJob();
     const stopPHIJob = yield* ComprehendMedical.StopPHIDetectionJob();
     const stopRxNormJob = yield* ComprehendMedical.StopRxNormInferenceJob();
     const stopSNOMEDCTJob = yield* ComprehendMedical.StopSNOMEDCTInferenceJob();
 
-    const startEntitiesJob =
-      yield* ComprehendMedical.StartEntitiesDetectionV2Job();
+    const startEntitiesJob = yield* ComprehendMedical.StartEntitiesDetectionV2Job();
     const startICD10CMJob = yield* ComprehendMedical.StartICD10CMInferenceJob();
     const startPHIJob = yield* ComprehendMedical.StartPHIDetectionJob();
     const startRxNormJob = yield* ComprehendMedical.StartRxNormInferenceJob();
-    const startSNOMEDCTJob =
-      yield* ComprehendMedical.StartSNOMEDCTInferenceJob();
+    const startSNOMEDCTJob = yield* ComprehendMedical.StartSNOMEDCTInferenceJob();
     // The remaining start bindings attach their IAM statements at deploy
     // time; the PHI start callable is the one exercised at runtime.
     void startEntitiesJob;
@@ -165,14 +156,11 @@ export default ComprehendMedicalTestFunction.make(
             { concurrency: 5 },
           );
           return yield* HttpServerResponse.json({
-            entities:
-              entities.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
-            icd10cm:
-              icd10cm.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
+            entities: entities.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
+            icd10cm: icd10cm.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
             phi: phi.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
             rxnorm: rxnorm.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
-            snomedct:
-              snomedct.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
+            snomedct: snomedct.ComprehendMedicalAsyncJobPropertiesList?.length ?? 0,
           });
         }
 
@@ -181,8 +169,7 @@ export default ComprehendMedicalTestFunction.make(
         // both the wiring and the granted action.
         if (request.method === "GET" && pathname === "/job-checks") {
           const success = () => "Success" as string;
-          const tagOf = (e: { readonly _tag: string }) =>
-            Effect.succeed(e._tag as string);
+          const tagOf = (e: { readonly _tag: string }) => Effect.succeed(e._tag as string);
 
           const [describes, stops] = yield* Effect.all([
             Effect.all(
@@ -266,11 +253,7 @@ export default ComprehendMedicalTestFunction.make(
           }).pipe(
             Effect.map(() => ({ tag: "Success" })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "InvalidRequestException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "InvalidRequestException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ tag: e._tag as string }),
             ),
           );

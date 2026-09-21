@@ -27,10 +27,7 @@ export interface GetClassificationScope extends Binding.Service<
   () => Effect.Effect<
     (
       request: macie2.GetClassificationScopeRequest,
-    ) => Effect.Effect<
-      macie2.GetClassificationScopeResponse,
-      macie2.GetClassificationScopeError
-    >
+    ) => Effect.Effect<macie2.GetClassificationScopeResponse, macie2.GetClassificationScopeError>
   >
 > {}
 export const GetClassificationScope = Binding.Service<GetClassificationScope>(

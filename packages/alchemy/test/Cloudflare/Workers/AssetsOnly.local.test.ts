@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,16 +5,15 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
@@ -36,10 +33,7 @@ const getTextReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -78,9 +72,7 @@ test.provider(
       // The asset layer's custom 404 page is applied by the assets worker
       // itself — the stub only delegates.
       const client = yield* HttpClient.HttpClient;
-      const missing = yield* client
-        .get(`${deployed.worker.url}/does-not-exist`)
-        .pipe(Effect.orDie);
+      const missing = yield* client.get(`${deployed.worker.url}/does-not-exist`).pipe(Effect.orDie);
       expect(missing.status).toBe(404);
       const missingBody = yield* missing.text.pipe(Effect.orDie);
       expect(missingBody).toContain("alchemy-assets-only-404");

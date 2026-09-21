@@ -1,20 +1,17 @@
-import * as Hetzner from "@/Hetzner";
-import { waitForAction } from "@/Hetzner/actions.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import { waitForAction } from "@/Hetzner/actions.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 const managedEnabled = !!process.env.HCLOUD_TEST_MANAGED_CERT;
@@ -321,18 +318,14 @@ test.provider.skipIf(!hasHetznerCreds || managedEnabled)(
         expect(result.failure._tag).toEqual("UnprocessableEntity");
       } else {
         const { certificate, action } = result.success;
-        const outcome = action
-          ? yield* Effect.result(waitForAction(action))
-          : undefined;
+        const outcome = action ? yield* Effect.result(waitForAction(action)) : undefined;
         yield* Services.certificates
           .deleteCertificate({ id: certificate.id })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));
         if (outcome !== undefined && Result.isFailure(outcome)) {
           // Issuance for a domain Hetzner does not host either fails the
           // Action or is still pending when the bounded poll expires.
-          expect(["ActionFailed", "ActionTimeout"]).toContain(
-            outcome.failure._tag,
-          );
+          expect(["ActionFailed", "ActionTimeout"]).toContain(outcome.failure._tag);
         } else {
           expect(certificate.status?.issuance).not.toEqual("completed");
         }

@@ -34,6 +34,4 @@ export interface GetOperation extends Binding.Service<
     ) => Effect.Effect<SD.GetOperationResponse, SD.GetOperationError>
   >
 > {}
-export const GetOperation = Binding.Service<GetOperation>(
-  "AWS.CloudMap.GetOperation",
-);
+export const GetOperation = Binding.Service<GetOperation>("AWS.CloudMap.GetOperation");

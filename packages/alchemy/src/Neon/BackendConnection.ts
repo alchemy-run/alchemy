@@ -58,16 +58,12 @@ export const bindBackendEnvironment = Effect.fn(function* (
     });
   } else {
     return yield* Effect.die(
-      new Error(
-        `Neon connection binding does not support host ${host?.Type ?? "none"}`,
-      ),
+      new Error(`Neon connection binding does not support host ${host?.Type ?? "none"}`),
     );
   }
 });
 
-export const backendString = (
-  key: string,
-): Effect.Effect<string, never, RuntimeContext> =>
+export const backendString = (key: string): Effect.Effect<string, never, RuntimeContext> =>
   Config.String(key).pipe(Effect.orDie);
 export const backendSecret = (
   key: string,

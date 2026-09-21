@@ -125,9 +125,7 @@ export interface KnowledgeBase extends Resource<
  *
  * @resource
  */
-export const KnowledgeBase = Resource<KnowledgeBase>(
-  "AWS.Bedrock.KnowledgeBase",
-);
+export const KnowledgeBase = Resource<KnowledgeBase>("AWS.Bedrock.KnowledgeBase");
 
 /** KB status values indicating an in-flight transition to wait out. */
 const KB_TRANSIENT = new Set(["CREATING", "UPDATING", "DELETING"]);
@@ -151,28 +149,19 @@ export const KnowledgeBaseProvider = () =>
   Provider.effect(
     KnowledgeBase,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<KnowledgeBaseProps, "name">,
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<KnowledgeBaseProps, "name">) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       const getKbOrUndefined = Effect.fn(function* (knowledgeBaseId: string) {
         return yield* bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(
           Effect.map((r) => r.knowledgeBase),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* bedrock.listKnowledgeBases
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* bedrock.listKnowledgeBases.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.knowledgeBaseSummaries ?? [])
           .find((s) => s.name === name)?.knowledgeBaseId;
@@ -190,9 +179,7 @@ export const KnowledgeBaseProvider = () =>
       const waitForSettled = Effect.fn(function* (knowledgeBaseId: string) {
         return yield* bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(
           Effect.map((r) => r.knowledgeBase),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
             until: (kb) => kb === undefined || !KB_TRANSIENT.has(kb.status),
@@ -206,9 +193,7 @@ export const KnowledgeBaseProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* bedrock.listKnowledgeBases
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* bedrock.listKnowledgeBases.pages({}).pipe(Stream.runCollect);
             const summaries = Array.from(pages).flatMap(
               (page) => page.knowledgeBaseSummaries ?? [],
             );
@@ -229,17 +214,14 @@ export const KnowledgeBaseProvider = () =>
                 ),
               { concurrency: 5 },
             );
-            return results.filter(
-              (r): r is KnowledgeBase["Attributes"] => r !== undefined,
-            );
+            return results.filter((r): r is KnowledgeBase["Attributes"] => r !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const kbId =
             output?.knowledgeBaseId ??
             (yield* findByName(
-              output?.name ??
-                (yield* createName(id, olds ?? ({} as KnowledgeBaseProps))),
+              output?.name ?? (yield* createName(id, olds ?? ({} as KnowledgeBaseProps))),
             ));
           if (kbId === undefined) return undefined;
           const kb = yield* getKbOrUndefined(kbId);
@@ -256,14 +238,8 @@ export const KnowledgeBaseProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createName(
-            id,
-            olds ?? ({} as KnowledgeBaseProps),
-          );
-          const newName = yield* createName(
-            id,
-            news ?? ({} as KnowledgeBaseProps),
-          );
+          const oldName = yield* createName(id, olds ?? ({} as KnowledgeBaseProps));
+          const newName = yield* createName(id, news ?? ({} as KnowledgeBaseProps));
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
@@ -276,12 +252,7 @@ export const KnowledgeBaseProvider = () =>
           // description, role, and tags converge via update.
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {} as KnowledgeBaseProps,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {} as KnowledgeBaseProps, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -341,9 +312,7 @@ export const KnowledgeBaseProvider = () =>
           if (upsert.length > 0) {
             yield* bedrock.tagResource({
               resourceArn: knowledgeBaseArn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
           if (removed.length > 0) {
@@ -367,9 +336,7 @@ export const KnowledgeBaseProvider = () =>
             bedrock.deleteKnowledgeBase({
               knowledgeBaseId: output.knowledgeBaseId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

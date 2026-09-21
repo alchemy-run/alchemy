@@ -1,7 +1,7 @@
 import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Layer from "effect/Layer";
-import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 import { BatchDeleteUniqueId } from "./BatchDeleteUniqueId.ts";
+import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 
 export const BatchDeleteUniqueIdHttp = Layer.effect(
   BatchDeleteUniqueId,

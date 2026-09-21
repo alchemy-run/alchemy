@@ -1,7 +1,5 @@
-import {
-  packageWebsiteArtifact,
-  stageWebsiteArtifact,
-} from "@/Neon/Website/Artifact.ts";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -9,11 +7,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { unzipSync } from "fflate";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { createHash } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { packageWebsiteArtifact, stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -27,42 +24,30 @@ const fixture = Effect.gen(function* () {
   return { fs, path, root, dist };
 });
 
-it.effect(
-  "static archives are deterministic and omit env and source maps",
-  () =>
-    Effect.gen(function* () {
-      const { fs, path, root, dist } = yield* fixture;
-      yield* fs.writeFileString(
-        path.join(dist, ".env.production"),
-        "TOKEN=do-not-package",
-      );
-      yield* fs.writeFileString(path.join(dist, "app.js.map"), "source-secret");
-      const props = {
-        root,
-        distDir: dist,
-        static: { notFoundHandling: "spa" as const },
-      };
-      const first = yield* packageWebsiteArtifact(props);
-      const second = yield* packageWebsiteArtifact(props);
-      expect(first.hash).toBe(second.hash);
-      const files = yield* Effect.sync(() => unzipSync(first.archive));
-      expect(files["index.mjs"]).toBeDefined();
-      expect(
-        Object.keys(files).some(
-          (name) => name.includes(".env") || name.endsWith(".map"),
-        ),
-      ).toBe(false);
-      const source = yield* Effect.sync(() =>
-        new TextDecoder().decode(files["index.mjs"]),
-      );
-      expect(source).toContain("export default");
-      expect(source).not.toContain(".listen(");
-      yield* fs.writeFileString(
-        path.join(dist, "index.html"),
-        "<h1>Updated</h1>",
-      );
-      expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+it.effect("static archives are deterministic and omit env and source maps", () =>
+  Effect.gen(function* () {
+    const { fs, path, root, dist } = yield* fixture;
+    yield* fs.writeFileString(path.join(dist, ".env.production"), "TOKEN=do-not-package");
+    yield* fs.writeFileString(path.join(dist, "app.js.map"), "source-secret");
+    const props = {
+      root,
+      distDir: dist,
+      static: { notFoundHandling: "spa" as const },
+    };
+    const first = yield* packageWebsiteArtifact(props);
+    const second = yield* packageWebsiteArtifact(props);
+    expect(first.hash).toBe(second.hash);
+    const files = yield* Effect.sync(() => unzipSync(first.archive));
+    expect(files["index.mjs"]).toBeDefined();
+    expect(Object.keys(files).some((name) => name.includes(".env") || name.endsWith(".map"))).toBe(
+      false,
+    );
+    const source = yield* Effect.sync(() => new TextDecoder().decode(files["index.mjs"]));
+    expect(source).toContain("export default");
+    expect(source).not.toContain(".listen(");
+    yield* fs.writeFileString(path.join(dist, "index.html"), "<h1>Updated</h1>");
+    expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 for (const kind of [
@@ -82,15 +67,11 @@ for (const kind of [
       } else if (kind === "native")
         yield* fs.writeFileString(path.join(dist, "addon.node"), "native");
       else if (kind === "executable")
-        yield* fs.writeFile(
-          path.join(dist, "binary"),
-          new Uint8Array([0xcf, 0xfa, 0xed, 0xfe]),
-        );
+        yield* fs.writeFile(path.join(dist, "binary"), new Uint8Array([0xcf, 0xfa, 0xed, 0xfe]));
       else if (kind === "secret-alias") {
         yield* fs.writeFileString(path.join(dist, ".env"), "SECRET=hidden");
         yield* fs.symlink(".env", path.join(dist, "public.txt"));
-      } else if (kind === "cycle")
-        yield* fs.symlink(".", path.join(dist, "cycle"));
+      } else if (kind === "cycle") yield* fs.symlink(".", path.join(dist, "cycle"));
       const result = yield* stageWebsiteArtifact({
         root,
         distDir: dist,
@@ -99,17 +80,12 @@ for (const kind of [
         },
       }).pipe(Effect.result);
       expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result))
-        expect(result.failure._tag).toBe("WebsiteArtifactError");
+      if (Result.isFailure(result)) expect(result.failure._tag).toBe("WebsiteArtifactError");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 }
 
-for (const sensitive of [
-  ".env.production",
-  ".alchemy/state file.json",
-  "private.pem",
-])
+for (const sensitive of [".env.production", ".alchemy/state file.json", "private.pem"])
   for (const alias of [false, true])
     it.effect(
       `rejects traced ${JSON.stringify(sensitive)}${alias ? " through a symlink" : ""} with a sanitized filename`,
@@ -140,181 +116,138 @@ export default { fetch: () => new Response(value) };`,
               `A traced dependency selects a sensitive file: ${sensitive.replace(/[^a-zA-Z0-9_./@+-]/g, "_")}`,
             );
             expect(result.failure.message).not.toContain(root);
-            expect(result.failure.message).not.toContain(
-              "fixture-secret-do-not-log",
-            );
+            expect(result.failure.message).not.toContain("fixture-secret-do-not-log");
           }
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
     );
 
-it.effect(
-  "traces referenced source data without selecting neighboring state or secrets",
-  () =>
-    Effect.gen(function* () {
-      const { fs, path, root, dist } = yield* fixture;
-      yield* fs.makeDirectory(path.join(root, "src"));
-      yield* fs.makeDirectory(path.join(root, ".alchemy"));
-      yield* fs.writeFileString(path.join(root, "src/guide.mdx"), "# Guide");
-      yield* fs.writeFileString(path.join(root, ".env"), "fixture-secret");
-      yield* fs.writeFileString(path.join(root, "private.key"), "fixture-key");
-      yield* fs.writeFileString(
-        path.join(root, ".alchemy/state.json"),
-        '{"private":"fixture-state"}',
-      );
-      const serverEntry = path.join(dist, "serve.mjs");
-      yield* fs.writeFileString(
-        serverEntry,
-        'import { readFileSync } from "node:fs"; const guide = readFileSync(new URL("../src/guide.mdx", import.meta.url), "utf8"); export default { fetch: () => new Response(guide) };',
-      );
-      const props = { root, distDir: dist, serverEntry };
-      const first = yield* packageWebsiteArtifact(props);
-      const archive = yield* Effect.sync(() => unzipSync(first.archive));
-      expect(Object.keys(archive).sort()).toEqual([
-        "files/dist/index.html",
-        "files/dist/serve.mjs",
-        "files/src/guide.mdx",
-        "index.mjs",
-      ]);
-      yield* fs.writeFileString(
-        path.join(root, "src/guide.mdx"),
-        "# Updated guide",
-      );
-      expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+it.effect("traces referenced source data without selecting neighboring state or secrets", () =>
+  Effect.gen(function* () {
+    const { fs, path, root, dist } = yield* fixture;
+    yield* fs.makeDirectory(path.join(root, "src"));
+    yield* fs.makeDirectory(path.join(root, ".alchemy"));
+    yield* fs.writeFileString(path.join(root, "src/guide.mdx"), "# Guide");
+    yield* fs.writeFileString(path.join(root, ".env"), "fixture-secret");
+    yield* fs.writeFileString(path.join(root, "private.key"), "fixture-key");
+    yield* fs.writeFileString(
+      path.join(root, ".alchemy/state.json"),
+      '{"private":"fixture-state"}',
+    );
+    const serverEntry = path.join(dist, "serve.mjs");
+    yield* fs.writeFileString(
+      serverEntry,
+      'import { readFileSync } from "node:fs"; const guide = readFileSync(new URL("../src/guide.mdx", import.meta.url), "utf8"); export default { fetch: () => new Response(guide) };',
+    );
+    const props = { root, distDir: dist, serverEntry };
+    const first = yield* packageWebsiteArtifact(props);
+    const archive = yield* Effect.sync(() => unzipSync(first.archive));
+    expect(Object.keys(archive).sort()).toEqual([
+      "files/dist/index.html",
+      "files/dist/serve.mjs",
+      "files/src/guide.mdx",
+      "index.mjs",
+    ]);
+    yield* fs.writeFileString(path.join(root, "src/guide.mdx"), "# Updated guide");
+    expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 for (const alias of [false, true])
-  it.effect(
-    `rejects a traced workspace escape${alias ? " through a symlink" : ""}`,
-    () =>
-      Effect.gen(function* () {
-        const { fs, path, root, dist } = yield* fixture;
-        const outside = yield* fs.makeTempDirectoryScoped();
-        const dependency = path.join(outside, "runtime-data.txt");
-        yield* fs.writeFileString(dependency, "outside-workspace");
-        const selected = alias
-          ? path.join(root, "runtime-data.txt")
-          : dependency;
-        if (alias) yield* fs.symlink(dependency, selected);
-        const serverEntry = path.join(dist, "serve.mjs");
-        yield* fs.writeFileString(
-          serverEntry,
-          `import { readFileSync } from "node:fs"; const value = readFileSync(${JSON.stringify(selected)}, "utf8"); export default { fetch: () => new Response(value) };`,
+  it.effect(`rejects a traced workspace escape${alias ? " through a symlink" : ""}`, () =>
+    Effect.gen(function* () {
+      const { fs, path, root, dist } = yield* fixture;
+      const outside = yield* fs.makeTempDirectoryScoped();
+      const dependency = path.join(outside, "runtime-data.txt");
+      yield* fs.writeFileString(dependency, "outside-workspace");
+      const selected = alias ? path.join(root, "runtime-data.txt") : dependency;
+      if (alias) yield* fs.symlink(dependency, selected);
+      const serverEntry = path.join(dist, "serve.mjs");
+      yield* fs.writeFileString(
+        serverEntry,
+        `import { readFileSync } from "node:fs"; const value = readFileSync(${JSON.stringify(selected)}, "utf8"); export default { fetch: () => new Response(value) };`,
+      );
+      const result = yield* stageWebsiteArtifact({
+        root,
+        distDir: dist,
+        serverEntry,
+      }).pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("WebsiteArtifactError");
+        expect(result.failure.message).toBe(
+          "A traced dependency escapes the application workspace.",
         );
-        const result = yield* stageWebsiteArtifact({
-          root,
-          distDir: dist,
-          serverEntry,
-        }).pipe(Effect.result);
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(result.failure._tag).toBe("WebsiteArtifactError");
-          expect(result.failure.message).toBe(
-            "A traced dependency escapes the application workspace.",
-          );
-        }
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
 for (const mode of ["import", "require"] as const)
-  it.effect(
-    `resolves pnpm ${mode} aliases without copying untraced dependencies`,
-    () =>
-      Effect.gen(function* () {
-        const { fs, path, root, dist } = yield* fixture;
-        const store = path.join(
-          root,
-          "node_modules",
-          ".pnpm",
-          "answer@1",
-          "node_modules",
-          "answer",
-        );
-        yield* fs.makeDirectory(store, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          '{"type":"module"}',
-        );
-        yield* fs.writeFileString(
-          path.join(store, "package.json"),
-          '{"name":"answer","type":"module","exports":"./index.js"}',
-        );
-        yield* fs.writeFileString(
-          path.join(store, "index.js"),
-          "export const answer = 42;",
-        );
-        yield* fs.writeFileString(path.join(store, "unused.txt"), "not-traced");
-        yield* fs.symlink(
-          ".pnpm/answer@1/node_modules/answer",
-          path.join(root, "node_modules", "answer"),
-        );
-        const other = path.join(
-          root,
-          "node_modules/.pnpm/answer@2/node_modules/answer",
-        );
-        yield* fs.makeDirectory(other, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(other, "package.json"),
-          '{"name":"answer","type":"module","exports":"./index.js"}',
-        );
-        yield* fs.writeFileString(
-          path.join(other, "index.js"),
-          "export const answer = 99;",
-        );
-        yield* fs.makeDirectory(
-          path.join(root, "node_modules/.pnpm/node_modules"),
-        );
-        yield* fs.symlink(
-          "../answer@2/node_modules/answer",
-          path.join(root, "node_modules/.pnpm/node_modules/answer"),
-        );
-        yield* fs.writeFileString(
-          path.join(dist, "other.mjs"),
-          'import "../node_modules/.pnpm/node_modules/answer/index.js";',
-        );
-        const serverEntry = path.join(dist, "serve-neon.mjs");
-        yield* fs.writeFileString(
-          serverEntry,
-          (mode === "import"
-            ? 'import { answer } from "answer";'
-            : 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { answer } = require("answer");') +
-            " export default { fetch() { return new Response(String(answer)); } };",
-        );
-        const props = { root, distDir: dist, serverEntry };
-        const first = yield* packageWebsiteArtifact(props);
-        const files = yield* Effect.sync(() => unzipSync(first.archive));
-        expect(
-          Object.keys(files).some((name) =>
-            name.endsWith("node_modules/answer/index.js"),
-          ),
-        ).toBe(true);
-        expect(
-          Object.keys(files).some((name) => name.endsWith("unused.txt")),
-        ).toBe(false);
-        const staged = yield* stageWebsiteArtifact(props);
-        const proc = yield* ChildProcess.make("node", [
-          "--input-type=module",
-          "-e",
-          `const {default: handler} = await import(${JSON.stringify(path.join(staged.directory, "index.mjs"))}); console.log(await handler.fetch(new Request("http://localhost/")).text());`,
-        ]);
-        const [code, stdout, stderr] = yield* Effect.all(
-          [
-            proc.exitCode,
-            proc.stdout.pipe(Stream.decodeText, Stream.mkString),
-            proc.stderr.pipe(Stream.decodeText, Stream.mkString),
-          ],
-          { concurrency: "unbounded" },
-        );
-        expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-        expect(stdout.trim()).toBe("42");
-        yield* fs.writeFileString(
-          path.join(store, "index.js"),
-          "export const answer = 43;",
-        );
-        expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(
-          first.hash,
-        );
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  it.effect(`resolves pnpm ${mode} aliases without copying untraced dependencies`, () =>
+    Effect.gen(function* () {
+      const { fs, path, root, dist } = yield* fixture;
+      const store = path.join(root, "node_modules", ".pnpm", "answer@1", "node_modules", "answer");
+      yield* fs.makeDirectory(store, { recursive: true });
+      yield* fs.writeFileString(path.join(root, "package.json"), '{"type":"module"}');
+      yield* fs.writeFileString(
+        path.join(store, "package.json"),
+        '{"name":"answer","type":"module","exports":"./index.js"}',
+      );
+      yield* fs.writeFileString(path.join(store, "index.js"), "export const answer = 42;");
+      yield* fs.writeFileString(path.join(store, "unused.txt"), "not-traced");
+      yield* fs.symlink(
+        ".pnpm/answer@1/node_modules/answer",
+        path.join(root, "node_modules", "answer"),
+      );
+      const other = path.join(root, "node_modules/.pnpm/answer@2/node_modules/answer");
+      yield* fs.makeDirectory(other, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(other, "package.json"),
+        '{"name":"answer","type":"module","exports":"./index.js"}',
+      );
+      yield* fs.writeFileString(path.join(other, "index.js"), "export const answer = 99;");
+      yield* fs.makeDirectory(path.join(root, "node_modules/.pnpm/node_modules"));
+      yield* fs.symlink(
+        "../answer@2/node_modules/answer",
+        path.join(root, "node_modules/.pnpm/node_modules/answer"),
+      );
+      yield* fs.writeFileString(
+        path.join(dist, "other.mjs"),
+        'import "../node_modules/.pnpm/node_modules/answer/index.js";',
+      );
+      const serverEntry = path.join(dist, "serve-neon.mjs");
+      yield* fs.writeFileString(
+        serverEntry,
+        (mode === "import"
+          ? 'import { answer } from "answer";'
+          : 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { answer } = require("answer");') +
+          " export default { fetch() { return new Response(String(answer)); } };",
+      );
+      const props = { root, distDir: dist, serverEntry };
+      const first = yield* packageWebsiteArtifact(props);
+      const files = yield* Effect.sync(() => unzipSync(first.archive));
+      expect(Object.keys(files).some((name) => name.endsWith("node_modules/answer/index.js"))).toBe(
+        true,
+      );
+      expect(Object.keys(files).some((name) => name.endsWith("unused.txt"))).toBe(false);
+      const staged = yield* stageWebsiteArtifact(props);
+      const proc = yield* ChildProcess.make("node", [
+        "--input-type=module",
+        "-e",
+        `const {default: handler} = await import(${JSON.stringify(path.join(staged.directory, "index.mjs"))}); console.log(await handler.fetch(new Request("http://localhost/")).text());`,
+      ]);
+      const [code, stdout, stderr] = yield* Effect.all(
+        [
+          proc.exitCode,
+          proc.stdout.pipe(Stream.decodeText, Stream.mkString),
+          proc.stderr.pipe(Stream.decodeText, Stream.mkString),
+        ],
+        { concurrency: "unbounded" },
+      );
+      expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+      expect(stdout.trim()).toBe("42");
+      yield* fs.writeFileString(path.join(store, "index.js"), "export const answer = 43;");
+      expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
 const elf = (machine = 183) => {
@@ -329,10 +262,7 @@ for (const machine of [183, 62])
   it.effect(`validates ELF target architecture ${machine}`, () =>
     Effect.gen(function* () {
       const { fs, path, root, dist } = yield* fixture;
-      yield* fs.writeFile(
-        path.join(dist, "addon.node"),
-        yield* Effect.sync(() => elf(machine)),
-      );
+      yield* fs.writeFile(path.join(dist, "addon.node"), yield* Effect.sync(() => elf(machine)));
       const result = yield* stageWebsiteArtifact({
         root,
         distDir: dist,
@@ -362,15 +292,9 @@ it.effect("Sharp metadata-only traces do not materialize native packages", () =>
       serverEntry,
     });
     expect(
-      yield* fs.exists(
-        path.join(artifact.directory, "files/node_modules/sharp/package.json"),
-      ),
+      yield* fs.exists(path.join(artifact.directory, "files/node_modules/sharp/package.json")),
     ).toBe(true);
-    expect(
-      yield* fs.exists(
-        path.join(artifact.directory, "files/node_modules/@img"),
-      ),
-    ).toBe(false);
+    expect(yield* fs.exists(path.join(artifact.directory, "files/node_modules/@img"))).toBe(false);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
@@ -385,16 +309,9 @@ const tarball = (files: [string, Uint8Array, string?][]) => {
     header.fill(32, 148, 156);
     header.write(type, 156);
     header.write("ustar\0", 257);
-    const checksum = header.reduce(
-      (sum: number, byte: number) => sum + byte,
-      0,
-    );
+    const checksum = header.reduce((sum: number, byte: number) => sum + byte, 0);
     header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148);
-    blocks.push(
-      header,
-      Buffer.from(content),
-      Buffer.alloc((512 - (content.length % 512)) % 512),
-    );
+    blocks.push(header, Buffer.from(content), Buffer.alloc((512 - (content.length % 512)) % 512));
   }
   return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 };
@@ -426,10 +343,7 @@ for (const scenario of [
           },
         }),
       );
-      yield* fs.writeFileString(
-        path.join(sharp, "index.js"),
-        "module.exports = 42;",
-      );
+      yield* fs.writeFileString(path.join(sharp, "index.js"), "module.exports = 42;");
       const serverEntry = path.join(dist, "serve.mjs");
       yield* fs.writeFileString(
         serverEntry,
@@ -458,9 +372,7 @@ for (const scenario of [
             const archive = tarball([
               ["package/package.json", Buffer.from(JSON.stringify(manifest))],
               [
-                scenario === "traversal"
-                  ? "package/../escape"
-                  : `package/${binary}`,
+                scenario === "traversal" ? "package/../escape" : `package/${binary}`,
                 elf(scenario === "architecture" ? 62 : 183),
                 scenario === "symlink" ? "2" : "0",
               ],
@@ -482,26 +394,19 @@ for (const scenario of [
         root,
         distDir: dist,
         serverEntry,
-      }).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.result,
-      );
+      }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.result);
       expect(Result.isSuccess(result)).toBe(scenario === "valid");
       expect(requested.length).toBeGreaterThan(0);
-      if (Result.isFailure(result))
-        expect(result.failure._tag).toBe("WebsiteArtifactError");
+      if (Result.isFailure(result)) expect(result.failure._tag).toBe("WebsiteArtifactError");
       if (Result.isSuccess(result)) {
         const packageFile = path.join(
           result.success.directory,
           "files/node_modules/@img/sharp-linux-arm64/package.json",
         );
-        expect(JSON.parse(yield* fs.readFileString(packageFile)).version).toBe(
+        expect(JSON.parse(yield* fs.readFileString(packageFile)).version).toBe("0.34.5");
+        expect(JSON.parse(yield* fs.readFileString(path.join(sharp, "package.json"))).version).toBe(
           "0.34.5",
         );
-        expect(
-          JSON.parse(yield* fs.readFileString(path.join(sharp, "package.json")))
-            .version,
-        ).toBe("0.34.5");
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

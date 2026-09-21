@@ -31,9 +31,7 @@ export interface StopMetricStreams extends Binding.Service<
   "AWS.CloudWatch.StopMetricStreams",
   (
     ...streams: MetricStreams
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.StopMetricStreamsOutput, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.StopMetricStreamsOutput, any>>
 > {}
 
 export const StopMetricStreams = Binding.Service<StopMetricStreams>(

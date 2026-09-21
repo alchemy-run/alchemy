@@ -1,23 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aiSecurity from "@distilled.cloud/cloudflare/ai-security";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // AI Security for Apps (Firewall for AI) is entitlement-gated — on the
 // standard testing account every call fails with "not entitled to access
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -61,38 +55,34 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
     }),
   );
 
-test.provider(
-  "surfaces the typed AiSecurityNotEntitled error on unentitled accounts",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("surfaces the typed AiSecurityNotEntitled error on unentitled accounts", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Settings may be entitled independently of Custom Topics. The
-      // unentitled path still has to surface the typed tag (never the
-      // catch-all); an entitled zone returns the singleton instead.
-      const settings = yield* getSettings(zoneId).pipe(
-        Effect.catchTag("AiSecurityNotEntitled", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-      if (settings !== undefined) {
-        expect(typeof (settings.enabled ?? false)).toBe("boolean");
-      }
+    // Settings may be entitled independently of Custom Topics. The
+    // unentitled path still has to surface the typed tag (never the
+    // catch-all); an entitled zone returns the singleton instead.
+    const settings = yield* getSettings(zoneId).pipe(
+      Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
+    );
+    if (settings !== undefined) {
+      expect(typeof (settings.enabled ?? false)).toBe("boolean");
+    }
 
-      const topicsError = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
-        Effect.retry({
-          while: (e) => e._tag === "Forbidden",
-          schedule: forbiddenRetrySchedule,
-          times: 8,
-        }),
-        Effect.flip,
-      );
-      expect(topicsError._tag).toEqual("AiSecurityNotEntitled");
+    const topicsError = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "Forbidden",
+        schedule: forbiddenRetrySchedule,
+        times: 8,
+      }),
+      Effect.flip,
+    );
+    expect(topicsError._tag).toEqual("AiSecurityNotEntitled");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -101,29 +91,25 @@ test.provider(
 // the route (AI Security is entitlement-gated). It always returns a well-typed
 // `Attributes[]` — empty on the unentitled testing account, non-empty and
 // containing the entitled zone when one is supplied via env.
-test.provider(
-  "list enumerates the setting across all entitled zones",
-  (stack) =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.AI.SecuritySettings,
-      );
-      const all = yield* provider.list();
+test.provider("list enumerates the setting across all entitled zones", (stack) =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Cloudflare.AI.SecuritySettings);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      // Every element is the full Attributes shape `read` produces.
-      for (const settings of all) {
-        expect(typeof settings.zoneId).toBe("string");
-        expect(typeof settings.enabled).toBe("boolean");
-        expect(typeof settings.initialEnabled).toBe("boolean");
-      }
-      // On an entitled account, the supplied zone must appear in the result.
-      if (entitledZoneId) {
-        expect(all.some((s) => s.zoneId === entitledZoneId)).toBe(true);
-      }
+    expect(Array.isArray(all)).toBe(true);
+    // Every element is the full Attributes shape `read` produces.
+    for (const settings of all) {
+      expect(typeof settings.zoneId).toBe("string");
+      expect(typeof settings.enabled).toBe("boolean");
+      expect(typeof settings.initialEnabled).toBe("boolean");
+    }
+    // On an entitled account, the supplied zone must appear in the result.
+    if (entitledZoneId) {
+      expect(all.some((s) => s.zoneId === entitledZoneId)).toBe(true);
+    }
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider.skipIf(!entitledZoneId)(

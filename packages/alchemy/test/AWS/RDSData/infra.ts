@@ -1,7 +1,7 @@
+import * as Effect from "effect/Effect";
 import * as EC2 from "@/AWS/EC2";
 import * as RDS from "@/AWS/RDS";
 import * as SecretsManager from "@/AWS/SecretsManager";
-import * as Effect from "effect/Effect";
 
 /**
  * Shared Aurora fixture infrastructure for the RDSData bindings Lambda and

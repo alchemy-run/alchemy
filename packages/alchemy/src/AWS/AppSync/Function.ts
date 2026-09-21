@@ -89,9 +89,7 @@ export interface AppSyncFunction extends Resource<
  *
  * @resource
  */
-export const FunctionResource = Resource<AppSyncFunction>(
-  "AWS.AppSync.Function",
-);
+export const FunctionResource = Resource<AppSyncFunction>("AWS.AppSync.Function");
 
 export interface FunctionInputProps extends Omit<
   {
@@ -143,14 +141,8 @@ export const FunctionProvider = () =>
   Provider.effect(
     FunctionResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<FunctionProps, "name">,
-      ) {
-        return (
-          props.name ??
-          sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<FunctionProps, "name">) {
+        return props.name ?? sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getFunctionSafe = (apiId: string, functionId: string) =>
@@ -160,10 +152,7 @@ export const FunctionProvider = () =>
         );
 
       /** Find a function by name (fallback when no functionId is cached). */
-      const findFunctionByName = Effect.fn(function* (
-        apiId: string,
-        name: string,
-      ) {
+      const findFunctionByName = Effect.fn(function* (apiId: string, name: string) {
         const pages = yield* appsync.listFunctions.pages({ apiId }).pipe(
           Stream.runCollect,
           Effect.catchTag("NotFoundException", () => Effect.succeed([])),
@@ -182,8 +171,7 @@ export const FunctionProvider = () =>
         requestMappingTemplate: news.requestMappingTemplate,
         responseMappingTemplate: news.responseMappingTemplate,
         functionVersion:
-          news.functionVersion ??
-          (news.code === undefined ? "2018-05-29" : undefined),
+          news.functionVersion ?? (news.code === undefined ? "2018-05-29" : undefined),
         maxBatchSize: news.maxBatchSize,
       });
 
@@ -236,10 +224,7 @@ export const FunctionProvider = () =>
           const fn =
             output?.functionId !== undefined
               ? yield* getFunctionSafe(apiId, output.functionId)
-              : yield* findFunctionByName(
-                  apiId,
-                  yield* createName(id, olds ?? {}),
-                );
+              : yield* findFunctionByName(apiId, yield* createName(id, olds ?? {}));
           if (fn?.functionId == null) return undefined;
           return toAttributes(apiId, fn);
         }),

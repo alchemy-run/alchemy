@@ -31,7 +31,6 @@ export interface DeleteMicrovmImageVersion extends Binding.Service<
     >
   >
 > {}
-export const DeleteMicrovmImageVersion =
-  Binding.Service<DeleteMicrovmImageVersion>(
-    "AWS.Lambda.DeleteMicrovmImageVersion",
-  );
+export const DeleteMicrovmImageVersion = Binding.Service<DeleteMicrovmImageVersion>(
+  "AWS.Lambda.DeleteMicrovmImageVersion",
+);

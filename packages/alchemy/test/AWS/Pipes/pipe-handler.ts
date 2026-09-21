@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 // End-to-end Pipe fixture: an EventBridge Pipe (created at deploy time via
 // the `AWS.Pipes.from(...).toLambda(...)` builder, which synthesizes the
@@ -35,9 +35,7 @@ export const PipeQueuesLive = Layer.effect(
 // EventBridge Pipes invokes a Lambda target with the raw batch: a JSON
 // array of source records (NOT the `{ Records: [...] }` Lambda event-source
 // envelope). SQS records carry `eventSource: "aws:sqs"`.
-const isPipeSqsBatch = (
-  event: unknown,
-): event is Array<{ body: string; messageId: string }> =>
+const isPipeSqsBatch = (event: unknown): event is Array<{ body: string; messageId: string }> =>
   Array.isArray(event) &&
   event.length > 0 &&
   (event[0] as { eventSource?: string })?.eventSource === "aws:sqs";
@@ -64,11 +62,9 @@ export default PipeTargetFunction.make(
       Effect.gen(function* () {
         return (event: unknown) => {
           if (isPipeSqsBatch(event)) {
-            return Effect.forEach(
-              event,
-              (record) => sendMessage({ MessageBody: record.body }),
-              { discard: true },
-            ).pipe(Effect.orDie);
+            return Effect.forEach(event, (record) => sendMessage({ MessageBody: record.body }), {
+              discard: true,
+            }).pipe(Effect.orDie);
           }
         };
       }),
@@ -86,7 +82,5 @@ export default PipeTargetFunction.make(
         });
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(Layer.mergeAll(AWS.SQS.SendMessageHttp, PipeQueuesLive)),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(AWS.SQS.SendMessageHttp, PipeQueuesLive))),
 );

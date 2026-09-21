@@ -59,11 +59,7 @@ export {
   waitForTaskToken,
   when,
 } from "./combinators.ts";
-export {
-  compileProgram,
-  SfnCompileError,
-  type CompiledProgram,
-} from "./compile.ts";
+export { compileProgram, SfnCompileError, type CompiledProgram } from "./compile.ts";
 export {
   simulate,
   SimulateError,

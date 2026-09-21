@@ -11,13 +11,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import {
-  inputExpr,
-  isExpr,
-  nodeOf,
-  variableExpr,
-  type ExprNode,
-} from "./Jsonata.ts";
+import { inputExpr, isExpr, nodeOf, variableExpr, type ExprNode } from "./Jsonata.ts";
 import type { AslNode } from "./Node.ts";
 import { isSfnEffect, type SfnEffect } from "./Program.ts";
 
@@ -115,10 +109,7 @@ const evalExprNode = (node: ExprNode, env: Env): unknown => {
       }
     // eslint-disable-next-line no-fallthrough
     case "prop": {
-      const parent = evalExprNode(node.parent, env) as
-        | Record<string, unknown>
-        | null
-        | undefined;
+      const parent = evalExprNode(node.parent, env) as Record<string, unknown> | null | undefined;
       return parent == null ? undefined : parent[node.name];
     }
     case "literal":
@@ -172,9 +163,7 @@ const evalExpr = (value: unknown, env: Env) =>
   Effect.try({
     try: () => evalValue(value, env),
     catch: (error) =>
-      error instanceof SimulateError
-        ? error
-        : new SimulateError({ message: String(error) }),
+      error instanceof SimulateError ? error : new SimulateError({ message: String(error) }),
   });
 
 const allocVar = (env: Env): string => `sim${env.counter.n++}`;
@@ -211,15 +200,11 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
           }),
         );
       }
-      return evalExpr(node.options.arguments, env).pipe(
-        Effect.flatMap(handler),
-      );
+      return evalExpr(node.options.arguments, env).pipe(Effect.flatMap(handler));
     }
 
     case "all":
-      return Effect.forEach(node.branches, (branch) =>
-        runNode(branch.node, childEnv(env)),
-      );
+      return Effect.forEach(node.branches, (branch) => runNode(branch.node, childEnv(env)));
 
     case "forEach":
       return evalExpr(node.items, env).pipe(
@@ -284,9 +269,7 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
       return evalExpr(node.value, env);
 
     case "fail":
-      return Effect.fail(
-        new FailStateFailure(node.error, node.cause, node.failure),
-      );
+      return Effect.fail(new FailStateFailure(node.error, node.cause, node.failure));
 
     case "retry": {
       const tags =
@@ -303,11 +286,8 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
             const failure = result.failure;
             const retryable =
               !(failure instanceof SimulateError) &&
-              (tags.includes("States.ALL") ||
-                tags.includes(errorNameOf(failure)));
-            return retryable && retriesLeft > 0
-              ? attempt(retriesLeft - 1)
-              : Effect.fail(failure);
+              (tags.includes("States.ALL") || tags.includes(errorNameOf(failure)));
+            return retryable && retriesLeft > 0 ? attempt(retriesLeft - 1) : Effect.fail(failure);
           }),
         );
       return attempt(maxAttempts);
@@ -320,8 +300,7 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
           const failure = result.failure;
           const matches =
             !(failure instanceof SimulateError) &&
-            (node.tags.includes("States.ALL") ||
-              node.tags.includes(errorNameOf(failure)));
+            (node.tags.includes("States.ALL") || node.tags.includes(errorNameOf(failure)));
           if (!matches) return Effect.fail(failure);
           const errorVar = allocVar(env);
           env.vars[errorVar] = {
@@ -332,8 +311,7 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
           if (!isSfnEffect(handler)) {
             return Effect.fail(
               new SimulateError({
-                message:
-                  "Sfn.catchTag/catchAll handler must return an Sfn effect",
+                message: "Sfn.catchTag/catchAll handler must return an Sfn effect",
               }),
             );
           }
@@ -390,8 +368,6 @@ export const simulate = <A, E>(
     counter: { n: 0 },
   };
   return runNode(program.node, env).pipe(
-    Effect.mapError((failure) =>
-      isFailStateFailure(failure) ? failure.failure : failure,
-    ),
+    Effect.mapError((failure) => (isFailStateFailure(failure) ? failure.failure : failure)),
   ) as Effect.Effect<A, E | SimulateError>;
 };

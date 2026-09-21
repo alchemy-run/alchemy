@@ -33,10 +33,7 @@ export interface BatchUpdateCluster extends Binding.Service<
   () => Effect.Effect<
     (
       request: memorydb.BatchUpdateClusterRequest,
-    ) => Effect.Effect<
-      memorydb.BatchUpdateClusterResponse,
-      memorydb.BatchUpdateClusterError
-    >
+    ) => Effect.Effect<memorydb.BatchUpdateClusterResponse, memorydb.BatchUpdateClusterError>
   >
 > {}
 export const BatchUpdateCluster = Binding.Service<BatchUpdateCluster>(

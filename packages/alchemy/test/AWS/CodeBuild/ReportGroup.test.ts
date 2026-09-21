@@ -1,10 +1,10 @@
+import * as codebuild from "@distilled.cloud/aws/codebuild";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ReportGroup } from "@/AWS/CodeBuild/ReportGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as codebuild from "@distilled.cloud/aws/codebuild";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ const findReportGroupArn = codebuild
   .listReportGroups({})
   .pipe(
     Effect.map((res) =>
-      res.reportGroups?.find((arn) =>
-        arn.endsWith(`report-group/${reportGroupName}`),
-      ),
+      res.reportGroups?.find((arn) => arn.endsWith(`report-group/${reportGroupName}`)),
     ),
   );
 
@@ -44,9 +42,7 @@ test.provider(
           type: "TEST",
         }),
       );
-      expect(deployed.reportGroupArn).toContain(
-        `report-group/${reportGroupName}`,
-      );
+      expect(deployed.reportGroupArn).toContain(`report-group/${reportGroupName}`);
       expect(deployed.reportGroupName).toBe(reportGroupName);
 
       // Out-of-band verification via distilled.
@@ -69,9 +65,7 @@ test.provider(
         }),
       );
       const updated = yield* getReportGroup;
-      expect(updated?.tags?.find((t) => t.key === "Purpose")?.value).toBe(
-        "alchemy-test",
-      );
+      expect(updated?.tags?.find((t) => t.key === "Purpose")?.value).toBe("alchemy-test");
 
       // Re-deploy identical props — sync diff is a no-op that converges.
       yield* stack.deploy(

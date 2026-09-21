@@ -1,15 +1,11 @@
+import * as apprunner from "@distilled.cloud/aws/apprunner";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { VpcConnector } from "@/AWS/AppRunner";
 import { SecurityGroup, Subnet, Vpc } from "@/AWS/EC2";
 import * as Test from "@/Test/Alchemy";
-import * as apprunner from "@distilled.cloud/aws/apprunner";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import {
-  assertSecurityGroupGone,
-  assertSubnetGone,
-  assertVpcGone,
-} from "../EC2/Gone.ts";
+import { assertSecurityGroupGone, assertSubnetGone, assertVpcGone } from "../EC2/Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -52,14 +48,10 @@ test.provider(
       const described = yield* apprunner.describeVpcConnector({
         VpcConnectorArn: connector.vpcConnectorArn,
       });
-      expect(described.VpcConnector.VpcConnectorName).toBe(
-        connector.vpcConnectorName,
-      );
+      expect(described.VpcConnector.VpcConnectorName).toBe(connector.vpcConnectorName);
       expect(described.VpcConnector.Status?.toUpperCase()).toBe("ACTIVE");
       expect(described.VpcConnector.Subnets).toEqual([subnet.subnetId]);
-      expect(described.VpcConnector.SecurityGroups).toEqual([
-        securityGroup.groupId,
-      ]);
+      expect(described.VpcConnector.SecurityGroups).toEqual([securityGroup.groupId]);
 
       // Destroy and verify deletion out-of-band: deleted connectors read
       // INACTIVE (or disappear entirely).
@@ -69,12 +61,8 @@ test.provider(
           VpcConnectorArn: connector.vpcConnectorArn,
         })
         .pipe(
-          Effect.map((r) =>
-            (r.VpcConnector.Status ?? "INACTIVE").toUpperCase(),
-          ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("GONE" as const),
-          ),
+          Effect.map((r) => (r.VpcConnector.Status ?? "INACTIVE").toUpperCase()),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
         );
       expect(["INACTIVE", "GONE"]).toContain(after);
 

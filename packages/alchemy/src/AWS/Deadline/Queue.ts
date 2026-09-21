@@ -149,10 +149,7 @@ export interface Queue extends Resource<
  */
 export const Queue = Resource<Queue>("AWS.Deadline.Queue");
 
-const createQueueName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createQueueName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -169,11 +166,7 @@ const readQueueById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getQueue({ farmId, queueId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const queueArn = arnOf(`farm/${described.farmId}/queue/${described.queueId}`);
   const state: QueueState = {
@@ -205,9 +198,7 @@ const findQueueByDisplayName = Effect.fn(function* (
       Effect.succeed([] as deadline.QueueSummary[]),
     ),
   );
-  const match = summaries.find(
-    (summary) => summary.displayName === displayName,
-  );
+  const match = summaries.find((summary) => summary.displayName === displayName);
   if (!match) return undefined;
   return yield* readQueueById(farmId, match.queueId, arnOf);
 });
@@ -228,10 +219,7 @@ const retryWhileStillExists = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
-const stringSetDelta = (
-  observed: readonly string[],
-  desired: readonly string[],
-) => ({
+const stringSetDelta = (observed: readonly string[], desired: readonly string[]) => ({
   toAdd: desired.filter((value) => !observed.includes(value)),
   toRemove: observed.filter((value) => !desired.includes(value)),
 });
@@ -252,11 +240,7 @@ export const QueueProvider = () =>
           if (farmId === undefined) return undefined;
           const state = output?.queueId
             ? yield* readQueueById(farmId, output.queueId, arnOf)
-            : yield* findQueueByDisplayName(
-                farmId,
-                yield* createQueueName(id, olds ?? {}),
-                arnOf,
-              );
+            : yield* findQueueByDisplayName(farmId, yield* createQueueName(id, olds ?? {}), arnOf);
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -272,9 +256,7 @@ export const QueueProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(
-              new Error("AWS.Deadline.Queue requires props"),
-            );
+            return yield* Effect.fail(new Error("AWS.Deadline.Queue requires props"));
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -298,21 +280,16 @@ export const QueueProvider = () =>
                 jobAttachmentSettings: news.jobAttachmentSettings,
                 roleArn: news.roleArn,
                 jobRunAsUser: news.jobRunAsUser,
-                requiredFileSystemLocationNames:
-                  news.requiredFileSystemLocationNames,
+                requiredFileSystemLocationNames: news.requiredFileSystemLocationNames,
                 allowedStorageProfileIds: news.allowedStorageProfileIds,
                 schedulingConfiguration: news.schedulingConfiguration,
                 tags: desiredTags,
               }),
             );
-            yield* session.note(
-              `Created queue ${displayName} (${created.queueId})`,
-            );
+            yield* session.note(`Created queue ${displayName} (${created.queueId})`);
             state = yield* readQueueById(farmId, created.queueId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created queue ${displayName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created queue ${displayName}`));
             }
           }
 
@@ -332,8 +309,7 @@ export const QueueProvider = () =>
               news.description !== (asPlain(described.description) ?? "")) ||
             (news.defaultBudgetAction !== undefined &&
               news.defaultBudgetAction !== described.defaultBudgetAction) ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.roleArn) ||
+            (news.roleArn !== undefined && news.roleArn !== described.roleArn) ||
             news.jobAttachmentSettings !== undefined ||
             news.jobRunAsUser !== undefined ||
             news.schedulingConfiguration !== undefined ||
@@ -356,8 +332,7 @@ export const QueueProvider = () =>
                   fslDelta.toAdd.length > 0 ? fslDelta.toAdd : undefined,
                 requiredFileSystemLocationNamesToRemove:
                   fslDelta.toRemove.length > 0 ? fslDelta.toRemove : undefined,
-                allowedStorageProfileIdsToAdd:
-                  spDelta.toAdd.length > 0 ? spDelta.toAdd : undefined,
+                allowedStorageProfileIdsToAdd: spDelta.toAdd.length > 0 ? spDelta.toAdd : undefined,
                 allowedStorageProfileIdsToRemove:
                   spDelta.toRemove.length > 0 ? spDelta.toRemove : undefined,
                 schedulingConfiguration: news.schedulingConfiguration,
@@ -370,15 +345,9 @@ export const QueueProvider = () =>
           yield* syncDeadlineTags(state.attrs.queueArn, desiredTags);
 
           yield* session.note(state.attrs.queueArn);
-          const final = yield* readQueueById(
-            farmId,
-            state.attrs.queueId,
-            arnOf,
-          );
+          const final = yield* readQueueById(farmId, state.attrs.queueId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled queue ${displayName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled queue ${displayName}`));
           }
           return final.attrs;
         }),
@@ -388,9 +357,7 @@ export const QueueProvider = () =>
               farmId: output.farmId,
               queueId: output.queueId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Queue deletion is asynchronous; wait until it is gone so the
           // parent farm's deletion does not hit a dependency conflict.
           yield* retryWhileStillExists(
@@ -398,14 +365,10 @@ export const QueueProvider = () =>
               const described = yield* deadline
                 .getQueue({ farmId: output.farmId, queueId: output.queueId })
                 .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 );
               if (described !== undefined) {
-                return yield* Effect.fail(
-                  new QueueStillExists({ queueId: output.queueId }),
-                );
+                return yield* Effect.fail(new QueueStillExists({ queueId: output.queueId }));
               }
             }),
           ).pipe(
@@ -415,9 +378,7 @@ export const QueueProvider = () =>
           // Deadline auto-creates /aws/deadline/{farmId}/{queueId} for the
           // queue's job/session logs and deleteQueue does NOT remove it —
           // reap it so a deleted queue leaves no orphaned log group.
-          yield* reapDeadlineLogGroups(
-            `/aws/deadline/${output.farmId}/${output.queueId}`,
-          );
+          yield* reapDeadlineLogGroups(`/aws/deadline/${output.farmId}/${output.queueId}`);
         }),
       };
     }),

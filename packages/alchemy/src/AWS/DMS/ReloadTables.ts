@@ -35,6 +35,4 @@ export interface ReloadTables extends Binding.Service<
   >
 > {}
 
-export const ReloadTables = Binding.Service<ReloadTables>(
-  "AWS.DMS.ReloadTables",
-);
+export const ReloadTables = Binding.Service<ReloadTables>("AWS.DMS.ReloadTables");

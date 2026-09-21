@@ -56,9 +56,7 @@ export class MachineLeaseLost extends Data.TaggedError("Fly.MachineLeaseLost")<{
   }
 }
 
-export class MachineMutationUncertain extends Data.TaggedError(
-  "Fly.MachineMutationUncertain",
-)<{
+export class MachineMutationUncertain extends Data.TaggedError("Fly.MachineMutationUncertain")<{
   appName: string;
   machineId: string;
 }> {}
@@ -87,25 +85,18 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     if (failure) return yield* Effect.fail(failure);
     const now = yield* Clock.currentTimeMillis;
     for (const [machineId, lease] of held) {
-      if (now >= lease.deadline)
-        return yield* lose(machineId, "lease authority expired");
+      if (now >= lease.deadline) return yield* lose(machineId, "lease authority expired");
     }
   });
   const guard = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     check.pipe(Effect.andThen(Effect.raceFirst(effect, Deferred.await(lost))));
-  const record = (
-    machineId: string,
-    response: machines.MachineLease,
-    requestedAt: number,
-  ) =>
+  const record = (machineId: string, response: machines.MachineLease, requestedAt: number) =>
     Effect.gen(function* () {
       const lease = response.data;
       const now = yield* Clock.currentTimeMillis;
       const deadline =
-        Math.min(
-          (lease?.expires_at ?? 0) * 1000,
-          requestedAt + TTL_SECONDS * 1000,
-        ) - EXPIRY_MARGIN_MS;
+        Math.min((lease?.expires_at ?? 0) * 1000, requestedAt + TTL_SECONDS * 1000) -
+        EXPIRY_MARGIN_MS;
       const captured = lease?.nonce
         ? { nonce: lease.nonce, deadline, renewAt: requestedAt + 25_000 }
         : undefined;
@@ -137,18 +128,14 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
                   Effect.retry({
                     times: 8,
                     schedule: retrySchedule<machines.CreateMachineLeaseError>(),
-                    while: (error) =>
-                      error._tag === "Conflict" ||
-                      error._tag === "TooManyRequests",
+                    while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
                   }),
                   Effect.timeout("30 seconds"),
                   Effect.catchTag("Conflict", () =>
                     Effect.fail(new MachineLeaseBusy({ appName, machineId })),
                   ),
-                  Effect.catchTag(
-                    ["HttpClientError", "GatewayTimeout", "TimeoutError"],
-                    (error) =>
-                      lose(machineId, `acquisition uncertain: ${error._tag}`),
+                  Effect.catchTag(["HttpClientError", "GatewayTimeout", "TimeoutError"], (error) =>
+                    lose(machineId, `acquisition uncertain: ${error._tag}`),
                   ),
                 ),
             );
@@ -167,11 +154,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     Effect.gen(function* () {
       yield* check;
       const lease = held.get(machineId);
-      if (!lease)
-        return yield* lose(
-          machineId,
-          "target is outside the acquired lease set",
-        );
+      if (!lease) return yield* lose(machineId, "target is outside the acquired lease set");
       return lease.nonce;
     });
   const mutate = <A, E extends { readonly _tag: string }, R>(
@@ -200,10 +183,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
         Effect.catch((error) =>
           Effect.gen(function* () {
             if (error._tag === "Conflict" || error._tag === "Forbidden") {
-              return yield* lose(
-                machineId,
-                `leased mutation rejected: ${error._tag}`,
-              );
+              return yield* lose(machineId, `leased mutation rejected: ${error._tag}`);
             }
             // Transport errors retain the request, including its private nonce header.
             if (
@@ -234,10 +214,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
         })
         .pipe(
           Retry.none,
-          Effect.map(
-            (machine) =>
-              machine.id === machineId && machine.state === "destroyed",
-          ),
+          Effect.map((machine) => machine.id === machineId && machine.state === "destroyed"),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
           Effect.catchTag(
             [
@@ -250,9 +227,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
             () => Effect.succeed(false),
           ),
           Effect.catchTag("HttpClientError", (error) =>
-            error.reason._tag === "TransportError"
-              ? Effect.succeed(false)
-              : Effect.fail(error),
+            error.reason._tag === "TransportError" ? Effect.succeed(false) : Effect.fail(error),
           ),
           Effect.repeat({
             times: 8,
@@ -281,9 +256,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
   ) =>
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient;
-      const fetchOptions = yield* Effect.serviceOption(
-        FetchHttpClient.RequestInit,
-      );
+      const fetchOptions = yield* Effect.serviceOption(FetchHttpClient.RequestInit);
       yield* Effect.sync(() => {
         deleting.add(machineId);
       });
@@ -292,10 +265,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
           // Bun can replay DELETE on a reused socket below the SDK retry policy.
           Effect.provideService(
             HttpClient.HttpClient,
-            HttpClient.mapRequest(
-              http,
-              HttpClientRequest.setHeader("connection", "close"),
-            ),
+            HttpClient.mapRequest(http, HttpClientRequest.setHeader("connection", "close")),
           ),
           Effect.provideService(FetchHttpClient.RequestInit, {
             ...Option.getOrUndefined(fetchOptions),
@@ -392,9 +362,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     }).pipe(
       Effect.retry({
         times: 8,
-        schedule: retrySchedule<
-          machines.CreateMachineLeaseError | MachineLeaseLost
-        >(),
+        schedule: retrySchedule<machines.CreateMachineLeaseError | MachineLeaseLost>(),
         while: (error) => error._tag === "TooManyRequests",
       }),
       Effect.timeout("75 seconds"),
@@ -407,18 +375,12 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
             const absent = yield* confirmRemoved(machineId).pipe(
               Effect.catch((observation) =>
                 held.get(machineId) === lease
-                  ? lose(
-                      machineId,
-                      `removal observation uncertain: ${observation._tag}`,
-                    )
+                  ? lose(machineId, `removal observation uncertain: ${observation._tag}`)
                   : Effect.succeed(true),
               ),
             );
             if (absent || held.get(machineId) !== lease) return;
-            return yield* lose(
-              machineId,
-              "lease disappeared before removal was confirmed",
-            );
+            return yield* lose(machineId, "lease disappeared before removal was confirmed");
           }
           return yield* lose(machineId, `refresh uncertain: ${error._tag}`);
         }),
@@ -426,10 +388,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
       (operation) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            const pending = yield* operation.pipe(
-              Effect.interruptible,
-              Effect.forkChild,
-            );
+            const pending = yield* operation.pipe(Effect.interruptible, Effect.forkChild);
             return yield* Fiber.join(pending);
           }),
         ),
@@ -450,8 +409,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     Effect.catch(() => Effect.void),
     Effect.forkScoped,
   );
-  const checkTarget = (machineId: string) =>
-    nonce(machineId).pipe(Effect.asVoid);
+  const checkTarget = (machineId: string) => nonce(machineId).pipe(Effect.asVoid);
   return {
     acquire,
     check,
@@ -464,9 +422,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
   };
 });
 
-export type MachineLeases = Effect.Success<
-  ReturnType<typeof makeMachineLeases>
->;
+export type MachineLeases = Effect.Success<ReturnType<typeof makeMachineLeases>>;
 
 export const usingMachineLeases = <A, E, R>(
   appName: string,
@@ -474,8 +430,7 @@ export const usingMachineLeases = <A, E, R>(
   use: (leases: MachineLeases) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
-    if (existing)
-      return yield* existing.guard(Effect.suspend(() => use(existing)));
+    if (existing) return yield* existing.guard(Effect.suspend(() => use(existing)));
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const leases = yield* makeMachineLeases(appName);

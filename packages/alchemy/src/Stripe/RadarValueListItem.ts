@@ -14,8 +14,8 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { alchemyMetadataKeys } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -92,15 +92,11 @@ export type RadarValueListItem = Resource<
  *
  * @resource
  */
-export const RadarValueListItem = Resource<RadarValueListItem>(
-  "Stripe.RadarValueListItem",
-);
+export const RadarValueListItem = Resource<RadarValueListItem>("Stripe.RadarValueListItem");
 
 type RadarValueListItemAttributes = RadarValueListItem["Attributes"];
 
-const toAttrs = (
-  item: StripeRadarValueListItem,
-): RadarValueListItemAttributes => ({
+const toAttrs = (item: StripeRadarValueListItem): RadarValueListItemAttributes => ({
   id: item.id,
   valueList: item.value_list,
   value: item.value,
@@ -112,9 +108,7 @@ const toAttrs = (
 const isMissing = isMissingStripeResource;
 
 const getById = (item: string) =>
-  GetRadarValueListItem({ item }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  GetRadarValueListItem({ item }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
 
 const listItems = Effect.fn(function* (valueList: string) {
   const items: StripeRadarValueListItem[] = [];
@@ -192,16 +186,10 @@ const listValueLists = Effect.fn(function* () {
 
 const listAlchemyValueLists = Effect.fn(function* () {
   const lists = yield* listValueLists();
-  return lists.filter(
-    (list) => tagRecord(list.metadata)[alchemyMetadataKeys.stack] !== undefined,
-  );
+  return lists.filter((list) => tagRecord(list.metadata)[alchemyMetadataKeys.stack] !== undefined);
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  valueList?: string;
-  value?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; valueList?: string; value?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -237,11 +225,8 @@ export const RadarValueListItemProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const valueList =
-        output?.valueList ??
-        (typeof olds?.valueList === "string" ? olds.valueList : undefined);
-      const value =
-        output?.value ??
-        (typeof olds?.value === "string" ? olds.value : undefined);
+        output?.valueList ?? (typeof olds?.valueList === "string" ? olds.valueList : undefined);
+      const value = output?.value ?? (typeof olds?.value === "string" ? olds.value : undefined);
       const existing = yield* observe({
         id: output?.id,
         valueList,
@@ -257,8 +242,7 @@ export const RadarValueListItemProvider = () =>
       const lists = yield* listAlchemyValueLists();
       const rows = yield* Effect.forEach(
         lists,
-        (list) =>
-          listItems(list.id).pipe(Effect.map((items) => items.map(toAttrs))),
+        (list) => listItems(list.id).pipe(Effect.map((items) => items.map(toAttrs))),
         { concurrency: LIST_CONCURRENCY },
       );
       return rows.flat();

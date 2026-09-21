@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import {
-  hostAwsAccess,
-  withRuntimeCredentials,
-} from "../Lambda/BindingHttp.ts";
+import { hostAwsAccess, withRuntimeCredentials } from "../Lambda/BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 /**
@@ -26,12 +23,7 @@ import type { Bucket } from "./Bucket.ts";
  * Genuinely-different bindings stay bespoke: `PresignGetObject` /
  * `PresignPutObject` (SigV4 presigners, not API operations).
  */
-export const makeBucketHttpBinding = <
-  I extends { Bucket?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.S3.GetObject`. */
   tag: string;
   /**

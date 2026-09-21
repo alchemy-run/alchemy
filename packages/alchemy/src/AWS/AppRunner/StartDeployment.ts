@@ -27,12 +27,7 @@ export interface StartDeployment extends Binding.Service<
   (
     service: Service,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      apprunner.StartDeploymentResponse,
-      apprunner.StartDeploymentError
-    >
+    () => Effect.Effect<apprunner.StartDeploymentResponse, apprunner.StartDeploymentError>
   >
 > {}
-export const StartDeployment = Binding.Service<StartDeployment>(
-  "AWS.AppRunner.StartDeployment",
-);
+export const StartDeployment = Binding.Service<StartDeployment>("AWS.AppRunner.StartDeployment");

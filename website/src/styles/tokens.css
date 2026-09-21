@@ -85,15 +85,11 @@
 
   /* ---------- Type ---------- */
   --alc-font-sans:
-    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    sans-serif;
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --alc-font-serif:
-    "Source Serif 4 Variable", "Source Serif Pro", Georgia, "Times New Roman",
-    serif;
-  --alc-font-mono:
-    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --alc-font-hand:
-    "Caveat Variable", "Comic Sans MS", cursive; /* hand-drawn diagram labels */
+    "Source Serif 4 Variable", "Source Serif Pro", Georgia, "Times New Roman", serif;
+  --alc-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --alc-font-hand: "Caveat Variable", "Comic Sans MS", cursive; /* hand-drawn diagram labels */
 
   /* ---------- Radius ---------- */
   --alc-radius-xs: 2px;
@@ -118,8 +114,7 @@
   --alc-shadow-sm: 0 1px 2px rgba(78, 64, 44, 0.08);
   --alc-shadow: 0 4px 14px rgba(78, 64, 44, 0.1);
   --alc-shadow-lg: 0 20px 40px rgba(78, 64, 44, 0.14);
-  --alc-glow:
-    0 0 0 1px var(--alc-accent-40), 0 0 24px -4px var(--alc-accent-40);
+  --alc-glow: 0 0 0 1px var(--alc-accent-40), 0 0 24px -4px var(--alc-accent-40);
 
   /* ---------- Motion ---------- */
   --alc-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -191,8 +186,7 @@
   --alc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --alc-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   --alc-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
-  --alc-glow:
-    0 0 0 1px var(--alc-accent-40), 0 0 24px -4px var(--alc-accent-40);
+  --alc-glow: 0 0 0 1px var(--alc-accent-40), 0 0 24px -4px var(--alc-accent-40);
 }
 
 /* ============================================================

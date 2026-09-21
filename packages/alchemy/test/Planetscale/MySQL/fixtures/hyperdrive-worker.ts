@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/MySQL.ts";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Hyperdrive } from "./Stack.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Drizzle from "@/Drizzle/MySQL.ts";
 import { relations, Widgets } from "./schema.ts";
+import { Hyperdrive } from "./Stack.ts";
 
 /**
  * Worker fixture that binds a Cloudflare Hyperdrive (pointed at a
@@ -49,20 +49,14 @@ export default class MySQLHyperdriveWorker extends Cloudflare.Worker<MySQLHyperd
             .insert(Widgets)
             .values({ id: body.id, name: body.name })
             .onDuplicateKeyUpdate({ set: { name: body.name } });
-          const [inserted] = yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, body.id));
+          const [inserted] = yield* db.select().from(Widgets).where(eq(Widgets.id, body.id));
           return yield* HttpServerResponse.json({ widget: inserted });
         }
 
         const idMatch = url.pathname.match(/^\/widgets\/(\d+)$/);
         if (request.method === "DELETE" && idMatch) {
           const id = Number(idMatch[1]);
-          const [existing] = yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, id));
+          const [existing] = yield* db.select().from(Widgets).where(eq(Widgets.id, id));
           yield* db.delete(Widgets).where(eq(Widgets.id, id));
           return yield* HttpServerResponse.json({ widget: existing ?? null });
         }
@@ -70,10 +64,7 @@ export default class MySQLHyperdriveWorker extends Cloudflare.Worker<MySQLHyperd
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catch((cause: any) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(cause) }, { status: 500 }),
         ),
       ),
     };

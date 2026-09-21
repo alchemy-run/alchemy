@@ -1,3 +1,8 @@
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import {
@@ -9,11 +14,6 @@ import {
   TargetGroup,
 } from "@/AWS/VpcLattice";
 import * as Test from "@/Test/Alchemy";
-import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,10 +27,7 @@ const assertTargetGroupDeleted = (id: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -40,10 +37,7 @@ const assertServiceDeleted = (id: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -68,13 +62,10 @@ test.provider(
           });
           const network = yield* ServiceNetwork("ChainNetwork", {});
           const service = yield* Service("ChainService", {});
-          const association = yield* ServiceNetworkServiceAssociation(
-            "ChainAssociation",
-            {
-              serviceNetworkIdentifier: network.serviceNetworkId,
-              serviceIdentifier: service.serviceId,
-            },
-          );
+          const association = yield* ServiceNetworkServiceAssociation("ChainAssociation", {
+            serviceNetworkIdentifier: network.serviceNetworkId,
+            serviceIdentifier: service.serviceId,
+          });
           const targetGroup = yield* TargetGroup("ChainTargets", {
             type: "IP",
             port: 80,
@@ -170,15 +161,11 @@ test.provider(
       expect(liveTargets.items.map((t) => t.id)).toEqual(["10.31.0.10"]);
 
       // The service is associated with the network.
-      const liveAssociation =
-        yield* vpclattice.getServiceNetworkServiceAssociation({
-          serviceNetworkServiceAssociationIdentifier:
-            first.association.associationId,
-        });
+      const liveAssociation = yield* vpclattice.getServiceNetworkServiceAssociation({
+        serviceNetworkServiceAssociationIdentifier: first.association.associationId,
+      });
       expect(liveAssociation.serviceId).toBe(first.service.serviceId);
-      expect(["ACTIVE", "CREATE_IN_PROGRESS"]).toContain(
-        liveAssociation.status,
-      );
+      expect(["ACTIVE", "CREATE_IN_PROGRESS"]).toContain(liveAssociation.status);
 
       // Update in place: default action, rule priority, health check, target.
       const second = yield* stack.deploy(
@@ -191,12 +178,8 @@ test.provider(
       );
       expect(second.listener.listenerId).toBe(first.listener.listenerId);
       expect(second.rule.ruleId).toBe(first.rule.ruleId);
-      expect(second.targetGroup.targetGroupId).toBe(
-        first.targetGroup.targetGroupId,
-      );
-      expect(second.association.associationId).toBe(
-        first.association.associationId,
-      );
+      expect(second.targetGroup.targetGroupId).toBe(first.targetGroup.targetGroupId);
+      expect(second.association.associationId).toBe(first.association.associationId);
 
       const updatedListener = yield* vpclattice.getListener({
         serviceIdentifier: first.service.serviceId,
@@ -218,18 +201,14 @@ test.provider(
       });
       expect(updatedGroup.config?.healthCheck?.enabled).toBe(true);
       expect(updatedGroup.config?.healthCheck?.path).toBe("/health");
-      expect(updatedGroup.config?.healthCheck?.healthCheckIntervalSeconds).toBe(
-        30,
-      );
+      expect(updatedGroup.config?.healthCheck?.healthCheckIntervalSeconds).toBe(30);
 
       const updatedTargets = yield* vpclattice.listTargets({
         targetGroupIdentifier: first.targetGroup.targetGroupId,
       });
-      expect(
-        updatedTargets.items
-          .filter((t) => t.status !== "DRAINING")
-          .map((t) => t.id),
-      ).toEqual(["10.31.0.11"]);
+      expect(updatedTargets.items.filter((t) => t.status !== "DRAINING").map((t) => t.id)).toEqual([
+        "10.31.0.11",
+      ]);
 
       yield* stack.destroy();
       yield* assertTargetGroupDeleted(first.targetGroup.targetGroupId);

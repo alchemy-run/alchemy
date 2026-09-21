@@ -1,8 +1,8 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -53,11 +53,9 @@ describe("Hetzner.Website.ReactRouter local", () => {
           timeout: "90 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "REACT_ROUTER_AWS_API_MARKER",
-          { label: "api route (dev)" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "REACT_ROUTER_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
 
         yield* stack.destroy();
       }),

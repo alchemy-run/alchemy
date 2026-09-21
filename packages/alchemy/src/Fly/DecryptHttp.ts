@@ -6,11 +6,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
 import { Decrypt, type DecryptRequest } from "./Decrypt.ts";
 import { unwrapSecretValue } from "./SecretHttp.ts";
-import {
-  base64ToBytes,
-  bytesToBase64,
-  makeHttpSecretKeyBinding,
-} from "./SecretKeyHttp.ts";
+import { base64ToBytes, bytesToBase64, makeHttpSecretKeyBinding } from "./SecretKeyHttp.ts";
 
 /**
  * HTTP implementation of {@link Decrypt}. Provide it on the
@@ -47,14 +43,9 @@ export const DecryptHttp = Layer.effect(
             }),
           );
           return {
-            plaintext: Redacted.make(
-              base64ToBytes(unwrapSecretValue(res.plaintext ?? "")),
-            ),
+            plaintext: Redacted.make(base64ToBytes(unwrapSecretValue(res.plaintext ?? ""))),
           };
         }),
     }),
   ),
-).pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(CredentialsFromAmbientOrEnv),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));

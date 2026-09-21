@@ -3,8 +3,8 @@ import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { AppApi } from "./api.ts";
 import { mergePull } from "./ref-writes.ts";
 
@@ -54,11 +54,9 @@ export const GitHubLive = HttpApiBuilder.group(AppApi, "github", (h) =>
                     ? 403
                     : error._tag === "Unauthorized"
                       ? 401
-                      : error._tag === "RepoNotFound" ||
-                          error._tag === "PullNotFound"
+                      : error._tag === "RepoNotFound" || error._tag === "PullNotFound"
                         ? 404
-                        : error._tag === "SchemaError" ||
-                            error._tag === "HttpServerError"
+                        : error._tag === "SchemaError" || error._tag === "HttpServerError"
                           ? 400
                           : 409,
               },

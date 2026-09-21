@@ -1,19 +1,17 @@
-import * as EKS from "@/AWS/EKS";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as EKS from "@/AWS/EKS";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "cluster-bindings-handler.ts");
 
 // The gated test supplies standing infrastructure via env (same convention as
 // Cluster.test.ts). The fallbacks keep the module importable when the test is
 // skipped — the fixture is only ever deployed when the env vars are set.
-const roleArn =
-  process.env.AWS_TEST_EKS_ROLE_ARN ??
-  "arn:aws:iam::000000000000:role/placeholder";
+const roleArn = process.env.AWS_TEST_EKS_ROLE_ARN ?? "arn:aws:iam::000000000000:role/placeholder";
 const subnetIds = (process.env.AWS_TEST_EKS_SUBNET_IDS ?? "").split(",");
 
 // Well-formed-but-nonexistent identifiers: each /probes call drives a
@@ -21,8 +19,7 @@ const subnetIds = (process.env.AWS_TEST_EKS_SUBNET_IDS ?? "").split(",");
 // cluster-name injection, and the typed error decode without provisioning the
 // sub-resource.
 const BOGUS = "alchemy-nonexistent-probe";
-const BOGUS_PRINCIPAL_ARN =
-  "arn:aws:iam::000000000000:role/alchemy-nonexistent-probe";
+const BOGUS_PRINCIPAL_ARN = "arn:aws:iam::000000000000:role/alchemy-nonexistent-probe";
 
 export class EKSClusterTestFunction extends Lambda.Function<Lambda.Function>()(
   "EKSClusterTestFunction",
@@ -53,27 +50,22 @@ export default EKSClusterTestFunction.make(
     const listNodegroups = yield* EKS.ListNodegroups(cluster);
     const listAddons = yield* EKS.ListAddons(cluster);
     const listFargateProfiles = yield* EKS.ListFargateProfiles(cluster);
-    const listPodIdentityAssociations =
-      yield* EKS.ListPodIdentityAssociations(cluster);
+    const listPodIdentityAssociations = yield* EKS.ListPodIdentityAssociations(cluster);
     const listAccessEntries = yield* EKS.ListAccessEntries(cluster);
     const listInsights = yield* EKS.ListInsights(cluster);
     const listUpdates = yield* EKS.ListUpdates(cluster);
     const listCapabilities = yield* EKS.ListCapabilities(cluster);
-    const listIdentityProviderConfigs =
-      yield* EKS.ListIdentityProviderConfigs(cluster);
-    const listAssociatedAccessPolicies =
-      yield* EKS.ListAssociatedAccessPolicies(cluster);
+    const listIdentityProviderConfigs = yield* EKS.ListIdentityProviderConfigs(cluster);
+    const listAssociatedAccessPolicies = yield* EKS.ListAssociatedAccessPolicies(cluster);
     const describeNodegroup = yield* EKS.DescribeNodegroup(cluster);
     const describeAddon = yield* EKS.DescribeAddon(cluster);
     const describeFargateProfile = yield* EKS.DescribeFargateProfile(cluster);
-    const describePodIdentityAssociation =
-      yield* EKS.DescribePodIdentityAssociation(cluster);
+    const describePodIdentityAssociation = yield* EKS.DescribePodIdentityAssociation(cluster);
     const describeAccessEntry = yield* EKS.DescribeAccessEntry(cluster);
     const describeUpdate = yield* EKS.DescribeUpdate(cluster);
     const describeInsight = yield* EKS.DescribeInsight(cluster);
     const describeCapability = yield* EKS.DescribeCapability(cluster);
-    const describeIdentityProviderConfig =
-      yield* EKS.DescribeIdentityProviderConfig(cluster);
+    const describeIdentityProviderConfig = yield* EKS.DescribeIdentityProviderConfig(cluster);
     const describeInsightsRefresh = yield* EKS.DescribeInsightsRefresh(cluster);
     const startInsightsRefresh = yield* EKS.StartInsightsRefresh(cluster);
 
@@ -119,8 +111,7 @@ export default EKSClusterTestFunction.make(
           return yield* HttpServerResponse.json({
             status: result.cluster?.status,
             endpointPresent: typeof result.cluster?.endpoint === "string",
-            caPresent:
-              typeof result.cluster?.certificateAuthority?.data === "string",
+            caPresent: typeof result.cluster?.certificateAuthority?.data === "string",
           });
         }
 
@@ -140,16 +131,12 @@ export default EKSClusterTestFunction.make(
             nodegroups: (nodegroups.nodegroups ?? []).length,
             addons: (addons.addons ?? []).length,
             fargateProfiles: (fargateProfiles.fargateProfileNames ?? []).length,
-            podIdentityAssociations: (
-              podIdentityAssociations.associations ?? []
-            ).length,
+            podIdentityAssociations: (podIdentityAssociations.associations ?? []).length,
             accessEntries: (accessEntries.accessEntries ?? []).length,
             insights: (insights.insights ?? []).length,
             updates: (updates.updateIds ?? []).length,
             capabilities: (capabilities.capabilities ?? []).length,
-            identityProviderConfigs: (
-              identityProviderConfigs.identityProviderConfigs ?? []
-            ).length,
+            identityProviderConfigs: (identityProviderConfigs.identityProviderConfigs ?? []).length,
           });
         }
 
@@ -161,89 +148,76 @@ export default EKSClusterTestFunction.make(
             nodegroupName: BOGUS,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           const addonTag = yield* describeAddon({ addonName: BOGUS }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const fargateProfileTag = yield* describeFargateProfile({
             fargateProfileName: BOGUS,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           const podIdentityTag = yield* describePodIdentityAssociation({
             associationId: `a-${BOGUS}`,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const accessEntryTag = yield* describeAccessEntry({
             principalArn: BOGUS_PRINCIPAL_ARN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidRequestException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const updateTag = yield* describeUpdate({
             updateId: "00000000-0000-0000-0000-000000000000",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const insightTag = yield* describeInsight({
             id: "00000000-0000-0000-0000-000000000000",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const associatedPoliciesTag = yield* listAssociatedAccessPolicies({
             principalArn: BOGUS_PRINCIPAL_ARN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidRequestException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const capabilityTag = yield* describeCapability({
             capabilityName: BOGUS,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
-          const identityProviderConfigTag =
-            yield* describeIdentityProviderConfig({
-              identityProviderConfig: { type: "oidc", name: BOGUS },
-            }).pipe(
-              Effect.map(() => "Found"),
-              Effect.catchTag(
-                ["ResourceNotFoundException", "InvalidParameterException"],
-                (e) => Effect.succeed(e._tag),
-              ),
-            );
+          const identityProviderConfigTag = yield* describeIdentityProviderConfig({
+            identityProviderConfig: { type: "oidc", name: BOGUS },
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
+            ),
+          );
           return yield* HttpServerResponse.json({
             nodegroupTag,
             addonTag,
@@ -264,16 +238,14 @@ export default EKSClusterTestFunction.make(
           // InvalidRequestException, which proves the same wiring.
           const startTag = yield* startInsightsRefresh().pipe(
             Effect.map((r) => r.status ?? "STARTED"),
-            Effect.catchTag(
-              ["InvalidRequestException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidRequestException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const describeTag = yield* describeInsightsRefresh().pipe(
             Effect.map((r) => r.status ?? "UNKNOWN"),
-            Effect.catchTag(
-              ["InvalidRequestException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidRequestException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ startTag, describeTag });

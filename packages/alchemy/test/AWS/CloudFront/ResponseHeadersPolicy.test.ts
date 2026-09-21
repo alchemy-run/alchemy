@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ResponseHeadersPolicy } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ResponseHeadersPolicy } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,15 +41,13 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
         const initial = yield* cloudfront.getResponseHeadersPolicy({
           Id: created.responseHeadersPolicyId,
         });
-        expect(initial.ResponseHeadersPolicy?.Id).toEqual(
-          created.responseHeadersPolicyId,
+        expect(initial.ResponseHeadersPolicy?.Id).toEqual(created.responseHeadersPolicyId);
+        expect(initial.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment).toEqual(
+          "initial",
         );
         expect(
-          initial.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment,
-        ).toEqual("initial");
-        expect(
-          initial.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig
-            ?.SecurityHeadersConfig?.FrameOptions?.FrameOption,
+          initial.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.SecurityHeadersConfig
+            ?.FrameOptions?.FrameOption,
         ).toEqual("DENY");
 
         const updated = yield* stack.deploy(
@@ -79,9 +77,7 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
           }),
         );
 
-        expect(updated.responseHeadersPolicyId).toEqual(
-          created.responseHeadersPolicyId,
-        );
+        expect(updated.responseHeadersPolicyId).toEqual(created.responseHeadersPolicyId);
 
         // Control-plane reads are eventually consistent — poll until the
         // update is visible, then assert.
@@ -91,17 +87,16 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
             Effect.repeat({
               schedule: Schedule.fixed("2 seconds"),
               until: (r) =>
-                r.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig
-                  ?.Comment === "updated",
+                r.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment === "updated",
               times: 15,
             }),
           );
+        expect(after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment).toEqual(
+          "updated",
+        );
         expect(
-          after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment,
-        ).toEqual("updated");
-        expect(
-          after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig
-            ?.SecurityHeadersConfig?.FrameOptions?.FrameOption,
+          after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.SecurityHeadersConfig
+            ?.FrameOptions?.FrameOption,
         ).toEqual("SAMEORIGIN");
         expect(
           after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.CorsConfig
@@ -109,9 +104,7 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
         ).toEqual(["https://app.example.com"]);
 
         yield* stack.destroy();
-        yield* assertResponseHeadersPolicyDeleted(
-          updated.responseHeadersPolicyId,
-        );
+        yield* assertResponseHeadersPolicyDeleted(updated.responseHeadersPolicyId);
       }),
     { timeout: 300_000 },
   );
@@ -137,16 +130,11 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
         const all = yield* provider.list();
 
         expect(
-          all.some(
-            (p) =>
-              p.responseHeadersPolicyId === deployed.responseHeadersPolicyId,
-          ),
+          all.some((p) => p.responseHeadersPolicyId === deployed.responseHeadersPolicyId),
         ).toBe(true);
 
         yield* stack.destroy();
-        yield* assertResponseHeadersPolicyDeleted(
-          deployed.responseHeadersPolicyId,
-        );
+        yield* assertResponseHeadersPolicyDeleted(deployed.responseHeadersPolicyId);
       }),
     { timeout: 300_000 },
   );
@@ -154,17 +142,11 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
 
 const assertResponseHeadersPolicyDeleted = (id: string) =>
   cloudfront.getResponseHeadersPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("ResponseHeadersPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("ResponseHeadersPolicyStillExists"))),
     Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void),
     Effect.retry({
       while: (error) =>
-        error instanceof Error &&
-        error.message === "ResponseHeadersPolicyStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+        error instanceof Error && error.message === "ResponseHeadersPolicyStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

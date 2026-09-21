@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Access custom pages are a plan-gated feature: on the standard testing
 // account `POST /accounts/{id}/access/custom_pages` fails with HTTP 403 code
@@ -52,11 +49,7 @@ test.provider.skipIf(entitled)(
           accountId,
           customPageId: "00000000-0000-0000-0000-000000000000",
         })
-        .pipe(
-          Effect.catchTag("AccessCustomPageNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       expect(direct).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -126,11 +119,7 @@ test.provider.skipIf(!entitled)(
           accountId,
           customPageId: replaced.customPageId,
         })
-        .pipe(
-          Effect.catchTag("AccessCustomPageNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.uid ?? undefined).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -146,9 +135,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.CustomPage,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.CustomPage);
 
       if (!entitled) {
         const all = yield* provider.list();
@@ -171,9 +158,7 @@ test.provider(
       );
 
       const all = yield* provider.list();
-      expect(all.some((p) => p.customPageId === deployed.customPageId)).toBe(
-        true,
-      );
+      expect(all.some((p) => p.customPageId === deployed.customPageId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

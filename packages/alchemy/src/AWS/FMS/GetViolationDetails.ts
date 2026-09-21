@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetViolationDetails}.
  */
-export interface GetViolationDetailsRequest
-  extends fms.GetViolationDetailsRequest {}
+export interface GetViolationDetailsRequest extends fms.GetViolationDetailsRequest {}
 
 /**
  * Runtime binding for `fms:GetViolationDetails`.
@@ -37,10 +36,7 @@ export interface GetViolationDetails extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetViolationDetailsRequest,
-    ) => Effect.Effect<
-      fms.GetViolationDetailsResponse,
-      fms.GetViolationDetailsError
-    >
+    ) => Effect.Effect<fms.GetViolationDetailsResponse, fms.GetViolationDetailsError>
   >
 > {}
 

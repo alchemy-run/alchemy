@@ -1,3 +1,9 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as AWS from "@/AWS";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import {
@@ -20,12 +26,6 @@ import {
   TrustStore,
 } from "@/AWS/ELBv2";
 import { Bucket } from "@/AWS/S3";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * An RFC1918 IP outside the default VPC's CIDR. RegisterTargets accepts
@@ -151,14 +151,10 @@ export default ElbBindingsFunction.make(
     const registerTargets = yield* RegisterTargets(targetGroup);
     const deregisterTargets = yield* DeregisterTargets(targetGroup);
     const describeTargetHealth = yield* DescribeTargetHealth(targetGroup);
-    const describeCapacityReservation =
-      yield* DescribeCapacityReservation(loadBalancer);
-    const modifyCapacityReservation =
-      yield* ModifyCapacityReservation(loadBalancer);
-    const getCaCertificatesBundle =
-      yield* GetTrustStoreCaCertificatesBundle(trustStore);
-    const getRevocationContent =
-      yield* GetTrustStoreRevocationContent(trustStore);
+    const describeCapacityReservation = yield* DescribeCapacityReservation(loadBalancer);
+    const modifyCapacityReservation = yield* ModifyCapacityReservation(loadBalancer);
+    const getCaCertificatesBundle = yield* GetTrustStoreCaCertificatesBundle(trustStore);
+    const getRevocationContent = yield* GetTrustStoreRevocationContent(trustStore);
 
     return {
       fetch: Effect.gen(function* () {
@@ -176,8 +172,7 @@ export default ElbBindingsFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            message:
-              result._tag === "Failure" ? String(result.failure) : undefined,
+            message: result._tag === "Failure" ? String(result.failure) : undefined,
           });
         }
 
@@ -207,17 +202,13 @@ export default ElbBindingsFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/capacity") {
-          const result = yield* describeCapacityReservation().pipe(
-            Effect.result,
-          );
+          const result = yield* describeCapacityReservation().pipe(Effect.result);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
             states:
               result._tag === "Success"
-                ? (result.success.CapacityReservationState ?? []).map(
-                    (s) => s.State,
-                  )
+                ? (result.success.CapacityReservationState ?? []).map((s) => s.State)
                 : undefined,
           });
         }
@@ -240,18 +231,14 @@ export default ElbBindingsFunction.make(
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
             // A presigned S3 URL, valid for ten minutes.
-            location:
-              result._tag === "Success" ? result.success.Location : undefined,
+            location: result._tag === "Success" ? result.success.Location : undefined,
           });
         }
 
         // Queries a revocation id that was never added — proves the IAM grant
         // and that the miss surfaces as the typed tag, without needing a CRL
         // fixture.
-        if (
-          request.method === "GET" &&
-          pathname === "/truststore-revocation-missing"
-        ) {
+        if (request.method === "GET" && pathname === "/truststore-revocation-missing") {
           const result = yield* getRevocationContent({
             RevocationId: 424242,
           }).pipe(Effect.result);

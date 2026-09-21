@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface BatchRemoveRoleRequest extends Omit<
-  repostspace.BatchRemoveRoleInput,
-  "spaceId"
-> {}
+export interface BatchRemoveRoleRequest extends Omit<repostspace.BatchRemoveRoleInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `BatchRemoveRole` operation (IAM action
@@ -39,12 +36,7 @@ export interface BatchRemoveRole extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchRemoveRoleRequest,
-    ) => Effect.Effect<
-      repostspace.BatchRemoveRoleOutput,
-      repostspace.BatchRemoveRoleError
-    >
+    ) => Effect.Effect<repostspace.BatchRemoveRoleOutput, repostspace.BatchRemoveRoleError>
   >
 > {}
-export const BatchRemoveRole = Binding.Service<BatchRemoveRole>(
-  "AWS.RePostSpace.BatchRemoveRole",
-);
+export const BatchRemoveRole = Binding.Service<BatchRemoveRole>("AWS.RePostSpace.BatchRemoveRole");

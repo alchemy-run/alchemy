@@ -31,12 +31,7 @@ export interface DescribeNodegroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<eks.DescribeNodegroupRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeNodegroupResponse,
-      eks.DescribeNodegroupError
-    >
+    ) => Effect.Effect<eks.DescribeNodegroupResponse, eks.DescribeNodegroupError>
   >
 > {}
-export const DescribeNodegroup = Binding.Service<DescribeNodegroup>(
-  "AWS.EKS.DescribeNodegroup",
-);
+export const DescribeNodegroup = Binding.Service<DescribeNodegroup>("AWS.EKS.DescribeNodegroup");

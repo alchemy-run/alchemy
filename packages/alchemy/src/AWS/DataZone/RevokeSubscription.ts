@@ -34,10 +34,7 @@ export interface RevokeSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RevokeSubscriptionRequest,
-    ) => Effect.Effect<
-      datazone.RevokeSubscriptionOutput,
-      datazone.RevokeSubscriptionError
-    >
+    ) => Effect.Effect<datazone.RevokeSubscriptionOutput, datazone.RevokeSubscriptionError>
   >
 > {}
 export const RevokeSubscription = Binding.Service<RevokeSubscription>(

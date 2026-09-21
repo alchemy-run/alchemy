@@ -4,18 +4,12 @@ import * as ts from "typescript-api/unstable/ast";
 import { createSyntaxProject } from "./typescript-source.ts";
 
 /** Insert only the missing type argument/import, preserving comments and formatting. */
-export function migrateBindingPolicies(
-  sourceFile: ts.SourceFile,
-  providersPath: string,
-): string {
+export function migrateBindingPolicies(sourceFile: ts.SourceFile, providersPath: string): string {
   const filename = sourceFile.fileName;
   let source = sourceFile.text;
   const insertions: { offset: number; text: string }[] = [];
   const visit = (node: ts.Node) => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression)
-    ) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
       const callee = node.expression;
       if (
         callee.name.text === "Policy" &&
@@ -45,36 +39,25 @@ export function migrateBindingPolicies(
     );
   });
   if (!alreadyImported) {
-    let relative = path
-      .relative(path.dirname(filename), providersPath)
-      .split(path.sep)
-      .join("/");
+    let relative = path.relative(path.dirname(filename), providersPath).split(path.sep).join("/");
     if (!relative.startsWith(".")) relative = `./${relative}`;
     const newline = source.includes("\r\n") ? "\r\n" : "\n";
     const lastImport = imports.at(-1);
-    const offset =
-      lastImport?.end ?? (source.startsWith("#!") ? source.indexOf("\n") : 0);
+    const offset = lastImport?.end ?? (source.startsWith("#!") ? source.indexOf("\n") : 0);
     insertions.push({
       offset,
       text: `${offset ? newline : ""}import type { Providers } from ${JSON.stringify(relative)};${offset ? "" : newline}`,
     });
   }
   for (const insertion of insertions.sort((a, b) => b.offset - a.offset)) {
-    source =
-      source.slice(0, insertion.offset) +
-      insertion.text +
-      source.slice(insertion.offset);
+    source = source.slice(0, insertion.offset) + insertion.text + source.slice(insertion.offset);
   }
   return source;
 }
 
 async function main() {
   const provider = process.argv[2] ?? "AWS";
-  const srcRoot = path.join(
-    import.meta.dir,
-    "../packages/alchemy/src",
-    provider,
-  );
+  const srcRoot = path.join(import.meta.dir, "../packages/alchemy/src", provider);
   const providersPath = path.join(srcRoot, "Providers.ts");
   const changed: string[] = [];
   const files = (await fs.readdir(srcRoot, { recursive: true }))

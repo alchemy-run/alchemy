@@ -1,20 +1,18 @@
-import * as AWS from "@/AWS";
-import { AppMonitor } from "@/AWS/RUM";
-import * as Test from "@/Test/Alchemy";
 import * as rum from "@distilled.cloud/aws/rum";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AppMonitor } from "@/AWS/RUM";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const findMonitor = (name: string) =>
   rum.getAppMonitor({ Name: name }).pipe(
     Effect.map((r) => r.AppMonitor),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class AppMonitorStillExists extends Data.TaggedError("AppMonitorStillExists")<{
@@ -24,9 +22,7 @@ class AppMonitorStillExists extends Data.TaggedError("AppMonitorStillExists")<{
 const assertMonitorDeleted = (name: string) =>
   findMonitor(name).pipe(
     Effect.flatMap((monitor) =>
-      monitor === undefined
-        ? Effect.void
-        : Effect.fail(new AppMonitorStillExists({ name })),
+      monitor === undefined ? Effect.void : Effect.fail(new AppMonitorStillExists({ name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AppMonitorStillExists",
@@ -36,15 +32,13 @@ const assertMonitorDeleted = (name: string) =>
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getAppMonitor on a nonexistent monitor fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        rum.getAppMonitor({ Name: "alchemy-nonexistent-rum-monitor-probe" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getAppMonitor on a nonexistent monitor fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      rum.getAppMonitor({ Name: "alchemy-nonexistent-rum-monitor-probe" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 test.provider(
@@ -76,9 +70,10 @@ test.provider(
       expect(created?.Id).toBe(monitor.appMonitorId);
       expect(created?.Domain).toBe("example.com");
       expect(created?.AppMonitorConfiguration?.SessionSampleRate).toBe(0.5);
-      expect(
-        [...(created?.AppMonitorConfiguration?.Telemetries ?? [])].sort(),
-      ).toEqual(["errors", "http"]);
+      expect([...(created?.AppMonitorConfiguration?.Telemetries ?? [])].sort()).toEqual([
+        "errors",
+        "http",
+      ]);
       expect(created?.AppMonitorConfiguration?.AllowCookies).toBe(true);
       expect(created?.DataStorage?.CwLog?.CwLogEnabled ?? false).toBe(false);
       expect(created?.CustomEvents?.Status ?? "DISABLED").toBe("DISABLED");
@@ -108,9 +103,7 @@ test.provider(
       const afterUpdate = yield* findMonitor(monitor.appMonitorName);
       expect(afterUpdate?.Domain).toBe("updated.example.com");
       expect(afterUpdate?.AppMonitorConfiguration?.SessionSampleRate).toBe(1);
-      expect(afterUpdate?.AppMonitorConfiguration?.Telemetries).toEqual([
-        "errors",
-      ]);
+      expect(afterUpdate?.AppMonitorConfiguration?.Telemetries).toEqual(["errors"]);
       expect(afterUpdate?.AppMonitorConfiguration?.AllowCookies).toBe(false);
       expect(afterUpdate?.DataStorage?.CwLog?.CwLogEnabled).toBe(true);
       expect(afterUpdate?.CustomEvents?.Status).toBe("ENABLED");
@@ -160,10 +153,7 @@ test.provider(
       expect(first.appMonitorName).toBe("alchemy-test-rum-monitor-a");
 
       const observed = yield* findMonitor(first.appMonitorName);
-      expect([...(observed?.DomainList ?? [])].sort()).toEqual([
-        "app.example.com",
-        "example.com",
-      ]);
+      expect([...(observed?.DomainList ?? [])].sort()).toEqual(["app.example.com", "example.com"]);
 
       // rename replaces the monitor
       const second = yield* stack.deploy(

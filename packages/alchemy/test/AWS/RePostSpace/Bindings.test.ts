@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as repostspace from "@distilled.cloud/aws/repostspace";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import RePostSpaceBindingsFunctionLive, {
-  RePostSpaceBindingsFunction,
-} from "./bindings-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import RePostSpaceBindingsFunctionLive, { RePostSpaceBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -22,29 +20,23 @@ const RUN_LIVE = !!process.env.AWS_TEST_REPOSTSPACE;
 
 const BOGUS_SPACE_ID = "SPalchemynonexistentprobe0";
 
-test.provider(
-  "getChannel on a nonexistent space fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        repostspace.getChannel({
-          spaceId: BOGUS_SPACE_ID,
-          channelId: "CHalchemynonexistentprobe0",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getChannel on a nonexistent space fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      repostspace.getChannel({
+        spaceId: BOGUS_SPACE_ID,
+        channelId: "CHalchemynonexistentprobe0",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "listChannels on a nonexistent space fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        repostspace.listChannels({ spaceId: BOGUS_SPACE_ID }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("listChannels on a nonexistent space fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(repostspace.listChannels({ spaceId: BOGUS_SPACE_ID }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 test.provider("sendInvites on a nonexistent space fails with a typed tag", () =>
@@ -57,27 +49,21 @@ test.provider("sendInvites on a nonexistent space fails with a typed tag", () =>
         body: "alchemy probe",
       }),
     );
-    expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-      error._tag,
-    );
+    expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
   }),
 );
 
-test.provider(
-  "batchAddRole on a nonexistent space fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        repostspace.batchAddRole({
-          spaceId: BOGUS_SPACE_ID,
-          accessorIds: ["00000000-0000-0000-0000-000000000000"],
-          role: "EXPERT",
-        }),
-      );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
-    }),
+test.provider("batchAddRole on a nonexistent space fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      repostspace.batchAddRole({
+        spaceId: BOGUS_SPACE_ID,
+        accessorIds: ["00000000-0000-0000-0000-000000000000"],
+        role: "EXPERT",
+      }),
+    );
+    expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
+  }),
 );
 
 const sharedStack = Core.scratchStack(testOptions, "RePostSpaceBindings");
@@ -96,9 +82,7 @@ describe("RePostSpace Bindings (E2E)", () => {
       yield* Effect.logInfo("RePostSpace E2E setup: destroying previous run");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "RePostSpace E2E setup: deploying space + Lambda (~30 min)",
-      );
+      yield* Effect.logInfo("RePostSpace E2E setup: deploying space + Lambda (~30 min)");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* RePostSpaceBindingsFunction;
@@ -116,10 +100,7 @@ describe("RePostSpace Bindings (E2E)", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
     }),
@@ -135,13 +116,11 @@ describe("RePostSpace Bindings (E2E)", () => {
     { timeout: 600_000 },
   );
 
-  test.provider.skipIf(!RUN_LIVE)(
-    "all 11 capabilities initialize in the runtime",
-    () =>
-      Effect.gen(function* () {
-        const response = (yield* get("/bindings")) as any;
-        expect(response.bound).toHaveLength(11);
-      }),
+  test.provider.skipIf(!RUN_LIVE)("all 11 capabilities initialize in the runtime", () =>
+    Effect.gen(function* () {
+      const response = (yield* get("/bindings")) as any;
+      expect(response.bound).toHaveLength(11);
+    }),
   );
 
   test.provider.skipIf(!RUN_LIVE)(
@@ -159,9 +138,7 @@ describe("RePostSpace Bindings (E2E)", () => {
         // Channel-role mutations against the real channel with a bogus
         // accessor — the API reports per-accessor errors (or a typed 400),
         // either proves the grant + injection end-to-end.
-        const roles = (yield* post(
-          `/channel-roles/bogus?channelId=${created.channelId}`,
-        )) as any;
+        const roles = (yield* post(`/channel-roles/bogus?channelId=${created.channelId}`)) as any;
         expect(roles.added).toBeDefined();
         expect(roles.removed).toBeDefined();
       }),

@@ -1,31 +1,26 @@
-import * as AWS from "@/AWS";
-import { FlowLog, Vpc } from "@/AWS/EC2";
-import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { FlowLog, Vpc } from "@/AWS/EC2";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
+import * as Provider from "@/Provider";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class FlowLogStillExists extends Data.TaggedError("FlowLogStillExists") {}
 
 const assertDeleted = Effect.fn(function* (flowLogId: string) {
   yield* EC2.describeFlowLogs({ FlowLogIds: [flowLogId] }).pipe(
     Effect.flatMap((r) =>
-      (r.FlowLogs?.length ?? 0) === 0
-        ? Effect.void
-        : Effect.fail(new FlowLogStillExists()),
+      (r.FlowLogs?.length ?? 0) === 0 ? Effect.void : Effect.fail(new FlowLogStillExists()),
     ),
     Effect.retry({
       while: (e) => e instanceof FlowLogStillExists,
@@ -56,11 +51,7 @@ const flowLogStack = (tags?: Record<string, string>) =>
           Statement: [
             {
               Effect: "Allow",
-              Action: [
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-                "logs:DescribeLogStreams",
-              ],
+              Action: ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"],
               Resource: "*",
             },
           ],
@@ -102,9 +93,7 @@ test.provider(
       expect(fl?.LogDestinationType).toEqual("cloud-watch-logs");
 
       // Update tags in place (flow log id unchanged).
-      const { flowLog: updated } = yield* stack.deploy(
-        flowLogStack({ env: "prod" }),
-      );
+      const { flowLog: updated } = yield* stack.deploy(flowLogStack({ env: "prod" }));
       expect(updated.flowLogId).toEqual(flowLog.flowLogId);
 
       const tags = yield* EC2.describeTags({
@@ -113,9 +102,7 @@ test.provider(
           { Name: "resource-type", Values: ["vpc-flow-log"] },
         ],
       });
-      expect(
-        tags.Tags?.some((t) => t.Key === "env" && t.Value === "prod"),
-      ).toBe(true);
+      expect(tags.Tags?.some((t) => t.Key === "env" && t.Value === "prod")).toBe(true);
 
       yield* stack.destroy();
       yield* assertDeleted(flowLog.flowLogId);

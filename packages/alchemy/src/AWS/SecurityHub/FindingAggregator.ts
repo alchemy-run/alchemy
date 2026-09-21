@@ -70,9 +70,7 @@ export interface FindingAggregator extends Resource<
  * });
  * ```
  */
-const FindingAggregatorResource = Resource<FindingAggregator>(
-  "AWS.SecurityHub.FindingAggregator",
-);
+const FindingAggregatorResource = Resource<FindingAggregator>("AWS.SecurityHub.FindingAggregator");
 
 export { FindingAggregatorResource as FindingAggregator };
 
@@ -82,23 +80,15 @@ export const FindingAggregatorProvider = () =>
     Effect.gen(function* () {
       const getAggregator = (arn: string) =>
         securityhub.getFindingAggregator({ FindingAggregatorArn: arn }).pipe(
-          Effect.map(
-            (r) => r as securityhub.GetFindingAggregatorResponse | undefined,
-          ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.catchTag("InvalidAccessException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.map((r) => r as securityhub.GetFindingAggregatorResponse | undefined),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
         );
 
       // At most one aggregator exists per account — a single page suffices.
       const findAggregator = securityhub.listFindingAggregators({}).pipe(
         Effect.map((r) => r.FindingAggregators?.[0]?.FindingAggregatorArn),
-        Effect.catchTag("InvalidAccessException", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
       );
 
       const buildAttrs = (r: securityhub.GetFindingAggregatorResponse) => ({

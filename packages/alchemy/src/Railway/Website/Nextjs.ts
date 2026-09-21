@@ -6,12 +6,10 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * OpenNext). Container-optimal path is `next build` + a long-running Node
  * process.
  */
-export const NEXTJS_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nextjs/node";
+export const NEXTJS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/node";
 
 /** The Node container deploy target for the Next.js build. */
-export const NEXTJS_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nextjs/node";
+export const NEXTJS_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/node";
 
 export interface NextjsProps extends FrameworkSiteProps {}
 

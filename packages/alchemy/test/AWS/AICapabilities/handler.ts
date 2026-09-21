@@ -1,9 +1,3 @@
-import * as Comprehend from "@/AWS/Comprehend";
-import * as Lambda from "@/AWS/Lambda";
-import * as Polly from "@/AWS/Polly";
-import * as Rekognition from "@/AWS/Rekognition";
-import * as Textract from "@/AWS/Textract";
-import * as Translate from "@/AWS/Translate";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,12 +5,13 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
-import {
-  HELLO_PNG_BASE64,
-  SENTIMENT_TEXT,
-  SPEECH_TEXT,
-  TRANSLATE_TEXT,
-} from "./constants.ts";
+import * as Comprehend from "@/AWS/Comprehend";
+import * as Lambda from "@/AWS/Lambda";
+import * as Polly from "@/AWS/Polly";
+import * as Rekognition from "@/AWS/Rekognition";
+import * as Textract from "@/AWS/Textract";
+import * as Translate from "@/AWS/Translate";
+import { HELLO_PNG_BASE64, SENTIMENT_TEXT, SPEECH_TEXT, TRANSLATE_TEXT } from "./constants.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -84,10 +79,7 @@ export default AICapabilitiesTestFunction.make(
             Text: SPEECH_TEXT,
           });
           const chunks = yield* Stream.runCollect(result.AudioStream!);
-          const byteLength = Array.from(chunks).reduce(
-            (total, chunk) => total + chunk.length,
-            0,
-          );
+          const byteLength = Array.from(chunks).reduce((total, chunk) => total + chunk.length, 0);
           return yield* HttpServerResponse.json({
             contentType: result.ContentType,
             byteLength,

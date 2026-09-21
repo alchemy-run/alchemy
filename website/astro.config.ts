@@ -1,3 +1,6 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -5,9 +8,6 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
@@ -56,9 +56,7 @@ function providerResourcesEntry(...providers: string[]) {
   const entryItems = (provider: string) => {
     const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
-    return [
-      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
-    ];
+    return [{ autogenerate: { directory: `providers/${provider}`, collapsed: true } }];
   };
   // A single provider's tree is inlined; a multi-namespace hub nests each
   // provider under its own subgroup so same-named resources (SQL.D1 vs
@@ -76,12 +74,8 @@ function providerResourcesEntry(...providers: string[]) {
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {
   return items.toSorted((a, b) => {
-    const overviewOrder =
-      Number(b.label === "Overview") - Number(a.label === "Overview");
-    return (
-      overviewOrder ||
-      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
-    );
+    const overviewOrder = Number(b.label === "Overview") - Number(a.label === "Overview");
+    return overviewOrder || a.label.localeCompare(b.label, "en", { sensitivity: "base" });
   });
 }
 
@@ -97,10 +91,7 @@ function providerApiReferenceEntry(...providers: string[]) {
     items.flatMap((item) => {
       if ("items" in item) {
         // Generated category and service groups can share a name.
-        return flatten(
-          item.items,
-          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
-        );
+        return flatten(item.items, prefix.at(-1) === item.label ? prefix : [...prefix, item.label]);
       }
       return [{ label: [...prefix, item.label].join("."), link: item.link }];
     });
@@ -170,10 +161,9 @@ function copyMarkdownSources(): AstroIntegration {
 
         // Docs (Starlight content collection) — preserves nested layout under
         // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
-        await walk(
-          fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
-          { lowercase: true },
-        );
+        await walk(fileURLToPath(new URL("./src/content/docs/", import.meta.url)), {
+          lowercase: true,
+        });
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
         // agents can fetch raw MDX via the worker's content negotiation. Astro
         // page routing preserves case, so don't lowercase these.
@@ -775,9 +765,7 @@ export default defineConfig({
             },
             {
               label: "AI",
-              items: [
-                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
-              ],
+              items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
             },
             {
               label: "Messaging & events",
@@ -811,15 +799,11 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-              ],
+              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
             },
             {
               label: "Observability",
-              items: [
-                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
-              ],
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Networking",
@@ -1336,9 +1320,7 @@ export default defineConfig({
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",
-              items: [
-                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
-              ],
+              items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
             },
             {
               label: "Guides",

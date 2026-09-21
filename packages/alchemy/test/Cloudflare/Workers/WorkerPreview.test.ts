@@ -1,19 +1,16 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { WorkerPreviewConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerPreviewConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
@@ -45,9 +42,7 @@ describe.concurrent("Cloudflare.Worker preview", () => {
         expect(v1.preview.previewSlug).toBeDefined();
         expect(v1.preview.deploymentId).toBeDefined();
         expect(v1.preview.url).toBeDefined();
-        expect(v1.preview.url).toContain(
-          `${v1.preview.previewSlug}-${v1.parent.workerName}.`,
-        );
+        expect(v1.preview.url).toContain(`${v1.preview.previewSlug}-${v1.parent.workerName}.`);
         expect(v1.preview.versionOf).toBeUndefined();
 
         yield* expectUrlContains(v1.parent.url!, "parent-marker-v1", {

@@ -1,5 +1,4 @@
-import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -12,14 +11,12 @@ import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { createHash } from "node:crypto";
+import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const services = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
-const spawnFixture = (
-  env: Record<string, string | undefined> = {},
-  waitForReady = true,
-) =>
+const spawnFixture = (env: Record<string, string | undefined> = {}, waitForReady = true) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const fixture = yield* path.fromFileUrl(
@@ -49,8 +46,7 @@ const spawnFixture = (
         Effect.sync(() => {
           output.push(chunk);
           const marker = env.RUN_ONLY === "1" ? "worker1 ready" : "http ready";
-          if (output.join("").includes(marker))
-            Deferred.doneUnsafe(ready, Effect.void);
+          if (output.join("").includes(marker)) Deferred.doneUnsafe(ready, Effect.void);
         }),
       ),
       Effect.forkScoped,
@@ -65,8 +61,7 @@ const spawnFixture = (
     return {
       handle,
       output: () => output.join(""),
-      signal: (signal: "SIGTERM" | "SIGINT") =>
-        Effect.sync(() => process.kill(handle.pid, signal)),
+      signal: (signal: "SIGTERM" | "SIGINT") => Effect.sync(() => process.kill(handle.pid, signal)),
       get: (route: string) =>
         client.get(`http://127.0.0.1:${port}${route}`, {
           headers: { connection: "close" },
@@ -94,9 +89,7 @@ const shutdownElapsed = (fixture: { output: () => string }) =>
     }),
   );
 
-const refusesNewRequests = (
-  fixture: Effect.Success<ReturnType<typeof spawnFixture>>,
-) =>
+const refusesNewRequests = (fixture: Effect.Success<ReturnType<typeof spawnFixture>>) =>
   fixture.get("/health").pipe(
     Effect.timeout("200 millis"),
     Effect.result,
@@ -105,16 +98,12 @@ const refusesNewRequests = (
       until: Result.isFailure,
       times: 8,
     }),
-    Effect.tap((result) =>
-      Effect.sync(() => expect(Result.isFailure(result)).toBe(true)),
-    ),
+    Effect.tap((result) => Effect.sync(() => expect(Result.isFailure(result)).toBe(true))),
   );
 
 const assertFinalizerOrder = (output: string, finished: string) => {
   expect(output.indexOf(finished)).toBeGreaterThanOrEqual(0);
-  expect(output.indexOf("request finalized")).toBeGreaterThan(
-    output.indexOf(finished),
-  );
+  expect(output.indexOf("request finalized")).toBeGreaterThan(output.indexOf(finished));
   expect(output.indexOf("instance finalizing")).toBeGreaterThan(
     output.indexOf("request finalized"),
   );
@@ -203,18 +192,14 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         const first = yield* Deferred.make<void>();
         const response = yield* fixture.get("/stream-hang").pipe(
           Effect.flatMap((response) =>
-            response.stream.pipe(
-              Stream.runForEach(() => Deferred.succeed(first, undefined)),
-            ),
+            response.stream.pipe(Stream.runForEach(() => Deferred.succeed(first, undefined))),
           ),
           Effect.result,
           Effect.forkChild,
         );
         yield* Deferred.await(first);
         yield* fixture.signal("SIGTERM");
-        expect(
-          yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds")),
-        ).toBe(1);
+        expect(yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds"))).toBe(1);
         expect(Result.isFailure(yield* Fiber.join(response))).toBe(true);
         const elapsed = yield* shutdownElapsed(fixture);
         expect(elapsed).toBeGreaterThanOrEqual(1500);
@@ -236,15 +221,11 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           HANG_FINALIZER: "1",
           RECORD_SHUTDOWN_TIMING: "1",
         });
-        const response = yield* fixture
-          .get("/hang")
-          .pipe(Effect.result, Effect.forkChild);
+        const response = yield* fixture.get("/hang").pipe(Effect.result, Effect.forkChild);
         yield* waitForOutput(fixture, "request started");
         yield* fixture.signal("SIGTERM");
         yield* refusesNewRequests(fixture);
-        expect(
-          yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds")),
-        ).toBe(1);
+        expect(yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds"))).toBe(1);
         const elapsed = yield* shutdownElapsed(fixture);
         expect(elapsed).toBeGreaterThanOrEqual(1500);
         expect(elapsed).toBeLessThan(2000);
@@ -338,9 +319,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         ).join("");
         expect(actual.length).toBe(262144);
         const hashes = yield* Effect.sync(() =>
-          [actual, expected].map((body) =>
-            createHash("sha256").update(body).digest("hex"),
-          ),
+          [actual, expected].map((body) => createHash("sha256").update(body).digest("hex")),
         );
         expect(hashes[0]).toBe(hashes[1]);
         expect(yield* fixture.handle.exitCode).toBe(0);
@@ -368,9 +347,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         assertWorkerOrder(output, "worker2");
         before(output, "worker2 stopped", "worker1 stopped");
         before(output, "worker1 claim 2", "worker1 stopped");
-        const claims = [...output.matchAll(/worker1 claim (\d+)/g)].map(
-          (match) => match[1],
-        );
+        const claims = [...output.matchAll(/worker1 claim (\d+)/g)].map((match) => match[1]);
         for (const id of claims) {
           before(output, `worker1 job ${id} completed`, "worker1 drained");
         }
@@ -442,8 +419,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           expect(output).not.toContain("instance finalizing");
           expect(output).not.toContain("worker1 client released");
           expect(output.match(/worker1 stop started/g)?.length).toBe(1);
-          if (mode === "stop-hang")
-            expect(output).not.toContain("worker1 drain started");
+          if (mode === "stop-hang") expect(output).not.toContain("worker1 drain started");
         }).pipe(Effect.scoped, Effect.provide(services)),
       { timeout: 25_000 },
     );
@@ -459,18 +435,11 @@ describe.sequential("managed Fly HTTP shutdown", () => {
             WORKERS: "1",
             WORKER_MODE: mode,
           });
-          expect(yield* fixture.handle.exitCode).toBe(
-            mode === "normal" ? 0 : 1,
-          );
+          expect(yield* fixture.handle.exitCode).toBe(mode === "normal" ? 0 : 1);
           yield* waitForOutput(fixture, "instance finalized");
           assertWorkerOrder(fixture.output(), "worker1");
-          before(
-            fixture.output(),
-            "worker1 client released",
-            "instance finalizing",
-          );
-          if (mode === "error")
-            expect(fixture.output()).toContain("worker failed");
+          before(fixture.output(), "worker1 client released", "instance finalizing");
+          if (mode === "error") expect(fixture.output()).toContain("worker failed");
         }).pipe(Effect.scoped, Effect.provide(services)),
       { timeout: 25_000 },
     );
@@ -567,9 +536,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         yield* fixture.signal("SIGTERM");
         expect(yield* fixture.handle.exitCode).toBe(0);
         expect(fixture.output()).toContain("ordinary handler defect");
-        expect(fixture.output()).not.toContain(
-          "Managed HTTP request cleanup failed",
-        );
+        expect(fixture.output()).not.toContain("Managed HTTP request cleanup failed");
       }).pipe(Effect.scoped, Effect.provide(services)),
     { timeout: 25_000 },
   );
@@ -585,9 +552,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         yield* waitForOutput(fixture, "request dependency released");
         yield* fixture.signal("SIGTERM");
         expect(yield* fixture.handle.exitCode).toBe(0);
-        expect(fixture.output()).not.toContain(
-          "Managed HTTP request cleanup failed",
-        );
+        expect(fixture.output()).not.toContain("Managed HTTP request cleanup failed");
       }).pipe(Effect.scoped, Effect.provide(services)),
     { timeout: 25_000 },
   );
@@ -613,9 +578,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           yield* fixture.signal("SIGTERM");
           yield* refusesNewRequests(fixture);
           expect(yield* fixture.handle.exitCode).toBe(1);
-          const elapsed = yield* Effect.sync(
-            () => performance.now() - signaled,
-          );
+          const elapsed = yield* Effect.sync(() => performance.now() - signaled);
           expect(elapsed).toBeGreaterThanOrEqual(1700);
           expect(elapsed).toBeLessThan(2500);
           yield* waitForOutput(fixture, "shutdown deadline exceeded");
@@ -640,16 +603,8 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           expect(yield* fixture.handle.exitCode).toBe(0);
           yield* waitForOutput(fixture, "instance finalized");
           assertWorkerOrder(fixture.output(), "worker1");
-          before(
-            fixture.output(),
-            "worker1 job 1 completed",
-            "worker1 client released",
-          );
-          before(
-            fixture.output(),
-            "worker1 client released",
-            "instance finalizing",
-          );
+          before(fixture.output(), "worker1 job 1 completed", "worker1 client released");
+          before(fixture.output(), "worker1 client released", "instance finalizing");
         }).pipe(Effect.scoped, Effect.provide(services)),
       { timeout: 25_000 },
     );
@@ -693,11 +648,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         before(output, "worker1 stop started", "worker1 claim 1");
         assertWorkerOrder(output, "worker1");
         for (const match of output.matchAll(/worker1 claim (\d+)/g)) {
-          before(
-            output,
-            `worker1 job ${match[1]} completed`,
-            "worker1 drained",
-          );
+          before(output, `worker1 job ${match[1]} completed`, "worker1 drained");
         }
       }).pipe(Effect.scoped, Effect.provide(services)),
     { timeout: 25_000 },
@@ -717,11 +668,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         yield* waitForOutput(fixture, "dependency finalizer failed");
         assertWorkerOrder(fixture.output(), "worker1");
         assertWorkerOrder(fixture.output(), "worker2");
-        before(
-          fixture.output(),
-          "worker2 client released",
-          "instance finalizing",
-        );
+        before(fixture.output(), "worker2 client released", "instance finalizing");
       }).pipe(Effect.scoped, Effect.provide(services)),
     { timeout: 25_000 },
   );
@@ -752,9 +699,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: undefined,
         });
         yield* fixture.signal("SIGINT");
-        expect(
-          Result.isFailure(yield* fixture.handle.exitCode.pipe(Effect.result)),
-        ).toBe(true);
+        expect(Result.isFailure(yield* fixture.handle.exitCode.pipe(Effect.result))).toBe(true);
         expect(fixture.output()).not.toContain("worker1 stop started");
         expect(fixture.output()).not.toContain("instance finalizing");
       }).pipe(Effect.scoped, Effect.provide(services)),
@@ -762,10 +707,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
   );
 
   for (const [name, env] of [
-    [
-      "Fly without the shutdown env",
-      { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: undefined },
-    ],
+    ["Fly without the shutdown env", { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: undefined }],
     ["unrelated hosts even with the Fly env", { UNMANAGED_HOST: "1" }],
   ] as const) {
     it.live(
@@ -773,9 +715,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
       () =>
         Effect.gen(function* () {
           const fixture = yield* spawnFixture(env);
-          const response = yield* fixture
-            .get("/slow")
-            .pipe(Effect.result, Effect.forkChild);
+          const response = yield* fixture.get("/slow").pipe(Effect.result, Effect.forkChild);
           yield* waitForOutput(fixture, "request started");
           yield* fixture.signal("SIGTERM");
           const exit = yield* fixture.handle.exitCode.pipe(Effect.result);
@@ -788,22 +728,12 @@ describe.sequential("managed Fly HTTP shutdown", () => {
     );
   }
 
-  for (const timeout of [
-    "0",
-    "-1",
-    "1.5",
-    "invalid",
-    "300001",
-    "9007199254740992",
-  ]) {
+  for (const timeout of ["0", "-1", "1.5", "invalid", "300001", "9007199254740992"]) {
     it.live(
       `R06 rejects invalid shutdown timeout ${timeout}`,
       () =>
         Effect.gen(function* () {
-          const fixture = yield* spawnFixture(
-            { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: timeout },
-            false,
-          );
+          const fixture = yield* spawnFixture({ ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: timeout }, false);
           expect(yield* fixture.handle.exitCode).toBe(1);
           yield* waitForOutput(fixture, "must be a positive integer");
           expect(fixture.output()).not.toContain("ready");

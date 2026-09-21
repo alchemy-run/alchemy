@@ -2,141 +2,31 @@
   "name": "@alchemy.run/frontend-frameworks",
   "version": "2.0.0-beta.79",
   "description": "Framework build and development integrations for Alchemy.",
-  "homepage": "https://alchemy.run",
-  "license": "Apache-2.0",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
     "cloudflare",
     "effect",
     "infrastructure-as-code"
   ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/frontend-frameworks"
   },
-  "bugs": {
-    "url": "https://github.com/alchemy-run/alchemy/issues"
-  },
-  "type": "module",
-  "sideEffects": false,
   "files": [
     "src",
     "dist",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts frontend-frameworks",
-    "clean": "rm -rf dist",
-    "test": "vitest run",
-    "test:core": "vitest run src/core/test",
-    "test:astro": "vitest run src/astro/test",
-    "test:nextjs": "vitest run src/nextjs/test",
-    "test:nuxt": "vitest run src/nuxt/test",
-    "test:octane": "vitest run src/octane/test",
-    "test:react-router": "vitest run src/react-router/test",
-    "test:solidstart": "vitest run src/solidstart/test",
-    "test:sveltekit": "vitest run src/sveltekit/test",
-    "test:tanstack-start": "vitest run src/tanstack-start/test",
-    "test:vite": "vitest run src/vite/test",
-    "test:vinext": "vitest run src/vinext/test",
-    "test:waku": "vitest run src/waku/test",
-    "test:vocs": "vitest run src/vocs/test",
-    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
-  },
-  "dependencies": {
-    "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@distilled.cloud/aws": "workspace:*",
-    "@distilled.cloud/cloudflare": "workspace:*",
-    "@effect/platform-node": "catalog:",
-    "esbuild": "catalog:",
-    "rolldown": "catalog:",
-    "srvx": "catalog:",
-    "tinyglobby": "catalog:"
-  },
-  "devDependencies": {
-    "@astrojs/internal-helpers": "catalog:",
-    "@astrojs/underscore-redirects": "catalog:",
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-bun": "catalog:",
-    "@octanejs/vite-plugin": "catalog:",
-    "@opennextjs/cloudflare": "catalog:",
-    "@sveltejs/kit": "catalog:",
-    "@tailwindcss/vite": "catalog:",
-    "@types/node": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "astro": "catalog:",
-    "effect": "catalog:",
-    "hono": "catalog:",
-    "nitropack": "catalog:",
-    "nuxt": "catalog:",
-    "octane": "catalog:",
-    "tailwindcss": "catalog:",
-    "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:",
-    "vocs": "catalog:",
-    "waku": "catalog:"
-  },
-  "peerDependencies": {
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@octanejs/vite-plugin": "catalog:frontend-peer",
-    "@opennextjs/cloudflare": "catalog:",
-    "@sveltejs/kit": "catalog:frontend-peer",
-    "@vitejs/plugin-react": "catalog:",
-    "astro": "catalog:frontend-peer",
-    "effect": "catalog:",
-    "hono": "catalog:",
-    "nuxt": "catalog:frontend-peer",
-    "vite": "catalog:frontend-peer",
-    "waku": "catalog:",
-    "vocs": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "@effect/platform-bun": {
-      "optional": true
-    },
-    "@effect/platform-node": {
-      "optional": true
-    },
-    "@octanejs/vite-plugin": {
-      "optional": true
-    },
-    "@opennextjs/cloudflare": {
-      "optional": true
-    },
-    "@sveltejs/kit": {
-      "optional": true
-    },
-    "@vitejs/plugin-react": {
-      "optional": true
-    },
-    "astro": {
-      "optional": true
-    },
-    "hono": {
-      "optional": true
-    },
-    "nuxt": {
-      "optional": true
-    },
-    "vite": {
-      "optional": true
-    },
-    "waku": {
-      "optional": true
-    },
-    "vocs": {
-      "optional": true
-    }
-  },
+  "type": "module",
+  "sideEffects": false,
   "exports": {
     "./*/neon": {
       "types": "./dist/*/neon.d.ts",
@@ -536,5 +426,115 @@
       "import": "./dist/vocs/node.js"
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts frontend-frameworks",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:core": "vitest run src/core/test",
+    "test:astro": "vitest run src/astro/test",
+    "test:nextjs": "vitest run src/nextjs/test",
+    "test:nuxt": "vitest run src/nuxt/test",
+    "test:octane": "vitest run src/octane/test",
+    "test:react-router": "vitest run src/react-router/test",
+    "test:solidstart": "vitest run src/solidstart/test",
+    "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:tanstack-start": "vitest run src/tanstack-start/test",
+    "test:vite": "vitest run src/vite/test",
+    "test:vinext": "vitest run src/vinext/test",
+    "test:waku": "vitest run src/waku/test",
+    "test:vocs": "vitest run src/vocs/test",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "esbuild": "catalog:",
+    "rolldown": "catalog:",
+    "srvx": "catalog:",
+    "tinyglobby": "catalog:"
+  },
+  "devDependencies": {
+    "@astrojs/internal-helpers": "catalog:",
+    "@astrojs/underscore-redirects": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@octanejs/vite-plugin": "catalog:",
+    "@opennextjs/cloudflare": "catalog:",
+    "@sveltejs/kit": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "astro": "catalog:",
+    "effect": "catalog:",
+    "hono": "catalog:",
+    "nitropack": "catalog:",
+    "nuxt": "catalog:",
+    "octane": "catalog:",
+    "tailwindcss": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vocs": "catalog:",
+    "waku": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@octanejs/vite-plugin": "catalog:frontend-peer",
+    "@opennextjs/cloudflare": "catalog:",
+    "@sveltejs/kit": "catalog:frontend-peer",
+    "@vitejs/plugin-react": "catalog:",
+    "astro": "catalog:frontend-peer",
+    "effect": "catalog:",
+    "hono": "catalog:",
+    "nuxt": "catalog:frontend-peer",
+    "vite": "catalog:frontend-peer",
+    "vocs": "catalog:",
+    "waku": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "@octanejs/vite-plugin": {
+      "optional": true
+    },
+    "@opennextjs/cloudflare": {
+      "optional": true
+    },
+    "@sveltejs/kit": {
+      "optional": true
+    },
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
+    "astro": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "nuxt": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "waku": {
+      "optional": true
+    },
+    "vocs": {
+      "optional": true
+    }
   }
 }

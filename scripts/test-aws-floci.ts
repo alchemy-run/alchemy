@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
@@ -11,8 +13,6 @@
  */
 import { Glob } from "bun";
 import { preferLocalFlociImage } from "./floci-image.ts";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const alchemyRoot = join(repoRoot, "packages/alchemy");
@@ -52,11 +52,7 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (
-      flagsWithValue.has(arg) &&
-      args[i + 1] &&
-      !args[i + 1]!.startsWith("-")
-    ) {
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
       flags.push(args[++i]!);
     }
     continue;
@@ -73,8 +69,7 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots =
-  paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {

@@ -7,8 +7,7 @@ const seedEntries = [
   { id: "ada", message: "First computers, now clusters." },
   {
     id: "grace",
-    message:
-      "A cluster in port is safe, but that is not what clusters are for.",
+    message: "A cluster in port is safe, but that is not what clusters are for.",
   },
   { id: "linus", message: "Talk is cheap. Show me the manifest." },
 ];

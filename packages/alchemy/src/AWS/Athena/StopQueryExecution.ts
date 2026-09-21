@@ -29,10 +29,7 @@ export interface StopQueryExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: athena.StopQueryExecutionInput,
-    ) => Effect.Effect<
-      athena.StopQueryExecutionOutput,
-      athena.StopQueryExecutionError
-    >
+    ) => Effect.Effect<athena.StopQueryExecutionOutput, athena.StopQueryExecutionError>
   >
 > {}
 

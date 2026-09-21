@@ -160,9 +160,7 @@ export class InvalidStateMachineDefinition extends Data.TaggedError(
   }[];
 }> {}
 
-const StateMachineResource = Resource<StateMachine>(
-  "AWS.StepFunctions.StateMachine",
-);
+const StateMachineResource = Resource<StateMachine>("AWS.StepFunctions.StateMachine");
 
 /**
  * Props for {@link StateMachine.fromProgram} — everything a raw
@@ -190,17 +188,12 @@ const fromProgram = (id: string, props: FromProgramProps) =>
     const compiled = yield* Effect.try({
       try: () => compileProgram(program),
       catch: (error) =>
-        error instanceof SfnCompileError
-          ? error
-          : new SfnCompileError({ message: String(error) }),
+        error instanceof SfnCompileError ? error : new SfnCompileError({ message: String(error) }),
     });
     return yield* StateMachineResource(id, {
       ...rest,
       definition: compiled.definition,
-      policyStatements: [
-        ...compiled.policyStatements,
-        ...(policyStatements ?? []),
-      ],
+      policyStatements: [...compiled.policyStatements, ...(policyStatements ?? [])],
     });
   });
 
@@ -363,9 +356,7 @@ const toSfnTags = (tags: Record<string, string>): sfn.Tag[] =>
   Object.entries(tags).map(([key, value]) => ({ key, value }));
 
 /** Convert an SFN wire tag list back to a record. */
-const fromSfnTags = (
-  tags: ReadonlyArray<sfn.Tag> | undefined,
-): Record<string, string> =>
+const fromSfnTags = (tags: ReadonlyArray<sfn.Tag> | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
@@ -387,9 +378,7 @@ const serializeDefinition = (props: {
     typeof props.definition === "string"
       ? props.definition
       : JSON.stringify(props.definition, null, 2);
-  for (const [key, value] of Object.entries(
-    props.definitionSubstitutions ?? {},
-  )) {
+  for (const [key, value] of Object.entries(props.definitionSubstitutions ?? {})) {
     definition = definition.replaceAll(`\${${key}}`, value);
   }
   return definition;
@@ -470,10 +459,7 @@ const loggingDrifted = (
   const desiredLevel = desired?.level ?? "OFF";
   if (observedLevel !== desiredLevel) return true;
   if (desiredLevel === "OFF") return false;
-  if (
-    (observed?.includeExecutionData ?? false) !==
-    (desired?.includeExecutionData ?? false)
-  ) {
+  if ((observed?.includeExecutionData ?? false) !== (desired?.includeExecutionData ?? false)) {
     return true;
   }
   const arnsOf = (config: sfn.LoggingConfiguration | undefined) =>
@@ -519,34 +505,20 @@ export const StateMachineProvider = () =>
         id: string,
         props: Pick<StateMachineProps, "stateMachineName">,
       ) {
-        return (
-          props.stateMachineName ??
-          (yield* createPhysicalName({ id, maxLength: 80 }))
-        );
+        return props.stateMachineName ?? (yield* createPhysicalName({ id, maxLength: 80 }));
       });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
-      const createPolicyName = (id: string) =>
-        createPhysicalName({ id, maxLength: 128 });
+      const createPolicyName = (id: string) => createPhysicalName({ id, maxLength: 128 });
 
-      const stateMachineArnOf = (
-        region: string,
-        accountId: string,
-        name: string,
-      ) => `arn:aws:states:${region}:${accountId}:stateMachine:${name}`;
+      const stateMachineArnOf = (region: string, accountId: string, name: string) =>
+        `arn:aws:states:${region}:${accountId}:stateMachine:${name}`;
 
-      const describeOrUndefined = Effect.fn(function* (
-        stateMachineArn: string,
-      ) {
+      const describeOrUndefined = Effect.fn(function* (stateMachineArn: string) {
         return yield* sfn
           .describeStateMachine({ stateMachineArn })
-          .pipe(
-            Effect.catchTag("StateMachineDoesNotExist", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("StateMachineDoesNotExist", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -575,9 +547,7 @@ export const StateMachineProvider = () =>
                 code: plain(diagnostic.code),
                 message: plain(diagnostic.message),
                 location:
-                  diagnostic.location === undefined
-                    ? undefined
-                    : plain(diagnostic.location),
+                  diagnostic.location === undefined ? undefined : plain(diagnostic.location),
               })),
             }),
           );
@@ -587,9 +557,7 @@ export const StateMachineProvider = () =>
       const fetchObservedTags = Effect.fn(function* (resourceArn: string) {
         return yield* sfn.listTagsForResource({ resourceArn }).pipe(
           Effect.map((r) => fromSfnTags(r.tags)),
-          Effect.catchTag("ResourceNotFound", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
+          Effect.catchTag("ResourceNotFound", () => Effect.succeed({} as Record<string, string>)),
         );
       });
 
@@ -613,9 +581,7 @@ export const StateMachineProvider = () =>
             Resource: [
               ...lambdaArns,
               // cover qualified invocations (versions/aliases)
-              ...lambdaArns
-                .filter((arn) => !/:function:[^:]+:/.test(arn))
-                .map((arn) => `${arn}:*`),
+              ...lambdaArns.filter((arn) => !/:function:[^:]+:/.test(arn)).map((arn) => `${arn}:*`),
             ],
           });
         }
@@ -705,12 +671,8 @@ export const StateMachineProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* sfn.listStateMachines
-              .pages({})
-              .pipe(Stream.runCollect);
-            const items = Array.from(pages).flatMap(
-              (page) => page.stateMachines ?? [],
-            );
+            const pages = yield* sfn.listStateMachines.pages({}).pipe(Stream.runCollect);
+            const items = Array.from(pages).flatMap((page) => page.stateMachines ?? []);
             const results = yield* Effect.forEach(
               items,
               (item) =>
@@ -734,24 +696,18 @@ export const StateMachineProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("StateMachineDoesNotExist", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("StateMachineDoesNotExist", () => Effect.succeed(undefined)),
                   ),
               { concurrency: 5 },
             );
-            return results.filter(
-              (item): item is StateMachine["Attributes"] => item !== undefined,
-            );
+            return results.filter((item): item is StateMachine["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.stateMachineName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.stateMachineName ?? (yield* createName(id, olds ?? {}));
           const stateMachineArn =
-            output?.stateMachineArn ??
-            stateMachineArnOf(region, accountId, name);
+            output?.stateMachineArn ?? stateMachineArnOf(region, accountId, name);
           const found = yield* describeOrUndefined(stateMachineArn);
           if (!found || found.status === "DELETING") return undefined;
           const attrs = {
@@ -778,16 +734,9 @@ export const StateMachineProvider = () =>
           // definition/role/logging/tracing/tags converge via update
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          bindings,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, bindings }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.stateMachineName ?? (yield* createName(id, news));
+          const name = output?.stateMachineName ?? (yield* createName(id, news));
           const stateMachineArn = stateMachineArnOf(region, accountId, name);
           const type = (news.type ?? "STANDARD") as StateMachineType;
           const definition = serializeDefinition(news);
@@ -819,9 +768,7 @@ export const StateMachineProvider = () =>
           //    name cache. A machine still DELETING from a prior destroy
           //    must finish deleting before we can recreate it.
           const observed = yield* describeOrUndefined(stateMachineArn).pipe(
-            Effect.map((machine) =>
-              machine?.status === "DELETING" ? undefined : machine,
-            ),
+            Effect.map((machine) => (machine?.status === "DELETING" ? undefined : machine)),
           );
 
           if (observed === undefined) {
@@ -840,9 +787,7 @@ export const StateMachineProvider = () =>
                     tags: toSfnTags(desiredTags),
                   })
                   .pipe(
-                    Effect.catchTag("StateMachineAlreadyExists", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("StateMachineAlreadyExists", () => Effect.succeed(undefined)),
                   ),
               ),
             );
@@ -850,12 +795,10 @@ export const StateMachineProvider = () =>
             // 3. SYNC — diff OBSERVED cloud state against desired and issue
             //    a single update only when something actually drifted.
             const drifted =
-              normalizeDefinition(plain(observed.definition)) !==
-                normalizeDefinition(definition) ||
+              normalizeDefinition(plain(observed.definition)) !== normalizeDefinition(definition) ||
               observed.roleArn !== roleArn ||
               loggingDrifted(observed.loggingConfiguration, desiredLogging) ||
-              (observed.tracingConfiguration?.enabled ?? false) !==
-                desiredTracing.enabled;
+              (observed.tracingConfiguration?.enabled ?? false) !== desiredTracing.enabled;
             if (drifted) {
               yield* retryWhileRolePropagates(
                 sfn.updateStateMachine({
@@ -931,18 +874,14 @@ export const StateMachineProvider = () =>
                     RoleName: roleName,
                     PolicyName: policyName,
                   })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
               ),
               Stream.runDrain,
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }),
       });

@@ -2,7 +2,6 @@ import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -108,9 +107,7 @@ export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(TypeId);
 /**
  * Returns true if the given value is a DdosAllowlistEntry resource.
  */
-export const isDdosAllowlistEntry = (
-  value: unknown,
-): value is DdosAllowlistEntry =>
+export const isDdosAllowlistEntry = (value: unknown): value is DdosAllowlistEntry =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DdosAllowlistEntryProvider = () =>
@@ -153,8 +150,7 @@ export const DdosAllowlistEntryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const comment =
-        news.comment ?? (yield* createPhysicalName({ id, lowercase: true }));
+      const comment = news.comment ?? (yield* createPhysicalName({ id, lowercase: true }));
       const enabled = news.enabled ?? false;
 
       // 1. Observe — the allowlist id cached on `output` is a hint, not a
@@ -182,8 +178,7 @@ export const DdosAllowlistEntryProvider = () =>
 
       // 4. Sync — diff observed comment/enabled against desired; skip the
       //    patch entirely on a no-op.
-      const dirty =
-        observed.comment !== comment || observed.enabled !== enabled;
+      const dirty = observed.comment !== comment || observed.enabled !== enabled;
       if (dirty) {
         observed = yield* ddos.patchAdvancedTcpProtectionAllowlistItem({
           accountId,
@@ -207,26 +202,21 @@ export const DdosAllowlistEntryProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* ddos.listAdvancedTcpProtectionAllowlists
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((entry) =>
-                toAttributes(entry, accountId),
-              ),
-            ),
+      return yield* ddos.listAdvancedTcpProtectionAllowlists.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
-          // Accounts without the Magic Transit / Advanced TCP Protection
-          // entitlement cannot enumerate allowlist entries — there is
-          // provably nothing to list, so return an empty array.
-          Effect.catchTag(
-            "AdvancedTcpProtectionNotEntitled",
-            (): Effect.Effect<DdosAllowlistEntryAttributes[]> =>
-              Effect.succeed([]),
-          ),
-        );
+        ),
+        // Accounts without the Magic Transit / Advanced TCP Protection
+        // entitlement cannot enumerate allowlist entries — there is
+        // provably nothing to list, so return an empty array.
+        Effect.catchTag(
+          "AdvancedTcpProtectionNotEntitled",
+          (): Effect.Effect<DdosAllowlistEntryAttributes[]> => Effect.succeed([]),
+        ),
+      );
     }),
   });
 
@@ -257,10 +247,7 @@ const findByPrefix = (accountId: string, prefix: string) =>
     ),
   );
 
-const toAttributes = (
-  entry: ObservedEntry,
-  accountId: string,
-): DdosAllowlistEntryAttributes => ({
+const toAttributes = (entry: ObservedEntry, accountId: string): DdosAllowlistEntryAttributes => ({
   allowlistId: entry.id,
   accountId,
   prefix: entry.prefix,

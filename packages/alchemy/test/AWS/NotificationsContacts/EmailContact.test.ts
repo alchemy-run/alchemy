@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { EmailContact } from "@/AWS/NotificationsContacts";
-import * as Test from "@/Test/Alchemy";
 import * as contacts from "@distilled.cloud/aws/notificationscontacts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EmailContact } from "@/AWS/NotificationsContacts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,10 +22,7 @@ const assertContactGone = (arn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -36,10 +33,7 @@ describe("AWS.NotificationsContacts.EmailContact", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const deployContact = (props: {
-          emailAddress: string;
-          tags: Record<string, string>;
-        }) =>
+        const deployContact = (props: { emailAddress: string; tags: Record<string, string> }) =>
           stack.deploy(
             Effect.gen(function* () {
               const contact = yield* EmailContact("OnCall", {

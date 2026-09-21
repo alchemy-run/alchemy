@@ -29,11 +29,7 @@ export interface GetEnvironment extends Binding.Service<
   "AWS.MWAA.GetEnvironment",
   (
     environment: Environment,
-  ) => Effect.Effect<
-    () => Effect.Effect<mwaa.GetEnvironmentOutput, mwaa.GetEnvironmentError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mwaa.GetEnvironmentOutput, mwaa.GetEnvironmentError>>
 > {}
 
-export const GetEnvironment = Binding.Service<GetEnvironment>(
-  "AWS.MWAA.GetEnvironment",
-);
+export const GetEnvironment = Binding.Service<GetEnvironment>("AWS.MWAA.GetEnvironment");

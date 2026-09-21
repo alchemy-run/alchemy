@@ -1,10 +1,10 @@
-import * as CloudWatch from "@/AWS/CloudWatch";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CloudWatch from "@/AWS/CloudWatch";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -73,34 +73,26 @@ export default CloudWatchTestFunction.make(
       },
     });
 
-    const detector = yield* CloudWatch.AnomalyDetector(
-      "BindingAnomalyDetector",
-      {
-        Namespace: METRIC_NAMESPACE,
-        MetricName: METRIC_NAME,
-        Stat: "Sum",
-      },
-    );
+    const detector = yield* CloudWatch.AnomalyDetector("BindingAnomalyDetector", {
+      Namespace: METRIC_NAMESPACE,
+      MetricName: METRIC_NAME,
+      Stat: "Sum",
+    });
     yield* detector.detectorId;
 
     // Bindings under test (one per CloudWatch capability).
     const describeAlarms = yield* CloudWatch.DescribeAlarms(alarm);
-    const describeAlarmContributors =
-      yield* CloudWatch.DescribeAlarmContributors(alarm);
+    const describeAlarmContributors = yield* CloudWatch.DescribeAlarmContributors(alarm);
     const describeAlarmHistory = yield* CloudWatch.DescribeAlarmHistory();
     const describeAlarmsForMetric = yield* CloudWatch.DescribeAlarmsForMetric();
-    const describeAnomalyDetectors =
-      yield* CloudWatch.DescribeAnomalyDetectors();
+    const describeAnomalyDetectors = yield* CloudWatch.DescribeAnomalyDetectors();
     const describeInsightRules = yield* CloudWatch.DescribeInsightRules();
     const disableAlarmActions = yield* CloudWatch.DisableAlarmActions(alarm);
     const enableAlarmActions = yield* CloudWatch.EnableAlarmActions(alarm);
-    const disableInsightRules =
-      yield* CloudWatch.DisableInsightRules(insightRule);
-    const enableInsightRules =
-      yield* CloudWatch.EnableInsightRules(insightRule);
+    const disableInsightRules = yield* CloudWatch.DisableInsightRules(insightRule);
+    const enableInsightRules = yield* CloudWatch.EnableInsightRules(insightRule);
     const getDashboard = yield* CloudWatch.GetDashboard(dashboard);
-    const getInsightRuleReport =
-      yield* CloudWatch.GetInsightRuleReport(insightRule);
+    const getInsightRuleReport = yield* CloudWatch.GetInsightRuleReport(insightRule);
     const getMetricData = yield* CloudWatch.GetMetricData();
     const getMetricStatistics = yield* CloudWatch.GetMetricStatistics();
     const getMetricWidgetImage = yield* CloudWatch.GetMetricWidgetImage();
@@ -193,10 +185,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/get-metric-widget-image"
-        ) {
+        if (request.method === "GET" && pathname === "/get-metric-widget-image") {
           const result = yield* getMetricWidgetImage({
             MetricWidget: JSON.stringify({
               metrics: [[METRIC_NAMESPACE, METRIC_NAME]],
@@ -220,10 +209,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-alarms-for-metric"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-alarms-for-metric") {
           const result = yield* describeAlarmsForMetric({
             Namespace: METRIC_NAMESPACE,
             MetricName: METRIC_NAME,
@@ -236,10 +222,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-alarm-history"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-alarm-history") {
           const result = yield* describeAlarmHistory({
             AlarmName: yield* AlarmName,
             MaxRecords: 10,
@@ -249,10 +232,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-alarm-contributors"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-alarm-contributors") {
           // Contributor data only exists for alarms with contributor-enabled
           // metric math; a plain metric alarm returns the typed
           // ValidationException (observed live: empty message) or
@@ -262,13 +242,11 @@ export default CloudWatchTestFunction.make(
               ok: true as const,
               contributors: r.AlarmContributors,
             })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) =>
-                Effect.succeed({
-                  ok: false as const,
-                  error: e._tag,
-                }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({
+                ok: false as const,
+                error: e._tag,
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -282,10 +260,7 @@ export default CloudWatchTestFunction.make(
           return yield* HttpServerResponse.json({ ok: true, result });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/disable-alarm-actions"
-        ) {
+        if (request.method === "POST" && pathname === "/disable-alarm-actions") {
           const result = yield* disableAlarmActions();
           return yield* HttpServerResponse.json({ ok: true, result });
         }
@@ -295,10 +270,7 @@ export default CloudWatchTestFunction.make(
           return yield* HttpServerResponse.json({ ok: true, result });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/list-tags-for-resource"
-        ) {
+        if (request.method === "GET" && pathname === "/list-tags-for-resource") {
           const result = yield* listTagsForResource();
           return yield* HttpServerResponse.json({
             tags: result.Tags ?? [],
@@ -320,18 +292,13 @@ export default CloudWatchTestFunction.make(
           const result = yield* listDashboards();
           return yield* HttpServerResponse.json({
             dashboardName: yield* DashboardName,
-            entries: (result.DashboardEntries ?? []).map(
-              (e) => e.DashboardName,
-            ),
+            entries: (result.DashboardEntries ?? []).map((e) => e.DashboardName),
           });
         }
 
         // ── Contributor Insights ───────────────────────────────────────────
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-insight-rules"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-insight-rules") {
           const result = yield* describeInsightRules();
           return yield* HttpServerResponse.json({
             ruleName: yield* RuleName,
@@ -339,10 +306,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/get-insight-rule-report"
-        ) {
+        if (request.method === "GET" && pathname === "/get-insight-rule-report") {
           const now = yield* Effect.sync(() => Date.now());
           const result = yield* getInsightRuleReport({
             StartTime: new Date(now - 3_600_000),
@@ -356,10 +320,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/disable-insight-rules"
-        ) {
+        if (request.method === "POST" && pathname === "/disable-insight-rules") {
           const result = yield* disableInsightRules();
           return yield* HttpServerResponse.json({
             failures: result.Failures ?? [],
@@ -373,10 +334,7 @@ export default CloudWatchTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/list-managed-insight-rules"
-        ) {
+        if (request.method === "GET" && pathname === "/list-managed-insight-rules") {
           // Managed Contributor Insights rules only exist for specific AWS
           // resource types. We probe with the alarm ARN: a supported resource
           // returns ManagedRules, an unsupported one returns the typed
@@ -400,10 +358,7 @@ export default CloudWatchTestFunction.make(
 
         // ── Anomaly detectors ──────────────────────────────────────────────
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-anomaly-detectors"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-anomaly-detectors") {
           const result = yield* describeAnomalyDetectors({
             Namespace: METRIC_NAMESPACE,
           });

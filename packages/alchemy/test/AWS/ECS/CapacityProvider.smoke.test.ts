@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import { CapacityProvider } from "@/AWS/ECS";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { CapacityProvider } from "@/AWS/ECS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Skipped by default: requires a pre-provisioned EC2 Auto Scaling Group ARN
 // (set via TEST_ASG_ARN) because AutoScalingGroup/LaunchTemplate currently
@@ -38,9 +35,7 @@ test.provider.skipIf(!process.env.TEST_ASG_ARN)(
         }),
       );
 
-      expect(provider.capacityProviderArn).toMatch(
-        /^arn:aws:ecs:[^:]+:\d+:capacity-provider\//,
-      );
+      expect(provider.capacityProviderArn).toMatch(/^arn:aws:ecs:[^:]+:\d+:capacity-provider\//);
       expect(provider.status).toEqual("ACTIVE");
       expect(provider.managedScaling?.targetCapacity).toEqual(80);
       expect(provider.tags.env).toEqual("test");
@@ -51,9 +46,7 @@ test.provider.skipIf(!process.env.TEST_ASG_ARN)(
       });
       const found = described.capacityProviders?.[0];
       expect(found?.name).toEqual(provider.name);
-      expect(
-        found?.autoScalingGroupProvider?.managedScaling?.targetCapacity,
-      ).toEqual(80);
+      expect(found?.autoScalingGroupProvider?.managedScaling?.targetCapacity).toEqual(80);
 
       const updated = yield* stack.deploy(
         CapacityProvider("TestCapacityProvider", {

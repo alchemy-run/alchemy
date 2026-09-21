@@ -1,9 +1,9 @@
-import * as Docker from "@/Docker";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Docker from "@/Docker";
+import * as Test from "@/Test/Alchemy";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
@@ -88,9 +88,7 @@ test.provider(
       const docker = yield* Docker.Docker;
       const gone = yield* docker.service.inspect(service.id).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(gone).toBe(true);
 
@@ -98,9 +96,7 @@ test.provider(
       // cleaned up with the service.
       const imageGone = yield* docker.image.inspect(imageRef).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(imageGone).toBe(true);
     }),

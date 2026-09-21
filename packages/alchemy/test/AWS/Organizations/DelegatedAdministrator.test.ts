@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DelegatedAdministrator } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,8 +41,7 @@ test.provider("list enumerates delegated administrators", () =>
 // skipped by default.
 const memberAccountId = process.env.AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID;
 const servicePrincipal =
-  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ??
-  "config.amazonaws.com";
+  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ?? "config.amazonaws.com";
 
 test.provider.skipIf(!memberAccountId)(
   "list contains the deployed delegated administrator",
@@ -65,8 +64,7 @@ test.provider.skipIf(!memberAccountId)(
       expect(
         all.some(
           (item) =>
-            item.accountId === admin.accountId &&
-            item.servicePrincipal === admin.servicePrincipal,
+            item.accountId === admin.accountId && item.servicePrincipal === admin.servicePrincipal,
         ),
       ).toBe(true);
 
@@ -119,9 +117,7 @@ test.provider.skipIf(!memberAccountId)(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
@@ -130,9 +126,7 @@ test.provider.skipIf(!memberAccountId)(
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.DelegatedAdministrator state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.DelegatedAdministrator state row found after deploy"),
         );
       }
       yield* state.set({

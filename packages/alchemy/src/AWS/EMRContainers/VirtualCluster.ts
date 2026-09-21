@@ -115,9 +115,7 @@ export interface VirtualCluster extends Resource<
  *
  * @resource
  */
-export const VirtualCluster = Resource<VirtualCluster>(
-  "AWS.EMRContainers.VirtualCluster",
-);
+export const VirtualCluster = Resource<VirtualCluster>("AWS.EMRContainers.VirtualCluster");
 
 export const VirtualClusterProvider = () =>
   Provider.effect(
@@ -127,10 +125,7 @@ export const VirtualClusterProvider = () =>
         id: string,
         props: { virtualClusterName?: string | undefined },
       ) {
-        return (
-          props.virtualClusterName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.virtualClusterName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const toContainerProvider = (
@@ -162,23 +157,17 @@ export const VirtualClusterProvider = () =>
 
       // Terminated virtual clusters linger in list results; only a RUNNING
       // (or transiently ARRESTED) one with our name is "present".
-      const live = (state: string | undefined) =>
-        state === "RUNNING" || state === "ARRESTED";
+      const live = (state: string | undefined) => state === "RUNNING" || state === "ARRESTED";
 
       const observeByName = Effect.fn(function* (name: string) {
-        return yield* emrc.listVirtualClusters
-          .items({ states: ["RUNNING", "ARRESTED"] })
-          .pipe(
-            Stream.filter((vc) => vc.name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        return yield* emrc.listVirtualClusters.items({ states: ["RUNNING", "ARRESTED"] }).pipe(
+          Stream.filter((vc) => vc.name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
       });
 
-      const observe = Effect.fn(function* (
-        id: string | undefined,
-        name: string,
-      ) {
+      const observe = Effect.fn(function* (id: string | undefined, name: string) {
         const byId = id !== undefined ? yield* observeById(id) : undefined;
         if (byId !== undefined && live(byId.state)) {
           return byId;
@@ -212,12 +201,7 @@ export const VirtualClusterProvider = () =>
       });
 
       return VirtualCluster.Provider.of({
-        stables: [
-          "virtualClusterId",
-          "virtualClusterName",
-          "virtualClusterArn",
-          "eksClusterName",
-        ],
+        stables: ["virtualClusterId", "virtualClusterName", "virtualClusterArn", "eksClusterName"],
 
         list: () =>
           Effect.gen(function* () {
@@ -226,18 +210,12 @@ export const VirtualClusterProvider = () =>
               .pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.virtualClusters ?? [])
-              .filter(
-                (vc) =>
-                  vc.id !== undefined &&
-                  vc.name !== undefined &&
-                  vc.arn !== undefined,
-              )
+              .filter((vc) => vc.id !== undefined && vc.name !== undefined && vc.arn !== undefined)
               .map(toAttributes);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.virtualClusterName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.virtualClusterName ?? (yield* createName(id, olds ?? {}));
           const vc = yield* observe(output?.virtualClusterId, name);
           if (vc?.id === undefined || vc.arn === undefined) {
             return undefined;
@@ -261,15 +239,8 @@ export const VirtualClusterProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
-          const name =
-            output?.virtualClusterName ?? (yield* createName(id, news));
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
+          const name = output?.virtualClusterName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -281,9 +252,7 @@ export const VirtualClusterProvider = () =>
             const created = yield* emrc.createVirtualCluster({
               // deterministic per instance: a retried create after a crashed
               // reconcile never double-provisions
-              clientToken:
-                instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) ||
-                "alchemy",
+              clientToken: instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) || "alchemy",
               name,
               containerProvider: toContainerProvider(news.containerProvider),
               securityConfigurationId: news.securityConfigurationId,
@@ -315,15 +284,12 @@ export const VirtualClusterProvider = () =>
           // deleteVirtualCluster is idempotent-by-observation: a terminated
           // or missing virtual cluster reads as "not live" and is skipped
           // (repeat deletes of a terminated id fail with ValidationException).
-          const vc = yield* emrc
-            .describeVirtualCluster({ id: output.virtualClusterId })
-            .pipe(
-              Effect.map((response) => response.virtualCluster),
-              Effect.catchTag(
-                ["ResourceNotFoundException", "ValidationException"],
-                () => Effect.succeed(undefined),
-              ),
-            );
+          const vc = yield* emrc.describeVirtualCluster({ id: output.virtualClusterId }).pipe(
+            Effect.map((response) => response.virtualCluster),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
+              Effect.succeed(undefined),
+            ),
+          );
           if (vc === undefined || !live(vc.state)) {
             return;
           }

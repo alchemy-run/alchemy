@@ -1,23 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out fresh-token 403 blips on out-of-band calls.
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -26,8 +21,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const getSettings = (accountId: string) =>
-  retryForbidden(dns.getSettingAccount({ accountId }));
+const getSettings = (accountId: string) => retryForbidden(dns.getSettingAccount({ accountId }));
 
 // Baselines for the (entitlement-free) zone-default fields these tests
 // manage. NOTE: `zoneDefaults.nsTtl`, custom SOA values, and custom zone
@@ -73,9 +67,7 @@ describe.sequential("AccountSettings", () => {
         // Account singleton — read-only enumeration, no mutation.
         yield* stack.destroy();
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.DNS.AccountDnsSettings,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.DNS.AccountDnsSettings);
         const all = yield* provider.list();
 
         // Exactly the one account-wide settings object, fully typed.
@@ -126,16 +118,12 @@ describe.sequential("AccountSettings", () => {
 
         // Destroy restored the managed field to its pre-management value.
         const restored = yield* getSettings(accountId);
-        expect(restored.zoneDefaults.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
+        expect(restored.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
 
         // Re-running destroy is idempotent (nothing left to restore).
         yield* stack.destroy();
         const still = yield* getSettings(accountId);
-        expect(still.zoneDefaults.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
+        expect(still.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
       }).pipe(logLevel),
     { timeout: 300_000 },
   );
@@ -166,16 +154,12 @@ describe.sequential("AccountSettings", () => {
         );
         expect(updated.zoneDefaults.multiProvider).toEqual(true);
         expect(updated.zoneDefaults.secondaryOverrides).toEqual(true);
-        expect(updated.initialSettings.zoneDefaults.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
+        expect(updated.initialSettings.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
         expect(updated.initialSettings.zoneDefaults.secondaryOverrides).toEqual(
           BASELINE_SECONDARY_OVERRIDES,
         );
         expect(updated.managedKeys).toContain("zoneDefaults.multiProvider");
-        expect(updated.managedKeys).toContain(
-          "zoneDefaults.secondaryOverrides",
-        );
+        expect(updated.managedKeys).toContain("zoneDefaults.secondaryOverrides");
 
         const live = yield* getSettings(accountId);
         expect(live.zoneDefaults.multiProvider).toEqual(true);
@@ -189,20 +173,14 @@ describe.sequential("AccountSettings", () => {
           }),
         );
         expect(dropped.managedKeys).toContain("zoneDefaults.multiProvider");
-        expect(dropped.managedKeys).toContain(
-          "zoneDefaults.secondaryOverrides",
-        );
+        expect(dropped.managedKeys).toContain("zoneDefaults.secondaryOverrides");
 
         yield* stack.destroy();
 
         // Both managed fields were restored to their pre-management values.
         const restored = yield* getSettings(accountId);
-        expect(restored.zoneDefaults.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
-        expect(restored.zoneDefaults.secondaryOverrides).toEqual(
-          BASELINE_SECONDARY_OVERRIDES,
-        );
+        expect(restored.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
+        expect(restored.zoneDefaults.secondaryOverrides).toEqual(BASELINE_SECONDARY_OVERRIDES);
       }).pipe(logLevel),
     { timeout: 300_000 },
   );

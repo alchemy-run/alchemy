@@ -54,7 +54,6 @@ export interface UpdateWhatsAppMessageTemplate extends Binding.Service<
     >
   >
 > {}
-export const UpdateWhatsAppMessageTemplate =
-  Binding.Service<UpdateWhatsAppMessageTemplate>(
-    "AWS.SocialMessaging.UpdateWhatsAppMessageTemplate",
-  );
+export const UpdateWhatsAppMessageTemplate = Binding.Service<UpdateWhatsAppMessageTemplate>(
+  "AWS.SocialMessaging.UpdateWhatsAppMessageTemplate",
+);

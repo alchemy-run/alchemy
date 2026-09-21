@@ -1,14 +1,12 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
-import LifecycleWorker, {
-  type Scenario,
-} from "./fixtures/workflow-lifecycle/worker.ts";
+import LifecycleWorker, { type Scenario } from "./fixtures/workflow-lifecycle/worker.ts";
 
 const Stack = Alchemy.Stack(
   "WorkflowLifecycleStack",
@@ -27,18 +25,13 @@ interface Status {
   entries: string[];
 }
 
-const request = Effect.fn(function* (
-  url: string,
-  method: "GET" | "POST" = "GET",
-) {
+const request = Effect.fn(function* (url: string, method: "GET" | "POST" = "GET") {
   const response = yield* requestWorker(
     method === "GET" ? HttpClientRequest.get(url) : HttpClientRequest.post(url),
   );
   const body = yield* response.text;
   if (response.status !== 200) {
-    return yield* Effect.fail(
-      new Error(`${method} ${url}: ${response.status}: ${body}`),
-    );
+    return yield* Effect.fail(new Error(`${method} ${url}: ${response.status}: ${body}`));
   }
   return body;
 });
@@ -51,19 +44,14 @@ const waitForReady = Effect.fn(function* (url: string) {
     const body = yield* response.text;
     if (
       response.status === 503 &&
-      response.headers["x-workflow-lifecycle-readiness"] ===
-        "journal-rpc-not-ready" &&
+      response.headers["x-workflow-lifecycle-readiness"] === "journal-rpc-not-ready" &&
       body === "LifecycleJournal.entries not ready"
     ) {
-      yield* Effect.logInfo(
-        `Workflow readiness: native journal RPC not ready at ${url}`,
-      );
+      yield* Effect.logInfo(`Workflow readiness: native journal RPC not ready at ${url}`);
       return false;
     }
     if (response.status !== 200) {
-      return yield* Effect.fail(
-        new Error(`GET ${url}: ${response.status}: ${body}`),
-      );
+      return yield* Effect.fail(new Error(`GET ${url}: ${response.status}: ${body}`));
     }
     if (body === "Alchemy worker is being deployed...") return false;
     expect(body).toBe("ready");
@@ -79,29 +67,19 @@ const waitForReady = Effect.fn(function* (url: string) {
   expect(ready, "Journal entries method did not propagate").toBe(true);
 });
 
-const probeWorkflow = Effect.fn(function* (
-  url: string,
-  className = "LifecycleWorkflow",
-) {
+const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWorkflow") {
   const ready = yield* Effect.gen(function* () {
     const started = yield* request(`${url}/probe`, "POST");
-    const { id } = yield* Effect.try(
-      () => JSON.parse(started) as { id: string },
-    );
+    const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
     const status = yield* request(`${url}/probe/${id}`).pipe(
-      Effect.flatMap((body) =>
-        Effect.try(() => JSON.parse(body) as Omit<Status, "entries">),
-      ),
+      Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Omit<Status, "entries">)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         times: 10,
-        until: (status) =>
-          status.status === "complete" || status.status === "errored",
+        until: (status) => status.status === "complete" || status.status === "errored",
       }),
     );
-    yield* Effect.logInfo(
-      `Workflow readiness probe ${id}: ${JSON.stringify(status)}`,
-    );
+    yield* Effect.logInfo(`Workflow readiness probe ${id}: ${JSON.stringify(status)}`);
     // Only a probe may be recreated when Workflow execution still sees the stub.
     if (
       status.status === "errored" &&
@@ -149,13 +127,7 @@ const cases: Array<{ scenario: Scenario; entries: string[] }> = [
   },
   {
     scenario: "retry",
-    entries: [
-      "open:1:captured:true",
-      "close:1",
-      "open:2:captured:true",
-      "close:2",
-      "after-task",
-    ],
+    entries: ["open:1:captured:true", "close:1", "open:2:captured:true", "close:2", "after-task"],
   },
   {
     scenario: "exhaustion",
@@ -170,12 +142,7 @@ const cases: Array<{ scenario: Scenario; entries: string[] }> = [
   },
   {
     scenario: "uncaught",
-    entries: [
-      "open:1:captured:true",
-      "close:1",
-      "open:2:captured:true",
-      "close:2",
-    ],
+    entries: ["open:1:captured:true", "close:1", "open:2:captured:true", "close:2"],
   },
   {
     scenario: "die",
@@ -263,14 +230,12 @@ describe.concurrent.each([
       `does not mask an application ${kind} failure as readiness`,
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const failure = yield* waitForReady(
-          `${url}/ready?application-error=${kind}`,
-        ).pipe(Effect.flip);
+        const failure = yield* waitForReady(`${url}/ready?application-error=${kind}`).pipe(
+          Effect.flip,
+        );
         expect(failure.message).toContain(": 500:");
         expect(failure.message).toContain(message);
-        expect(failure.message).not.toContain(
-          "LifecycleJournal.entries not ready",
-        );
+        expect(failure.message).not.toContain("LifecycleJournal.entries not ready");
       }),
       { timeout: 60_000 },
     );
@@ -283,9 +248,7 @@ describe.concurrent.each([
       const startUrl = `${url}/start/success?id=repeated-start`;
       const first = yield* request(startUrl, "POST");
       expect(yield* request(startUrl, "POST")).toBe(first);
-      const { id } = yield* Effect.try(
-        () => JSON.parse(first) as { id: string },
-      );
+      const { id } = yield* Effect.try(() => JSON.parse(first) as { id: string });
       expect(id).toBe("repeated-start");
       const status = yield* request(`${url}/status/${id}`).pipe(
         Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
@@ -333,15 +296,9 @@ describe.concurrent.each([
         const { id } = yield* request(
           `${url}/start/${scenario}?stage=${encodeURIComponent(stage)}`,
           "POST",
-        ).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as { id: string }),
-          ),
-        );
+        ).pipe(Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as { id: string })));
         const recovered = yield* request(`${url}/journal/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as string[]),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as string[])),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             times: 10,
@@ -357,14 +314,11 @@ describe.concurrent.each([
         expect(recovered).toContain(`${caught}:true`);
         // A journal write does not acknowledge native run completion.
         const completed = yield* request(`${url}/status/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as Status),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             times: 10,
-            until: (status) =>
-              status.status === "complete" || status.status === "errored",
+            until: (status) => status.status === "complete" || status.status === "errored",
           }),
         );
         expect(completed, JSON.stringify(completed)).toMatchObject({
@@ -373,18 +327,14 @@ describe.concurrent.each([
         });
         yield* request(`${url}/restart/${id}`, "POST");
         const journal = yield* request(`${url}/journal/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as string[]),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as string[])),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             times: 10,
             until: (entries) => entries.includes("after-task"),
           }),
         );
-        yield* Effect.logInfo(
-          `Replay journal ${id}: ${JSON.stringify(journal)}`,
-        );
+        yield* Effect.logInfo(`Replay journal ${id}: ${JSON.stringify(journal)}`);
         if (!journal.includes("after-task")) {
           yield* Effect.logInfo(
             "Workflow checkpoint restart status",
@@ -393,18 +343,14 @@ describe.concurrent.each([
         }
         expect(journal).toContain("after-task");
         // Native terminal failures may rerun on an explicit checkpoint restart.
-        const reranTerminal =
-          terminal && journal.includes("open:3:captured:true");
+        const reranTerminal = terminal && journal.includes("open:3:captured:true");
         expect(journal).toContain(`${caught}:${reranTerminal}`);
         const replayed = yield* request(`${url}/status/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as Status),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             times: 10,
-            until: (status) =>
-              status.status === "complete" || status.status === "errored",
+            until: (status) => status.status === "complete" || status.status === "errored",
           }),
         );
         expect(replayed, JSON.stringify(replayed)).toMatchObject({
@@ -434,15 +380,11 @@ describe.concurrent.each([
       Effect.gen(function* () {
         const { url } = yield* stack;
         const started = yield* request(`${url}/start/${scenario}`, "POST");
-        const { id } = yield* Effect.try(
-          () => JSON.parse(started) as { id: string },
-        );
+        const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
         if (scenario.startsWith("rollback")) {
           // Native status() can reject during compensation; observe cleanup first.
           const journal = yield* request(`${url}/journal/${id}`).pipe(
-            Effect.flatMap((body) =>
-              Effect.try(() => JSON.parse(body) as string[]),
-            ),
+            Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as string[])),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               times: 10,
@@ -452,14 +394,11 @@ describe.concurrent.each([
           expect(journal).toEqual(entries);
         }
         const status = yield* request(`${url}/status/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as Status),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             times: 10,
-            until: (status) =>
-              status.status === "complete" || status.status === "errored",
+            until: (status) => status.status === "complete" || status.status === "errored",
           }),
         );
         const failed =
@@ -487,20 +426,13 @@ describe.concurrent.each([
             "Workflow application failure is not serializable",
           );
           if (scenario === "unsupported-array")
-            expect(status.error?.message).toContain(
-              "sparse arrays or custom array properties",
-            );
-          if (
-            scenario === "unsupported-accessor" ||
-            scenario === "unsupported-tag-accessor"
-          ) {
+            expect(status.error?.message).toContain("sparse arrays or custom array properties");
+          if (scenario === "unsupported-accessor" || scenario === "unsupported-tag-accessor") {
             expect(status.error?.message).toContain("accessor error data");
             expect(status.error?.message).not.toContain("getter was invoked");
           }
           if (scenario === "unsupported-alias")
-            expect(status.error?.message).toContain(
-              "shared references in error data",
-            );
+            expect(status.error?.message).toContain("shared references in error data");
         } else if (failed) {
           expect(status.error?.message).toContain("application failure");
         } else {

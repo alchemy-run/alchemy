@@ -81,25 +81,16 @@ export interface PolicyTemplate extends Resource<
  *
  * @resource
  */
-export const PolicyTemplate = Resource<PolicyTemplate>(
-  "AWS.VerifiedPermissions.PolicyTemplate",
-);
+export const PolicyTemplate = Resource<PolicyTemplate>("AWS.VerifiedPermissions.PolicyTemplate");
 
 export const PolicyTemplateProvider = () =>
   Provider.effect(
     PolicyTemplate,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        policyStoreId: string,
-        policyTemplateId: string,
-      ) {
+      const observe = Effect.fn(function* (policyStoreId: string, policyTemplateId: string) {
         return yield* avp
           .getPolicyTemplate({ policyStoreId, policyTemplateId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return PolicyTemplate.Provider.of({
@@ -176,9 +167,7 @@ export const PolicyTemplateProvider = () =>
               policyStoreId: output.policyStoreId,
               policyTemplateId: output.policyTemplateId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

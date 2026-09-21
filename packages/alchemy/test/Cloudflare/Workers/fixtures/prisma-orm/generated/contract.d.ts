@@ -3,6 +3,18 @@
 // To regenerate, run: prisma contract emit
 import type { QueryOperationTypes as PgAdapterQueryOps } from "@prisma/orm-postgres/adapter/operation-types";
 import type {
+  Contract as ContractType,
+  ExecutionHashBase,
+  NamespaceId,
+  ProfileHashBase,
+  StorageHashBase,
+} from "@prisma/orm-postgres/contract/types";
+import type {
+  ContractWithTypeMaps,
+  RelationKeys,
+  TypeMaps as TypeMapsType,
+} from "@prisma/orm-postgres/family-contract/types";
+import type {
   Bit,
   Char,
   CodecTypes as PgTypes,
@@ -19,19 +31,6 @@ import type {
   VarBit,
   Varchar,
 } from "@prisma/orm-postgres/target/codec-types";
-
-import type {
-  ContractWithTypeMaps,
-  RelationKeys,
-  TypeMaps as TypeMapsType,
-} from "@prisma/orm-postgres/family-contract/types";
-import type {
-  Contract as ContractType,
-  ExecutionHashBase,
-  NamespaceId,
-  ProfileHashBase,
-  StorageHashBase,
-} from "@prisma/orm-postgres/contract/types";
 
 export type StorageHash =
   StorageHashBase<"03524e20386e10a155733715778d8ff1bb8d54ad14d4d11110c0a4de5e4864d6">;
@@ -518,10 +517,7 @@ export type AggregateTypes = {
     };
   };
 };
-type DefaultLiteralValue<
-  CodecId extends string,
-  Encoded,
-> = CodecId extends keyof CodecTypes
+type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyof CodecTypes
   ? Encoded extends CodecTypes[CodecId]["json"]
     ? Encoded
     : CodecTypes[CodecId]["json"]

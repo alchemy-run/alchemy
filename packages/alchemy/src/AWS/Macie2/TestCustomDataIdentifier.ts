@@ -36,7 +36,6 @@ export interface TestCustomDataIdentifier extends Binding.Service<
     >
   >
 > {}
-export const TestCustomDataIdentifier =
-  Binding.Service<TestCustomDataIdentifier>(
-    "AWS.Macie2.TestCustomDataIdentifier",
-  );
+export const TestCustomDataIdentifier = Binding.Service<TestCustomDataIdentifier>(
+  "AWS.Macie2.TestCustomDataIdentifier",
+);

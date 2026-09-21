@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import CacheTestWorker from "./fixtures/cache/cache-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The worker stamps every invocation with a fresh UUID, so two fetches of
 // the same URL returning the same body means the second response was served
@@ -146,9 +143,7 @@ test.provider(
       // response parses as JSON — transient placeholders/5xx bodies throw
       // and retry; a parsed `success: false` is a genuine failure and
       // surfaces via the assertion.
-      const purged = yield* Effect.sync(
-        () => `${worker.url}/purge?cb=${Date.now()}`,
-      ).pipe(
+      const purged = yield* Effect.sync(() => `${worker.url}/purge?cb=${Date.now()}`).pipe(
         Effect.flatMap(fetchCached),
         Effect.flatMap((res) =>
           res.status === 200
@@ -169,9 +164,7 @@ test.provider(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (res) =>
-            res.status === 200 &&
-            res.body.startsWith("id:") &&
-            res.body !== cachedBody,
+            res.status === 200 && res.body.startsWith("id:") && res.body !== cachedBody,
           times: 20,
         }),
       );

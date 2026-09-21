@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Secret } from "./Secret.ts";
 import { ReadSecret, SecretError } from "./ReadSecret.ts";
+import type { Secret } from "./Secret.ts";
 
 export const ReadSecretBinding = Layer.effect(
   ReadSecret,
@@ -26,12 +26,9 @@ export const ReadSecretBinding = Layer.effect(
         });
       }
       const raw = Effect.sync(
-        () =>
-          (env as Record<string, runtime.SecretsStoreSecret>)[secret.LogicalId],
+        () => (env as Record<string, runtime.SecretsStoreSecret>)[secret.LogicalId],
       );
-      const tryPromise = <T>(
-        fn: () => Promise<T>,
-      ): Effect.Effect<T, SecretError> =>
+      const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SecretError> =>
         Effect.tryPromise({
           try: fn,
           catch: (error: any) =>
@@ -42,9 +39,7 @@ export const ReadSecretBinding = Layer.effect(
         });
 
       const getEffect = raw.pipe(
-        Effect.flatMap((raw) =>
-          tryPromise(() => raw.get().then(Redacted.make)),
-        ),
+        Effect.flatMap((raw) => tryPromise(() => raw.get().then(Redacted.make))),
       );
 
       return Object.assign(getEffect, {

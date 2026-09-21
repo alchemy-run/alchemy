@@ -30,10 +30,7 @@ export interface DescribeInsightsRefresh extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.DescribeInsightsRefreshRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeInsightsRefreshResponse,
-      eks.DescribeInsightsRefreshError
-    >
+    ) => Effect.Effect<eks.DescribeInsightsRefreshResponse, eks.DescribeInsightsRefreshError>
   >
 > {}
 export const DescribeInsightsRefresh = Binding.Service<DescribeInsightsRefresh>(

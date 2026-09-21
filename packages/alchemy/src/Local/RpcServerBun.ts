@@ -4,11 +4,7 @@ import { SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { ServerRpcSession } from "./RpcServerSession.ts";
 
 export const RpcServerBun = RpcServer.layerServer(
-  Effect.fn(function* ({
-    parentConnected,
-    parentDisconnected,
-    createRpcSession,
-  }) {
+  Effect.fn(function* ({ parentConnected, parentDisconnected, createRpcSession }) {
     const server = yield* Effect.sync(() =>
       Bun.serve<
         | { type: "session"; session: ServerRpcSession<any> }
@@ -25,8 +21,7 @@ export const RpcServerBun = RpcServer.layerServer(
                   ? { type: "parent" }
                   : {
                       type: "pending",
-                      sessionEnv:
-                        url.searchParams.get(SESSION_ENV_PARAM) ?? undefined,
+                      sessionEnv: url.searchParams.get(SESSION_ENV_PARAM) ?? undefined,
                     },
             })
           ) {
@@ -40,9 +35,7 @@ export const RpcServerBun = RpcServer.layerServer(
               parentConnected();
             } else {
               const sessionEnv =
-                ws.data && ws.data.type === "pending"
-                  ? ws.data.sessionEnv
-                  : undefined;
+                ws.data && ws.data.type === "pending" ? ws.data.sessionEnv : undefined;
               ws.data = {
                 type: "session",
                 session: createRpcSession(ws, sessionEnv),

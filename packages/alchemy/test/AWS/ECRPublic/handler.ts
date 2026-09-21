@@ -1,5 +1,3 @@
-import * as ECRPublic from "@/AWS/ECRPublic";
-import * as Lambda from "@/AWS/Lambda";
 import crypto from "node:crypto";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ECRPublic from "@/AWS/ECRPublic";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -42,16 +42,12 @@ export default EcrPublicTestFunction.make(
     // --- repository-scoped bindings ---
     const describeImages = yield* ECRPublic.DescribeImages(repository);
     const describeImageTags = yield* ECRPublic.DescribeImageTags(repository);
-    const getRepositoryCatalogData =
-      yield* ECRPublic.GetRepositoryCatalogData(repository);
-    const batchCheckLayerAvailability =
-      yield* ECRPublic.BatchCheckLayerAvailability(repository);
+    const getRepositoryCatalogData = yield* ECRPublic.GetRepositoryCatalogData(repository);
+    const batchCheckLayerAvailability = yield* ECRPublic.BatchCheckLayerAvailability(repository);
     const batchDeleteImage = yield* ECRPublic.BatchDeleteImage(repository);
-    const initiateLayerUpload =
-      yield* ECRPublic.InitiateLayerUpload(repository);
+    const initiateLayerUpload = yield* ECRPublic.InitiateLayerUpload(repository);
     const uploadLayerPart = yield* ECRPublic.UploadLayerPart(repository);
-    const completeLayerUpload =
-      yield* ECRPublic.CompleteLayerUpload(repository);
+    const completeLayerUpload = yield* ECRPublic.CompleteLayerUpload(repository);
     const putImage = yield* ECRPublic.PutImage(repository);
 
     // --- registry-level bindings ---
@@ -91,9 +87,7 @@ export default EcrPublicTestFunction.make(
       yield* completeLayerUpload({
         uploadId: uploadId!,
         layerDigests: [digest],
-      }).pipe(
-        Effect.catchTag("LayerAlreadyExistsException", () => Effect.void),
-      );
+      }).pipe(Effect.catchTag("LayerAlreadyExistsException", () => Effect.void));
       return digest;
     });
 
@@ -132,9 +126,7 @@ export default EcrPublicTestFunction.make(
           // The token is Redacted in the distilled response — never echo it.
           const hasToken =
             token !== undefined &&
-            (typeof token === "string"
-              ? token.length > 0
-              : Redacted.value(token).length > 0);
+            (typeof token === "string" ? token.length > 0 : Redacted.value(token).length > 0);
           return yield* HttpServerResponse.json({ hasToken });
         }
 
@@ -167,9 +159,8 @@ export default EcrPublicTestFunction.make(
           // failure or as a layer with `layerAvailability: "UNAVAILABLE"`.
           return yield* HttpServerResponse.json({
             failures: (result.failures ?? []).length,
-            unavailable: (result.layers ?? []).filter(
-              (l) => l.layerAvailability !== "AVAILABLE",
-            ).length,
+            unavailable: (result.layers ?? []).filter((l) => l.layerAvailability !== "AVAILABLE")
+              .length,
           });
         }
 
@@ -186,9 +177,7 @@ export default EcrPublicTestFunction.make(
           // A genuine (minimal) image push: upload a config blob and a layer
           // blob, then put a docker v2 manifest referencing both. Re-runs
           // converge — existing layers and an identical manifest are fine.
-          const layerBlob = new TextEncoder().encode(
-            "alchemy-ecr-public-bindings-fixture-layer",
-          );
+          const layerBlob = new TextEncoder().encode("alchemy-ecr-public-bindings-fixture-layer");
           const configBlob = new TextEncoder().encode(
             JSON.stringify({
               architecture: "amd64",
@@ -217,8 +206,7 @@ export default EcrPublicTestFunction.make(
           });
           const result = yield* putImage({
             imageManifest,
-            imageManifestMediaType:
-              "application/vnd.docker.distribution.manifest.v2+json",
+            imageManifestMediaType: "application/vnd.docker.distribution.manifest.v2+json",
             imageTag: "bindings-test",
           }).pipe(
             Effect.map((r) => ({

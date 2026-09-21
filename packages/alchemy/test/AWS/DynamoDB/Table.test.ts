@@ -1,3 +1,9 @@
+import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
@@ -5,12 +11,6 @@ import { Stream as KinesisStream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -102,13 +102,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const created = yield* waitForTableStreamSpecification(
-          table.tableName,
-          {
-            StreamEnabled: true,
-            StreamViewType: "NEW_AND_OLD_IMAGES",
-          },
-        );
+        const created = yield* waitForTableStreamSpecification(table.tableName, {
+          StreamEnabled: true,
+          StreamViewType: "NEW_AND_OLD_IMAGES",
+        });
         expect(created.Table?.StreamSpecification).toEqual({
           StreamEnabled: true,
           StreamViewType: "NEW_AND_OLD_IMAGES",
@@ -132,13 +129,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const updated = yield* waitForTableStreamSpecification(
-          table.tableName,
-          {
-            StreamEnabled: true,
-            StreamViewType: "KEYS_ONLY",
-          },
-        );
+        const updated = yield* waitForTableStreamSpecification(table.tableName, {
+          StreamEnabled: true,
+          StreamViewType: "KEYS_ONLY",
+        });
         expect(updated.Table?.StreamSpecification).toEqual({
           StreamEnabled: true,
           StreamViewType: "KEYS_ONLY",
@@ -154,10 +148,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const disabled = yield* waitForTableStreamSpecification(
-          table.tableName,
-          undefined,
-        );
+        const disabled = yield* waitForTableStreamSpecification(table.tableName, undefined);
         expect(disabled.Table?.StreamSpecification).toBeUndefined();
 
         yield* logTestStep("destroying stream table");
@@ -195,17 +186,11 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         expect(createdTags["Environment"]).toEqual("test");
         expect(table.tags?.["Environment"]).toEqual("test");
 
-        const createdBackups = yield* waitForPointInTimeRecovery(
-          table.tableName,
-          true,
+        const createdBackups = yield* waitForPointInTimeRecovery(table.tableName, true);
+        expect(createdBackups.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus).toEqual(
+          "ENABLED",
         );
-        expect(
-          createdBackups.PointInTimeRecoveryDescription
-            ?.PointInTimeRecoveryStatus,
-        ).toEqual("ENABLED");
-        expect(
-          createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays,
-        ).toEqual(7);
+        expect(createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays).toEqual(7);
 
         yield* logTestStep("updating tags and disabling PITR");
         const updated = yield* stack.deploy(
@@ -230,14 +215,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         expect(updated.tags?.["Environment"]).toEqual("prod");
         expect(updated.tags?.["Team"]).toEqual("platform");
 
-        const updatedBackups = yield* waitForPointInTimeRecovery(
-          updated.tableName,
-          false,
+        const updatedBackups = yield* waitForPointInTimeRecovery(updated.tableName, false);
+        expect(updatedBackups.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus).toEqual(
+          "DISABLED",
         );
-        expect(
-          updatedBackups.PointInTimeRecoveryDescription
-            ?.PointInTimeRecoveryStatus,
-        ).toEqual("DISABLED");
 
         yield* logTestStep("destroying tagged table");
         yield* stack.destroy();
@@ -287,17 +268,11 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
             return yield* Table("PolicyTable", {
               partitionKey: "id",
               attributes: { id: "S" },
-              resourcePolicy: policyFor(
-                "AllowSameAccountDescribe",
-                "dynamodb:DescribeTable",
-              ),
+              resourcePolicy: policyFor("AllowSameAccountDescribe", "dynamodb:DescribeTable"),
             });
           }),
         );
-        const created = yield* waitForResourcePolicy(
-          table.tableArn,
-          "AllowSameAccountDescribe",
-        );
+        const created = yield* waitForResourcePolicy(table.tableArn, "AllowSameAccountDescribe");
         expect(created).toContain("AllowSameAccountDescribe");
 
         yield* logTestStep("updating the resource policy");
@@ -306,17 +281,11 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
             return yield* Table("PolicyTable", {
               partitionKey: "id",
               attributes: { id: "S" },
-              resourcePolicy: policyFor(
-                "AllowSameAccountGet",
-                "dynamodb:GetItem",
-              ),
+              resourcePolicy: policyFor("AllowSameAccountGet", "dynamodb:GetItem"),
             });
           }),
         );
-        const updated = yield* waitForResourcePolicy(
-          table.tableArn,
-          "AllowSameAccountGet",
-        );
+        const updated = yield* waitForResourcePolicy(table.tableArn, "AllowSameAccountGet");
         expect(updated).toContain("AllowSameAccountGet");
         expect(updated).not.toContain("AllowSameAccountDescribe");
 
@@ -371,9 +340,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
             return { table, stream };
           });
 
-        yield* logTestStep(
-          "deploying stream + table with streaming destination",
-        );
+        yield* logTestStep("deploying stream + table with streaming destination");
         const { table, stream } = yield* stack.deploy(program(true));
 
         const enabled = yield* waitForKinesisDestination(
@@ -382,13 +349,9 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           "ACTIVE",
         );
         expect(enabled?.DestinationStatus).toEqual("ACTIVE");
-        expect(enabled?.ApproximateCreationDateTimePrecision).toEqual(
-          "MICROSECOND",
-        );
+        expect(enabled?.ApproximateCreationDateTimePrecision).toEqual("MICROSECOND");
 
-        yield* logTestStep(
-          "removing the streaming destination (stream stays deployed)",
-        );
+        yield* logTestStep("removing the streaming destination (stream stays deployed)");
         yield* stack.deploy(program(false));
         const disabled = yield* waitForKinesisDestination(
           table.tableName,
@@ -422,10 +385,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const enabled = yield* waitForContributorInsights(
-          table.tableName,
-          true,
-        );
+        const enabled = yield* waitForContributorInsights(table.tableName, true);
         expect(["ENABLING", "ENABLED"]).toContain(enabled);
 
         yield* logTestStep("disabling Contributor Insights");
@@ -438,10 +398,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const disabled = yield* waitForContributorInsights(
-          table.tableName,
-          false,
-        );
+        const disabled = yield* waitForContributorInsights(table.tableName, false);
         expect(["DISABLING", "DISABLED"]).toContain(disabled);
 
         yield* logTestStep("destroying Contributor Insights test table");
@@ -456,9 +413,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     "destroying a table with Contributor Insights still enabled leaves no CloudWatch rules",
     (stack) =>
       Effect.gen(function* () {
-        yield* logTestStep(
-          "starting Contributor Insights destroy-while-enabled test",
-        );
+        yield* logTestStep("starting Contributor Insights destroy-while-enabled test");
         yield* stack.destroy();
 
         yield* logTestStep("deploying table with Contributor Insights");
@@ -472,10 +427,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           }),
         );
 
-        const enabled = yield* waitForContributorInsights(
-          table.tableName,
-          true,
-        );
+        const enabled = yield* waitForContributorInsights(table.tableName, true);
         expect(["ENABLING", "ENABLED"]).toContain(enabled);
 
         // Destroy WITHOUT disabling insights first. DynamoDB's CloudWatch
@@ -536,9 +488,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
             TableName: table.tableName,
           });
           if (
-            current.Table?.GlobalSecondaryIndexes?.some(
-              (index) => index.IndexStatus !== "ACTIVE",
-            )
+            current.Table?.GlobalSecondaryIndexes?.some((index) => index.IndexStatus !== "ACTIVE")
           ) {
             return yield* Effect.fail(new GlobalSecondaryIndexNotActive());
           }
@@ -546,25 +496,20 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "GlobalSecondaryIndexNotActive",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
           }),
         );
 
-        expect(
-          actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName),
-        ).toContain("lsi-by-sk");
-        expect(
-          actualTable?.GlobalSecondaryIndexes?.map((index) => index.IndexName),
-        ).toContain("gsi-by-lookup");
-        expect(
-          table.localSecondaryIndexes?.map((index) => index.IndexName),
-        ).toContain("lsi-by-sk");
-        expect(
-          table.globalSecondaryIndexes?.map((index) => index.IndexName),
-        ).toContain("gsi-by-lookup");
+        expect(actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+          "lsi-by-sk",
+        );
+        expect(actualTable?.GlobalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+          "gsi-by-lookup",
+        );
+        expect(table.localSecondaryIndexes?.map((index) => index.IndexName)).toContain("lsi-by-sk");
+        expect(table.globalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+          "gsi-by-lookup",
+        );
 
         yield* logTestStep("destroying indexed table");
         yield* stack.destroy();
@@ -613,9 +558,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         // must report the HASH attributes then the RANGE attributes in
         // declaration order.
         expect(
-          actualTable?.GlobalSecondaryIndexes?.[0]?.KeySchema?.map(
-            (element) => [element.AttributeName, element.KeyType],
-          ),
+          actualTable?.GlobalSecondaryIndexes?.[0]?.KeySchema?.map((element) => [
+            element.AttributeName,
+            element.KeyType,
+          ]),
         ).toEqual([
           ["tournamentId", "HASH"],
           ["region", "HASH"],
@@ -655,10 +601,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
           },
         }).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
             until: (response) => (response.Count ?? 0) === 2,
           }),
         );
@@ -668,8 +611,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         const byRound = yield* DynamoDB.query({
           TableName: table.tableName,
           IndexName: "TournamentRegionIndex",
-          KeyConditionExpression:
-            "tournamentId = :t AND #r = :r AND round = :round",
+          KeyConditionExpression: "tournamentId = :t AND #r = :r AND round = :round",
           ExpressionAttributeNames: { "#r": "region" },
           ExpressionAttributeValues: {
             ":t": { S: "WINTER2024" },
@@ -755,9 +697,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     "update global secondary indexes across multiple deploys",
     (stack) =>
       Effect.gen(function* () {
-        yield* logTestStep(
-          "starting multi-stage global secondary index update test",
-        );
+        yield* logTestStep("starting multi-stage global secondary index update test");
         yield* stack.destroy();
 
         yield* logTestStep("deploying table without GSIs");
@@ -1047,9 +987,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         const successor = yield* DynamoDB.describeTable({
           TableName: replaced.tableName,
         });
-        expect(successor.Table?.KeySchema).toEqual([
-          { AttributeName: "pk", KeyType: "HASH" },
-        ]);
+        expect(successor.Table?.KeySchema).toEqual([{ AttributeName: "pk", KeyType: "HASH" }]);
 
         yield* logTestStep("destroying key schema replacement test table");
         yield* stack.destroy();
@@ -1295,19 +1233,14 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         const stage = stack.stage;
         const fqns = yield* state.list({ stack: stack.name, stage });
         const rows = yield* Effect.forEach(fqns, (fqn) =>
-          state
-            .get({ stack: stack.name, stage, fqn })
-            .pipe(Effect.map((row) => ({ fqn, row }))),
+          state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
         );
         const wedged = rows.find(
           (r): r is { fqn: string; row: ResourceState } =>
-            isResourceState(r.row) &&
-            r.row.resourceType === "AWS.DynamoDB.Table",
+            isResourceState(r.row) && r.row.resourceType === "AWS.DynamoDB.Table",
         );
         if (!wedged) {
-          return yield* Effect.die(
-            new Error("no AWS.DynamoDB.Table state row found after deploy"),
-          );
+          return yield* Effect.die(new Error("no AWS.DynamoDB.Table state row found after deploy"));
         }
         yield* state.set({
           stack: stack.name,
@@ -1325,16 +1258,11 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         });
 
         // Delete the table out-of-band so the recovery `read` misses.
-        yield* logTestStep(
-          `deleting ${created.tableName} out-of-band to force a read miss`,
-        );
+        yield* logTestStep(`deleting ${created.tableName} out-of-band to force a read miss`);
         yield* DynamoDB.deleteTable({ TableName: created.tableName }).pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceInUseException",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
           }),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         );
@@ -1366,10 +1294,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     yield* DynamoDB.deleteTable({ TableName: tableName }).pipe(
       Effect.retry({
         while: (e) => e._tag === "ResourceInUseException",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(8),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
       }),
       Effect.flatMap(() => assertTableIsDeleted(tableName)),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -1377,25 +1302,18 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
   });
 
   const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
-    yield* Effect.logInfo(
-      `DynamoDB Table test: waiting for deletion of ${tableName}`,
-    );
+    yield* Effect.logInfo(`DynamoDB Table test: waiting for deletion of ${tableName}`);
     yield* DynamoDB.describeTable({
       TableName: tableName,
     }).pipe(
       Effect.flatMap(() => Effect.fail(new TableStillExists())),
       Effect.retry({
         while: (e) => e._tag === "TableStillExists",
-        schedule: Schedule.max([
-          Schedule.fixed("1 second"),
-          Schedule.recurs(30),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(30)]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );
-    yield* Effect.logInfo(
-      `DynamoDB Table test: confirmed deleted ${tableName}`,
-    );
+    yield* Effect.logInfo(`DynamoDB Table test: confirmed deleted ${tableName}`);
   });
 
   const waitForTableTags = Effect.fn(function* (
@@ -1412,9 +1330,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         const tags = Object.fromEntries(
           (result.Tags ?? []).map((tag) => [tag.Key!, tag.Value!]),
         ) as Record<string, string>;
-        const matches = Object.entries(expected).every(
-          ([key, value]) => tags[key] === value,
-        );
+        const matches = Object.entries(expected).every(([key, value]) => tags[key] === value);
         if (!matches) {
           return Effect.logInfo(
             `DynamoDB Table test: tags not ready on ${tableArn}. expected=${JSON.stringify(expected)} actual=${JSON.stringify(tags)}`,
@@ -1426,18 +1342,12 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "TableTagsNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   });
 
-  const waitForPointInTimeRecovery = Effect.fn(function* (
-    tableName: string,
-    enabled: boolean,
-  ) {
+  const waitForPointInTimeRecovery = Effect.fn(function* (tableName: string, enabled: boolean) {
     yield* Effect.logInfo(
       `DynamoDB Table test: waiting for PITR on ${tableName} -> ${enabled ? "ENABLED" : "DISABLED"}`,
     );
@@ -1448,31 +1358,21 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         const status =
           result.ContinuousBackupsDescription?.PointInTimeRecoveryDescription
             ?.PointInTimeRecoveryStatus;
-        if (
-          (enabled && status !== "ENABLED") ||
-          (!enabled && status !== "DISABLED")
-        ) {
+        if ((enabled && status !== "ENABLED") || (!enabled && status !== "DISABLED")) {
           return Effect.logInfo(
             `DynamoDB Table test: PITR not ready on ${tableName}. current=${status ?? "undefined"}`,
-          ).pipe(
-            Effect.andThen(Effect.fail(new PointInTimeRecoveryNotUpdated())),
-          );
+          ).pipe(Effect.andThen(Effect.fail(new PointInTimeRecoveryNotUpdated())));
         }
         if (!result.ContinuousBackupsDescription) {
           return Effect.fail(new PointInTimeRecoveryNotUpdated());
         }
-        return Effect.logInfo(
-          `DynamoDB Table test: PITR ready on ${tableName} -> ${status}`,
-        ).pipe(
+        return Effect.logInfo(`DynamoDB Table test: PITR ready on ${tableName} -> ${status}`).pipe(
           Effect.andThen(Effect.succeed(result.ContinuousBackupsDescription)),
         );
       }),
       Effect.retry({
         while: (error) => error._tag === "PointInTimeRecoveryNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   });
@@ -1489,8 +1389,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     }).pipe(
       Effect.flatMap((result) => {
         const actual = result.Table?.StreamSpecification;
-        const matches =
-          JSON.stringify(actual ?? undefined) === JSON.stringify(expected);
+        const matches = JSON.stringify(actual ?? undefined) === JSON.stringify(expected);
         if (!matches) {
           return Effect.logInfo(
             `DynamoDB Table test: stream configuration not ready on ${tableName}. actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`,
@@ -1502,10 +1401,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "StreamSpecNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
       }),
     );
   });
@@ -1570,14 +1466,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       ResourceArn: tableArn,
     }).pipe(
       Effect.map((result) => result.Policy),
-      Effect.catchTag("PolicyNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
       Effect.flatMap((policy) => {
         const matches =
-          expectedSid === undefined
-            ? policy === undefined
-            : policy?.includes(expectedSid) === true;
+          expectedSid === undefined ? policy === undefined : policy?.includes(expectedSid) === true;
         if (!matches) {
           return Effect.logInfo(
             `DynamoDB Table test: resource policy not ready on ${tableArn}. actual=${policy ?? "absent"}`,
@@ -1587,10 +1479,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "ResourcePolicyNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   });
@@ -1613,26 +1502,18 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         if (destination?.DestinationStatus !== expectedStatus) {
           return Effect.logInfo(
             `DynamoDB Table test: Kinesis destination not ready on ${tableName}. actual=${destination?.DestinationStatus ?? "absent"} expected=${expectedStatus}`,
-          ).pipe(
-            Effect.andThen(Effect.fail(new KinesisDestinationNotUpdated())),
-          );
+          ).pipe(Effect.andThen(Effect.fail(new KinesisDestinationNotUpdated())));
         }
         return Effect.succeed(destination);
       }),
       Effect.retry({
         while: (error) => error._tag === "KinesisDestinationNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(18),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]),
       }),
     );
   });
 
-  const waitForContributorInsights = Effect.fn(function* (
-    tableName: string,
-    enabled: boolean,
-  ) {
+  const waitForContributorInsights = Effect.fn(function* (tableName: string, enabled: boolean) {
     yield* Effect.logInfo(
       `DynamoDB Table test: waiting for Contributor Insights on ${tableName} -> ${enabled ? "enabled" : "disabled"}`,
     );
@@ -1645,18 +1526,13 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         if (isEnabled !== enabled) {
           return Effect.logInfo(
             `DynamoDB Table test: Contributor Insights not ready on ${tableName}. actual=${status ?? "undefined"}`,
-          ).pipe(
-            Effect.andThen(Effect.fail(new ContributorInsightsNotUpdated())),
-          );
+          ).pipe(Effect.andThen(Effect.fail(new ContributorInsightsNotUpdated())));
         }
         return Effect.succeed(status);
       }),
       Effect.retry({
         while: (error) => error._tag === "ContributorInsightsNotUpdated",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   });
@@ -1664,21 +1540,15 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
   // Out-of-band proof that DynamoDB's Contributor Insights cleanup ran:
   // no `DynamoDBContributorInsights-*-<tableName>-*` CloudWatch rules may
   // survive the destroy — stranded rules can only be removed by AWS support.
-  const assertNoContributorInsightsRules = Effect.fn(function* (
-    tableName: string,
-  ) {
+  const assertNoContributorInsightsRules = Effect.fn(function* (tableName: string) {
     const rules = yield* CloudWatch.describeInsightRules({});
     const leftover = (rules.InsightRules ?? [])
       .map((rule) => rule.Name)
-      .filter(
-        (name): name is string =>
-          name !== undefined && name.includes(`-${tableName}-`),
-      );
+      .filter((name): name is string => name !== undefined && name.includes(`-${tableName}-`));
     expect(leftover).toEqual([]);
   });
 
-  const logTestStep = (message: string) =>
-    Effect.logInfo(`DynamoDB Table test: ${message}`);
+  const logTestStep = (message: string) => Effect.logInfo(`DynamoDB Table test: ${message}`);
 
   class TableStillExists extends Data.TaggedError("TableStillExists") {}
 
@@ -1686,27 +1556,15 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
 
   class TableTagsNotUpdated extends Data.TaggedError("TableTagsNotUpdated") {}
 
-  class PointInTimeRecoveryNotUpdated extends Data.TaggedError(
-    "PointInTimeRecoveryNotUpdated",
-  ) {}
+  class PointInTimeRecoveryNotUpdated extends Data.TaggedError("PointInTimeRecoveryNotUpdated") {}
 
-  class GlobalSecondaryIndexNotActive extends Data.TaggedError(
-    "GlobalSecondaryIndexNotActive",
-  ) {}
+  class GlobalSecondaryIndexNotActive extends Data.TaggedError("GlobalSecondaryIndexNotActive") {}
 
-  class TableIndexesNotUpdated extends Data.TaggedError(
-    "TableIndexesNotUpdated",
-  ) {}
+  class TableIndexesNotUpdated extends Data.TaggedError("TableIndexesNotUpdated") {}
 
-  class ResourcePolicyNotUpdated extends Data.TaggedError(
-    "ResourcePolicyNotUpdated",
-  ) {}
+  class ResourcePolicyNotUpdated extends Data.TaggedError("ResourcePolicyNotUpdated") {}
 
-  class KinesisDestinationNotUpdated extends Data.TaggedError(
-    "KinesisDestinationNotUpdated",
-  ) {}
+  class KinesisDestinationNotUpdated extends Data.TaggedError("KinesisDestinationNotUpdated") {}
 
-  class ContributorInsightsNotUpdated extends Data.TaggedError(
-    "ContributorInsightsNotUpdated",
-  ) {}
+  class ContributorInsightsNotUpdated extends Data.TaggedError("ContributorInsightsNotUpdated") {}
 });

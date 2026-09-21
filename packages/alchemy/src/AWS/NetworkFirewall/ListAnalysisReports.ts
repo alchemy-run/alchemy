@@ -36,10 +36,7 @@ export interface ListAnalysisReports extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAnalysisReportsRequest,
-    ) => Effect.Effect<
-      NFW.ListAnalysisReportsResponse,
-      NFW.ListAnalysisReportsError
-    >
+    ) => Effect.Effect<NFW.ListAnalysisReportsResponse, NFW.ListAnalysisReportsError>
   >
 > {}
 

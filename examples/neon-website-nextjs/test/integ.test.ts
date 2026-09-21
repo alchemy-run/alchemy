@@ -1,11 +1,11 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -79,9 +79,7 @@ test(
   Effect.gen(function* () {
     const url = yield* base;
     for (const name of ["Neon", "Alchemy"]) {
-      const response = yield* Test.getWhenReady(
-        `${url}/api/hello?name=${name}`,
-      );
+      const response = yield* Test.getWhenReady(`${url}/api/hello?name=${name}`);
       expect(response.status).toBe(200);
       expect(yield* response.json).toEqual({
         name,

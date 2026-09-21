@@ -37,6 +37,4 @@ export interface SignPayload extends Binding.Service<
     ) => Effect.Effect<signer.SignPayloadResponse, signer.SignPayloadError>
   >
 > {}
-export const SignPayload = Binding.Service<SignPayload>(
-  "AWS.Signer.SignPayload",
-);
+export const SignPayload = Binding.Service<SignPayload>("AWS.Signer.SignPayload");

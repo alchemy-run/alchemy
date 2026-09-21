@@ -28,6 +28,4 @@ export interface ListCopyJobs extends Binding.Service<
     ) => Effect.Effect<backup.ListCopyJobsOutput, backup.ListCopyJobsError>
   >
 > {}
-export const ListCopyJobs = Binding.Service<ListCopyJobs>(
-  "AWS.Backup.ListCopyJobs",
-);
+export const ListCopyJobs = Binding.Service<ListCopyJobs>("AWS.Backup.ListCopyJobs");

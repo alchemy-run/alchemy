@@ -118,9 +118,7 @@ export interface EmailEventSourceProps extends EventRouteProps {
  */
 export const consumeEmailEvents = <StreamReq = never, Req = never>(
   props: EmailEventSourceProps,
-  process: (
-    events: Stream.Stream<EmailEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<EmailEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "SESEmailEvents",

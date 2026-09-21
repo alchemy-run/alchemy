@@ -136,12 +136,9 @@ export const PermissionProvider = () =>
       // therefore receive a transient ResourceConflictException even when
       // their statement ids are distinct. Keep the retry bounded well below
       // the provider/test timeout.
-      type PolicyMutationError =
-        | Lambda.AddPermissionError
-        | Lambda.RemovePermissionError;
+      type PolicyMutationError = Lambda.AddPermissionError | Lambda.RemovePermissionError;
       const retryPolicyMutation = {
-        while: (error: PolicyMutationError) =>
-          error._tag === "ResourceConflictException",
+        while: (error: PolicyMutationError) => error._tag === "ResourceConflictException",
         schedule: Schedule.spaced("500 millis"),
         times: 8,
       } as const;
@@ -150,21 +147,14 @@ export const PermissionProvider = () =>
         Lambda.addPermission(request).pipe(Effect.retry(retryPolicyMutation));
 
       const removePermission = (request: Lambda.RemovePermissionRequest) =>
-        Lambda.removePermission(request).pipe(
-          Effect.retry(retryPolicyMutation),
-        );
+        Lambda.removePermission(request).pipe(Effect.retry(retryPolicyMutation));
 
-      const hasStatement = Effect.fn(function* (
-        functionName: string,
-        statementId: string,
-      ) {
+      const hasStatement = Effect.fn(function* (functionName: string, statementId: string) {
         const { Policy } = yield* Lambda.getPolicy({
           FunctionName: functionName,
         }).pipe(
           // A function without a resource policy is reported as not found.
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({ Policy: undefined }),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Policy: undefined })),
         );
         if (!Policy) return false;
         return yield* Effect.try({
@@ -177,12 +167,9 @@ export const PermissionProvider = () =>
               : policy.Statement
                 ? [policy.Statement]
                 : [];
-            return statements.some(
-              (statement) => statement.Sid === statementId,
-            );
+            return statements.some((statement) => statement.Sid === statementId);
           },
-          catch: (cause) =>
-            new Error("invalid Lambda resource policy", { cause }),
+          catch: (cause) => new Error("invalid Lambda resource policy", { cause }),
         });
       });
 
@@ -233,9 +220,7 @@ export const PermissionProvider = () =>
                       ? [policy.Statement]
                       : [];
                   return statements
-                    .filter(
-                      (s): s is { Sid: string } => typeof s.Sid === "string",
-                    )
+                    .filter((s): s is { Sid: string } => typeof s.Sid === "string")
                     .map((s): PermissionAttrs => ({
                       statementId: s.Sid,
                       functionName,
@@ -261,8 +246,7 @@ export const PermissionProvider = () =>
           // Observe — derive identity. The statementId is deterministic from
           // the logical id, so we always use it whether this is a first
           // reconciliation, an adoption, or a re-run after a partial create.
-          const statementId =
-            output?.statementId ?? (yield* createStatementId(id));
+          const statementId = output?.statementId ?? (yield* createStatementId(id));
 
           // Observe the deterministic Sid before mutating. An existing Sid is
           // a true create/update collision and must be replaced; a
@@ -272,9 +256,7 @@ export const PermissionProvider = () =>
             yield* removePermission({
               FunctionName: news.functionName,
               StatementId: statementId,
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           yield* addPermission({
@@ -290,9 +272,7 @@ export const PermissionProvider = () =>
             PrincipalOrgID: news.principalOrgID,
           });
 
-          yield* session.note(
-            `Permission ${statementId} on ${news.functionName}`,
-          );
+          yield* session.note(`Permission ${statementId} on ${news.functionName}`);
 
           return {
             statementId,
@@ -303,9 +283,7 @@ export const PermissionProvider = () =>
           yield* removePermission({
             FunctionName: output.functionName,
             StatementId: output.statementId,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

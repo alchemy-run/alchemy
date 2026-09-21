@@ -1,13 +1,11 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const R2BucketWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/r2-bucket/R2Bucket.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/r2-bucket/R2Bucket.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
@@ -17,10 +15,7 @@ import type { BindingHook } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
-import type {
-  R2BucketProps,
-  R2ServiceProps,
-} from "./R2BucketOptions.shared.ts";
+import type { R2BucketProps, R2ServiceProps } from "./R2BucketOptions.shared.ts";
 import {
   BINDING_R2_BLOBS,
   BINDING_R2_ENABLE_CONTROL_ENDPOINTS,
@@ -39,9 +34,7 @@ export class R2Bucket extends Plugin.Service<
      * the binding should target: the shared `r2` service, with the bucket
      * name carried via designator props.
      */
-    readonly register: (
-      props: R2ServiceProps,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    readonly register: (props: R2ServiceProps) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/R2Bucket") {}
 
@@ -54,13 +47,11 @@ export const R2BucketLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "R2Bucket",
-          message:
-            "Cannot configure R2 persistence: the Storage service has no disk path.",
+          message: "Cannot configure R2 persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
@@ -108,9 +99,7 @@ export const R2BucketLive = Layer.effect(
                 // `node:crypto` is used to synchronously compute multipart etags
                 // Node.js compatibility is default-on for the 2026-08-31
                 // internal compatibility date.
-                modules: formatInternalWorkerModules(
-                  yield* Effect.promise(R2BucketWorker.worker),
-                ),
+                modules: formatInternalWorkerModules(yield* Effect.promise(R2BucketWorker.worker)),
                 durableObjectNamespaces: [
                   {
                     className: R2_OBJECT_CLASS_NAME,
@@ -167,11 +156,7 @@ export const local = (props: R2BucketProps): BindingHook<R2Bucket> =>
     ),
   );
 
-export const remote = (
-  binding: string,
-  bucketName: string,
-  jurisdiction?: string,
-) =>
+export const remote = (binding: string, bucketName: string, jurisdiction?: string) =>
   makeRemoteBinding(
     { name: binding, type: "r2_bucket", bucketName, jurisdiction, raw: true },
     (service) => ({

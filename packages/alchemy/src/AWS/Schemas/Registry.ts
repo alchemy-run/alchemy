@@ -115,24 +115,14 @@ export const RegistryProvider = () =>
   Provider.effect(
     Registry,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: RegistryProps,
-      ) {
-        return (
-          props.registryName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: RegistryProps) {
+        return props.registryName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const describe = (registryName: string) =>
         schemas
           .describeRegistry({ RegistryName: registryName })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return Registry.Provider.of({
         stables: ["registryName", "registryArn"],
@@ -146,9 +136,7 @@ export const RegistryProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.Registries ?? [])
-                  .filter(
-                    (r) => r.RegistryName != null && r.RegistryArn != null,
-                  )
+                  .filter((r) => r.RegistryName != null && r.RegistryArn != null)
                   .map((r) => ({
                     registryName: r.RegistryName!,
                     registryArn: r.RegistryArn!,
@@ -158,17 +146,14 @@ export const RegistryProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const registryName =
-            output?.registryName ?? (yield* createName(id, olds ?? {}));
+          const registryName = output?.registryName ?? (yield* createName(id, olds ?? {}));
           const found = yield* describe(registryName);
           if (!found) return undefined;
           const attrs = {
             registryName,
             registryArn: found.RegistryArn!,
           };
-          return (yield* hasAlchemyTags(id, found.Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, found.Tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -180,8 +165,7 @@ export const RegistryProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const registryName =
-            output?.registryName ?? (yield* createName(id, news));
+          const registryName = output?.registryName ?? (yield* createName(id, news));
 
           // OBSERVE
           let live = yield* describe(registryName);
@@ -220,15 +204,12 @@ export const RegistryProvider = () =>
             .getResourcePolicy({ RegistryName: registryName })
             .pipe(
               Effect.map((r) => (r.Policy ? r.Policy : undefined)),
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
             );
           const policyDrifted =
             desiredPolicy === undefined || currentPolicy === undefined
               ? desiredPolicy !== currentPolicy
-              : normalizePolicyDocument(currentPolicy) !==
-                normalizePolicyDocument(desiredPolicy);
+              : normalizePolicyDocument(currentPolicy) !== normalizePolicyDocument(desiredPolicy);
           if (policyDrifted) {
             if (desiredPolicy === undefined) {
               yield* schemas
@@ -265,12 +246,10 @@ export const RegistryProvider = () =>
             // Schemas are registry-scoped and globally invisible to nuke.
             // Only its explicit operator-confirmed force path may remove them
             // or an attached registry policy.
-            const childSchemas = yield* schemas.listSchemas
-              .items({ RegistryName })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-              );
+            const childSchemas = yield* schemas.listSchemas.items({ RegistryName }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
             yield* Effect.forEach(
               childSchemas,
               (schema) =>
@@ -281,9 +260,7 @@ export const RegistryProvider = () =>
                         RegistryName,
                         SchemaName: schema.SchemaName,
                       })
-                      .pipe(
-                        Effect.catchTag("NotFoundException", () => Effect.void),
-                      ),
+                      .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
               { concurrency: 4, discard: true },
             );
             yield* schemas
@@ -301,10 +278,7 @@ export const RegistryProvider = () =>
                 e._tag === "BadRequestException" ||
                 e._tag === "InternalServerErrorException" ||
                 e._tag === "ServiceUnavailableException",
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
             }),
             Effect.catchTag("NotFoundException", () => Effect.void),
           );

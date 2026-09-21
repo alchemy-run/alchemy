@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetDashboardForJobRun} runtime callable.
  * The `applicationId` is injected from the bound {@link Application}.
  */
-export type GetDashboardForJobRunInput = Omit<
-  emr.GetDashboardForJobRunRequest,
-  "applicationId"
->;
+export type GetDashboardForJobRunInput = Omit<emr.GetDashboardForJobRunRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetDashboardForJobRun`.
@@ -41,10 +38,7 @@ export interface GetDashboardForJobRun extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDashboardForJobRunInput,
-    ) => Effect.Effect<
-      emr.GetDashboardForJobRunResponse,
-      emr.GetDashboardForJobRunError
-    >
+    ) => Effect.Effect<emr.GetDashboardForJobRunResponse, emr.GetDashboardForJobRunError>
   >
 > {}
 export const GetDashboardForJobRun = Binding.Service<GetDashboardForJobRun>(

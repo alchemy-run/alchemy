@@ -1,14 +1,14 @@
-import * as HealthLake from "@/AWS/HealthLake";
-import * as IAM from "@/AWS/IAM";
-import * as KMS from "@/AWS/KMS";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as HealthLake from "@/AWS/HealthLake";
+import * as IAM from "@/AWS/IAM";
+import * as KMS from "@/AWS/KMS";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -152,9 +152,7 @@ export default HealthLakeTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { jobId: result.JobId, status: result.JobStatus },
+            "errorTag" in result ? result : { jobId: result.JobId, status: result.JobStatus },
           );
         }
 
@@ -162,18 +160,14 @@ export default HealthLakeTestFunction.make(
           const jobId = url.searchParams.get("jobId") ?? "";
           const result = yield* errorTagged(describeImport({ JobId: jobId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { status: result.ImportJobProperties.JobStatus },
+            "errorTag" in result ? result : { status: result.ImportJobProperties.JobStatus },
           );
         }
 
         if (request.method === "GET" && pathname === "/list-imports") {
           const result = yield* errorTagged(listImports());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.ImportJobPropertiesList.length },
+            "errorTag" in result ? result : { count: result.ImportJobPropertiesList.length },
           );
         }
 
@@ -189,9 +183,7 @@ export default HealthLakeTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { jobId: result.JobId, status: result.JobStatus },
+            "errorTag" in result ? result : { jobId: result.JobId, status: result.JobStatus },
           );
         }
 
@@ -199,18 +191,14 @@ export default HealthLakeTestFunction.make(
           const jobId = url.searchParams.get("jobId") ?? "";
           const result = yield* errorTagged(describeExport({ JobId: jobId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { status: result.ExportJobProperties.JobStatus },
+            "errorTag" in result ? result : { status: result.ExportJobProperties.JobStatus },
           );
         }
 
         if (request.method === "GET" && pathname === "/list-exports") {
           const result = yield* errorTagged(listExports());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.ExportJobPropertiesList.length },
+            "errorTag" in result ? result : { count: result.ExportJobPropertiesList.length },
           );
         }
 

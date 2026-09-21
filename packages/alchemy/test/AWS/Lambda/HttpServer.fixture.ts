@@ -38,15 +38,10 @@ export const TestHttpEffect = Effect.gen(function* () {
       },
     );
 
-    return HttpServerResponse.setCookieUnsafe(
-      response,
-      "job-session",
-      "created",
-      {
-        httpOnly: true,
-        path: "/",
-      },
-    );
+    return HttpServerResponse.setCookieUnsafe(response, "job-session", "created", {
+      httpOnly: true,
+      path: "/",
+    });
   }
 
   if (request.method === "GET" && pathname === "/binary") {

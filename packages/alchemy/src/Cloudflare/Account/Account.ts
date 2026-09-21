@@ -2,7 +2,6 @@ import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -94,13 +93,7 @@ export interface AccountAttributes {
   enforceTwofactor: boolean;
 }
 
-export type Account = Resource<
-  TypeId,
-  AccountProps,
-  AccountAttributes,
-  never,
-  Providers
->;
+export type Account = Resource<TypeId, AccountProps, AccountAttributes, never, Providers>;
 
 /**
  * A Cloudflare account (subaccount), for tenant / partner platforms that
@@ -199,14 +192,11 @@ export const AccountProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name =
-        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+      const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
       // 1. Observe — the account id cached on `output` is a hint, not a
       //    guarantee: a deleted account falls through to create.
-      let observed = output?.accountId
-        ? yield* getAccount(output.accountId)
-        : undefined;
+      let observed = output?.accountId ? yield* getAccount(output.accountId) : undefined;
 
       // 2. Ensure — create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to

@@ -1,7 +1,3 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Planetscale from "@/Planetscale";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
@@ -9,13 +5,14 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import { adopt } from "@/AdoptPolicy";
+import * as Planetscale from "@/Planetscale";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
   test.provider(
@@ -39,11 +36,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           }),
         );
 
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          "main",
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
         yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
         yield* ps.createBranch({
@@ -52,11 +45,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           name: branchName,
           parent_branch: "main",
         });
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          branchName,
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, branchName);
 
         const { branch } = yield* stack
           .deploy(
@@ -117,11 +106,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           }),
         );
 
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          "main",
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
         yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
         yield* ps.createBranch({
@@ -130,11 +115,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           name: branchName,
           parent_branch: "main",
         });
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          branchName,
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, branchName);
 
         const exit = yield* stack
           .deploy(
@@ -191,11 +172,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           }),
         );
 
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          "main",
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
         yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
         const backup = yield* ps.createBackup({
@@ -206,12 +183,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           retention_unit: "hour",
           retention_value: 1,
         });
-        yield* waitForBackupSuccess(
-          database.organization,
-          dbName,
-          "main",
-          backup.id,
-        );
+        yield* waitForBackupSuccess(database.organization, dbName, "main", backup.id);
 
         const { branch } = yield* stack.deploy(
           Effect.gen(function* () {
@@ -492,11 +464,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
           }),
         );
 
-        yield* Planetscale.waitForBranchReady(
-          database.organization,
-          dbName,
-          "main",
-        );
+        yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
         yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
         const { branch } = yield* stack.deploy(
@@ -567,10 +535,7 @@ const waitForBranchToBeDeleted = Effect.fn(function* (
   );
 });
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
   yield* ps
     .getDatabase({
       organization,
@@ -579,8 +544,7 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
     .pipe(
       Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
       Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
+        while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
         schedule: Schedule.exponential(100),
       }),
       Effect.catchTag("NotFound", () => Effect.void),
@@ -601,22 +565,14 @@ const waitForBackupSuccess = Effect.fn(function* (
         case "failed":
         case "canceled":
         case "ignored":
-          return Effect.fail(
-            new BackupNotReady({ retryable: false, state: backup.state }),
-          );
+          return Effect.fail(new BackupNotReady({ retryable: false, state: backup.state }));
         default:
-          return Effect.fail(
-            new BackupNotReady({ retryable: true, state: backup.state }),
-          );
+          return Effect.fail(new BackupNotReady({ retryable: true, state: backup.state }));
       }
     }),
     Effect.retry({
-      while: (e): e is BackupNotReady =>
-        e instanceof BackupNotReady && e.retryable,
-      schedule: Schedule.max([
-        Schedule.exponential(1_000),
-        Schedule.recurs(120),
-      ]),
+      while: (e): e is BackupNotReady => e instanceof BackupNotReady && e.retryable,
+      schedule: Schedule.max([Schedule.exponential(1_000), Schedule.recurs(120)]),
     }),
   );
 });

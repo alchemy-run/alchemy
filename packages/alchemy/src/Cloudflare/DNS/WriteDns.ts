@@ -95,16 +95,10 @@ export const WriteDns = Binding.Service<WriteDns>("Cloudflare.DNS.WriteDns");
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
 
 /** Update-record request, minus the zone id and record id. */
-export type UpdateRecordRequestInput = Omit<
-  UpdateRecordRequest,
-  "zoneId" | "dnsRecordId"
->;
+export type UpdateRecordRequestInput = Omit<UpdateRecordRequest, "zoneId" | "dnsRecordId">;
 
 /** Patch-record request, minus the zone id and record id. */
-export type PatchRecordRequestInput = Omit<
-  PatchRecordRequest,
-  "zoneId" | "dnsRecordId"
->;
+export type PatchRecordRequestInput = Omit<PatchRecordRequest, "zoneId" | "dnsRecordId">;
 
 /** Batch-records request, minus the zone id (bound at `WriteDnsBinding(zone)` time). */
 export type BatchRecordRequestInput = Omit<BatchRecordRequest, "zoneId">;

@@ -1,31 +1,29 @@
+import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Export } from "@/AWS/BCMDataExports/Export.ts";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on. Runs in every
 // CI pass at near-zero cost.
-test.provider(
-  "getExport on a nonexistent export ARN fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        bcm.getExport({
-          ExportArn: `arn:aws:bcm-data-exports:us-east-1:${accountId}:export/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getExport on a nonexistent export ARN fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { accountId } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      bcm.getExport({
+        ExportArn: `arn:aws:bcm-data-exports:us-east-1:${accountId}:export/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const bucketName = "alchemy-test-bcm-export-dest";
@@ -54,16 +52,10 @@ const destinationBucket = (accountId: string) =>
         Sid: "EnableAWSDataExportsToWriteToS3AndCheckPolicy",
         Effect: "Allow",
         Principal: {
-          Service: [
-            "billingreports.amazonaws.com",
-            "bcm-data-exports.amazonaws.com",
-          ],
+          Service: ["billingreports.amazonaws.com", "bcm-data-exports.amazonaws.com"],
         },
         Action: ["s3:PutObject", "s3:GetBucketPolicy"],
-        Resource: [
-          `arn:aws:s3:::${bucketName}`,
-          `arn:aws:s3:::${bucketName}/*`,
-        ],
+        Resource: [`arn:aws:s3:::${bucketName}`, `arn:aws:s3:::${bucketName}/*`],
         Condition: {
           StringLike: {
             "aws:SourceAccount": accountId,
@@ -80,9 +72,7 @@ const destinationBucket = (accountId: string) =>
 const getExportByArn = (arn: string) =>
   bcm.getExport({ ExportArn: arn }).pipe(
     Effect.map((r) => r.Export),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 // Typed wait-until-gone: bounded, declarative.
@@ -90,16 +80,11 @@ const assertExportGone = (arn: string) =>
   Effect.gen(function* () {
     const live = yield* getExportByArn(arn);
     if (live !== undefined) {
-      return yield* Effect.fail(
-        new Error(`export '${arn}' still exists after destroy`),
-      );
+      return yield* Effect.fail(new Error(`export '${arn}' still exists after destroy`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -139,12 +124,8 @@ test.provider(
       expect(created?.Name).toBe(exportName);
       expect(created?.Description).toBe("alchemy bcm-data-exports test");
       expect(created?.DataQuery.QueryStatement).toBe(queryStatement);
-      expect(created?.DestinationConfigurations.S3Destination.S3Bucket).toBe(
-        bucketName,
-      );
-      expect(created?.DestinationConfigurations.S3Destination.S3Prefix).toBe(
-        "cur2",
-      );
+      expect(created?.DestinationConfigurations.S3Destination.S3Bucket).toBe(bucketName);
+      expect(created?.DestinationConfigurations.S3Destination.S3Prefix).toBe("cur2");
       expect(created?.RefreshCadence.Frequency).toBe("SYNCHRONOUS");
 
       // Tags: internal branding + user tag attached at create.
@@ -152,9 +133,7 @@ test.provider(
         .listTagsForResource({ ResourceArn: deployed.exportArn })
         .pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
         );
       expect(tags.fixture).toBe("bcm-data-exports");
@@ -186,20 +165,14 @@ test.provider(
       expect(updated.exportArn).toBe(deployed.exportArn);
 
       const afterUpdate = yield* getExportByArn(deployed.exportArn);
-      expect(afterUpdate?.Description).toBe(
-        "alchemy bcm-data-exports test (updated)",
-      );
-      expect(
-        afterUpdate?.DestinationConfigurations.S3Destination.S3Prefix,
-      ).toBe("cur2-updated");
+      expect(afterUpdate?.Description).toBe("alchemy bcm-data-exports test (updated)");
+      expect(afterUpdate?.DestinationConfigurations.S3Destination.S3Prefix).toBe("cur2-updated");
 
       const tagsAfterUpdate = yield* bcm
         .listTagsForResource({ ResourceArn: deployed.exportArn })
         .pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
         );
       expect(tagsAfterUpdate.phase).toBe("two");

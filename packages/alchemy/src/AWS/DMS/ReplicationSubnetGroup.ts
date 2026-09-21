@@ -96,8 +96,7 @@ const sameStringSet = (
 };
 
 const DMS_VPC_ROLE_NAME = "dms-vpc-role";
-const DMS_VPC_POLICY_ARN =
-  "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole";
+const DMS_VPC_POLICY_ARN = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole";
 const DMS_VPC_ROLE_OWNER_TAG = {
   Key: "alchemy::managed-by",
   Value: "AWS.DMS.ReplicationSubnetGroup",
@@ -122,15 +121,9 @@ export const ReplicationSubnetGroupProvider = () =>
       const findGroup = Effect.fn(function* (identifier: string) {
         const response = yield* dms
           .describeReplicationSubnetGroups({
-            Filters: [
-              { Name: "replication-subnet-group-id", Values: [identifier] },
-            ],
+            Filters: [{ Name: "replication-subnet-group-id", Values: [identifier] }],
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ReplicationSubnetGroups?.[0];
       });
 
@@ -156,9 +149,7 @@ export const ReplicationSubnetGroupProvider = () =>
             }),
             Tags: [DMS_VPC_ROLE_OWNER_TAG],
           })
-          .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("EntityAlreadyExistsException", () => Effect.void));
         // Idempotent — attaching an already-attached managed policy is a no-op.
         yield* iam.attachRolePolicy({
           RoleName: DMS_VPC_ROLE_NAME,
@@ -174,10 +165,7 @@ export const ReplicationSubnetGroupProvider = () =>
             error._tag === "ConcurrentModificationException" ||
             error._tag === "LimitExceededException" ||
             error._tag === "ServiceFailureException",
-          schedule: Schedule.max([
-            Schedule.fixed("1 second"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
         }),
       );
 
@@ -191,16 +179,11 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const tags = yield* iam
             .listRoleTags({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           if (tags === undefined) return;
           const owned = (tags.Tags ?? []).some(
             (tag) =>
-              tag.Key === DMS_VPC_ROLE_OWNER_TAG.Key &&
-              tag.Value === DMS_VPC_ROLE_OWNER_TAG.Value,
+              tag.Key === DMS_VPC_ROLE_OWNER_TAG.Key && tag.Value === DMS_VPC_ROLE_OWNER_TAG.Value,
           );
           if (!owned) return;
 
@@ -210,14 +193,10 @@ export const ReplicationSubnetGroupProvider = () =>
                 RoleName: DMS_VPC_ROLE_NAME,
                 PolicyArn: DMS_VPC_POLICY_ARN,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam
               .deleteRole({ RoleName: DMS_VPC_ROLE_NAME })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             return true;
           }).pipe(
             Effect.catchTag(
@@ -237,11 +216,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const remaining = yield* iam
             .getRole({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -280,18 +255,13 @@ export const ReplicationSubnetGroupProvider = () =>
       });
 
       return {
-        stables: [
-          "replicationSubnetGroupIdentifier",
-          "replicationSubnetGroupArn",
-        ],
+        stables: ["replicationSubnetGroupIdentifier", "replicationSubnetGroupArn"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
-            (yield* toName(
-              id,
-              olds ?? ({ subnetIds: [] } as ReplicationSubnetGroupProps),
-            )) !== (yield* toName(id, news))
+            (yield* toName(id, olds ?? ({ subnetIds: [] } as ReplicationSubnetGroupProps))) !==
+            (yield* toName(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -300,22 +270,15 @@ export const ReplicationSubnetGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.replicationSubnetGroupIdentifier ??
-            (yield* toName(
-              id,
-              olds ?? ({ subnetIds: [] } as ReplicationSubnetGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ subnetIds: [] } as ReplicationSubnetGroupProps)));
           const group = yield* findGroup(name);
           if (!group?.ReplicationSubnetGroupIdentifier) return undefined;
           const attrs = yield* toAttrs(group);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.replicationSubnetGroupIdentifier ??
-            (yield* toName(id, news));
+          const name = output?.replicationSubnetGroupIdentifier ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const description = news.description ?? "Managed by Alchemy";
@@ -348,10 +311,7 @@ export const ReplicationSubnetGroupProvider = () =>
                   schedule: Schedule.spaced("5 seconds"),
                   times: 10,
                 }),
-                Effect.catchTag(
-                  "ResourceAlreadyExistsFault",
-                  () => Effect.void,
-                ),
+                Effect.catchTag("ResourceAlreadyExistsFault", () => Effect.void),
               );
             observed = yield* findGroup(name);
           } else {
@@ -374,9 +334,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           if (!observed?.ReplicationSubnetGroupIdentifier) {
             return yield* Effect.fail(
-              new Error(
-                `DMS replication subnet group '${name}' not found after reconcile`,
-              ),
+              new Error(`DMS replication subnet group '${name}' not found after reconcile`),
             );
           }
 
@@ -401,18 +359,14 @@ export const ReplicationSubnetGroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* dms
             .deleteReplicationSubnetGroup({
-              ReplicationSubnetGroupIdentifier:
-                output.replicationSubnetGroupIdentifier,
+              ReplicationSubnetGroupIdentifier: output.replicationSubnetGroupIdentifier,
             })
             .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.void));
 
           // Observe actual absence before discarding state or considering the
           // shared helper unused. DMS deletion is eventually consistent.
           for (let attempt = 0; attempt < 30; attempt++) {
-            if (
-              (yield* findGroup(output.replicationSubnetGroupIdentifier)) ===
-              undefined
-            ) {
+            if ((yield* findGroup(output.replicationSubnetGroupIdentifier)) === undefined) {
               yield* deleteOwnedDmsVpcRoleIfUnused;
               return;
             }
@@ -431,14 +385,11 @@ export const ReplicationSubnetGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.ReplicationSubnetGroups ?? []).filter(
-                  (group) =>
-                    group.ReplicationSubnetGroupIdentifier !== undefined,
+                  (group) => group.ReplicationSubnetGroupIdentifier !== undefined,
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((group) => toAttrs(group), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((group) => toAttrs(group), { concurrency: 4 })),
           ),
       };
     }),

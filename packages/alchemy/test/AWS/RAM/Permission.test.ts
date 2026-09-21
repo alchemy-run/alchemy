@@ -1,40 +1,31 @@
-import * as AWS from "@/AWS";
-import { Permission } from "@/AWS/RAM";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ram from "@distilled.cloud/aws/ram";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Permission } from "@/AWS/RAM";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class PermissionStillLive extends Data.TaggedError("PermissionStillLive") {}
 
 const readPermission = Effect.fn(function* (arn: string) {
   const detail = yield* ram.getPermission({ permissionArn: arn }).pipe(
     Effect.map((r) => r.permission),
-    Effect.catchTag("UnknownResourceException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("UnknownResourceException", () => Effect.succeed(undefined)),
   );
-  return detail && detail.status !== "DELETING" && detail.status !== "DELETED"
-    ? detail
-    : undefined;
+  return detail && detail.status !== "DELETING" && detail.status !== "DELETED" ? detail : undefined;
 });
 
 const assertDeleted = Effect.fn(function* (arn: string) {
   yield* readPermission(arn).pipe(
-    Effect.flatMap((p) =>
-      p === undefined ? Effect.void : Effect.fail(new PermissionStillLive()),
-    ),
+    Effect.flatMap((p) => (p === undefined ? Effect.void : Effect.fail(new PermissionStillLive()))),
     Effect.retry({
       while: (e) => e instanceof PermissionStillLive,
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(15)]),
@@ -42,10 +33,7 @@ const assertDeleted = Effect.fn(function* (arn: string) {
   );
 });
 
-const permissionStack = (props: {
-  actions: string[];
-  tags?: Record<string, string>;
-}) =>
+const permissionStack = (props: { actions: string[]; tags?: Record<string, string> }) =>
   Effect.gen(function* () {
     const permission = yield* Permission("TestPermission", {
       resourceType: "appsync:Apis",
@@ -82,9 +70,7 @@ test.provider(
         Action?: string | string[];
       };
       expect(policy.Action).toContain("appsync:SourceGraphQL");
-      expect(
-        live?.tags?.some((t) => t.key === "team" && t.value === "platform"),
-      ).toBe(true);
+      expect(live?.tags?.some((t) => t.key === "team" && t.value === "platform")).toBe(true);
       expect(live?.tags?.some((t) => t.key === "alchemy::id")).toBe(true);
 
       // 3. Update in place: grow the policy (new default version), add a
@@ -105,9 +91,7 @@ test.provider(
         Action?: string | string[];
       };
       expect(policy2.Action).toContain("appsync:GraphQL");
-      expect(
-        live2?.tags?.some((t) => t.key === "env" && t.value === "prod"),
-      ).toBe(true);
+      expect(live2?.tags?.some((t) => t.key === "env" && t.value === "prod")).toBe(true);
 
       // listPermissionVersions keeps DELETED versions in the listing — only
       // the new default remains live.
@@ -148,9 +132,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Permission);
       const all = yield* provider.list();
-      expect(
-        all.some((x) => x.permissionArn === permission.permissionArn),
-      ).toBe(true);
+      expect(all.some((x) => x.permissionArn === permission.permissionArn)).toBe(true);
 
       yield* stack.destroy();
       yield* assertDeleted(permission.permissionArn);

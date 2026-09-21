@@ -7,20 +7,13 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  detectorIdentity,
-  matchesDetectorIdentity,
-  retryConcurrent,
-} from "./common.ts";
+import { detectorIdentity, matchesDetectorIdentity, retryConcurrent } from "./common.ts";
 
-class AnomalyDetectorNotVisible extends Data.TaggedError(
-  "AnomalyDetectorNotVisible",
-)<{
+class AnomalyDetectorNotVisible extends Data.TaggedError("AnomalyDetectorNotVisible")<{
   message: string;
 }> {}
 
-export interface AnomalyDetectorProps
-  extends cloudwatch.PutAnomalyDetectorInput {}
+export interface AnomalyDetectorProps extends cloudwatch.PutAnomalyDetectorInput {}
 
 export interface AnomalyDetector extends Resource<
   "AWS.CloudWatch.AnomalyDetector",
@@ -71,9 +64,7 @@ export interface AnomalyDetector extends Resource<
  *
  * @resource
  */
-export const AnomalyDetector = Resource<AnomalyDetector>(
-  "AWS.CloudWatch.AnomalyDetector",
-);
+export const AnomalyDetector = Resource<AnomalyDetector>("AWS.CloudWatch.AnomalyDetector");
 
 const toDescribeRequest = (
   input: cloudwatch.PutAnomalyDetectorInput,
@@ -123,10 +114,7 @@ const toDeleteRequest = (
   };
 };
 
-const detectorReadinessSchedule = Schedule.max([
-  Schedule.exponential(200),
-  Schedule.recurs(8),
-]);
+const detectorReadinessSchedule = Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]);
 
 const describeDetector = Effect.fn(function* (
   props: cloudwatch.PutAnomalyDetectorInput,
@@ -139,25 +127,18 @@ const describeDetector = Effect.fn(function* (
   const request = toDescribeRequest(props);
   // Stop paginating at the first identity match; a miss drains every page
   // anyway, which is exactly what the miss diagnostics below need.
-  const detectors = yield* cloudwatch.describeAnomalyDetectors
-    .items(request)
-    .pipe(
-      Stream.takeUntil((candidate) =>
-        matchesDetectorIdentity(candidate, props),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-    );
-  const detector = detectors.find((candidate) =>
-    matchesDetectorIdentity(candidate, props),
+  const detectors = yield* cloudwatch.describeAnomalyDetectors.items(request).pipe(
+    Stream.takeUntil((candidate) => matchesDetectorIdentity(candidate, props)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
   );
+  const detector = detectors.find((candidate) => matchesDetectorIdentity(candidate, props));
 
   if (!detector && options?.logMisses) {
     const prefix = options.resourceId
       ? `${options.resourceId}: anomaly detector not yet visible`
       : "anomaly detector not yet visible";
-    const attempt =
-      options.attempt === undefined ? "" : ` (attempt ${options.attempt})`;
+    const attempt = options.attempt === undefined ? "" : ` (attempt ${options.attempt})`;
 
     yield* Effect.logInfo(
       `${prefix}${attempt}; request=${JSON.stringify(request)} candidates=${JSON.stringify(
@@ -261,9 +242,7 @@ export const AnomalyDetectorProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* retryConcurrent(
-        cloudwatch.deleteAnomalyDetector(
-          toDeleteRequest(output.anomalyDetector),
-        ),
+        cloudwatch.deleteAnomalyDetector(toDeleteRequest(output.anomalyDetector)),
       ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
     }),
   });

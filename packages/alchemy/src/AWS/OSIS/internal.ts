@@ -35,9 +35,7 @@ export const readPipelineTags = Effect.fn(function* (arn: string) {
  * An OSIS pipeline whose asynchronous create/update converged to a
  * `*_FAILED` status.
  */
-export class PipelineOperationFailed extends Data.TaggedError(
-  "OsisPipelineOperationFailed",
-)<{
+export class PipelineOperationFailed extends Data.TaggedError("OsisPipelineOperationFailed")<{
   readonly pipelineName: string;
   readonly status: string;
   readonly reason: string | undefined;
@@ -51,9 +49,7 @@ const isTransitional = (status: string | undefined): boolean =>
   status === "DELETING";
 
 const isFailedStatus = (status: string | undefined): boolean =>
-  status === "CREATE_FAILED" ||
-  status === "UPDATE_FAILED" ||
-  status === "START_FAILED";
+  status === "CREATE_FAILED" || status === "UPDATE_FAILED" || status === "START_FAILED";
 
 /**
  * Poll an OSIS pipeline until its `Status` reaches a terminal value
@@ -74,16 +70,10 @@ export const waitForPipelineSettled = <E extends { readonly _tag: string }, R>(
 ): Effect.Effect<osis.Pipeline | undefined, E | PipelineOperationFailed, R> =>
   Effect.flatMap(
     Effect.repeat(read, {
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(60),
-      ]),
-      until: (pipeline) =>
-        pipeline === undefined || !isTransitional(pipeline.Status),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
+      until: (pipeline) => pipeline === undefined || !isTransitional(pipeline.Status),
     }),
-    (
-      pipeline,
-    ): Effect.Effect<osis.Pipeline | undefined, PipelineOperationFailed> =>
+    (pipeline): Effect.Effect<osis.Pipeline | undefined, PipelineOperationFailed> =>
       pipeline !== undefined && isFailedStatus(pipeline.Status)
         ? Effect.fail(
             new PipelineOperationFailed({
@@ -99,11 +89,7 @@ export const waitForPipelineSettled = <E extends { readonly _tag: string }, R>(
  * Retry an effect while OSIS reports `ConflictException` — raised when a
  * delete/update races an in-flight state transition. Bounded: 15s x 20.
  */
-export const retryWhilePipelineConflict = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryWhilePipelineConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -130,10 +116,7 @@ export const jsonEquals = (a: unknown, b: unknown): boolean => {
     return (
       ka.length === kb.length &&
       ka.every((k) =>
-        jsonEquals(
-          (a as Record<string, unknown>)[k],
-          (b as Record<string, unknown>)[k],
-        ),
+        jsonEquals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
       )
     );
   }

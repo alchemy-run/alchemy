@@ -1,10 +1,10 @@
-import * as CodeConnections from "@/AWS/CodeConnections";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CodeConnections from "@/AWS/CodeConnections";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -72,9 +72,7 @@ export default CodeConnectionsTestFunction.make(
             ProviderTypeFilter: "GitHub",
           });
           return yield* HttpServerResponse.json({
-            names: (result.Connections ?? []).map(
-              (c) => c.ConnectionName ?? null,
-            ),
+            names: (result.Connections ?? []).map((c) => c.ConnectionName ?? null),
           });
         }
 
@@ -88,9 +86,7 @@ export default CodeConnectionsTestFunction.make(
         if (request.method === "GET" && pathname === "/repository-links") {
           const result = yield* listRepositoryLinks();
           return yield* HttpServerResponse.json({
-            repositories: (result.RepositoryLinks ?? []).map(
-              (l) => l.RepositoryName ?? null,
-            ),
+            repositories: (result.RepositoryLinks ?? []).map((l) => l.RepositoryName ?? null),
           });
         }
 

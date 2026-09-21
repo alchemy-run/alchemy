@@ -40,10 +40,7 @@ export interface DeleteMemoryRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteMemoryRecordRequest,
-    ) => Effect.Effect<
-      agentcore.DeleteMemoryRecordOutput,
-      agentcore.DeleteMemoryRecordError
-    >
+    ) => Effect.Effect<agentcore.DeleteMemoryRecordOutput, agentcore.DeleteMemoryRecordError>
   >
 > {}
 export const DeleteMemoryRecord = Binding.Service<DeleteMemoryRecord>(

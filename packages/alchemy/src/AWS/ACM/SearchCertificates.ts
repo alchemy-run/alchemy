@@ -2,8 +2,7 @@ import type * as acm from "@distilled.cloud/aws/acm";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface SearchCertificatesRequest
-  extends acm.SearchCertificatesRequest {}
+export interface SearchCertificatesRequest extends acm.SearchCertificatesRequest {}
 
 /**
  * Runtime binding for `acm:SearchCertificates`.
@@ -34,13 +33,8 @@ export interface SearchCertificates extends Binding.Service<
   () => Effect.Effect<
     (
       request?: SearchCertificatesRequest,
-    ) => Effect.Effect<
-      acm.SearchCertificatesResponse,
-      acm.SearchCertificatesError
-    >
+    ) => Effect.Effect<acm.SearchCertificatesResponse, acm.SearchCertificatesError>
   >
 > {}
 
-export const SearchCertificates = Binding.Service<SearchCertificates>(
-  "AWS.ACM.SearchCertificates",
-);
+export const SearchCertificates = Binding.Service<SearchCertificates>("AWS.ACM.SearchCertificates");

@@ -89,9 +89,7 @@ export interface ResourceCollection extends Resource<
  *
  * @resource
  */
-export const ResourceCollection = Resource<ResourceCollection>(
-  "AWS.DevOpsGuru.ResourceCollection",
-);
+export const ResourceCollection = Resource<ResourceCollection>("AWS.DevOpsGuru.ResourceCollection");
 
 /**
  * Concurrent `UpdateResourceCollection` calls conflict server-side — retry
@@ -111,8 +109,7 @@ const retryUpdateConflict = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
   });
 
-const sameKey = (left: string, right: string) =>
-  left.toLowerCase() === right.toLowerCase();
+const sameKey = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
 
 export const ResourceCollectionProvider = () =>
   Provider.effect(
@@ -121,18 +118,14 @@ export const ResourceCollectionProvider = () =>
       // GetResourceCollection fails with a typed ResourceNotFoundException
       // ("No CustomerResourceFilter present") when nothing has ever been
       // configured — treat that as an empty collection.
-      const observeType = Effect.fn(function* (
-        type: devopsguru.ResourceCollectionType,
-      ) {
-        return yield* devopsguru.getResourceCollection
-          .pages({ ResourceCollectionType: type })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([] as devopsguru.GetResourceCollectionResponse[]),
-            ),
-          );
+      const observeType = Effect.fn(function* (type: devopsguru.ResourceCollectionType) {
+        return yield* devopsguru.getResourceCollection.pages({ ResourceCollectionType: type }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed([] as devopsguru.GetResourceCollectionResponse[]),
+          ),
+        );
       });
 
       // Observe the full account collection (both filter types).
@@ -141,10 +134,7 @@ export const ResourceCollectionProvider = () =>
         const tagPages = yield* observeType("AWS_TAGS");
         const stackNames = [
           ...new Set(
-            cfnPages.flatMap(
-              (page) =>
-                page.ResourceCollection?.CloudFormation?.StackNames ?? [],
-            ),
+            cfnPages.flatMap((page) => page.ResourceCollection?.CloudFormation?.StackNames ?? []),
           ),
         ].sort();
         const tagMap = new Map<string, Set<string>>();
@@ -180,10 +170,7 @@ export const ResourceCollectionProvider = () =>
         );
       });
 
-      const toAttrs = (observed: {
-        stackNames: string[];
-        tags: TagAppBoundary[];
-      }) => ({
+      const toAttrs = (observed: { stackNames: string[]; tags: TagAppBoundary[] }) => ({
         cloudFormationStackNames: observed.stackNames,
         tags: observed.tags,
       });
@@ -193,9 +180,7 @@ export const ResourceCollectionProvider = () =>
         list: () =>
           observe.pipe(
             Effect.map((observed) =>
-              observed.stackNames.length > 0 || observed.tags.length > 0
-                ? [toAttrs(observed)]
-                : [],
+              observed.stackNames.length > 0 || observed.tags.length > 0 ? [toAttrs(observed)] : [],
             ),
           ),
 
@@ -230,9 +215,7 @@ export const ResourceCollectionProvider = () =>
             });
           }
           for (const tag of observed.tags) {
-            const desired = desiredTags.find((t) =>
-              sameKey(t.appBoundaryKey, tag.appBoundaryKey),
-            );
+            const desired = desiredTags.find((t) => sameKey(t.appBoundaryKey, tag.appBoundaryKey));
             const valuesToRemove = tag.tagValues.filter(
               (value) => !(desired?.tagValues ?? []).includes(value),
             );
@@ -249,9 +232,7 @@ export const ResourceCollectionProvider = () =>
           }
 
           // 3. SYNC (additions) — apply only the delta.
-          const stacksToAdd = desiredStacks.filter(
-            (name) => !observed.stackNames.includes(name),
-          );
+          const stacksToAdd = desiredStacks.filter((name) => !observed.stackNames.includes(name));
           if (stacksToAdd.length > 0) {
             yield* update("ADD", {
               CloudFormation: { StackNames: stacksToAdd },

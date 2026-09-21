@@ -1,3 +1,9 @@
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
@@ -5,26 +11,16 @@ import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Secret } from "@/AWS/SecretsManager/Secret.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 class SecretNotListed extends Data.TaggedError("SecretNotListed") {}
 
-class ResourcePolicyNotAttached extends Data.TaggedError(
-  "ResourcePolicyNotAttached",
-) {}
+class ResourcePolicyNotAttached extends Data.TaggedError("ResourcePolicyNotAttached") {}
 
 class SecretStillExists extends Data.TaggedError("SecretStillExists") {}
 
-class SecretVersionNotVisible extends Data.TaggedError(
-  "SecretVersionNotVisible",
-)<{
+class SecretVersionNotVisible extends Data.TaggedError("SecretVersionNotVisible")<{
   readonly expectedVersionId: string;
   readonly observedVersionId: string | undefined;
   readonly descriptionMatches: boolean;
@@ -68,8 +64,7 @@ const readCurrentSecret = Effect.fn(function* (
     ),
     {
       while: (error) =>
-        error._tag === "SecretVersionNotVisible" ||
-        error._tag === "ResourceNotFoundException",
+        error._tag === "SecretVersionNotVisible" || error._tag === "ResourceNotFoundException",
       schedule: Schedule.fixed("2 seconds"),
       times: 10,
     },
@@ -78,23 +73,13 @@ const readCurrentSecret = Effect.fn(function* (
 
 // Secrets Manager marks values as sensitive, so the distilled client can hand
 // them back either raw or wrapped in `Redacted` — unwrap for assertions.
-const unwrapString = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const unwrapString = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const unwrapBinary = (
   value: Uint8Array | Redacted.Redacted<Uint8Array> | undefined,
 ): Uint8Array | undefined =>
-  value === undefined
-    ? undefined
-    : value instanceof Uint8Array
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : value instanceof Uint8Array ? value : Redacted.value(value);
 
 // Typed wait-until-gone: the provider deletes with
 // `ForceDeleteWithoutRecovery`, which completes asynchronously — poll
@@ -105,10 +90,7 @@ const assertSecretDeleted = (secretArn: string) =>
     Effect.flatMap(() => Effect.fail(new SecretStillExists())),
     Effect.retry({
       while: (e) => e._tag === "SecretStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -167,9 +149,7 @@ test.provider("create, update value, destroy", (stack) =>
 
     expect(described.Description).toBe("lifecycle v2");
     expect(updated.description).toBe(described.Description);
-    expect(described.VersionIdsToStages?.[updated.versionId!]).toContain(
-      "AWSCURRENT",
-    );
+    expect(described.VersionIdsToStages?.[updated.versionId!]).toContain("AWSCURRENT");
 
     yield* stack.destroy();
 
@@ -210,9 +190,7 @@ test.provider("binary secret value round-trips (Redacted prop)", (stack) =>
     );
     expect(v1.VersionId).toBe(secret.versionId);
     expect(v1.VersionStages).toContain("AWSCURRENT");
-    expect(Array.from(unwrapBinary(v1.SecretBinary)!)).toEqual(
-      Array.from(BINARY_V1),
-    );
+    expect(Array.from(unwrapBinary(v1.SecretBinary)!)).toEqual(Array.from(BINARY_V1));
     expect(unwrapString(v1.SecretString)).toBeUndefined();
 
     // Rotate the binary value in place (no replacement).
@@ -235,16 +213,12 @@ test.provider("binary secret value round-trips (Redacted prop)", (stack) =>
     );
     expect(v2.VersionId).toBe(updated.versionId);
     expect(v2.VersionStages).toContain("AWSCURRENT");
-    expect(Array.from(unwrapBinary(v2.SecretBinary)!)).toEqual(
-      Array.from(BINARY_V2),
-    );
+    expect(Array.from(unwrapBinary(v2.SecretBinary)!)).toEqual(Array.from(BINARY_V2));
     expect(unwrapString(v2.SecretString)).toBeUndefined();
 
     expect(described.Description).toBe("binary lifecycle v2");
     expect(updated.description).toBe(described.Description);
-    expect(described.VersionIdsToStages?.[updated.versionId!]).toContain(
-      "AWSCURRENT",
-    );
+    expect(described.VersionIdsToStages?.[updated.versionId!]).toContain("AWSCURRENT");
 
     yield* stack.destroy();
     yield* assertSecretDeleted(secret.secretArn);
@@ -284,25 +258,18 @@ test.provider("resource policy deploys and re-deploys clean", (stack) =>
 
     // Out-of-band verification via distilled: the attached policy is
     // equivalent to the typed document (bounded retry through propagation).
-    const attached = yield* secretsmanager
-      .getResourcePolicy({ SecretId: secret.secretArn })
-      .pipe(
-        Effect.flatMap((response) =>
-          response.ResourcePolicy === undefined
-            ? Effect.fail(new ResourcePolicyNotAttached())
-            : Effect.succeed(response.ResourcePolicy),
-        ),
-        Effect.retry({
-          while: (e) => e._tag === "ResourcePolicyNotAttached",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(5),
-          ]),
-        }),
-      );
-    expect(normalizePolicyDocument(attached)).toBe(
-      normalizePolicyDocument(resourcePolicy),
+    const attached = yield* secretsmanager.getResourcePolicy({ SecretId: secret.secretArn }).pipe(
+      Effect.flatMap((response) =>
+        response.ResourcePolicy === undefined
+          ? Effect.fail(new ResourcePolicyNotAttached())
+          : Effect.succeed(response.ResourcePolicy),
+      ),
+      Effect.retry({
+        while: (e) => e._tag === "ResourcePolicyNotAttached",
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
+      }),
     );
+    expect(normalizePolicyDocument(attached)).toBe(normalizePolicyDocument(resourcePolicy));
 
     // Re-deploy the identical PolicyDocument — must be a clean no-op.
     const redeployed = yield* stack.deploy(

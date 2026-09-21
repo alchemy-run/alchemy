@@ -166,15 +166,10 @@ export const ReceiptRuleProvider = () =>
         id: string,
         props: Pick<ReceiptRuleProps, "ruleName">,
       ) {
-        return (
-          props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
-      const describeRule = Effect.fn(function* (
-        ruleSetName: string,
-        ruleName: string,
-      ) {
+      const describeRule = Effect.fn(function* (ruleSetName: string, ruleName: string) {
         return yield* ses
           .describeReceiptRule({ RuleSetName: ruleSetName, RuleName: ruleName })
           .pipe(
@@ -185,10 +180,7 @@ export const ReceiptRuleProvider = () =>
           );
       });
 
-      const buildRule = (
-        ruleName: string,
-        props: ReceiptRuleProps,
-      ): ses.ReceiptRule => ({
+      const buildRule = (ruleName: string, props: ReceiptRuleProps): ses.ReceiptRule => ({
         Name: ruleName,
         // The classic API defaults an omitted Enabled/ScanEnabled to FALSE —
         // apply the documented defaults explicitly so an undeclared rule is
@@ -266,10 +258,7 @@ export const ReceiptRuleProvider = () =>
           const ruleSet = yield* ses.describeReceiptRuleSet({
             RuleSetName: ruleSetName,
           });
-          const predecessor = observedPredecessor(
-            ruleSet.Rules ?? [],
-            ruleName,
-          );
+          const predecessor = observedPredecessor(ruleSet.Rules ?? [], ruleName);
           if (predecessor !== news.after) {
             yield* ses.setReceiptRulePosition({
               RuleSetName: ruleSetName,
@@ -289,12 +278,7 @@ export const ReceiptRuleProvider = () =>
               RuleSetName: output.ruleSetName,
               RuleName: output.ruleName,
             })
-            .pipe(
-              Effect.catchTag(
-                "RuleSetDoesNotExistException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.void));
         }),
       });
     }),

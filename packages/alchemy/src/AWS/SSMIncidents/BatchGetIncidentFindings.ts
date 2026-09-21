@@ -38,7 +38,6 @@ export interface BatchGetIncidentFindings extends Binding.Service<
     >
   >
 > {}
-export const BatchGetIncidentFindings =
-  Binding.Service<BatchGetIncidentFindings>(
-    "AWS.SSMIncidents.BatchGetIncidentFindings",
-  );
+export const BatchGetIncidentFindings = Binding.Service<BatchGetIncidentFindings>(
+  "AWS.SSMIncidents.BatchGetIncidentFindings",
+);

@@ -38,12 +38,7 @@ export interface DeleteGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteGroupRequest,
-    ) => Effect.Effect<
-      qbusiness.DeleteGroupResponse,
-      qbusiness.DeleteGroupError
-    >
+    ) => Effect.Effect<qbusiness.DeleteGroupResponse, qbusiness.DeleteGroupError>
   >
 > {}
-export const DeleteGroup = Binding.Service<DeleteGroup>(
-  "AWS.QBusiness.DeleteGroup",
-);
+export const DeleteGroup = Binding.Service<DeleteGroup>("AWS.QBusiness.DeleteGroup");

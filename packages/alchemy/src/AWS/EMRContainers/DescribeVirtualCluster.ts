@@ -32,10 +32,7 @@ export interface DescribeVirtualCluster extends Binding.Service<
   (
     virtualCluster: VirtualCluster,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      emrc.DescribeVirtualClusterResponse,
-      emrc.DescribeVirtualClusterError
-    >
+    () => Effect.Effect<emrc.DescribeVirtualClusterResponse, emrc.DescribeVirtualClusterError>
   >
 > {}
 export const DescribeVirtualCluster = Binding.Service<DescribeVirtualCluster>(

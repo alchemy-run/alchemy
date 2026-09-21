@@ -38,9 +38,7 @@ export default class HasherFunction extends Lambda.Function<HasherFunction>()(
   },
   Effect.gen(function* () {
     const fn = yield* Lambda.Function;
-    yield* fn.listen((event: unknown) =>
-      isHashEvent(event) ? handleHashEvent(event) : undefined,
-    );
+    yield* fn.listen((event: unknown) => (isHashEvent(event) ? handleHashEvent(event) : undefined));
     return {};
   }),
 ) {}

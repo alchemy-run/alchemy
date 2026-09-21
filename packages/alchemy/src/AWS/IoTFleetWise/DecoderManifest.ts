@@ -124,9 +124,7 @@ export interface DecoderManifest extends Resource<
  *
  * @resource
  */
-export const DecoderManifest = Resource<DecoderManifest>(
-  "AWS.IoTFleetWise.DecoderManifest",
-);
+export const DecoderManifest = Resource<DecoderManifest>("AWS.IoTFleetWise.DecoderManifest");
 
 export const DecoderManifestProvider = () =>
   Provider.effect(
@@ -140,9 +138,7 @@ export const DecoderManifestProvider = () =>
       const readManifest = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getDecoderManifest({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -158,23 +154,19 @@ export const DecoderManifestProvider = () =>
       });
 
       const readInterfaces = Effect.fn(function* (name: string) {
-        return yield* iotfleetwise.listDecoderManifestNetworkInterfaces
-          .items({ name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            inFleetWiseRegion,
-          );
+        return yield* iotfleetwise.listDecoderManifestNetworkInterfaces.items({ name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          inFleetWiseRegion,
+        );
       });
 
       const readDecoders = Effect.fn(function* (name: string) {
-        return yield* iotfleetwise.listDecoderManifestSignals
-          .items({ name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            inFleetWiseRegion,
-          );
+        return yield* iotfleetwise.listDecoderManifestSignals.items({ name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          inFleetWiseRegion,
+        );
       });
 
       const toAttrs = (manifest: iotfleetwise.GetDecoderManifestResponse) => ({
@@ -199,8 +191,7 @@ export const DecoderManifestProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.decoderManifestName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.decoderManifestName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readManifest(name);
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -226,10 +217,8 @@ export const DecoderManifestProvider = () =>
                 name,
                 modelManifestArn: news.modelManifestArn,
                 description: news.description,
-                networkInterfaces:
-                  desiredInterfaces.length > 0 ? desiredInterfaces : undefined,
-                signalDecoders:
-                  desiredDecoders.length > 0 ? desiredDecoders : undefined,
+                networkInterfaces: desiredInterfaces.length > 0 ? desiredInterfaces : undefined,
+                signalDecoders: desiredDecoders.length > 0 ? desiredDecoders : undefined,
                 defaultForUnmappedSignals: news.defaultForUnmappedSignals,
                 tags: toFleetWiseTagList(desiredTags),
               })
@@ -246,12 +235,8 @@ export const DecoderManifestProvider = () =>
           //    so they run before any DRAFT -> ACTIVE transition.
           const observedInterfaces = yield* readInterfaces(name);
           const observedDecoders = yield* readDecoders(name);
-          const observedInterfaceById = new Map(
-            observedInterfaces.map((i) => [i.interfaceId, i]),
-          );
-          const desiredInterfaceById = new Map(
-            desiredInterfaces.map((i) => [i.interfaceId, i]),
-          );
+          const observedInterfaceById = new Map(observedInterfaces.map((i) => [i.interfaceId, i]));
+          const desiredInterfaceById = new Map(desiredInterfaces.map((i) => [i.interfaceId, i]));
           const observedDecoderByFqn = new Map(
             observedDecoders.map((d) => [d.fullyQualifiedName, d]),
           );
@@ -280,8 +265,7 @@ export const DecoderManifestProvider = () =>
             .map((d) => d.fullyQualifiedName)
             .filter((fqn) => !desiredDecoderByFqn.has(fqn));
           const descriptionChanged =
-            news.description !== undefined &&
-            news.description !== observed.description;
+            news.description !== undefined && news.description !== observed.description;
 
           if (
             interfacesToAdd.length > 0 ||
@@ -296,22 +280,14 @@ export const DecoderManifestProvider = () =>
               .updateDecoderManifest({
                 name,
                 description: descriptionChanged ? news.description : undefined,
-                networkInterfacesToAdd:
-                  interfacesToAdd.length > 0 ? interfacesToAdd : undefined,
+                networkInterfacesToAdd: interfacesToAdd.length > 0 ? interfacesToAdd : undefined,
                 networkInterfacesToUpdate:
-                  interfacesToUpdate.length > 0
-                    ? interfacesToUpdate
-                    : undefined,
+                  interfacesToUpdate.length > 0 ? interfacesToUpdate : undefined,
                 networkInterfacesToRemove:
-                  interfacesToRemove.length > 0
-                    ? interfacesToRemove
-                    : undefined,
-                signalDecodersToAdd:
-                  decodersToAdd.length > 0 ? decodersToAdd : undefined,
-                signalDecodersToUpdate:
-                  decodersToUpdate.length > 0 ? decodersToUpdate : undefined,
-                signalDecodersToRemove:
-                  decodersToRemove.length > 0 ? decodersToRemove : undefined,
+                  interfacesToRemove.length > 0 ? interfacesToRemove : undefined,
+                signalDecodersToAdd: decodersToAdd.length > 0 ? decodersToAdd : undefined,
+                signalDecodersToUpdate: decodersToUpdate.length > 0 ? decodersToUpdate : undefined,
+                signalDecodersToRemove: decodersToRemove.length > 0 ? decodersToRemove : undefined,
                 defaultForUnmappedSignals: news.defaultForUnmappedSignals,
               })
               .pipe(inFleetWiseRegion);
@@ -337,13 +313,11 @@ export const DecoderManifestProvider = () =>
           // Idempotent: deleting a missing manifest succeeds. Vehicles
           // still detaching surface as ConflictException — retry through
           // the window (bounded).
-          yield* iotfleetwise
-            .deleteDecoderManifest({ name: output.decoderManifestName })
-            .pipe(
-              inFleetWiseRegion,
-              retryWhileConflict,
-              Effect.catchTag("ConflictException", () => Effect.void),
-            );
+          yield* iotfleetwise.deleteDecoderManifest({ name: output.decoderManifestName }).pipe(
+            inFleetWiseRegion,
+            retryWhileConflict,
+            Effect.catchTag("ConflictException", () => Effect.void),
+          );
         }),
 
         list: () =>

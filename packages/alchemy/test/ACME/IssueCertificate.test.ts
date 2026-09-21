@@ -1,11 +1,11 @@
-import * as ACME from "@/ACME";
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/issue-zerossl-stack.ts";
 import { ZONE_NAME } from "./fixtures/shared.ts";
 
@@ -24,14 +24,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const enabled =
   process.env.ACME_TEST_ZEROSSL === "1" &&
-  (process.env.ZERO_SSL_KEY !== undefined ||
-    process.env.ZEROSSL_ACCESS_KEY !== undefined);
+  (process.env.ZERO_SSL_KEY !== undefined || process.env.ZEROSSL_ACCESS_KEY !== undefined);
 
 // No `beforeAll.skipIf`: deploy only when enabled, else hand the (skipped)
 // test an empty handle.
-const stack = beforeAll(
-  enabled ? deploy(Stack) : Effect.succeed({ url: "" } as { url: string }),
-);
+const stack = beforeAll(enabled ? deploy(Stack) : Effect.succeed({ url: "" } as { url: string }));
 afterAll.skipIf(!enabled || !!process.env.NO_DESTROY)(destroy(Stack));
 
 const NAME = `alchemy-acme-worker.${ZONE_NAME}`;
@@ -55,9 +52,7 @@ test.skipIf(!enabled)(
 
     const response = yield* client.get(`${url}/issue?name=${NAME}`);
     const text = yield* response.text;
-    expect(text, `status ${response.status}: ${text.slice(0, 2000)}`).toMatch(
-      /^\{/,
-    );
+    expect(text, `status ${response.status}: ${text.slice(0, 2000)}`).toMatch(/^\{/);
     const body = JSON.parse(text) as {
       issuer?: string;
       notAfter?: string;

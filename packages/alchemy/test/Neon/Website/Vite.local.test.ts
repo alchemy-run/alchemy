@@ -1,7 +1,3 @@
-import * as Alchemy from "@/index.ts";
-import { providers } from "@/Neon/Providers.ts";
-import { Vite } from "@/Neon/Website/Vite.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -9,6 +5,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Alchemy from "@/index.ts";
+import { providers } from "@/Neon/Providers.ts";
+import { Vite } from "@/Neon/Website/Vite.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { bodyContaining, exampleRoot } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers(), dev: true });
@@ -23,9 +23,7 @@ test.provider(
       const rootDir = yield* exampleRoot("vite");
       const asset = path.join(rootDir, "public", "example.json");
       const original = yield* fs.readFileString(asset);
-      yield* Effect.addFinalizer(() =>
-        fs.writeFileString(asset, original).pipe(Effect.orDie),
-      );
+      yield* Effect.addFinalizer(() => fs.writeFileString(asset, original).pipe(Effect.orDie));
       const deploy = (value: string) =>
         stack.deploy(Vite("Web", { rootDir, env: { VITE_REVISION: value } }));
       const site = yield* deploy("first");
@@ -64,19 +62,16 @@ test.provider(
         slug: fn.slug,
       });
       expect(observed.function.id).toBe(fn.functionId);
-      const html = yield* bodyContaining(
-        `${site.url}/deep/link`,
-        "Vite on Neon",
-      );
+      const html = yield* bodyContaining(`${site.url}/deep/link`, "Vite on Neon");
       const scripts = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(
         (match) => match[1]!,
       );
       expect(scripts.length).toBeGreaterThan(0);
       let javascript = "";
       for (const script of scripts) {
-        javascript += yield* HttpClient.get(
-          new URL(script, String(site.url)).href,
-        ).pipe(Effect.flatMap((response) => response.text));
+        javascript += yield* HttpClient.get(new URL(script, String(site.url)).href).pipe(
+          Effect.flatMap((response) => response.text),
+        );
       }
       expect(javascript).toContain("public-build-marker");
       expect(html + javascript).not.toContain("private-runtime-marker");

@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // RealtimeKit (the acquired Dyte platform) is in beta and must be enabled
 // per account. On unentitled accounts every call fails with the typed
@@ -66,9 +63,7 @@ test.provider(
 
       const entitled = yield* probeEntitlement;
       if (entitled) {
-        yield* Effect.logInfo(
-          "account is RealtimeKit-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is RealtimeKit-entitled; probe test is a no-op");
         return;
       }
 
@@ -88,9 +83,7 @@ test.provider(
     Effect.gen(function* () {
       const entitled = yield* probeEntitlement;
       if (!entitled) {
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; skipping lifecycle",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; skipping lifecycle");
         return;
       }
 
@@ -105,9 +98,7 @@ test.provider(
 
       // Create — or adopt the app left over from a previous run (apps can
       // never be deleted, so adoption-by-name is the designed behavior).
-      const app = yield* stack.deploy(
-        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
-      );
+      const app = yield* stack.deploy(Cloudflare.RealtimeKit.App("App", { name: APP_NAME }));
 
       expect(app.appId).toBeTruthy();
       expect(app.accountId).toEqual(accountId);
@@ -117,23 +108,17 @@ test.provider(
       }
 
       // Out-of-band verification via the distilled API.
-      const live = (yield* listApps(accountId)).find(
-        (a) => a?.id === app.appId,
-      );
+      const live = (yield* listApps(accountId)).find((a) => a?.id === app.appId);
       expect(live?.name).toEqual(APP_NAME);
 
       // Re-deploy is a no-op update — same app, same id.
-      const again = yield* stack.deploy(
-        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
-      );
+      const again = yield* stack.deploy(Cloudflare.RealtimeKit.App("App", { name: APP_NAME }));
       expect(again.appId).toEqual(app.appId);
 
       // Destroy only forgets the app from state (no delete API) — the app
       // must still exist on the account afterwards.
       yield* stack.destroy();
-      const after = (yield* listApps(accountId)).find(
-        (a) => a?.id === app.appId,
-      );
+      const after = (yield* listApps(accountId)).find((a) => a?.id === app.appId);
       expect(after?.id).toEqual(app.appId);
 
       // A fresh deploy after destroy adopts by name instead of creating a
@@ -141,9 +126,7 @@ test.provider(
       // predate the one this run touched if duplicates leaked before
       // adoption-by-name existed).
       const expectedAdoptee = oldestNamed(yield* listApps(accountId));
-      const adopted = yield* stack.deploy(
-        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
-      );
+      const adopted = yield* stack.deploy(Cloudflare.RealtimeKit.App("App", { name: APP_NAME }));
       expect(adopted.appId).toEqual(expectedAdoptee?.id);
 
       yield* stack.destroy();
@@ -160,9 +143,7 @@ test.provider(
         // RealtimeKit beta is entitlement-gated: an unentitled account gets the
         // typed `Forbidden` (403) on `getApp`, which `list()` propagates. Skip
         // the live assertion; the probe test above pins the typed tag.
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; skipping list",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; skipping list");
         return;
       }
 
@@ -171,9 +152,7 @@ test.provider(
       // Create — or adopt the same-named app left over from a previous run
       // (apps can never be deleted, so adoption-by-name is the designed
       // behavior).
-      const deployed = yield* stack.deploy(
-        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
-      );
+      const deployed = yield* stack.deploy(Cloudflare.RealtimeKit.App("App", { name: APP_NAME }));
 
       const provider = yield* Provider.findProvider(Cloudflare.RealtimeKit.App);
       const all = yield* provider.list();

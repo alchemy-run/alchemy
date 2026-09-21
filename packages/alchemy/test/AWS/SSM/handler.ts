@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SSM from "@/AWS/SSM";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,21 +7,15 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SSM from "@/AWS/SSM";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
-export class SSMTestFunction extends Lambda.Function<Lambda.Function>()(
-  "SSMTestFunction",
-) {}
+export class SSMTestFunction extends Lambda.Function<Lambda.Function>()("SSMTestFunction") {}
 
 export default SSMTestFunction.make(
   {
@@ -62,25 +54,17 @@ export default SSMTestFunction.make(
     yield* SSM.consumeParameterEvents(
       {
         kinds: ["change"],
-        names: [
-          "/alchemy-test/ssm-bindings/root",
-          "/alchemy-test/ssm-bindings/root/child",
-        ],
+        names: ["/alchemy-test/ssm-bindings/root", "/alchemy-test/ssm-bindings/root/child"],
       },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `parameter ${event.detail.operation}: ${event.detail.name}`,
-          ),
+          Effect.log(`parameter ${event.detail.operation}: ${event.detail.name}`),
         ),
     );
 
     const getStringParameter = yield* SSM.GetParameter(stringParameter);
     const getSecureParameter = yield* SSM.GetParameter(secureParameter);
-    const getParameters = yield* SSM.GetParameters(
-      stringParameter,
-      secureParameter,
-    );
+    const getParameters = yield* SSM.GetParameters(stringParameter, secureParameter);
     const putParameter = yield* SSM.PutParameter(mutableParameter);
     const getHistory = yield* SSM.GetParameterHistory(mutableParameter);
     const labelVersion = yield* SSM.LabelParameterVersion(mutableParameter);
@@ -141,9 +125,7 @@ export default SSMTestFunction.make(
           const result = yield* getHistory();
           return yield* HttpServerResponse.json({
             count: (result.Parameters ?? []).length,
-            values: (result.Parameters ?? []).map((version) =>
-              plain(version.Value),
-            ),
+            values: (result.Parameters ?? []).map((version) => plain(version.Value)),
           });
         }
 
@@ -157,8 +139,7 @@ export default SSMTestFunction.make(
             Labels: ["current"],
           }).pipe(
             Effect.repeat({
-              until: (result): boolean =>
-                (result.RemovedLabels ?? []).length > 0,
+              until: (result): boolean => (result.RemovedLabels ?? []).length > 0,
               schedule: Schedule.spaced("1 second"),
               times: 8,
             }),

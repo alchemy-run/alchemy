@@ -14,11 +14,7 @@ interface EventDescriptor {
 
 export interface QueueRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {
   sqsParameters?: RuleTarget["SqsParameters"];
 }
@@ -42,8 +38,7 @@ export const toQueue = (
   props: QueueRouteTargetProps = {},
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${queue.LogicalId}Queue`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${queue.LogicalId}Queue`);
 
     const rule = yield* Rule(routeId, {
       description: descriptor.props?.description,

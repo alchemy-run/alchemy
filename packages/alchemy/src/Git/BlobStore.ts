@@ -1,3 +1,9 @@
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 /**
  * `Git.BlobStore` — the swappable bulk-byte store (RFC "Git Building
  * Blocks" §3.1).
@@ -29,12 +35,6 @@
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { R2Error, ReadWriteBucketClient } from "../Cloudflare/R2/index.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 
 /** Failure of a {@link BlobStore} operation. */
 export class BlobStoreError extends Data.TaggedError("BlobStoreError")<{
@@ -73,16 +73,12 @@ export interface BlobMultipart {
     partNumber: number,
     part: Uint8Array,
   ) => Effect.Effect<UploadedPart, BlobStoreError>;
-  readonly complete: (
-    parts: ReadonlyArray<UploadedPart>,
-  ) => Effect.Effect<void, BlobStoreError>;
+  readonly complete: (parts: ReadonlyArray<UploadedPart>) => Effect.Effect<void, BlobStoreError>;
   readonly abort: Effect.Effect<void, BlobStoreError>;
 }
 
 /** Sorts parts by number: stores validate the uniform-part rule against the list as given. */
-export const orderedParts = (
-  parts: ReadonlyArray<UploadedPart>,
-): Array<UploadedPart> =>
+export const orderedParts = (parts: ReadonlyArray<UploadedPart>): Array<UploadedPart> =>
   [...parts].sort((a, b) => a.partNumber - b.partNumber);
 
 /** One listed blob (GC/purge walks). */
@@ -105,13 +101,9 @@ export interface BlobStoreShape {
     options?: { readonly contentLength?: number | undefined },
   ) => Effect.Effect<void, BlobStoreError, RuntimeContext>;
   /** Existence/size check without reading the body. */
-  readonly head: (
-    key: string,
-  ) => Effect.Effect<BlobMeta | null, BlobStoreError, RuntimeContext>;
+  readonly head: (key: string) => Effect.Effect<BlobMeta | null, BlobStoreError, RuntimeContext>;
   /** Begin a multipart write (spilled push bodies of unknown length). */
-  readonly multipart: (
-    key: string,
-  ) => Effect.Effect<BlobMultipart, BlobStoreError, RuntimeContext>;
+  readonly multipart: (key: string) => Effect.Effect<BlobMultipart, BlobStoreError, RuntimeContext>;
   /**
    * Uploads one part of a multipart write created elsewhere (by key and
    * `uploadId`) — the resume path the push pipeline's hasher isolates use.
@@ -126,9 +118,7 @@ export interface BlobStoreShape {
     keys: string | ReadonlyArray<string>,
   ) => Effect.Effect<void, BlobStoreError, RuntimeContext>;
   /** Prefix listing — GC/purge only, never on a serving path. */
-  readonly list: (
-    prefix: string,
-  ) => Stream.Stream<BlobMeta, BlobStoreError, RuntimeContext>;
+  readonly list: (prefix: string) => Stream.Stream<BlobMeta, BlobStoreError, RuntimeContext>;
 }
 
 /**
@@ -152,9 +142,7 @@ const r2Error = (what: string) => (error: R2Error) =>
  * Used directly by the Repo DO (which resolves its own binding) and by
  * the {@link BlobStoreR2} layer.
  */
-export const makeBlobStoreR2 = (
-  bucket: ReadWriteBucketClient,
-): BlobStoreShape => ({
+export const makeBlobStoreR2 = (bucket: ReadWriteBucketClient): BlobStoreShape => ({
   get: (key, range) =>
     bucket.get(key, range === undefined ? undefined : { range }).pipe(
       Effect.mapError(r2Error(`get ${key}`)),
@@ -163,12 +151,8 @@ export const makeBlobStoreR2 = (
           ? null
           : ({
               size: object.size,
-              bytes: object
-                .bytes()
-                .pipe(Effect.mapError(r2Error(`read ${key}`))),
-              stream: object.body.pipe(
-                Stream.mapError(r2Error(`stream ${key}`)),
-              ),
+              bytes: object.bytes().pipe(Effect.mapError(r2Error(`read ${key}`))),
+              stream: object.body.pipe(Stream.mapError(r2Error(`stream ${key}`))),
               readable: object.readable,
             } satisfies BlobBody),
       ),
@@ -176,11 +160,7 @@ export const makeBlobStoreR2 = (
   put: (key, body, options) => {
     // A stream body's own BlobStoreError joins R2's error union — map
     // only the R2 side, pass ours through.
-    const write: Effect.Effect<
-      unknown,
-      R2Error | BlobStoreError,
-      RuntimeContext
-    > =
+    const write: Effect.Effect<unknown, R2Error | BlobStoreError, RuntimeContext> =
       body instanceof Uint8Array
         ? bucket.put(key, body)
         : bucket.put(key, body, {
@@ -196,9 +176,7 @@ export const makeBlobStoreR2 = (
   head: (key) =>
     bucket.head(key).pipe(
       Effect.mapError(r2Error(`head ${key}`)),
-      Effect.map((object) =>
-        object === null ? null : { key, size: object.size },
-      ),
+      Effect.map((object) => (object === null ? null : { key, size: object.size })),
     ),
   multipart: (key) =>
     bucket.createMultipartUpload(key).pipe(
@@ -213,9 +191,7 @@ export const makeBlobStoreR2 = (
           upload
             .complete(orderedParts(parts))
             .pipe(Effect.mapError(r2Error(`complete ${key}`)), Effect.asVoid),
-        abort: upload
-          .abort()
-          .pipe(Effect.mapError(r2Error(`abort ${key}`)), Effect.asVoid),
+        abort: upload.abort().pipe(Effect.mapError(r2Error(`abort ${key}`)), Effect.asVoid),
       })),
     ),
   uploadPart: (key, uploadId, partNumber, part) =>

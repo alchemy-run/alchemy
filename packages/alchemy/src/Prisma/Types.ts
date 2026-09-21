@@ -111,11 +111,7 @@ export interface ProjectTransferInput {
   recipientAccessToken: string;
 }
 
-export type DatabaseStatus =
-  | "failure"
-  | "provisioning"
-  | "ready"
-  | "recovering";
+export type DatabaseStatus = "failure" | "provisioning" | "ready" | "recovering";
 
 export interface EndpointDetail {
   host: string;
@@ -159,10 +155,7 @@ export interface DatabaseConnection {
   database: ResourceRef;
 }
 
-export interface DatabaseConnectionWithSecrets extends Omit<
-  DatabaseConnection,
-  "endpoints"
-> {
+export interface DatabaseConnectionWithSecrets extends Omit<DatabaseConnection, "endpoints"> {
   endpoints: ConnectionEndpointsWithSecrets;
 }
 
@@ -178,10 +171,7 @@ export interface ConnectionCreateInput {
   name: string;
 }
 
-export interface DatabaseConnectionCreateInput extends Omit<
-  ConnectionCreateInput,
-  "databaseId"
-> {}
+export interface DatabaseConnectionCreateInput extends Omit<ConnectionCreateInput, "databaseId"> {}
 
 export type DatabaseSource =
   | { type: "empty" }
@@ -455,11 +445,7 @@ export type CustomDomainStatus =
   | "failed"
   | "removing";
 
-export type CustomDomainFailureCategory =
-  | "dns"
-  | "acme"
-  | "storage"
-  | "unknown";
+export type CustomDomainFailureCategory = "dns" | "acme" | "storage" | "unknown";
 
 export interface CustomDomainDnsRecord {
   type: "CNAME";

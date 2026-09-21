@@ -29,10 +29,7 @@ export interface ListSigningPlatforms extends Binding.Service<
   () => Effect.Effect<
     (
       request?: signer.ListSigningPlatformsRequest,
-    ) => Effect.Effect<
-      signer.ListSigningPlatformsResponse,
-      signer.ListSigningPlatformsError
-    >
+    ) => Effect.Effect<signer.ListSigningPlatformsResponse, signer.ListSigningPlatformsError>
   >
 > {}
 export const ListSigningPlatforms = Binding.Service<ListSigningPlatforms>(

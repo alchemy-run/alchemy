@@ -53,9 +53,7 @@ export const GetAmiHttp = Layer.effect(
         return (response.Images ?? [])
           .slice()
           .sort((a: ec2.Image, b: ec2.Image) =>
-            String(b.CreationDate ?? "").localeCompare(
-              String(a.CreationDate ?? ""),
-            ),
+            String(b.CreationDate ?? "").localeCompare(String(a.CreationDate ?? "")),
           )[0];
       });
     });

@@ -1,7 +1,7 @@
 import { RuntimeContext } from "alchemy";
+import { expect } from "alchemy-test";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Test from "alchemy/Test/Alchemy";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { BetterAuth, Database } from "@/index.ts";
@@ -26,10 +26,10 @@ test.provider(
           const database = yield* Planetscale.MySQLDatabase("BetterAuthMySQL", {
             clusterSize: "PS_10",
           });
-          const password = yield* Planetscale.MySQLPassword(
-            "BetterAuthMySQLPassword",
-            { database, role: "admin" },
-          );
+          const password = yield* Planetscale.MySQLPassword("BetterAuthMySQLPassword", {
+            database,
+            role: "admin",
+          });
           return { database, password };
         }),
       );

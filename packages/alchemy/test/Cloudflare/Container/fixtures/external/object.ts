@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 export class ExternalContainer extends Cloudflare.Container<ExternalContainer>()(
   "ExternalContainer",
@@ -31,9 +31,7 @@ export class ExternalContainerObject extends Cloudflare.DurableObject<ExternalCo
 
       return {
         hello: Effect.fn("hello")(function* () {
-          const response = yield* fetch(
-            HttpClientRequest.get("http://container/"),
-          );
+          const response = yield* fetch(HttpClientRequest.get("http://container/"));
           return yield* response.text;
         }),
       };

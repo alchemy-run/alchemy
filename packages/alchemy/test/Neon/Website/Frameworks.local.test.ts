@@ -1,12 +1,12 @@
-import { providers } from "@/Neon/Providers.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { providers } from "@/Neon/Providers.ts";
+import * as Test from "@/Test/Alchemy.ts";
+import { browserRoundtrip } from "./Browser.ts";
 import { bodyContaining, exampleRoot } from "./Fixture.ts";
 import { frameworks } from "./Frameworks.ts";
-import { browserRoundtrip } from "./Browser.ts";
 
 const { test } = Test.make({ providers: providers(), dev: true });
 
@@ -51,12 +51,8 @@ describe.sequential("Neon Website native frameworks", () => {
             const location = new URL(redirect.headers.location!);
             expect(["localhost", "127.0.0.1"]).toContain(location.hostname);
             expect(location.port).toBe(new URL(String(site.url)).port);
-            expect(location.pathname + location.search).toBe(
-              "/?redirected=yes",
-            );
-            expect(
-              (yield* HttpClient.get(`${site.url}/not-a-real-page`)).status,
-            ).toBe(404);
+            expect(location.pathname + location.search).toBe("/?redirected=yes");
+            expect((yield* HttpClient.get(`${site.url}/not-a-real-page`)).status).toBe(404);
           }
           yield* browserRoundtrip(String(site.url), slug);
           yield* stack.destroy();

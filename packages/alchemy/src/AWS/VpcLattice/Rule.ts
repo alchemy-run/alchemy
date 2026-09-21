@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
@@ -156,17 +151,9 @@ export const RuleProvider = () =>
       ) =>
         vpclattice
           .getRule({ serviceIdentifier, listenerIdentifier, ruleIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const findByName = (
-        serviceIdentifier: string,
-        listenerIdentifier: string,
-        name: string,
-      ) =>
+      const findByName = (serviceIdentifier: string, listenerIdentifier: string, name: string) =>
         vpclattice.listRules
           .pages({ serviceIdentifier, listenerIdentifier })
           .pipe(
@@ -185,22 +172,14 @@ export const RuleProvider = () =>
           .pipe(
             // The owning listener/service may already be gone during
             // teardown races.
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -216,18 +195,10 @@ export const RuleProvider = () =>
       });
 
       return {
-        stables: [
-          "ruleId",
-          "ruleArn",
-          "name",
-          "serviceIdentifier",
-          "listenerIdentifier",
-        ],
+        stables: ["ruleId", "ruleArn", "name", "serviceIdentifier", "listenerIdentifier"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (
@@ -238,17 +209,11 @@ export const RuleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const serviceIdentifier =
-            output?.serviceIdentifier ?? olds?.serviceIdentifier;
-          const listenerIdentifier =
-            output?.listenerIdentifier ?? olds?.listenerIdentifier;
+          const serviceIdentifier = output?.serviceIdentifier ?? olds?.serviceIdentifier;
+          const listenerIdentifier = output?.listenerIdentifier ?? olds?.listenerIdentifier;
           if (!serviceIdentifier || !listenerIdentifier) return undefined;
           const rule = output?.ruleId
-            ? yield* observe(
-                serviceIdentifier,
-                listenerIdentifier,
-                output.ruleId,
-              )
+            ? yield* observe(serviceIdentifier, listenerIdentifier, output.ruleId)
             : yield* findByName(
                 serviceIdentifier,
                 listenerIdentifier,
@@ -267,9 +232,7 @@ export const RuleProvider = () =>
             listenerIdentifier,
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -278,16 +241,8 @@ export const RuleProvider = () =>
 
           // Observe — prefer the stable id cache, fall back to name lookup.
           let rule = output?.ruleId
-            ? yield* observe(
-                news.serviceIdentifier,
-                news.listenerIdentifier,
-                output.ruleId,
-              )
-            : yield* findByName(
-                news.serviceIdentifier,
-                news.listenerIdentifier,
-                name,
-              );
+            ? yield* observe(news.serviceIdentifier, news.listenerIdentifier, output.ruleId)
+            : yield* findByName(news.serviceIdentifier, news.listenerIdentifier, name);
 
           // Ensure — create if missing.
           if (!rule?.arn || !rule.id) {
@@ -302,17 +257,11 @@ export const RuleProvider = () =>
               }),
             ).pipe(
               Effect.catchTag("ConflictException", () =>
-                findByName(
-                  news.serviceIdentifier,
-                  news.listenerIdentifier,
-                  name,
-                ),
+                findByName(news.serviceIdentifier, news.listenerIdentifier, name),
               ),
             );
             if (!rule?.arn || !rule.id) {
-              return yield* Effect.fail(
-                new Error(`Failed to create rule ${name}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create rule ${name}`));
             }
           } else if (
             JSON.stringify(rule.match) !== JSON.stringify(news.match) ||
@@ -355,15 +304,9 @@ export const RuleProvider = () =>
               listenerIdentifier: output.listenerIdentifier,
               ruleIdentifier: output.ruleId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitUntilAbsent(
-            observe(
-              output.serviceIdentifier,
-              output.listenerIdentifier,
-              output.ruleId,
-            ),
+            observe(output.serviceIdentifier, output.listenerIdentifier, output.ruleId),
           );
         }),
       };

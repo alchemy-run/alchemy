@@ -1,13 +1,13 @@
+import { expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { Bucket } from "@/Neon/Bucket";
 import { Object as NeonObject } from "@/Neon/Object";
-import { ReadObject } from "@/Neon/ReadObject";
-import { WriteObject } from "@/Neon/WriteObject";
 import { ReadBucket } from "@/Neon/ReadBucket";
+import { ReadObject } from "@/Neon/ReadObject";
 import { WriteBucket } from "@/Neon/WriteBucket";
-import * as Effect from "effect/Effect";
+import { WriteObject } from "@/Neon/WriteObject";
 import * as Output from "@/Output";
-import * as Schema from "effect/Schema";
-import { expect, test } from "alchemy-test";
 
 interface Settings {
   theme: "system" | "light" | "dark";
@@ -78,8 +78,7 @@ const typeCases = (bucket: Bucket) =>
       value: { count: Output.literal(1) },
     });
     const outputReader = yield* ReadObject(outputs);
-    const outputValue: { count: number } | undefined =
-      yield* outputReader.get();
+    const outputValue: { count: number } | undefined = yield* outputReader.get();
     const readBucket = yield* ReadBucket(bucket);
     // @ts-expect-error Read-only API cannot upload.
     readBucket.put("key", "value");
@@ -91,10 +90,8 @@ const typeCases = (bucket: Bucket) =>
     return { inferredValue, value, rawValue, outputValue };
   });
 
-test.effect(
-  "typed object declarations are checked by the workspace compiler",
-  () =>
-    Effect.sync(() => {
-      expect(typeof typeCases).toBe("function");
-    }),
+test.effect("typed object declarations are checked by the workspace compiler", () =>
+  Effect.sync(() => {
+    expect(typeof typeCases).toBe("function");
+  }),
 );

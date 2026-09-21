@@ -7,10 +7,7 @@ import type { Map as LocationMap } from "./Map.ts";
  * `GetMapSprites` request with `MapName` injected from the bound
  * resource.
  */
-export interface GetMapSpritesRequest extends Omit<
-  location.GetMapSpritesRequest,
-  "MapName"
-> {}
+export interface GetMapSpritesRequest extends Omit<location.GetMapSpritesRequest, "MapName"> {}
 
 /**
  * Retrieves the map's sprite sheet (PNG) or sprite index (JSON) used to render icons.
@@ -38,12 +35,7 @@ export interface GetMapSprites extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMapSpritesRequest,
-    ) => Effect.Effect<
-      location.GetMapSpritesResponse,
-      location.GetMapSpritesError
-    >
+    ) => Effect.Effect<location.GetMapSpritesResponse, location.GetMapSpritesError>
   >
 > {}
-export const GetMapSprites = Binding.Service<GetMapSprites>(
-  "AWS.Location.GetMapSprites",
-);
+export const GetMapSprites = Binding.Service<GetMapSprites>("AWS.Location.GetMapSprites");

@@ -29,10 +29,7 @@ export interface ListRuleExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListRuleExecutionsRequest,
-    ) => Effect.Effect<
-      SVC.ListRuleExecutionsOutput,
-      SVC.ListRuleExecutionsError
-    >
+    ) => Effect.Effect<SVC.ListRuleExecutionsOutput, SVC.ListRuleExecutionsError>
   >
 > {}
 export const ListRuleExecutions = Binding.Service<ListRuleExecutions>(

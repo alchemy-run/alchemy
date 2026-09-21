@@ -1,24 +1,20 @@
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Stream from "effect/Stream";
 import { Action } from "@/Action";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic record name — reused on every run (never derive from
 // Date.now()/random), owns its own subdomain so it never collides with the
@@ -31,9 +27,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -53,21 +47,17 @@ const purgeRecords = (zoneId: string) =>
       Effect.map((chunk) => Array.from(chunk)),
       Effect.flatMap(
         Effect.forEach((r) =>
-          dns
-            .deleteRecord({ zoneId, dnsRecordId: r.id })
-            .pipe(Effect.catch(() => Effect.void)),
+          dns.deleteRecord({ zoneId, dnsRecordId: r.id }).pipe(Effect.catch(() => Effect.void)),
         ),
       ),
     );
 
 const findRecord = (zoneId: string) =>
-  dns.listRecords
-    .items({ zoneId, name: { exact: RECORD_NAME }, type: RECORD_TYPE })
-    .pipe(
-      Stream.filter((r) => r.name === RECORD_NAME && r.type === RECORD_TYPE),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)[0]),
-    );
+  dns.listRecords.items({ zoneId, name: { exact: RECORD_NAME }, type: RECORD_TYPE }).pipe(
+    Stream.filter((r) => r.name === RECORD_NAME && r.type === RECORD_TYPE),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)[0]),
+  );
 
 // Binding a DNS zone inside an Action via `ReadWriteDnsLocal` — the local
 // (current-credentials) implementation of the `ReadWriteDns` binding. Exercises
@@ -121,9 +111,7 @@ test.provider(
                     zoneId: yield* zoneIdAccessor,
                     recordId: created.id,
                     content: record.content,
-                    listedContent: listed.result.find(
-                      (r) => r.id === created.id,
-                    )?.content,
+                    listedContent: listed.result.find((r) => r.id === created.id)?.content,
                     listedCount: listed.result.length,
                   };
                 });

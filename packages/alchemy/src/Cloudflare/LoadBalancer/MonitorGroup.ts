@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -169,10 +168,7 @@ export const MonitorGroupProvider = () =>
 
       // 1. Observe — output.monitorGroupId is a cache hint.
       const observed = output?.monitorGroupId
-        ? yield* getMonitorGroup(
-            output.accountId ?? accountId,
-            output.monitorGroupId,
-          )
+        ? yield* getMonitorGroup(output.accountId ?? accountId, output.monitorGroupId)
         : undefined;
 
       // 2. Ensure — missing: create with the full desired body.
@@ -221,10 +217,7 @@ export const MonitorGroupProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "MonitorGroupInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
           }),
           Effect.catchTag("MonitorGroupNotFound", () => Effect.void),
         );
@@ -244,9 +237,7 @@ type ObservedMonitorGroup =
 const getMonitorGroup = (accountId: string, monitorGroupId: string) =>
   loadBalancers
     .getMonitorGroup({ accountId, monitorGroupId })
-    .pipe(
-      Effect.catchTag("MonitorGroupNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("MonitorGroupNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a monitor group by exact description. If several carry the same
@@ -277,10 +268,7 @@ const buildMembers = (news: MonitorGroupProps) =>
     mustBeHealthy: m.mustBeHealthy ?? true,
   }));
 
-const toAttributes = (
-  group: ObservedMonitorGroup,
-  accountId: string,
-): MonitorGroupAttributes => ({
+const toAttributes = (group: ObservedMonitorGroup, accountId: string): MonitorGroupAttributes => ({
   monitorGroupId: group.id,
   accountId,
   description: group.description,

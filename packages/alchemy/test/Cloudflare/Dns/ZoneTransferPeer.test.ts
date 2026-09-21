@@ -1,29 +1,24 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic key material (this is test-only, not a real secret).
 const TSIG_SECRET =
   "kyTZf6QHTPVdpDjLWWbYO7DI3Z6f3wWvECDCtMHEOSomCnq0db4DBzowg4QH51jJZUw5n4nGYNGmkJhCfn+9Ag==";
 
 // Ride out fresh-token 403 blips on out-of-band calls.
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -42,10 +37,7 @@ const expectGone = (accountId: string, peerId: string) =>
     Effect.catchTag("PeerNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PeerNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -152,9 +144,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneTransferPeer,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneTransferPeer);
       const all = yield* provider.list();
 
       expect(all.some((p) => p.peerId === deployed.peerId)).toBe(true);

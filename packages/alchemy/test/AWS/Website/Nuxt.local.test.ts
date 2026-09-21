@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -18,14 +18,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 // workspace's hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 describe("AWS.Website.Nuxt local", () => {
   test.provider(
@@ -58,9 +51,7 @@ describe("AWS.Website.Nuxt local", () => {
         // The site is the framework's own dev server: a localhost URL and
         // no cloud rows at all (proof no AWS call ran).
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.server).toBeUndefined();
         expect(deployed.site.bucket).toBeUndefined();
@@ -71,22 +62,18 @@ describe("AWS.Website.Nuxt local", () => {
           label: "dev SSR home page",
         });
         // The fixture's own nuxt.config.ts applied in dev too.
-        yield* expectUrlContains(
-          `${url}/`,
-          "config:nuxt-aws-user-config-loaded",
-          { label: "user nuxt.config.ts applied (dev)" },
-        );
+        yield* expectUrlContains(`${url}/`, "config:nuxt-aws-user-config-loaded", {
+          label: "user nuxt.config.ts applied (dev)",
+        });
         // server.environment reaches the dev server's process env — the
         // same values the Lambda gets on deploy (dev/live parity).
         yield* expectUrlContains(`${url}/`, "env:nuxt-aws-dev-env-marker", {
           label: "server.environment injected into dev server",
         });
         // Server API route through the dev server.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "NUXT_AWS_API_MARKER",
-          { label: "API route (dev)" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "NUXT_AWS_API_MARKER", {
+          label: "API route (dev)",
+        });
 
         // ── HMR: edit the API route in place. The stack is NOT re-applied —
         // nitro's dev rebuild must pick the change up and serve it through
@@ -97,11 +84,10 @@ describe("AWS.Website.Nuxt local", () => {
           helloPath,
           hello.replace("NUXT_AWS_API_MARKER", "NUXT_AWS_API_MARKER_V2"),
         );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "NUXT_AWS_API_MARKER_V2",
-          { timeout: "90 seconds", label: "API route after HMR edit" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "NUXT_AWS_API_MARKER_V2", {
+          timeout: "90 seconds",
+          label: "API route after HMR edit",
+        });
         // server.environment survived the dev rebuild — the injected env
         // still reaches SSR after the reload (dev/live parity holds across
         // hot updates, not just at boot).

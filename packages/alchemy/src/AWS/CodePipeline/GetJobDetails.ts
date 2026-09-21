@@ -31,6 +31,4 @@ export interface GetJobDetails extends Binding.Service<
     ) => Effect.Effect<SVC.GetJobDetailsOutput, SVC.GetJobDetailsError>
   >
 > {}
-export const GetJobDetails = Binding.Service<GetJobDetails>(
-  "AWS.CodePipeline.GetJobDetails",
-);
+export const GetJobDetails = Binding.Service<GetJobDetails>("AWS.CodePipeline.GetJobDetails");

@@ -1,5 +1,5 @@
-import { Random } from "../../Random.ts";
 import * as Effect from "effect/Effect";
+import { Random } from "../../Random.ts";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { Store as SecretsStore } from "../SecretsStore/SecretsStore.ts";
 
@@ -48,8 +48,7 @@ export const EncryptionKeyValue = Random("StateStoreEncryptionKeyValue", {
   bytes: 32,
 });
 
-export const EncryptionKeySecretName =
-  "AlchemyStateStoreEncryptionKey" as const;
+export const EncryptionKeySecretName = "AlchemyStateStoreEncryptionKey" as const;
 
 /**
  * The encryption key secret. The raw hex-encoded bytes live inside

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/DocDBElastic";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/DocDBElastic";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -15,18 +15,16 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on. Runs in every
 // CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getCluster on a nonexistent cluster ARN fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { accountId, region } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        docdbelastic.getCluster({
-          clusterArn: `arn:aws:docdb-elastic:${region}:${accountId}:cluster/00000000-0000-0000-0000-000000000000`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getCluster on a nonexistent cluster ARN fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { accountId, region } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      docdbelastic.getCluster({
+        clusterArn: `arn:aws:docdb-elastic:${region}:${accountId}:cluster/00000000-0000-0000-0000-000000000000`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -43,9 +41,7 @@ const defaultNetwork = Effect.gen(function* () {
   // a/b/c) only.
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -70,21 +66,14 @@ const assertClusterDeleting = (arn: string) =>
   Effect.gen(function* () {
     const status = yield* docdbelastic.getCluster({ clusterArn: arn }).pipe(
       Effect.map((r) => r.cluster.status),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
     );
     if (status !== "GONE" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`cluster '${arn}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${arn}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 

@@ -1,11 +1,11 @@
-import * as Alchemy from "@/index";
-import { providers } from "@/Neon/Providers";
-import * as Test from "@/Test/Alchemy";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Alchemy from "@/index";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 import EventFunction from "./fixtures/function-events.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -88,9 +88,7 @@ test(
         until: (body) => JSON.stringify(body).includes('"schedule"'),
       }),
     );
-    expect(events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
-    );
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]));
   }),
   { timeout: 120_000 },
 );

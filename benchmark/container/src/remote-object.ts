@@ -26,7 +26,10 @@ export class RemoteObject extends Cloudflare.DurableObject<RemoteObject>()(
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
-                schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+                schedule: Schedule.min([
+                  Schedule.exponential("1 second"),
+                  Schedule.spaced("5 seconds"),
+                ]),
                 times: 40,
               }),
             );

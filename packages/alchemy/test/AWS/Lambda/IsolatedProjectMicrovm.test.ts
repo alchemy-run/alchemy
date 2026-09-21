@@ -1,15 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
+import * as AWS from "@/AWS";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
 import { project } from "./fixtures/microvm/isolated/sandbox.ts";
 import IsolatedStack from "./fixtures/microvm/isolated/stack.ts";
 
@@ -18,10 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // MicroVM image builds run server-side (Firecracker snapshot) and can take
 // several minutes, so give deploy/destroy plenty of room.
@@ -71,9 +65,7 @@ describe.skipIf(skip)("isolated-project microvm (main)", () => {
           r.status === 200
             ? Effect.succeed(r)
             : r.text.pipe(
-                Effect.flatMap((text) =>
-                  Effect.fail(new Error(`/rpc ${r.status}: ${text}`)),
-                ),
+                Effect.flatMap((text) => Effect.fail(new Error(`/rpc ${r.status}: ${text}`))),
               ),
         ),
         Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 6 }),

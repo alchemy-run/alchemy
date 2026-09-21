@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as sns from "@distilled.cloud/aws/sns";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +6,8 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import {
   PlatformApiFunction,
   PlatformApiFunctionLive,
@@ -70,10 +70,9 @@ describe.sequential("SNS PlatformApplication", () => {
 
         const baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
         const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/endpoint-cycle`),
-            { token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/endpoint-cycle`), {
+            token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN,
+          }),
         ).pipe(
           Effect.retry({
             schedule: Schedule.exponential("2 seconds"),
@@ -88,32 +87,26 @@ describe.sequential("SNS PlatformApplication", () => {
 
         if (!process.env.NO_DESTROY) {
           yield* stack.destroy();
-          yield* assertPlatformApplicationGone(
-            deployed.application.platformApplicationArn,
-          );
+          yield* assertPlatformApplicationGone(deployed.application.platformApplicationArn);
         }
       }),
     { timeout: 300_000 },
   );
 });
 
-class PlatformApplicationStillExists extends Data.TaggedError(
-  "PlatformApplicationStillExists",
-) {}
+class PlatformApplicationStillExists extends Data.TaggedError("PlatformApplicationStillExists") {}
 
 // Out-of-band proof the trailing destroy left nothing behind: the platform
 // application must be observably gone (typed NotFoundException) after destroy.
 const assertPlatformApplicationGone = Effect.fn(function* (arn: string) {
-  yield* sns
-    .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new PlatformApplicationStillExists())),
-      Effect.retry({
-        while: (error) => error._tag === "PlatformApplicationStillExists",
-        schedule: Schedule.exponential(100),
-        times: 8,
-      }),
-      Effect.catchTag("NotFoundException", () => Effect.void),
-      Effect.catchTag("InvalidParameterException", () => Effect.void),
-    );
+  yield* sns.getPlatformApplicationAttributes({ PlatformApplicationArn: arn }).pipe(
+    Effect.flatMap(() => Effect.fail(new PlatformApplicationStillExists())),
+    Effect.retry({
+      while: (error) => error._tag === "PlatformApplicationStillExists",
+      schedule: Schedule.exponential(100),
+      times: 8,
+    }),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+    Effect.catchTag("InvalidParameterException", () => Effect.void),
+  );
 });

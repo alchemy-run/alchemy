@@ -38,13 +38,9 @@ export interface StartSpeechSynthesisTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: polly.StartSpeechSynthesisTaskInput,
-    ) => Effect.Effect<
-      polly.StartSpeechSynthesisTaskOutput,
-      polly.StartSpeechSynthesisTaskError
-    >
+    ) => Effect.Effect<polly.StartSpeechSynthesisTaskOutput, polly.StartSpeechSynthesisTaskError>
   >
 > {}
-export const StartSpeechSynthesisTask =
-  Binding.Service<StartSpeechSynthesisTask>(
-    "AWS.Polly.StartSpeechSynthesisTask",
-  );
+export const StartSpeechSynthesisTask = Binding.Service<StartSpeechSynthesisTask>(
+  "AWS.Polly.StartSpeechSynthesisTask",
+);

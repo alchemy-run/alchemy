@@ -1,41 +1,30 @@
-import { AlchemyContext } from "@/AlchemyContext";
-import * as Bundle from "@/Bundle/Bundle";
-import * as Provider from "@/Provider";
-import { ServiceProvider } from "@/Railway/ServiceProvider";
-import { FunctionProvider } from "@/Railway/Function";
-import * as Layer from "effect/Layer";
-import * as Railway from "@/Railway";
-import { RailwayEnvironment } from "@/Railway/Environment";
 import { Credentials } from "@distilled.cloud/railway";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  createRailwayFunctionSupport,
-  createRailwayHostedSupport,
-} from "@/Railway/hosted";
-import { Stack } from "@/Stack";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Bundle from "@/Bundle/Bundle";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { RailwayEnvironment } from "@/Railway/Environment";
+import { FunctionProvider } from "@/Railway/Function";
+import { createRailwayFunctionSupport, createRailwayHostedSupport } from "@/Railway/hosted";
+import { ServiceProvider } from "@/Railway/ServiceProvider";
+import { Stack } from "@/Stack";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(ServiceProvider(), FunctionProvider()).pipe(
     Layer.provide(
       Layer.mergeAll(
-        Layer.succeed(
-          Credentials,
-          Effect.die("Offline diff must not resolve credentials"),
-        ),
-        Layer.succeed(
-          RailwayEnvironment,
-          Effect.die("Offline diff must not resolve environment"),
-        ),
+        Layer.succeed(Credentials, Effect.die("Offline diff must not resolve credentials")),
+        Layer.succeed(RailwayEnvironment, Effect.die("Offline diff must not resolve environment")),
         Layer.succeed(
           HttpClient.HttpClient,
-          HttpClient.make(() =>
-            Effect.die("Offline diff must not make HTTP requests"),
-          ),
+          HttpClient.make(() => Effect.die("Offline diff must not make HTTP requests")),
         ),
       ),
     ),

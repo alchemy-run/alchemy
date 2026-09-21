@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Registry, Schema } from "@/AWS/Schemas";
-import * as Test from "@/Test/Alchemy";
 import * as schemas from "@distilled.cloud/aws/schemas";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Registry, Schema } from "@/AWS/Schemas";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -42,21 +42,14 @@ const contentV2 = JSON.stringify({
 });
 
 const assertSchemaGone = (registryName: string, schemaName: string) =>
-  schemas
-    .describeSchema({ RegistryName: registryName, SchemaName: schemaName })
-    .pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new Error(`schema ${schemaName} still exists`)),
-      ),
-      Effect.catchTag("NotFoundException", () => Effect.void),
-      Effect.retry({
-        while: (e) => e instanceof Error,
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(10),
-        ]),
-      }),
-    );
+  schemas.describeSchema({ RegistryName: registryName, SchemaName: schemaName }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`schema ${schemaName} still exists`))),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+    Effect.retry({
+      while: (e) => e instanceof Error,
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+    }),
+  );
 
 describe("AWS.Schemas.Schema", () => {
   test.provider(

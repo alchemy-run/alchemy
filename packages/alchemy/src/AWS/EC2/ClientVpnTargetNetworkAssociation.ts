@@ -79,33 +79,27 @@ export interface ClientVpnTargetNetworkAssociation extends Resource<
  *
  * @resource
  */
-export const ClientVpnTargetNetworkAssociation =
-  Resource<ClientVpnTargetNetworkAssociation>(
-    "AWS.EC2.ClientVpnTargetNetworkAssociation",
-  );
+export const ClientVpnTargetNetworkAssociation = Resource<ClientVpnTargetNetworkAssociation>(
+  "AWS.EC2.ClientVpnTargetNetworkAssociation",
+);
 
-class ClientVpnAssociationPending extends Data.TaggedError(
-  "ClientVpnAssociationPending",
-)<{ message: string }> {}
+class ClientVpnAssociationPending extends Data.TaggedError("ClientVpnAssociationPending")<{
+  message: string;
+}> {}
 
-class ClientVpnAssociationFailed extends Data.TaggedError(
-  "ClientVpnAssociationFailed",
-)<{ message: string }> {}
+class ClientVpnAssociationFailed extends Data.TaggedError("ClientVpnAssociationFailed")<{
+  message: string;
+}> {}
 
 const networks = (clientVpnEndpointId: ClientVpnEndpointId) =>
-  ec2.describeClientVpnTargetNetworks
-    .items({ ClientVpnEndpointId: clientVpnEndpointId })
-    .pipe(
-      Stream.runCollect,
-      Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
-        Effect.succeed([] as ec2.TargetNetwork[]),
-      ),
-    );
+  ec2.describeClientVpnTargetNetworks.items({ ClientVpnEndpointId: clientVpnEndpointId }).pipe(
+    Stream.runCollect,
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
+      Effect.succeed([] as ec2.TargetNetwork[]),
+    ),
+  );
 
-const findNetwork = (
-  props: ClientVpnTargetNetworkAssociationProps,
-  associationId?: string,
-) =>
+const findNetwork = (props: ClientVpnTargetNetworkAssociationProps, associationId?: string) =>
   networks(props.clientVpnEndpointId).pipe(
     Effect.map((items) =>
       items.find(
@@ -141,18 +135,14 @@ const waitForNetwork = (
     if (!deleted && network?.Status?.Code === "associated") return network;
     if (!deleted && network?.Status?.Code === "association-failed") {
       return yield* new ClientVpnAssociationFailed({
-        message:
-          network.Status.Message ?? "Client VPN target association failed",
+        message: network.Status.Message ?? "Client VPN target association failed",
       });
     }
     return yield* new ClientVpnAssociationPending({
       message: `Client VPN association ${associationId ?? props.subnetId} is ${network?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "disassociation" : "associated"}`,
     });
   }).pipe((effect) =>
-    retryClientVpn(
-      effect,
-      (error) => error._tag === "ClientVpnAssociationPending",
-    ),
+    retryClientVpn(effect, (error) => error._tag === "ClientVpnAssociationPending"),
   );
 
 /** Live AWS provider for ClientVpnTargetNetworkAssociation. */
@@ -163,16 +153,10 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
       return {
         stables: ["associationId", "clientVpnEndpointId", "subnetId", "vpcId"],
         nuke: {
-          dependsOn: [
-            "AWS.EC2.ClientVpnEndpoint",
-            "AWS.EC2.Subnet",
-            "AWS.EC2.SecurityGroup",
-          ],
+          dependsOn: ["AWS.EC2.ClientVpnEndpoint", "AWS.EC2.Subnet", "AWS.EC2.SecurityGroup"],
         },
         list: Effect.fn(function* () {
-          const endpoints = yield* ec2.describeClientVpnEndpoints
-            .items({})
-            .pipe(Stream.runCollect);
+          const endpoints = yield* ec2.describeClientVpnEndpoints.items({}).pipe(Stream.runCollect);
           const items = yield* Effect.forEach(endpoints, (endpoint) =>
             networks(endpoint.ClientVpnEndpointId as ClientVpnEndpointId).pipe(
               Effect.map((items) =>
@@ -184,10 +168,7 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                       item.Status?.Code !== "disassociated",
                   )
                   .map((item) =>
-                    toAttributes(
-                      endpoint.ClientVpnEndpointId as ClientVpnEndpointId,
-                      item,
-                    ),
+                    toAttributes(endpoint.ClientVpnEndpointId as ClientVpnEndpointId, item),
                   ),
               ),
             ),
@@ -210,8 +191,7 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
           ) {
             return {
               action: "replace",
-              deleteFirst:
-                news.clientVpnEndpointId === olds.clientVpnEndpointId,
+              deleteFirst: news.clientVpnEndpointId === olds.clientVpnEndpointId,
             };
           }
           const network = yield* findNetwork(news, output?.associationId);
@@ -249,19 +229,14 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                   ],
                   () => Effect.succeed(undefined),
                 ),
-                (effect) =>
-                  retryClientVpn(
-                    effect,
-                    (error) => error._tag === "IncorrectState",
-                  ),
+                (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
               );
             associationId = created?.AssociationId;
           }
           const associated = yield* waitForNetwork(news, associationId, false);
           if (!associated?.AssociationId) {
             return yield* new ClientVpnAssociationFailed({
-              message:
-                "AWS did not return a Client VPN target association identifier.",
+              message: "AWS did not return a Client VPN target association identifier.",
             });
           }
           return toAttributes(news.clientVpnEndpointId, associated);
@@ -277,17 +252,10 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
               })
               .pipe(
                 Effect.catchTag(
-                  [
-                    "InvalidClientVpnEndpointId.NotFound",
-                    "InvalidClientVpnAssociationIdNotFound",
-                  ],
+                  ["InvalidClientVpnEndpointId.NotFound", "InvalidClientVpnAssociationIdNotFound"],
                   () => Effect.void,
                 ),
-                (effect) =>
-                  retryClientVpn(
-                    effect,
-                    (error) => error._tag === "IncorrectState",
-                  ),
+                (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
               );
           }
           yield* waitForNetwork(output, output.associationId, true);

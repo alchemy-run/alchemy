@@ -22,10 +22,8 @@ export const isMSKEvent = (event: any): event is lambda.MSKEvent =>
 // The cluster ARN is `arn:...:cluster/name/uuid`. Topic and consumer-group
 // resources live under sibling namespaces (`topic/` and `group/`) scoped to the
 // same cluster path; MSK IAM auth grants data-plane access via these ARNs.
-const topicArnGlob = (clusterArn: string) =>
-  `${clusterArn.replace(":cluster/", ":topic/")}/*`;
-const groupArnGlob = (clusterArn: string) =>
-  `${clusterArn.replace(":cluster/", ":group/")}/*`;
+const topicArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":topic/")}/*`;
+const groupArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":group/")}/*`;
 
 /** @binding */
 export const KafkaEventSource = Layer.effect(
@@ -41,8 +39,6 @@ export const KafkaEventSource = Layer.effect(
         stream: Stream.Stream<MSKRecord, never, StreamReq>,
       ) => Effect.Effect<void, never, Req>,
     ) {
-      const ClusterArn = yield* cluster.clusterArn;
-
       // Deploy-time: grant the IAM actions MSK IAM authentication requires and
       // create the event-source mapping. Skipped once running inside the
       // deployed Function (the global guard). Namespaced under the host so the
@@ -51,46 +47,34 @@ export const KafkaEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.KafkaEventSource(${cluster}))`(
-              {
-                policyStatements: [
-                  {
-                    // Cluster-level: connect + describe (Lambda poller + IAM auth).
-                    Effect: "Allow",
-                    Action: [
-                      "kafka-cluster:Connect",
-                      "kafka-cluster:DescribeCluster",
-                      "kafka-cluster:DescribeClusterDynamicConfiguration",
-                      "kafka:DescribeClusterV2",
-                      "kafka:GetBootstrapBrokers",
-                    ],
-                    Resource: [cluster.clusterArn],
-                  },
-                  {
-                    // Topic-level: read records + describe topics.
-                    Effect: "Allow",
-                    Action: [
-                      "kafka-cluster:DescribeTopic",
-                      "kafka-cluster:ReadData",
-                    ],
-                    Resource: [
-                      cluster.clusterArn.pipe(Output.map(topicArnGlob)),
-                    ],
-                  },
-                  {
-                    // Consumer-group-level: join/commit as a consumer group.
-                    Effect: "Allow",
-                    Action: [
-                      "kafka-cluster:DescribeGroup",
-                      "kafka-cluster:AlterGroup",
-                    ],
-                    Resource: [
-                      cluster.clusterArn.pipe(Output.map(groupArnGlob)),
-                    ],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.Lambda.KafkaEventSource(${cluster}))`({
+              policyStatements: [
+                {
+                  // Cluster-level: connect + describe (Lambda poller + IAM auth).
+                  Effect: "Allow",
+                  Action: [
+                    "kafka-cluster:Connect",
+                    "kafka-cluster:DescribeCluster",
+                    "kafka-cluster:DescribeClusterDynamicConfiguration",
+                    "kafka:DescribeClusterV2",
+                    "kafka:GetBootstrapBrokers",
+                  ],
+                  Resource: [cluster.clusterArn],
+                },
+                {
+                  // Topic-level: read records + describe topics.
+                  Effect: "Allow",
+                  Action: ["kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"],
+                  Resource: [cluster.clusterArn.pipe(Output.map(topicArnGlob))],
+                },
+                {
+                  // Consumer-group-level: join/commit as a consumer group.
+                  Effect: "Allow",
+                  Action: ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"],
+                  Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
+                },
+              ],
+            });
 
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
@@ -119,9 +103,7 @@ export const KafkaEventSource = Layer.effect(
             if (isMSKEvent(event)) {
               // `event.records` maps `topic-partition` → MSKRecord[]; flatten
               // to a single stream of records.
-              const records = Object.values(
-                event.records,
-              ).flat() as MSKRecord[];
+              const records = Object.values(event.records).flat() as MSKRecord[];
               if (records.length > 0) {
                 return process(Stream.fromArray(records)).pipe(Effect.orDie);
               }

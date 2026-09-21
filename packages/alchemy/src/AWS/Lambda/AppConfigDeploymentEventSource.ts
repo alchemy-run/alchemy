@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import * as Namespace from "../../Namespace.ts";
 import type { Application } from "../AppConfig/Application.ts";
 import {
@@ -43,16 +42,13 @@ const eventSetSuffix = (events: DeploymentEventType[]): string =>
  * Narrow an arbitrary Lambda invocation payload to an AppConfig extension
  * deployment notification.
  */
-export const isAppConfigDeploymentEvent = (
-  event: any,
-): event is DeploymentEventRecord =>
+export const isAppConfigDeploymentEvent = (event: any): event is DeploymentEventRecord =>
   typeof event?.InvocationId === "string" &&
   typeof event?.Type === "string" &&
   typeof event?.Application === "object";
 
-const isEnvironment = (
-  target: Application | Environment,
-): target is Environment => target.Type === "AWS.AppConfig.Environment";
+const isEnvironment = (target: Application | Environment): target is Environment =>
+  target.Type === "AWS.AppConfig.Environment";
 
 /**
  * Lambda runtime implementation for `AWS.AppConfig.consumeDeploymentEvents(...)`.
@@ -99,18 +95,14 @@ export const AppConfigDeploymentEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       target: Application | Environment,
       props: DeploymentEventSourceProps,
-      process: (
-        events: Stream.Stream<DeploymentEventRecord>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (events: Stream.Stream<DeploymentEventRecord>) => Effect.Effect<void, never, Req>,
     ) {
       const events = props.events ?? ALL_DEPLOYMENT_EVENTS;
       const suffix = eventSetSuffix(events);
 
       // Resolving the target's id also registers it on the host environment;
       // re-yield per invocation inside the listener below.
-      const TargetId = yield* isEnvironment(target)
-        ? target.environmentId
-        : target.applicationId;
+      const TargetId = yield* isEnvironment(target) ? target.environmentId : target.applicationId;
 
       // Deploy-time: provision the invoke role, the extension whose actions
       // call this function at each subscribed action point, and the
@@ -125,33 +117,30 @@ export const AppConfigDeploymentEventSource = Layer.effect(
             // NB: hyphenated logical ids only — the id lands in the
             // `alchemy::id` tag value, and IAM/AppConfig tag values reject
             // `(`, `)` and `,`.
-            const role = yield* InvokeRole(
-              `${target.LogicalId}-${suffix}-InvokeRole`,
-              {
-                assumeRolePolicyDocument: {
+            const role = yield* InvokeRole(`${target.LogicalId}-${suffix}-InvokeRole`, {
+              assumeRolePolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "appconfig.amazonaws.com" },
+                    Action: ["sts:AssumeRole"],
+                  },
+                ],
+              },
+              inlinePolicies: {
+                InvokeFunction: {
                   Version: "2012-10-17",
                   Statement: [
                     {
                       Effect: "Allow",
-                      Principal: { Service: "appconfig.amazonaws.com" },
-                      Action: ["sts:AssumeRole"],
+                      Action: ["lambda:InvokeFunction"],
+                      Resource: [host.functionArn as any],
                     },
                   ],
                 },
-                inlinePolicies: {
-                  InvokeFunction: {
-                    Version: "2012-10-17",
-                    Statement: [
-                      {
-                        Effect: "Allow",
-                        Action: ["lambda:InvokeFunction"],
-                        Resource: [host.functionArn as any],
-                      },
-                    ],
-                  },
-                },
               },
-            );
+            });
 
             const extension = yield* DeploymentExtension(
               `${target.LogicalId}-${suffix}-DeploymentEvents`,

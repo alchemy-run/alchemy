@@ -38,24 +38,20 @@ export const makeObservabilityAdminHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  // Account-level configuration reads have no resource ARN.
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                // Account-level configuration reads have no resource ARN.
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.ObservabilityAdmin.${options.capability}`)(
-        function* (request?: I) {
-          return yield* op(request ?? ({} as I));
-        },
-      );
+      return Effect.fn(`AWS.ObservabilityAdmin.${options.capability}`)(function* (request?: I) {
+        return yield* op(request ?? ({} as I));
+      });
     });
   });

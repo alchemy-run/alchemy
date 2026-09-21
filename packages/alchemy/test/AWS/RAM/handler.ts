@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RAM from "@/AWS/RAM";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RAM from "@/AWS/RAM";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -26,9 +26,7 @@ const fakeSubnetArn = (shareArn: string) => {
   return `arn:aws:ec2:${region}:${accountId}:subnet/subnet-00000000000000000`;
 };
 
-export class RAMTestFunction extends Lambda.Function<Lambda.Function>()(
-  "RAMTestFunction",
-) {}
+export class RAMTestFunction extends Lambda.Function<Lambda.Function>()("RAMTestFunction") {}
 
 export default RAMTestFunction.make(
   {
@@ -129,10 +127,7 @@ export default RAMTestFunction.make(
           }).pipe(
             Effect.map(() => "Ok"),
             Effect.catchTag(
-              [
-                "ResourceShareInvitationArnNotFoundException",
-                "MalformedArnException",
-              ],
+              ["ResourceShareInvitationArnNotFoundException", "MalformedArnException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -149,20 +144,14 @@ export default RAMTestFunction.make(
           }).pipe(
             Effect.map(() => "Ok"),
             Effect.catchTag(
-              [
-                "ResourceShareInvitationArnNotFoundException",
-                "MalformedArnException",
-              ],
+              ["ResourceShareInvitationArnNotFoundException", "MalformedArnException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag: result });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/pending-resources-nonexistent"
-        ) {
+        if (request.method === "GET" && pathname === "/pending-resources-nonexistent") {
           const shareArn = yield* firstShareArn;
           if (shareArn === undefined) {
             return yield* HttpServerResponse.json({ tag: "NoShares" });
@@ -197,10 +186,7 @@ export default RAMTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/resource-policies-nonexistent"
-        ) {
+        if (request.method === "GET" && pathname === "/resource-policies-nonexistent") {
           const shareArn = yield* firstShareArn;
           if (shareArn === undefined) {
             return yield* HttpServerResponse.json({ tag: "NoShares" });
@@ -214,9 +200,8 @@ export default RAMTestFunction.make(
               tag: "Ok" as string,
               count: (r.policies ?? []).length,
             })),
-            Effect.catchTag(
-              ["ResourceArnNotFoundException", "MalformedArnException"],
-              (e) => Effect.succeed({ tag: e._tag as string, count: 0 }),
+            Effect.catchTag(["ResourceArnNotFoundException", "MalformedArnException"], (e) =>
+              Effect.succeed({ tag: e._tag as string, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);

@@ -6,9 +6,7 @@ import { diffTags } from "../../Tags.ts";
 /**
  * Flatten the wire `Tag[]` list into a plain string record.
  */
-export const toTagRecord = (
-  tags: readonly smsvoice.Tag[] | undefined,
-): Record<string, string> =>
+export const toTagRecord = (tags: readonly smsvoice.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 /**
@@ -39,9 +37,7 @@ export const syncSmsVoiceTags = Effect.fn(function* (
   const observedTags = yield* readSmsVoiceTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {
-    yield* smsvoice
-      .tagResource({ ResourceArn: arn, Tags: upsert })
-      .pipe(retrySmsVoiceThrottled);
+    yield* smsvoice.tagResource({ ResourceArn: arn, Tags: upsert }).pipe(retrySmsVoiceThrottled);
   }
   if (removed.length > 0) {
     yield* smsvoice
@@ -56,17 +52,10 @@ export const syncSmsVoiceTags = Effect.fn(function* (
  * `ThrottlingException` on a bounded exponential schedule — the End User
  * Messaging SMS control plane has low per-account TPS limits.
  */
-export const retrySmsVoiceThrottled = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retrySmsVoiceThrottled = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
   });

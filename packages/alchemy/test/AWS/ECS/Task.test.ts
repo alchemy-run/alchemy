@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { Task } from "@/AWS/ECS/Task.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Task } from "@/AWS/ECS/Task.ts";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -37,9 +37,7 @@ test.provider(
       // guarantee full deletion (deregister + delete) on success, failure,
       // and interruption.
       yield* reclaimTaskDefinitionFamily(family);
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -54,9 +52,7 @@ test.provider(
             name: family,
             image: imageUri,
             essential: true,
-            portMappings: [
-              { containerPort: 3000, hostPort: 3000, protocol: "tcp" },
-            ],
+            portMappings: [{ containerPort: 3000, hostPort: 3000, protocol: "tcp" }],
             logConfiguration: {
               logDriver: "awslogs",
               options: {
@@ -112,9 +108,7 @@ test.provider(
       // guarantee full deletion of BOTH revisions registered below on
       // success, failure, and interruption.
       yield* reclaimTaskDefinitionFamily(family);
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -134,9 +128,7 @@ test.provider(
             image: "public.ecr.aws/nginx/nginx:stable",
             essential: true,
             portMappings: [{ containerPort: 80, protocol: "tcp" }],
-            mountPoints: [
-              { sourceVolume: "scratch", containerPath: "/scratch" },
-            ],
+            mountPoints: [{ sourceVolume: "scratch", containerPath: "/scratch" }],
             dependsOn: [{ containerName: "sidecar", condition: "START" }],
           },
           {
@@ -156,13 +148,8 @@ test.provider(
       });
       const def = described.taskDefinition;
       expect(def?.containerDefinitions?.length).toBe(2);
-      expect(def?.containerDefinitions?.map((c) => c.name)).toEqual([
-        "app",
-        "sidecar",
-      ]);
-      expect(
-        def?.containerDefinitions?.[0]?.dependsOn?.[0]?.containerName,
-      ).toBe("sidecar");
+      expect(def?.containerDefinitions?.map((c) => c.name)).toEqual(["app", "sidecar"]);
+      expect(def?.containerDefinitions?.[0]?.dependsOn?.[0]?.containerName).toBe("sidecar");
       expect(def?.runtimePlatform?.cpuArchitecture).toBe("ARM64");
       expect(def?.ephemeralStorage?.sizeInGiB).toBe(25);
       expect(def?.volumes?.[0]?.name).toBe("scratch");
@@ -256,9 +243,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) =>
-            (r.taskDefinitionArns ?? []).filter((arn) =>
-              arn.includes(`/${deployed.taskFamily}:`),
-            ),
+            (r.taskDefinitionArns ?? []).filter((arn) => arn.includes(`/${deployed.taskFamily}:`)),
           ),
         );
       expect(activeRevisions).toEqual([]);
@@ -294,9 +279,9 @@ test.provider(
       const described = yield* ecs.describeTaskDefinition({
         taskDefinition: deployed.taskDefinitionArn,
       });
-      expect(
-        described.taskDefinition?.containerDefinitions?.[0]?.environmentFiles,
-      ).toEqual([{ value: envFileArn, type: "s3" }]);
+      expect(described.taskDefinition?.containerDefinitions?.[0]?.environmentFiles).toEqual([
+        { value: envFileArn, type: "s3" },
+      ]);
 
       // Out-of-band: the execution role can read the referenced object.
       const policy = yield* iam.getRolePolicy({
@@ -311,12 +296,10 @@ test.provider(
       yield* stack.destroy();
 
       // Destroy sweeps the role (inline policy included) and the family.
-      const roleGone = yield* iam
-        .getRole({ RoleName: deployed.executionRoleName })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(true)),
-        );
+      const roleGone = yield* iam.getRole({ RoleName: deployed.executionRoleName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NoSuchEntityException", () => Effect.succeed(true)),
+      );
       expect(roleGone).toBe(true);
     }),
   { timeout: 240_000 },

@@ -1,5 +1,3 @@
-import * as DLM from "@/AWS/DLM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,12 +5,12 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DLM from "@/AWS/DLM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class DlmTestFunction extends Lambda.Function<Lambda.Function>()(
-  "DlmTestFunction",
-) {}
+export class DlmTestFunction extends Lambda.Function<Lambda.Function>()("DlmTestFunction") {}
 
 export default DlmTestFunction.make(
   {
@@ -43,9 +41,7 @@ export default DlmTestFunction.make(
     // The deploy proves the EventBridge rule + invoke permission wiring.
     yield* DLM.consumePolicyEvents({ kinds: ["state-change"] }, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `dlm state change: ${event.detail.policy_id} -> ${event.detail.state}`,
-        ),
+        Effect.log(`dlm state change: ${event.detail.policy_id} -> ${event.detail.state}`),
       ),
     );
 
@@ -94,11 +90,7 @@ export default DlmTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Lambda.EventSource,
-        DLM.GetLifecyclePolicyHttp,
-        DLM.GetLifecyclePoliciesHttp,
-      ),
+      Layer.mergeAll(Lambda.EventSource, DLM.GetLifecyclePolicyHttp, DLM.GetLifecyclePoliciesHttp),
     ),
   ),
 );

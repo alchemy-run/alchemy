@@ -1,21 +1,21 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import type { Branch } from "@/Neon/Branch";
-import { providers } from "@/Neon/Providers";
-import { runSql } from "@/Neon/Migrations";
-import * as Redacted from "effect/Redacted";
-import * as Test from "@/Test/Alchemy";
 import { getConnectionURI, getProjectBranch } from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import type { Branch } from "@/Neon/Branch";
+import { runSql } from "@/Neon/Migrations";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 import { ConnectBranch } from "./fixtures/connect-database.ts";
-import ConnectLambda from "./fixtures/connect-lambda.ts";
 import ConnectFunction from "./fixtures/connect-function.ts";
-import ConnectWorker from "./fixtures/connect-worker.ts";
+import ConnectLambda from "./fixtures/connect-lambda.ts";
 import ConnectProjectFunction from "./fixtures/connect-project-function.ts";
+import ConnectWorker from "./fixtures/connect-worker.ts";
 
 const { test: workerTest } = Test.make({
   providers: Layer.mergeAll(providers(), Cloudflare.providers()),

@@ -1,5 +1,3 @@
-import * as ACM from "@/AWS/ACM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,10 +7,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
-import {
-  IMPORT_CERTIFICATE_PEM,
-  IMPORT_PRIVATE_KEY_PEM,
-} from "./fixtures/import-cert.ts";
+import * as ACM from "@/AWS/ACM";
+import * as Lambda from "@/AWS/Lambda";
+import { IMPORT_CERTIFICATE_PEM, IMPORT_PRIVATE_KEY_PEM } from "./fixtures/import-cert.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -34,15 +31,11 @@ const tagOr = <A, E extends { _tag: string }, R>(
 ) =>
   Effect.result(effect).pipe(
     Effect.map((result) =>
-      Result.isSuccess(result)
-        ? onSuccess(result.success)
-        : { errorTag: result.failure._tag },
+      Result.isSuccess(result) ? onSuccess(result.success) : { errorTag: result.failure._tag },
     ),
   );
 
-export class AcmTestFunction extends Lambda.Function<Lambda.Function>()(
-  "AcmTestFunction",
-) {}
+export class AcmTestFunction extends Lambda.Function<Lambda.Function>()("AcmTestFunction") {}
 
 export default AcmTestFunction.make(
   {
@@ -114,9 +107,7 @@ export default AcmTestFunction.make(
             CertificateStatuses: ["PENDING_VALIDATION", "ISSUED"],
           });
           return yield* HttpServerResponse.json({
-            arns: (result.CertificateSummaryList ?? []).map(
-              (summary) => summary.CertificateArn,
-            ),
+            arns: (result.CertificateSummaryList ?? []).map((summary) => summary.CertificateArn),
           });
         }
 
@@ -173,10 +164,9 @@ export default AcmTestFunction.make(
 
         if (request.method === "POST" && pathname === "/revoke") {
           return yield* HttpServerResponse.json(
-            yield* tagOr(
-              revokeCertificate({ RevocationReason: "UNSPECIFIED" }),
-              () => ({ ok: true }),
-            ),
+            yield* tagOr(revokeCertificate({ RevocationReason: "UNSPECIFIED" }), () => ({
+              ok: true,
+            })),
           );
         }
 

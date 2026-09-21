@@ -1,6 +1,6 @@
-import type { ReadNamespaceClient } from "@/Cloudflare/KV/ReadNamespace.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { ReadNamespaceClient } from "@/Cloudflare/KV/ReadNamespace.ts";
 
 /**
  * Shared read-side routes exercised by both the binding and HTTP fixtures so
@@ -28,9 +28,7 @@ export const readRoutes = (kv: ReadNamespaceClient, url: URL) =>
       return yield* HttpServerResponse.json({ value });
     }
     if (url.pathname === "/get-bulk") {
-      const keys = (url.searchParams.get("keys") ?? "")
-        .split(",")
-        .filter((k) => k.length > 0);
+      const keys = (url.searchParams.get("keys") ?? "").split(",").filter((k) => k.length > 0);
       const values = yield* kv.get(keys, "text").pipe(Effect.orDie);
       return yield* HttpServerResponse.json({
         values: Object.fromEntries(values),
@@ -46,9 +44,7 @@ export const readRoutes = (kv: ReadNamespaceClient, url: URL) =>
     }
     if (url.pathname === "/list") {
       const prefix = url.searchParams.get("prefix") ?? undefined;
-      const result = yield* kv
-        .list(prefix ? { prefix } : undefined)
-        .pipe(Effect.orDie);
+      const result = yield* kv.list(prefix ? { prefix } : undefined).pipe(Effect.orDie);
       return yield* HttpServerResponse.json({
         keys: result.keys.map((k) => k.name),
       });

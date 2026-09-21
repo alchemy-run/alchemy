@@ -1,12 +1,12 @@
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { CisScanConfiguration } from "@/AWS/Inspector2/CisScanConfiguration.ts";
 import { Filter } from "@/AWS/Inspector2/Filter.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,9 +27,7 @@ test.provider(
       yield* Effect.forEach(orphans, (f) =>
         inspector2
           .deleteFilter({ arn: f.arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       );
 
       const deploy = (props: { action: "NONE" | "SUPPRESS"; reason: string }) =>
@@ -62,8 +60,7 @@ test.provider(
       expect(created.action).toBe("SUPPRESS");
 
       // Out-of-band verification via distilled.
-      const live = (yield* inspector2.listFilters({ arns: [created.arn] }))
-        .filters[0];
+      const live = (yield* inspector2.listFilters({ arns: [created.arn] })).filters[0];
       expect(live?.action).toBe("SUPPRESS");
       expect(live?.tags?.["env"]).toBe("test");
       expect(live?.tags?.["alchemy::id"]).toBe("SuppressInfo");
@@ -107,9 +104,7 @@ test.provider("CIS scan APIs reject a non-enabled account (typed)", () =>
       );
       return;
     }
-    const result = yield* Effect.result(
-      inspector2.listCisScanConfigurations({}),
-    );
+    const result = yield* Effect.result(inspector2.listCisScanConfigurations({}));
     expect(Result.isFailure(result)).toBe(true);
     if (Result.isFailure(result)) {
       expect(result.failure._tag).toBe("AccessDeniedException");
@@ -125,10 +120,7 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deploy = (props: {
-        securityLevel: "LEVEL_1" | "LEVEL_2";
-        timeOfDay: string;
-      }) =>
+      const deploy = (props: { securityLevel: "LEVEL_1" | "LEVEL_2"; timeOfDay: string }) =>
         stack.deploy(
           Effect.gen(function* () {
             const cis = yield* CisScanConfiguration("NightlyCis", {
@@ -177,11 +169,7 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(CisScanConfiguration);
       const all = yield* provider.list();
-      expect(
-        all.some(
-          (c) => c.scanConfigurationArn === created.scanConfigurationArn,
-        ),
-      ).toBe(true);
+      expect(all.some((c) => c.scanConfigurationArn === created.scanConfigurationArn)).toBe(true);
 
       // Update in place — the ARN is stable.
       const updated = yield* deploy({

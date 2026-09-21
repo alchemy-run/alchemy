@@ -1,7 +1,4 @@
-import {
-  withRequestOptions,
-  type StripeOpError,
-} from "@distilled.cloud/stripe";
+import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
 import {
   DeleteAccountPerson,
   GetAccounts,
@@ -28,8 +25,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -193,25 +190,15 @@ const fromRelationship = (
 ): AccountPersonRelationship | undefined => {
   if (relationship === undefined) return undefined;
   const value: AccountPersonRelationship = {
-    ...(relationship.authorizer != null
-      ? { authorizer: relationship.authorizer }
-      : {}),
-    ...(relationship.director != null
-      ? { director: relationship.director }
-      : {}),
-    ...(relationship.executive != null
-      ? { executive: relationship.executive }
-      : {}),
-    ...(relationship.legal_guardian != null
-      ? { legalGuardian: relationship.legal_guardian }
-      : {}),
+    ...(relationship.authorizer != null ? { authorizer: relationship.authorizer } : {}),
+    ...(relationship.director != null ? { director: relationship.director } : {}),
+    ...(relationship.executive != null ? { executive: relationship.executive } : {}),
+    ...(relationship.legal_guardian != null ? { legalGuardian: relationship.legal_guardian } : {}),
     ...(relationship.owner != null ? { owner: relationship.owner } : {}),
     ...(relationship.percent_ownership != null
       ? { percentOwnership: relationship.percent_ownership }
       : {}),
-    ...(relationship.representative != null
-      ? { representative: relationship.representative }
-      : {}),
+    ...(relationship.representative != null ? { representative: relationship.representative } : {}),
     ...(relationship.title != null ? { title: relationship.title } : {}),
   };
   return Object.keys(value).length === 0 ? undefined : value;
@@ -220,15 +207,9 @@ const fromRelationship = (
 const toRelationshipWire = (
   relationship: AccountPersonRelationship,
 ): CreateAccountPersonRequestRelationship => ({
-  ...(relationship.authorizer !== undefined
-    ? { authorizer: relationship.authorizer }
-    : {}),
-  ...(relationship.director !== undefined
-    ? { director: relationship.director }
-    : {}),
-  ...(relationship.executive !== undefined
-    ? { executive: relationship.executive }
-    : {}),
+  ...(relationship.authorizer !== undefined ? { authorizer: relationship.authorizer } : {}),
+  ...(relationship.director !== undefined ? { director: relationship.director } : {}),
+  ...(relationship.executive !== undefined ? { executive: relationship.executive } : {}),
   ...(relationship.legalGuardian !== undefined
     ? { legal_guardian: relationship.legalGuardian }
     : {}),
@@ -242,10 +223,7 @@ const toRelationshipWire = (
   ...(relationship.title !== undefined ? { title: relationship.title } : {}),
 });
 
-const sameFlag = (
-  desired: boolean | undefined,
-  observed: boolean | null | undefined,
-): boolean => {
+const sameFlag = (desired: boolean | undefined, observed: boolean | null | undefined): boolean => {
   if (desired === undefined) return true;
   return (observed ?? false) === desired;
 };
@@ -267,19 +245,13 @@ const relationshipChanged = (
     return true;
   }
   if (!sameFlag(desired.representative, observed?.representative)) return true;
-  if (
-    desired.title !== undefined &&
-    (observed?.title ?? "") !== desired.title
-  ) {
+  if (desired.title !== undefined && (observed?.title ?? "") !== desired.title) {
     return true;
   }
   return false;
 };
 
-const toAttrs = (
-  account: string,
-  person: StripePerson,
-): AccountPersonAttributes => ({
+const toAttrs = (account: string, person: StripePerson): AccountPersonAttributes => ({
   id: person.id,
   account: person.account ?? account,
   firstName: person.first_name ?? undefined,
@@ -294,9 +266,7 @@ const toAttrs = (
 const isMissing = isMissingStripeResource;
 
 const isSkippedListError = (error: StripeOpError): boolean =>
-  isMissing(error) ||
-  error._tag === "InvalidRequestError" ||
-  error._tag === "Forbidden";
+  isMissing(error) || error._tag === "InvalidRequestError" || error._tag === "Forbidden";
 
 const getById = (account: string, person: string) =>
   GetAccountPerson({ account, person }).pipe(
@@ -311,9 +281,7 @@ const listPersons = Effect.fn(function* (account: string) {
       account,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(
-      Effect.catchIf(isSkippedListError, () => Effect.succeed(undefined)),
-    );
+    }).pipe(Effect.catchIf(isSkippedListError, () => Effect.succeed(undefined)));
     if (response === undefined) {
       break;
     }
@@ -349,10 +317,7 @@ const listAllAccounts = Effect.fn(function* () {
   return accounts;
 });
 
-const findByAlchemyIdOnAccount = Effect.fn(function* (
-  account: string,
-  id: string,
-) {
+const findByAlchemyIdOnAccount = Effect.fn(function* (account: string, id: string) {
   const people = yield* listPersons(account);
   const matches: StripePerson[] = [];
   for (const person of people) {
@@ -371,27 +336,18 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
     (account) => findByAlchemyIdOnAccount(account.id, id),
     { concurrency: LIST_CONCURRENCY },
   );
-  const found = matches.filter(
-    (person): person is StripePerson => person !== undefined,
-  );
+  const found = matches.filter((person): person is StripePerson => person !== undefined);
   found.sort((a, b) => b.created - a.created);
   return found[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  account?: string;
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { account?: string; id?: string; logicalId: string }) {
   if (input.account !== undefined && input.id !== undefined) {
     const byId = yield* getById(input.account, input.id);
     if (byId !== undefined) return byId;
   }
   if (input.account !== undefined) {
-    const onAccount = yield* findByAlchemyIdOnAccount(
-      input.account,
-      input.logicalId,
-    );
+    const onAccount = yield* findByAlchemyIdOnAccount(input.account, input.logicalId);
     if (onAccount !== undefined) return onAccount;
   }
   return yield* findByAlchemyId(input.logicalId);
@@ -430,8 +386,7 @@ export const AccountPersonProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const account =
-        output?.account ??
-        (typeof olds?.account === "string" ? olds.account : undefined);
+        output?.account ?? (typeof olds?.account === "string" ? olds.account : undefined);
       const existing = yield* observe({
         account,
         id: output?.id,
@@ -441,9 +396,7 @@ export const AccountPersonProvider = () =>
       const resolvedAccount = existing.account ?? account;
       if (resolvedAccount === undefined) return undefined;
       const attrs = toAttrs(resolvedAccount, existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -455,9 +408,7 @@ export const AccountPersonProvider = () =>
             Effect.map((people) =>
               people
                 .filter(
-                  (person) =>
-                    tagRecord(person.metadata)[alchemyMetadataKeys.stack] !==
-                    undefined,
+                  (person) => tagRecord(person.metadata)[alchemyMetadataKeys.stack] !== undefined,
                 )
                 .map((person) => toAttrs(account.id, person)),
             ),
@@ -479,19 +430,14 @@ export const AccountPersonProvider = () =>
         id: output?.id,
         logicalId: id,
       });
-      if (
-        current !== undefined &&
-        shouldReplace(news, toAttrs(news.account, current))
-      ) {
+      if (current !== undefined && shouldReplace(news, toAttrs(news.account, current))) {
         current = undefined;
       }
 
       if (current === undefined) {
         current = yield* CreateAccountPerson({
           account: news.account,
-          ...(desiredFirstName.length > 0
-            ? { first_name: desiredFirstName }
-            : {}),
+          ...(desiredFirstName.length > 0 ? { first_name: desiredFirstName } : {}),
           ...(desiredLastName.length > 0 ? { last_name: desiredLastName } : {}),
           ...(desiredEmail.length > 0 ? { email: desiredEmail } : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
@@ -513,10 +459,7 @@ export const AccountPersonProvider = () =>
       const lastNameChanged = (current.last_name ?? "") !== desiredLastName;
       const emailChanged = (current.email ?? "") !== desiredEmail;
       const phoneChanged = (current.phone ?? "") !== desiredPhone;
-      const relChanged = relationshipChanged(
-        news.relationship,
-        current.relationship,
-      );
+      const relChanged = relationshipChanged(news.relationship, current.relationship);
 
       if (
         !firstNameChanged &&
@@ -542,9 +485,7 @@ export const AccountPersonProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

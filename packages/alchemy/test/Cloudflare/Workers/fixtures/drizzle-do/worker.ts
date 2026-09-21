@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { DrizzleClockObject, DrizzleUsersObject } from "./object.ts";
 
 export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<DrizzleDurableObjectWorker>()(
@@ -18,9 +18,7 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
-        const object = objects.getByName(
-          url.searchParams.get("do") ?? "default",
-        );
+        const object = objects.getByName(url.searchParams.get("do") ?? "default");
 
         if (url.pathname === "/sqlite-clock") {
           return yield* Effect.gen(function* () {
@@ -33,26 +31,18 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
             return yield* HttpServerResponse.json({ clock: "ready" });
           }).pipe(
             Effect.catchCause((cause) =>
-              HttpServerResponse.json(
-                { error: Cause.pretty(cause) },
-                { status: 500 },
-              ),
+              HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
             ),
           );
         }
 
         if (url.pathname === "/sqlite-gate") {
-          return yield* object
-            .sqliteGate(url.searchParams.get("view") === "true")
-            .pipe(
-              Effect.flatMap((result) => HttpServerResponse.json(result)),
-              Effect.catchCause((cause) =>
-                HttpServerResponse.json(
-                  { error: Cause.pretty(cause) },
-                  { status: 500 },
-                ),
-              ),
-            );
+          return yield* object.sqliteGate(url.searchParams.get("view") === "true").pipe(
+            Effect.flatMap((result) => HttpServerResponse.json(result)),
+            Effect.catchCause((cause) =>
+              HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
+            ),
+          );
         }
 
         if (url.pathname === "/sqlite-rollback") {

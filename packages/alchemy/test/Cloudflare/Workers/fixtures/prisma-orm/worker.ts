@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as PrismaPostgres from "@/Prisma/ORM/Postgres.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as PrismaPostgres from "@/Prisma/ORM/Postgres.ts";
 import { contract } from "./contract.ts";
 import { Hyperdrive } from "./db.ts";
 
@@ -35,9 +35,7 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
 
         if (request.url.startsWith("/widgets/create/")) {
           const name = request.url.split("/widgets/create/")[1] ?? "unnamed";
-          const widget = yield* db.orm.public.Widget.create({ name }).pipe(
-            Effect.orDie,
-          );
+          const widget = yield* db.orm.public.Widget.create({ name }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             id: widget.id,
             name: widget.name,
@@ -46,9 +44,7 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
 
         if (request.url.startsWith("/widgets/get/")) {
           const id = Number(request.url.split("/widgets/get/")[1] ?? "0");
-          const widget = yield* db.orm.public.Widget.where({ id })
-            .first()
-            .pipe(Effect.orDie);
+          const widget = yield* db.orm.public.Widget.where({ id }).first().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             found: widget !== null,
             name: widget?.name ?? null,
@@ -109,15 +105,11 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
             )
             .pipe(
               Effect.as("committed" as const),
-              Effect.catchTag("Prisma.RollbackError", () =>
-                Effect.succeed("rolled-back" as const),
-              ),
+              Effect.catchTag("Prisma.RollbackError", () => Effect.succeed("rolled-back" as const)),
               Effect.orDie,
             );
           // Prove the write did not survive the rollback.
-          const after = yield* db.orm.public.Widget.where({ name })
-            .first()
-            .pipe(Effect.orDie);
+          const after = yield* db.orm.public.Widget.where({ name }).first().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             outcome,
             visible: after !== null,

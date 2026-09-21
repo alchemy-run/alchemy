@@ -1,10 +1,10 @@
-import * as AppRegistry from "@/AWS/AppRegistry";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AppRegistry from "@/AWS/AppRegistry";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -36,10 +36,8 @@ export default AppRegistryTestFunction.make(
     // --- application-scoped bindings ---
     const getApplication = yield* AppRegistry.GetApplication(app);
     const getAssociatedResource = yield* AppRegistry.GetAssociatedResource(app);
-    const listAssociatedResources =
-      yield* AppRegistry.ListAssociatedResources(app);
-    const listAssociatedAttributeGroups =
-      yield* AppRegistry.ListAssociatedAttributeGroups(app);
+    const listAssociatedResources = yield* AppRegistry.ListAssociatedResources(app);
+    const listAssociatedAttributeGroups = yield* AppRegistry.ListAssociatedAttributeGroups(app);
     const listAttributeGroupsForApplication =
       yield* AppRegistry.ListAttributeGroupsForApplication(app);
 
@@ -91,10 +89,7 @@ export default AppRegistryTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/associated-attribute-groups"
-        ) {
+        if (request.method === "GET" && pathname === "/associated-attribute-groups") {
           const result = yield* listAssociatedAttributeGroups({
             maxResults: 20,
           });
@@ -104,17 +99,12 @@ export default AppRegistryTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/attribute-groups-details"
-        ) {
+        if (request.method === "GET" && pathname === "/attribute-groups-details") {
           const result = yield* listAttributeGroupsForApplication({
             maxResults: 20,
           });
           return yield* HttpServerResponse.json({
-            names: (result.attributeGroupsDetails ?? []).map(
-              (detail) => detail.name ?? null,
-            ),
+            names: (result.attributeGroupsDetails ?? []).map((detail) => detail.name ?? null),
           });
         }
 
@@ -125,19 +115,14 @@ export default AppRegistryTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/associated-resource-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/associated-resource-not-found") {
           // Exercises `application` injection + the typed not-found path.
           const result = yield* getAssociatedResource({
             resourceType: "CFN_STACK",
             resource: NONEXISTENT_STACK,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ found: false }),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ found: false })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -153,9 +138,7 @@ export default AppRegistryTestFunction.make(
               maxResults: 25,
               nextToken,
             });
-            names.push(
-              ...(result.applications ?? []).map((a) => a.name ?? null),
-            );
+            names.push(...(result.applications ?? []).map((a) => a.name ?? null));
             nextToken = result.nextToken;
             if (!nextToken) break;
           }
@@ -172,9 +155,7 @@ export default AppRegistryTestFunction.make(
               maxResults: 25,
               nextToken,
             });
-            names.push(
-              ...(result.attributeGroups ?? []).map((g) => g.name ?? null),
-            );
+            names.push(...(result.attributeGroups ?? []).map((g) => g.name ?? null));
             nextToken = result.nextToken;
             if (!nextToken) break;
           }

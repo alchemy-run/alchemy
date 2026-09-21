@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { OriginAccessControl } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { OriginAccessControl } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,11 +28,9 @@ describe("AWS.CloudFront.OriginAccessControl", () => {
         const provider = yield* Provider.findProvider(OriginAccessControl);
         const all = yield* provider.list();
 
-        expect(
-          all.some(
-            (o) => o.originAccessControlId === deployed.originAccessControlId,
-          ),
-        ).toBe(true);
+        expect(all.some((o) => o.originAccessControlId === deployed.originAccessControlId)).toBe(
+          true,
+        );
 
         yield* stack.destroy();
         yield* assertOriginAccessControlDeleted(deployed.originAccessControlId);
@@ -43,17 +41,11 @@ describe("AWS.CloudFront.OriginAccessControl", () => {
 
 const assertOriginAccessControlDeleted = (id: string) =>
   cloudfront.getOriginAccessControlConfig({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("OriginAccessControlStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("OriginAccessControlStillExists"))),
     Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void),
     Effect.retry({
       while: (error) =>
-        error instanceof Error &&
-        error.message === "OriginAccessControlStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+        error instanceof Error && error.message === "OriginAccessControlStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Route53Domains from "@/AWS/Route53Domains";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Route53Domains from "@/AWS/Route53Domains";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -27,9 +27,7 @@ const errorRoute = <A, E extends { _tag: string }>(
       return yield* HttpServerResponse.json({
         ok: false,
         errorTag: result.failure._tag,
-        errorMessage: String(
-          (result.failure as { message?: unknown }).message ?? "",
-        ),
+        errorMessage: String((result.failure as { message?: unknown }).message ?? ""),
       });
     }
     return yield* HttpServerResponse.json({
@@ -47,10 +45,8 @@ export default Route53DomainsTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const checkDomainAvailability =
-      yield* Route53Domains.CheckDomainAvailability();
-    const checkDomainTransferability =
-      yield* Route53Domains.CheckDomainTransferability();
+    const checkDomainAvailability = yield* Route53Domains.CheckDomainAvailability();
+    const checkDomainTransferability = yield* Route53Domains.CheckDomainTransferability();
     const getDomainDetail = yield* Route53Domains.GetDomainDetail();
     const getDomainSuggestions = yield* Route53Domains.GetDomainSuggestions();
     const getOperationDetail = yield* Route53Domains.GetOperationDetail();
@@ -59,10 +55,8 @@ export default Route53DomainsTestFunction.make(
     const listPrices = yield* Route53Domains.ListPrices();
     const registerDomain = yield* Route53Domains.RegisterDomain();
     const renewDomain = yield* Route53Domains.RenewDomain();
-    const retrieveDomainAuthCode =
-      yield* Route53Domains.RetrieveDomainAuthCode();
-    const updateDomainNameservers =
-      yield* Route53Domains.UpdateDomainNameservers();
+    const retrieveDomainAuthCode = yield* Route53Domains.RetrieveDomainAuthCode();
+    const updateDomainNameservers = yield* Route53Domains.UpdateDomainNameservers();
 
     return {
       fetch: Effect.gen(function* () {
@@ -135,10 +129,9 @@ export default Route53DomainsTestFunction.make(
           // example.com is never registered in the test account — the call
           // must reach the API (proving the IAM grant and us-east-1 pin)
           // and come back as a typed domain-level error, not AccessDenied.
-          return yield* errorRoute(
-            getDomainDetail({ DomainName: "example.com" }),
-            (detail) => ({ domainName: detail.DomainName }),
-          );
+          return yield* errorRoute(getDomainDetail({ DomainName: "example.com" }), (detail) => ({
+            domainName: detail.DomainName,
+          }));
         }
 
         if (request.method === "GET" && pathname === "/operation-detail") {
@@ -157,10 +150,9 @@ export default Route53DomainsTestFunction.make(
           // example.com is not in the account — typed domain-level error.
           // On success the AuthCode would be Redacted; this route never
           // returns it.
-          return yield* errorRoute(
-            retrieveDomainAuthCode({ DomainName: "example.com" }),
-            () => ({ hasAuthCode: true }),
-          );
+          return yield* errorRoute(retrieveDomainAuthCode({ DomainName: "example.com" }), () => ({
+            hasAuthCode: true,
+          }));
         }
 
         if (request.method === "GET" && pathname === "/nameservers") {

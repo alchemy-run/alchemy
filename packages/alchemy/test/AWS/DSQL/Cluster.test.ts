@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,9 +20,7 @@ const vpcOnlyPolicy = (exceptions?: string[]) =>
         Resource: "*",
         Condition: {
           Null: { "aws:SourceVpc": "true" },
-          ...(exceptions
-            ? { StringNotEquals: { "aws:PrincipalArn": exceptions } }
-            : {}),
+          ...(exceptions ? { StringNotEquals: { "aws:PrincipalArn": exceptions } } : {}),
         },
       },
     ],
@@ -31,11 +29,7 @@ const vpcOnlyPolicy = (exceptions?: string[]) =>
 const getCluster = (identifier: string) =>
   dsql
     .getCluster({ identifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, update deletion protection, delete DSQL cluster",
@@ -112,9 +106,7 @@ test.provider(
           });
           const policy = yield* ClusterPolicy("AppDbPolicy", {
             clusterId: cluster.clusterId,
-            policy: vpcOnlyPolicy([
-              "arn:aws:iam::123456789012:role/ExceptionRole",
-            ]),
+            policy: vpcOnlyPolicy(["arn:aws:iam::123456789012:role/ExceptionRole"]),
           });
           return { policyVersion: policy.policyVersion };
         }),
@@ -129,11 +121,9 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* getCluster(created.clusterId);
       // A deleted DSQL cluster is either gone or reports DELETING/DELETED.
-      expect(
-        gone === undefined ||
-          gone.status === "DELETING" ||
-          gone.status === "DELETED",
-      ).toBe(true);
+      expect(gone === undefined || gone.status === "DELETING" || gone.status === "DELETED").toBe(
+        true,
+      );
     }),
   { timeout: 300_000 },
 );

@@ -56,7 +56,6 @@ export interface UpdateTableMetadataLocation extends Binding.Service<
     >
   >
 > {}
-export const UpdateTableMetadataLocation =
-  Binding.Service<UpdateTableMetadataLocation>(
-    "AWS.S3Tables.UpdateTableMetadataLocation",
-  );
+export const UpdateTableMetadataLocation = Binding.Service<UpdateTableMetadataLocation>(
+  "AWS.S3Tables.UpdateTableMetadataLocation",
+);

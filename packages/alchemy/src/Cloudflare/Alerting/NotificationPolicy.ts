@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -169,9 +168,7 @@ export const NotificationPolicy = Resource<NotificationPolicy>(TypeId);
 /**
  * Returns true if the given value is a NotificationPolicy resource.
  */
-export const isNotificationPolicy = (
-  value: unknown,
-): value is NotificationPolicy =>
+export const isNotificationPolicy = (value: unknown): value is NotificationPolicy =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationPolicyProvider = () =>
@@ -253,9 +250,7 @@ export const NotificationPolicyProvider = () =>
         });
         if (!created.id) {
           return yield* Effect.fail(
-            new Error(
-              "Cloudflare did not return an id for the created notification policy",
-            ),
+            new Error("Cloudflare did not return an id for the created notification policy"),
           );
         }
         const fresh = yield* observePolicy(accountId, created.id);
@@ -301,8 +296,7 @@ interface ObservedPolicy {
   readonly modified?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowPolicy = (raw: {
   id?: string | null;
@@ -365,10 +359,7 @@ const createPolicyName = (id: string, name: string | undefined) =>
 
 type PolicyBody = Omit<alerting.CreatePolicyRequest, "accountId">;
 
-const buildPolicyBody = (
-  name: string,
-  news: NotificationPolicyProps,
-): PolicyBody => ({
+const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBody => ({
   name,
   alertType: news.alertType,
   enabled: news.enabled ?? true,
@@ -386,10 +377,7 @@ const buildPolicyBody = (
  * dropped and object keys sorted, since Cloudflare echoes optional fields
  * as `null`.
  */
-const policyEqualsObserved = (
-  desired: PolicyBody,
-  observed: ObservedPolicy,
-): boolean =>
+const policyEqualsObserved = (desired: PolicyBody, observed: ObservedPolicy): boolean =>
   desired.name === (observed.name ?? "") &&
   desired.enabled === (observed.enabled ?? true) &&
   (desired.description ?? "") === (observed.description ?? "") &&

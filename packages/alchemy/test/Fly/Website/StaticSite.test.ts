@@ -1,12 +1,12 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import { sameStopConfig } from "@/Fly/replicas.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Fly from "@/Fly";
+import { sameStopConfig } from "@/Fly/replicas.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {
   assertAppGone,
@@ -20,10 +20,7 @@ import {
 } from "./fixtures/deployment.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "R08/R02 StaticSite: build v1 to v2 under un-retried traffic, forwarded policies, destroy, gone",
@@ -33,10 +30,7 @@ test.provider(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const cwd = yield* cloneFixture(
-        path.resolve(
-          import.meta.dirname,
-          "../../Cloudflare/Website/staticsite-fixture",
-        ),
+        path.resolve(import.meta.dirname, "../../Cloudflare/Website/staticsite-fixture"),
         {
           prefix: "alchemy-staticsite-fly-",
           tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
@@ -80,32 +74,21 @@ test.provider(
           }),
         ).toBe(true);
         expect(observed.config?.checks?.website?.path).toBe("/index.html");
-        expect(observed.config?.services?.[0]?.checks?.[0]?.path).toBe(
-          "/index.html",
-        );
-        expect(
-          observed.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS,
-        ).toBeUndefined();
+        expect(observed.config?.services?.[0]?.checks?.[0]?.path).toBe("/index.html");
+        expect(observed.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS).toBeUndefined();
         const traffic = yield* startTraffic(`${url}/`);
-        yield* traffic.waitFor((body) =>
-          body.includes("StaticSite fixture v1"),
-        );
+        yield* traffic.waitFor((body) => body.includes("StaticSite fixture v1"));
         const index = path.join(cwd, "src/index.html");
         yield* fs.writeFileString(
           index,
-          (yield* fs.readFileString(index)).replaceAll(
-            "fixture v1",
-            "fixture v2",
-          ),
+          (yield* fs.readFileString(index)).replaceAll("fixture v1", "fixture v2"),
         );
         const second = yield* deploy();
         const newId = second.site.service!.machineId;
-        expect(
-          yield* fs.readFileString(path.join(cwd, "dist/index.html")),
-        ).toContain("StaticSite fixture v2");
-        expect(second.site.service!.code.hash).not.toBe(
-          first.site.service!.code.hash,
+        expect(yield* fs.readFileString(path.join(cwd, "dist/index.html"))).toContain(
+          "StaticSite fixture v2",
         );
+        expect(second.site.service!.code.hash).not.toBe(first.site.service!.code.hash);
         const updated = yield* machines.getMachine({
           app_name: appName,
           machine_id: newId,
@@ -115,12 +98,9 @@ test.provider(
         expect(newId).not.toBe(oldId);
         const secondBody = yield* getText(`${url}/`);
         expect(secondBody).toContain("StaticSite fixture v2");
-        yield* traffic.waitFor((body) =>
-          body.includes("StaticSite fixture v2"),
-        );
+        yield* traffic.waitFor((body) => body.includes("StaticSite fixture v2"));
         const samples = yield* traffic.finish;
-        for (const body of samples)
-          expect([firstBody, secondBody]).toContain(body);
+        for (const body of samples) expect([firstBody, secondBody]).toContain(body);
         yield* assertMachineGone(appName, oldId);
         yield* assertOnlyMachine(appName, newId);
       }).pipe(

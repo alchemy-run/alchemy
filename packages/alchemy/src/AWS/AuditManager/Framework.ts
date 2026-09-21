@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
 
@@ -126,17 +121,10 @@ export interface Framework extends Resource<
  */
 export const Framework = Resource<Framework>("AWS.AuditManager.Framework");
 
-const createFrameworkName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 100 });
+const createFrameworkName = (id: string, props: { name?: string | undefined }) =>
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
-const toAttributes = (
-  framework: auditmanager.Framework,
-): Framework["Attributes"] => ({
+const toAttributes = (framework: auditmanager.Framework): Framework["Attributes"] => ({
   frameworkId: framework.id ?? "",
   arn: framework.arn ?? "",
   name: framework.name ?? "",
@@ -147,11 +135,7 @@ const toAttributes = (
 const readFrameworkById = Effect.fn(function* (frameworkId: string) {
   const response = yield* auditmanager
     .getAssessmentFramework({ frameworkId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.framework;
 });
 
@@ -178,9 +162,7 @@ const projectControlSets = (
 ) =>
   controlSets.map((set) => ({
     name: set.name ?? "",
-    controls: (set.controls ?? [])
-      .flatMap((control) => (control.id ? [control.id] : []))
-      .sort(),
+    controls: (set.controls ?? []).flatMap((control) => (control.id ? [control.id] : [])).sort(),
   }));
 
 export const FrameworkProvider = () =>
@@ -209,14 +191,10 @@ export const FrameworkProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const framework = output?.frameworkId
             ? yield* readFrameworkById(output.frameworkId)
-            : yield* findFrameworkByName(
-                yield* createFrameworkName(id, olds ?? {}),
-              );
+            : yield* findFrameworkByName(yield* createFrameworkName(id, olds ?? {}));
           if (!framework) return undefined;
           const attrs = toAttributes(framework);
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createFrameworkName(id, news);
@@ -241,9 +219,7 @@ export const FrameworkProvider = () =>
             framework = created.framework;
             if (!framework?.id) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateAssessmentFramework for '${name}' returned no framework`,
-                ),
+                new Error(`CreateAssessmentFramework for '${name}' returned no framework`),
               );
             }
             yield* session.note(`Created framework ${name} (${framework.id})`);
@@ -253,8 +229,7 @@ export const FrameworkProvider = () =>
           const drifted =
             (framework.name ?? "") !== name ||
             (framework.description ?? "") !== (news.description ?? "") ||
-            (unredact(framework.complianceType) ?? "") !==
-              (news.complianceType ?? "") ||
+            (unredact(framework.complianceType) ?? "") !== (news.complianceType ?? "") ||
             JSON.stringify(projectControlSets(framework.controlSets ?? [])) !==
               JSON.stringify(projectControlSets(news.controlSets));
           if (drifted) {
@@ -290,9 +265,7 @@ export const FrameworkProvider = () =>
           if (upsert.length > 0) {
             yield* auditmanager.tagResource({
               resourceArn: attrs.arn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
 
@@ -302,9 +275,7 @@ export const FrameworkProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* auditmanager
             .deleteAssessmentFramework({ frameworkId: output.frameworkId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

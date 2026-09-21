@@ -1,14 +1,14 @@
+import { createRequire } from "node:module";
 import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
-import { isPathWithin } from "../../Util/isPathWithin.ts";
 import type { PlatformError } from "effect/PlatformError";
-import { createRequire } from "node:module";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
 import { createComputeArchive } from "../ComputeArchive.ts";
@@ -50,9 +50,7 @@ export interface WebsiteArtifact extends Resource<
   }
 > {}
 
-export const WebsiteArtifact = Resource<WebsiteArtifact>(
-  "Prisma.WebsiteArtifact",
-);
+export const WebsiteArtifact = Resource<WebsiteArtifact>("Prisma.WebsiteArtifact");
 
 const MAX_ENTRIES = 50_000;
 const MAX_BYTES = 256 * 1024 * 1024;
@@ -67,9 +65,8 @@ const excluded = (relative: string) =>
     );
 const javascript = (file: string) => /\.[cm]?[jt]sx?$/.test(file);
 const nextExcluded = (relative: string) =>
-  /^\.next\/(?:cache|standalone|types|diagnostics|dev)(?:\/|$)/.test(
-    relative,
-  ) || /^\.next\/trace(?:-|$)/.test(relative);
+  /^\.next\/(?:cache|standalone|types|diagnostics|dev)(?:\/|$)/.test(relative) ||
+  /^\.next\/trace(?:-|$)/.test(relative);
 
 const fail = (message: string) => Effect.fail(new Error(message));
 
@@ -79,9 +76,7 @@ const fail = (message: string) => Effect.fail(new Error(message));
  * package scopes, pnpm links, and dynamically loaded framework chunks.
  * The caller owns the surrounding Scope and must archive before it closes.
  */
-export const stageWebsiteArtifact = Effect.fn(function* (
-  props: WebsiteArtifactProps,
-) {
+export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(initialCwd, props.root));
@@ -121,9 +116,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     boundary,
   ) {
     if (++visited > MAX_ENTRIES)
-      return yield* fail(
-        "Website artifact exceeds the 50,000-entry safety limit.",
-      );
+      return yield* fail("Website artifact exceeds the 50,000-entry safety limit.");
     const relative = path.relative(root, source).replaceAll("\\", "/");
     if (
       excluded(relative) ||
@@ -139,31 +132,21 @@ export const stageWebsiteArtifact = Effect.fn(function* (
       relativeToBoundary.startsWith(`..${path.sep}`) ||
       path.isAbsolute(relativeToBoundary)
     ) {
-      return yield* fail(
-        `Website output symlink escapes its selected directory: ${source}`,
-      );
+      return yield* fail(`Website output symlink escapes its selected directory: ${source}`);
     }
     const stat = yield* fs.stat(real);
     if (stat.type === "Directory") {
-      if (ancestors.has(real))
-        return yield* fail(`Cyclic website output symlink: ${source}`);
+      if (ancestors.has(real)) return yield* fail(`Cyclic website output symlink: ${source}`);
       const next = new Set([...ancestors, real]);
       for (const name of yield* fs.readDirectory(source)) {
         // Runtime dependencies are traced, never copied wholesale.
         if (name === "node_modules") continue;
-        yield* collect(
-          path.join(source, name),
-          next,
-          runtimePackage,
-          boundary ?? real,
-        );
+        yield* collect(path.join(source, name), next, runtimePackage, boundary ?? real);
       }
     } else if (stat.type === "File") {
       files.add(source);
-      if (!runtimePackage && props.static === undefined && javascript(source))
-        seeds.add(source);
-      if (props.layout === "next" && source.endsWith(".nft.json"))
-        manifests.push(source);
+      if (!runtimePackage && props.static === undefined && javascript(source)) seeds.add(source);
+      if (props.layout === "next" && source.endsWith(".nft.json")) manifests.push(source);
     } else {
       return yield* fail(`Unsupported website output file: ${source}`);
     }
@@ -173,10 +156,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     props.layout === "next" ? root : dist,
     props.layout === "next" ? "next" : "client",
   );
-  if (
-    props.layout === "next" &&
-    !(yield* fs.exists(path.join(root, ".next", "BUILD_ID")))
-  ) {
+  if (props.layout === "next" && !(yield* fs.exists(path.join(root, ".next", "BUILD_ID")))) {
     return yield* fail(
       "Next.js output is missing .next/BUILD_ID; run the production build before packaging.",
     );
@@ -192,9 +172,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
 
   if (props.layout === "next") {
     const nextPackage = yield* Effect.try(() =>
-      createRequire(path.join(root, "package.json")).resolve(
-        "next/package.json",
-      ),
+      createRequire(path.join(root, "package.json")).resolve("next/package.json"),
     );
     const nextRoot = path.dirname(nextPackage);
     // Next's custom server resolves internal modules through runtime alias
@@ -205,9 +183,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
 
   for (const manifest of manifests) {
     const text = yield* fs.readFileString(manifest);
-    const parsed = yield* Effect.try(
-      () => JSON.parse(text) as { files?: unknown },
-    );
+    const parsed = yield* Effect.try(() => JSON.parse(text) as { files?: unknown });
     if (
       !Array.isArray(parsed.files) ||
       !parsed.files.every((file): file is string => typeof file === "string")
@@ -216,13 +192,8 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     }
     for (const file of parsed.files) {
       const source = path.resolve(path.dirname(manifest), file);
-      if (
-        excluded(path.relative(root, source)) ||
-        isPathWithin(dotAlchemy, source, runtimeBase)
-      )
-        return yield* fail(
-          `A Next.js runtime dependency is a sensitive file: ${source}`,
-        );
+      if (excluded(path.relative(root, source)) || isPathWithin(dotAlchemy, source, runtimeBase))
+        return yield* fail(`A Next.js runtime dependency is a sensitive file: ${source}`);
       files.add(source);
       if (javascript(source)) seeds.add(source);
     }
@@ -254,45 +225,29 @@ export const stageWebsiteArtifact = Effect.fn(function* (
         }).pipe(Effect.timeout("90 seconds"));
   for (const file of trace.fileList) files.add(path.resolve(traceBase, file));
   if (files.size > MAX_ENTRIES)
-    return yield* fail(
-      "Website dependency trace exceeds the 50,000-entry safety limit.",
-    );
+    return yield* fail("Website dependency trace exceeds the 50,000-entry safety limit.");
 
   const links = new Map<string, string>();
   const selected = new Set<string>();
   for (const file of files) {
-    if (
-      excluded(path.relative(root, file)) ||
-      isPathWithin(dotAlchemy, file, runtimeBase)
-    )
-      return yield* fail(
-        `A website runtime dependency is a sensitive file: ${file}`,
-      );
-    const link = yield* fs
-      .readLink(file)
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    if (excluded(path.relative(root, file)) || isPathWithin(dotAlchemy, file, runtimeBase))
+      return yield* fail(`A website runtime dependency is a sensitive file: ${file}`);
+    const link = yield* fs.readLink(file).pipe(Effect.catch(() => Effect.succeed(undefined)));
     if (link !== undefined) {
       const target = yield* fs.realPath(file);
       links.set(file, target);
-      if ((yield* fs.stat(target)).type === "File")
-        selected.add(yield* fs.realPath(target));
+      if ((yield* fs.stat(target)).type === "File") selected.add(yield* fs.realPath(target));
     } else {
       const stat = yield* fs.stat(file);
       if (stat.type !== "File")
-        return yield* fail(
-          `A traced runtime dependency is not a file: ${file}`,
-        );
+        return yield* fail(`A traced runtime dependency is not a file: ${file}`);
       selected.add(file);
     }
   }
   let base = root;
   const within = (directory: string, file: string) => {
     const relative = path.relative(directory, file);
-    return (
-      relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative)
-    );
+    return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
   };
   for (const file of [...selected, ...links.keys(), ...links.values()]) {
     while (!within(base, file)) base = path.dirname(base);
@@ -300,8 +255,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const directory = yield* fs.makeTempDirectoryScoped({
     prefix: "alchemy-prisma-website-",
   });
-  const staged = (file: string) =>
-    path.join(directory, "files", path.relative(base, file));
+  const staged = (file: string) => path.join(directory, "files", path.relative(base, file));
   let bytes = 0;
   for (const file of [...selected].sort()) {
     const stat = yield* fs.stat(file);
@@ -336,12 +290,8 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     return { directory, entrypoint: "server.mjs", requiredFiles: [] };
   }
   if (entry === undefined) return yield* fail("Missing website server entry.");
-  const entryRelative = path
-    .relative(directory, staged(entry))
-    .replaceAll("\\", "/");
-  const cwdRelative = path
-    .relative(directory, staged(root))
-    .replaceAll("\\", "/");
+  const entryRelative = path.relative(directory, staged(entry)).replaceAll("\\", "/");
+  const cwdRelative = path.relative(directory, staged(root)).replaceAll("\\", "/");
   yield* fs.makeDirectory(staged(root), { recursive: true });
   yield* fs.writeFileString(
     path.join(directory, "server.mjs"),
@@ -382,16 +332,10 @@ export const WebsiteArtifactProvider = () =>
               });
               return yield* Effect.gen(function* () {
                 yield* fs.makeDirectory(directory, { recursive: true });
-                const artifactPath = path.join(
-                  directory,
-                  `${archive.sha256}.tar.gz`,
-                );
+                const artifactPath = path.join(directory, `${archive.sha256}.tar.gz`);
                 yield* fs.copyFile(archive.path, artifactPath);
                 for (const old of yield* fs.readDirectory(directory)) {
-                  if (
-                    old !== path.basename(artifactPath) &&
-                    /^[a-f0-9]{64}\.tar\.gz$/.test(old)
-                  ) {
+                  if (old !== path.basename(artifactPath) && /^[a-f0-9]{64}\.tar\.gz$/.test(old)) {
                     yield* fs.remove(path.join(directory, old), {
                       force: true,
                     });

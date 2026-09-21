@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { KxDatabase, KxEnvironment } from "@/AWS/FinSpace";
-import { Key } from "@/AWS/KMS";
-import * as Test from "@/Test/Alchemy";
 import * as finspace from "@distilled.cloud/aws/finspace";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { KxDatabase, KxEnvironment } from "@/AWS/FinSpace";
+import { Key } from "@/AWS/KMS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -68,18 +68,16 @@ test.provider(
     }),
 );
 
-test.provider(
-  "getKxVolume on a nonexistent environment fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        finspace.getKxVolume({
-          environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz",
-          volumeName: "novolume",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getKxVolume on a nonexistent environment fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      finspace.getKxVolume({
+        environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz",
+        volumeName: "novolume",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Deletion is verified as INITIATED (irreversible) or fully gone.
@@ -87,9 +85,7 @@ const assertKxEnvironmentDeleting = (environmentId: string) =>
   Effect.gen(function* () {
     const status = yield* finspace.getKxEnvironment({ environmentId }).pipe(
       Effect.map((r) => r.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (
       status !== "gone" &&
@@ -98,17 +94,12 @@ const assertKxEnvironmentDeleting = (environmentId: string) =>
       status !== "DELETE_REQUESTED"
     ) {
       return yield* Effect.fail(
-        new Error(
-          `kdb environment '${environmentId}' still exists (${status})`,
-        ),
+        new Error(`kdb environment '${environmentId}' still exists (${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 

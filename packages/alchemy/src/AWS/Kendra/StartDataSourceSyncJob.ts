@@ -29,10 +29,7 @@ export interface StartDataSourceSyncJob extends Binding.Service<
   (
     dataSource: DataSource,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kendra.StartDataSourceSyncJobResponse,
-      kendra.StartDataSourceSyncJobError
-    >
+    () => Effect.Effect<kendra.StartDataSourceSyncJobResponse, kendra.StartDataSourceSyncJobError>
   >
 > {}
 export const StartDataSourceSyncJob = Binding.Service<StartDataSourceSyncJob>(

@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * A sibling resource whose output is threaded into the container's `env`,
@@ -53,9 +53,7 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
         // The proxy pattern from #1334: forward the incoming request to the

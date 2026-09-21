@@ -111,27 +111,17 @@ export interface JobTemplate extends Resource<
  *
  * @resource
  */
-export const JobTemplate = Resource<JobTemplate>(
-  "AWS.MediaConvert.JobTemplate",
-);
+export const JobTemplate = Resource<JobTemplate>("AWS.MediaConvert.JobTemplate");
 
 export const JobTemplateProvider = () =>
   Provider.effect(
     JobTemplate,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: JobTemplateProps,
-      ) {
-        return (
-          props.jobTemplateName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: JobTemplateProps) {
+        return props.jobTemplateName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const toAttrs = (
-        template: mediaconvert.JobTemplate & { Name: string },
-      ) => ({
+      const toAttrs = (template: mediaconvert.JobTemplate & { Name: string }) => ({
         jobTemplateName: template.Name,
         jobTemplateArn: template.Arn!,
         type: template.Type,
@@ -142,11 +132,7 @@ export const JobTemplateProvider = () =>
       const getJobTemplate = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getJobTemplate({ Name: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         return response?.JobTemplate;
       });
 
@@ -161,8 +147,7 @@ export const JobTemplateProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.jobTemplateName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.jobTemplateName ?? (yield* createName(id, olds ?? {}));
           const template = yield* getJobTemplate(name);
           if (template === undefined) return undefined;
           const attrs = toAttrs(template);
@@ -213,9 +198,7 @@ export const JobTemplateProvider = () =>
           yield* syncMcTags(template.Arn!, desiredTags);
 
           yield* session.note(name);
-          return toAttrs(
-            template as mediaconvert.JobTemplate & { Name: string },
-          );
+          return toAttrs(template as mediaconvert.JobTemplate & { Name: string });
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -227,9 +210,7 @@ export const JobTemplateProvider = () =>
         list: () =>
           mediaconvert.listJobTemplates.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.JobTemplates ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.JobTemplates ?? [])),
             Effect.map((templates) => templates.map(toAttrs)),
           ),
       };

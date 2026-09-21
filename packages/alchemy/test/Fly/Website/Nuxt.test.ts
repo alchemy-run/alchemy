@@ -1,34 +1,21 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/nuxt-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nuxt-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 const waitUntilGone = (appName: string) =>
   machines.getApp({ app_name: appName }).pipe(
@@ -58,13 +45,7 @@ test.provider(
           const site = yield* Fly.Website.Nuxt("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "server/**",
-                "public/**",
-                "package.json",
-                "nuxt.config.ts",
-              ],
+              include: ["app/**", "server/**", "public/**", "package.json", "nuxt.config.ts"],
             },
           });
           return { site };
@@ -81,22 +62,14 @@ test.provider(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "NUXT_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
-      yield* expectUrlContains(
-        `${url!}/prerendered`,
-        "NUXT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "extra route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "NUXT_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
+      yield* expectUrlContains(`${url!}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+        timeout: "30 seconds",
+        label: "extra route",
+      });
 
       const appName = deployed.site.app!.appName;
       yield* stack.destroy();

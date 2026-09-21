@@ -32,13 +32,9 @@ export interface GetContextKeysForCustomPolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: iam.GetContextKeysForCustomPolicyRequest,
-    ) => Effect.Effect<
-      iam.GetContextKeysForPolicyResponse,
-      iam.GetContextKeysForCustomPolicyError
-    >
+    ) => Effect.Effect<iam.GetContextKeysForPolicyResponse, iam.GetContextKeysForCustomPolicyError>
   >
 > {}
-export const GetContextKeysForCustomPolicy =
-  Binding.Service<GetContextKeysForCustomPolicy>(
-    "AWS.IAM.GetContextKeysForCustomPolicy",
-  );
+export const GetContextKeysForCustomPolicy = Binding.Service<GetContextKeysForCustomPolicy>(
+  "AWS.IAM.GetContextKeysForCustomPolicy",
+);

@@ -95,15 +95,10 @@ export const TopicRuleProvider = () =>
   Provider.effect(
     TopicRule,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: TopicRuleProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: TopicRuleProps) {
         return (
           props.ruleName ??
-          sanitizeRuleName(
-            yield* createPhysicalName({ id, delimiter: "_", maxLength: 128 }),
-          )
+          sanitizeRuleName(yield* createPhysicalName({ id, delimiter: "_", maxLength: 128 }))
         );
       });
 
@@ -137,18 +132,12 @@ export const TopicRuleProvider = () =>
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const ruleName =
-            output?.ruleName ?? (yield* createName(id, olds ?? {}));
+          const ruleName = output?.ruleName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(
-              Effect.catchTag("TopicRuleNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
           if (!found) return undefined;
-          const ruleArn =
-            found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
+          const ruleArn = found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
           const attrs = { ruleName, ruleArn };
           const tags = yield* readIotTags(ruleArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -169,11 +158,7 @@ export const TopicRuleProvider = () =>
           // OBSERVE
           const live = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(
-              Effect.catchTag("TopicRuleNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
 
           // ENSURE / SYNC — createTopicRule for a new rule, replaceTopicRule
           // (a full upsert of the payload) for an existing one.

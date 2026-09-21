@@ -40,10 +40,7 @@ import type { Providers } from "./Providers.ts";
 
 export type BranchSource = Project | { projectId: string };
 
-export type ParentBranchSource =
-  | Branch
-  | { branchId: string }
-  | { name: string };
+export type ParentBranchSource = Branch | { branchId: string } | { name: string };
 
 export type BranchEndpointConfig = {
   /** Endpoint access mode. A branch has exactly one read-write endpoint. */
@@ -249,9 +246,7 @@ export const BranchProvider = () =>
           ? maybeResolveProjectId(olds.project as BranchSource)
           : undefined);
       const newProjectId =
-        "project" in news
-          ? maybeResolveProjectId(news.project as BranchSource)
-          : undefined;
+        "project" in news ? maybeResolveProjectId(news.project as BranchSource) : undefined;
       if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
@@ -266,8 +261,7 @@ export const BranchProvider = () =>
       if (
         olds.parentLsn !== news.parentLsn ||
         olds.parentTimestamp !== news.parentTimestamp ||
-        (olds.initSource ?? "parent-data") !==
-          (news.initSource ?? "parent-data")
+        (olds.initSource ?? "parent-data") !== (news.initSource ?? "parent-data")
       ) {
         return replacement;
       }
@@ -289,8 +283,7 @@ export const BranchProvider = () =>
       } else if (output && olds.parentBranch && !news.parentBranch) {
         return replacement;
       }
-      const oldName =
-        output?.branchName ?? (yield* createBranchName(id, olds.name));
+      const oldName = output?.branchName ?? (yield* createBranchName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
@@ -319,9 +312,7 @@ export const BranchProvider = () =>
           project_id: output.projectId,
           branch_id: output.branchId,
         }).pipe(
-          Effect.flatMap(({ branch }) =>
-            hydrateBranch(output.projectId, branch, output),
-          ),
+          Effect.flatMap(({ branch }) => hydrateBranch(output.projectId, branch, output)),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       }
@@ -347,27 +338,17 @@ export const BranchProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const projectId = yield* resolveProjectId(news.project as BranchSource);
-      const newName =
-        news.name ??
-        output?.branchName ??
-        (yield* createBranchName(id, undefined));
+      const newName = news.name ?? output?.branchName ?? (yield* createBranchName(id, undefined));
       const endpoints = news.endpoints ?? [{ type: "read_write" as const }];
-      if (
-        endpoints.filter((endpoint) => endpoint.type === "read_write")
-          .length !== 1
-      ) {
+      if (endpoints.filter((endpoint) => endpoint.type === "read_write").length !== 1) {
         return yield* new BranchStateError({
-          reason:
-            "Branch requires exactly one read_write endpoint for its connection outputs",
+          reason: "Branch requires exactly one read_write endpoint for its connection outputs",
         });
       }
       // Approval of a cached branch never authorizes a different same-name ID.
       const authorize = (
         branch: ListProjectBranchesResponse["branches"][number],
-      ): Effect.Effect<
-        ListProjectBranchesResponse["branches"][number],
-        OwnedBySomeoneElse
-      > =>
+      ): Effect.Effect<ListProjectBranchesResponse["branches"][number], OwnedBySomeoneElse> =>
         projectId === output?.projectId && branch.id === output.branchId
           ? Effect.succeed(branch)
           : Effect.fail(
@@ -444,9 +425,7 @@ export const BranchProvider = () =>
                 ? (news.protected ?? false)
                 : undefined,
             expires_at:
-              observed.expires_at !== news.expiresAt
-                ? (news.expiresAt ?? null)
-                : undefined,
+              observed.expires_at !== news.expiresAt ? (news.expiresAt ?? null) : undefined,
           },
         });
         yield* waitForOperations(updated.operations);
@@ -465,8 +444,7 @@ export const BranchProvider = () =>
         return yield* new BranchStateError({
           reason: "Branch has no database or connection endpoint",
         });
-      const previous =
-        branchInfo.branchId === output?.branchId ? output : undefined;
+      const previous = branchInfo.branchId === output?.branchId ? output : undefined;
 
       const connectionUri = Redacted.make(branchInfo.connectionUri);
       const migrationsInput = migrationsInputOf(news);
@@ -520,9 +498,7 @@ export const BranchProvider = () =>
         project_id: output.projectId,
         branch_id: output.branchId,
       }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail(new DeletionPending({ resourceId: output.branchId })),
-        ),
+        Effect.flatMap(() => Effect.fail(new DeletionPending({ resourceId: output.branchId }))),
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: (error) => error._tag === "NeonDeletionPending",
@@ -543,20 +519,16 @@ export const BranchProvider = () =>
         (project) =>
           Effect.gen(function* () {
             const branches = yield* listAllBranches(project.id);
-            return yield* Effect.forEach(
-              branches,
-              (branch) => hydrateBranch(project.id, branch),
-              { concurrency: 10 },
-            );
+            return yield* Effect.forEach(branches, (branch) => hydrateBranch(project.id, branch), {
+              concurrency: 10,
+            });
           }).pipe(
             // The project may be deleted between enumeration and listing.
             Effect.catchTag("NotFound", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
-      return perProject
-        .flat()
-        .filter((row): row is Branch["Attributes"] => row !== undefined);
+      return perProject.flat().filter((row): row is Branch["Attributes"] => row !== undefined);
     }),
   });
 
@@ -570,11 +542,7 @@ const listAllProjects = Effect.gen(function* () {
     // Neon returns a `pagination.cursor` on every response (the `created_at`
     // of the last row), not a "has next page" flag — stop once a page comes
     // back empty or the cursor stops advancing to avoid an infinite loop.
-    if (
-      page.projects.length === 0 ||
-      nextCursor === undefined ||
-      nextCursor === cursor
-    ) {
+    if (page.projects.length === 0 || nextCursor === undefined || nextCursor === cursor) {
       break;
     }
     cursor = nextCursor;
@@ -607,16 +575,9 @@ const hydrateBranch = (
       project_id: projectId,
       branch_id: branch.id,
     });
-    const db =
-      dbs.databases.find((db) => db.name === previous?.databaseName) ??
-      dbs.databases[0];
+    const db = dbs.databases.find((db) => db.name === previous?.databaseName) ?? dbs.databases[0];
     if (!db) return undefined;
-    const conn = yield* fetchConnection(
-      projectId,
-      branch.id,
-      db.name,
-      db.owner_name,
-    );
+    const conn = yield* fetchConnection(projectId, branch.id, db.name, db.owner_name);
     const attributes: Branch["Attributes"] = {
       branchId: branch.id,
       branchName: branch.name,
@@ -625,8 +586,7 @@ const hydrateBranch = (
       parentLsn: branch.parent_lsn,
       parentTimestamp: branch.parent_timestamp,
       initSource:
-        branch.init_source === "parent-schema" ||
-        branch.init_source === "schema-only"
+        branch.init_source === "parent-schema" || branch.init_source === "schema-only"
           ? "schema-only"
           : branch.init_source === "parent-data"
             ? "parent-data"
@@ -688,16 +648,12 @@ const resolveProjectId = (source: BranchSource) => {
     ? Effect.succeed(projectId)
     : Effect.fail(
         new BranchStateError({
-          reason:
-            "Invalid Neon project source: must be a Project or { projectId }",
+          reason: "Invalid Neon project source: must be a Project or { projectId }",
         }),
       );
 };
 
-const resolveParentBranchId = (
-  source: ParentBranchSource | undefined,
-  projectId: string,
-) =>
+const resolveParentBranchId = (source: ParentBranchSource | undefined, projectId: string) =>
   Effect.gen(function* () {
     if (!source) return undefined as string | undefined;
     if ("branchId" in source && typeof source.branchId === "string") {
@@ -746,15 +702,11 @@ const syncEndpoints = Effect.fn(function* (
   });
   const remaining = [...endpoints].sort((a, b) => a.id.localeCompare(b.id));
   for (const config of desired) {
-    const index = remaining.findIndex(
-      (endpoint) => endpoint.type === config.type,
-    );
+    const index = remaining.findIndex((endpoint) => endpoint.type === config.type);
     let observed = index < 0 ? undefined : remaining.splice(index, 1)[0];
     const settings = {
       autoscaling_limit_min_cu:
-        config.autoscalingLimitMinCu ??
-        defaults.autoscaling_limit_min_cu ??
-        0.25,
+        config.autoscalingLimitMinCu ?? defaults.autoscaling_limit_min_cu ?? 0.25,
       autoscaling_limit_max_cu:
         config.autoscalingLimitMaxCu ?? defaults.autoscaling_limit_max_cu ?? 2,
       suspend_timeout_seconds:
@@ -771,9 +723,7 @@ const syncEndpoints = Effect.fn(function* (
             branch_id: branchId,
           }).pipe(
             Effect.flatMap(({ endpoints }) => {
-              const matches = endpoints.filter(
-                (endpoint) => endpoint.type === "read_write",
-              );
+              const matches = endpoints.filter((endpoint) => endpoint.type === "read_write");
               return config.type === "read_write" && matches.length === 1
                 ? Effect.succeed({ endpoint: matches[0]!, operations: [] })
                 : Effect.fail(error);

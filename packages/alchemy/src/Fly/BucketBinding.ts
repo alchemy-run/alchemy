@@ -33,9 +33,7 @@ export interface TigrisS3Scope {
   region: RegionName;
 }
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isFlyHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||
@@ -67,15 +65,9 @@ const authorizeS3 = <A, E>(
     ),
   ) as Effect.Effect<A, E, RuntimeContext>;
 
-export const makeTigrisS3Binding = <
-  I extends { Bucket?: string },
-  A,
-  E,
->(options: {
+export const makeTigrisS3Binding = <I extends { Bucket?: string }, A, E>(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: (input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
 }) =>
   Effect.succeed(
     Effect.fn(function* (bucket: Bucket) {

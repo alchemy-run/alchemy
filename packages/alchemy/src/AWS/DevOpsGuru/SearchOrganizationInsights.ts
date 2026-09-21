@@ -41,7 +41,6 @@ export interface SearchOrganizationInsights extends Binding.Service<
     >
   >
 > {}
-export const SearchOrganizationInsights =
-  Binding.Service<SearchOrganizationInsights>(
-    "AWS.DevOpsGuru.SearchOrganizationInsights",
-  );
+export const SearchOrganizationInsights = Binding.Service<SearchOrganizationInsights>(
+  "AWS.DevOpsGuru.SearchOrganizationInsights",
+);

@@ -3,10 +3,9 @@ import type {
   ScalarFieldBuilder,
   field as nativeField,
 } from "@prisma/orm-postgres/contract-builder";
-
 import type { JsonValue } from "@prisma/orm-postgres/contract/types";
-import type postgresPack from "@prisma/orm-postgres/target/pack";
 import type sqlPack from "@prisma/orm-postgres/family/pack";
+import type postgresPack from "@prisma/orm-postgres/target/pack";
 
 type FieldState = ScalarFieldBuilder["__state"];
 type Set<S, K extends PropertyKey, V> = Omit<S, K> & { readonly [P in K]: V };
@@ -27,9 +26,7 @@ export type Field<S extends FieldState> = {
   >;
   defaultSql<const E extends string>(
     expression: E,
-  ): Field<
-    Set<S, "default", { readonly kind: "function"; readonly expression: E }>
-  >;
+  ): Field<Set<S, "default", { readonly kind: "function"; readonly expression: E }>>;
   optional(): Field<Set<S, "nullable", true>>;
   many(): Field<Set<S, "many", true>>;
   column<const N extends string>(name: N): Field<Set<S, "columnName", N>>;
@@ -42,9 +39,7 @@ export type Field<S extends FieldState> = {
   sql<const Spec extends Parameters<ScalarFieldBuilder<S>["sql"]>[0]>(
     spec: Spec,
   ): Field<
-    (Spec extends { readonly column: infer N extends string }
-      ? Set<S, "columnName", N>
-      : S) &
+    (Spec extends { readonly column: infer N extends string } ? Set<S, "columnName", N> : S) &
       (Spec extends { readonly id: { readonly name: infer N extends string } }
         ? { readonly id: Constraint<N> }
         : {}) &
@@ -62,14 +57,8 @@ type AnyModel = ContractModelBuilder<
   Record<string, ScalarFieldBuilder>,
   Record<string, never>
 >;
-type Attributes = Exclude<
-  Parameters<AnyModel["attributes"]>[0],
-  (...args: never[]) => unknown
->;
-type Sql = Exclude<
-  Parameters<AnyModel["sql"]>[0],
-  (...args: never[]) => unknown
->;
+type Attributes = Exclude<Parameters<AnyModel["attributes"]>[0], (...args: never[]) => unknown>;
+type Sql = Exclude<Parameters<AnyModel["sql"]>[0], (...args: never[]) => unknown>;
 type Relations = Parameters<AnyModel["relations"]>[0];
 type IndexTypes = AnyModel["__indexTypes"];
 
@@ -123,10 +112,7 @@ export type Model<B extends ModelBase, Namespace extends string> = Omit<
       | A
       | ((
           context: Parameters<
-            Extract<
-              Parameters<Rebuild<B>["attributes"]>[0],
-              (...args: never[]) => unknown
-            >
+            Extract<Parameters<Rebuild<B>["attributes"]>[0], (...args: never[]) => unknown>
           >[0],
         ) => A),
   ): Model<
@@ -146,10 +132,7 @@ export type Model<B extends ModelBase, Namespace extends string> = Omit<
       | S
       | ((
           context: Parameters<
-            Extract<
-              Parameters<Rebuild<B>["sql"]>[0],
-              (...args: never[]) => unknown
-            >
+            Extract<Parameters<Rebuild<B>["sql"]>[0], (...args: never[]) => unknown>
           >[0],
         ) => S),
   ): Model<
@@ -202,8 +185,7 @@ export interface CoreFieldHelpers {
     spec: Parameters<typeof nativeField.generated<D>>[0],
   ): WrapField<ReturnType<typeof nativeField.generated<D>>>;
 }
-type Presets = typeof postgresPack.authoring.field &
-  typeof sqlPack.authoring.field;
+type Presets = typeof postgresPack.authoring.field & typeof sqlPack.authoring.field;
 type Defaults<S extends FieldState, D> = S &
   (D extends { readonly output: { readonly default: infer Default } }
     ? { readonly default: Default }
@@ -212,18 +194,13 @@ type Defaults<S extends FieldState, D> = S &
     ? { readonly executionDefaults: Defaults }
     : {});
 type FieldNamespace<H, D> = {
-  readonly [K in keyof H]: H[K] extends (
-    ...args: infer Args
-  ) => ScalarFieldBuilder<infer S>
+  readonly [K in keyof H]: H[K] extends (...args: infer Args) => ScalarFieldBuilder<infer S>
     ? (...args: Args) => Field<Defaults<S, K extends keyof D ? D[K] : {}>>
     : H[K] extends object
       ? FieldNamespace<H[K], K extends keyof D ? D[K] : {}>
       : H[K];
 };
-export type FieldHelpers<H> = Omit<
-  FieldNamespace<H, Presets>,
-  keyof CoreFieldHelpers
-> &
+export type FieldHelpers<H> = Omit<FieldNamespace<H, Presets>, keyof CoreFieldHelpers> &
   CoreFieldHelpers;
 export type Helpers<
   H extends {
@@ -232,11 +209,7 @@ export type Helpers<
   },
 > = {
   readonly [
-    K in keyof H as string extends K
-      ? never
-      : K extends "field" | "model"
-        ? never
-        : K
+    K in keyof H as string extends K ? never : K extends "field" | "model" ? never : K
   ]: H[K];
 } & {
   readonly field: FieldHelpers<H["field"]>;

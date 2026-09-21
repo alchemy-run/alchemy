@@ -1,33 +1,27 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The Repository block's seams, as the docs show them: a route of your
  * own over `Git.GitRepo`, and a decorated namespace that logs commits.
  * Compile-checked against the real types; run against a fake stub.
  */
 import * as Git from "@/Git/index.ts";
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
 // ── a route of your own ──────────────────────────────────────────────────────
 
-export const Tip = HttpApiEndpoint.get(
-  "tip",
-  "/api/v1/repos/:owner/:repo/tip",
-  {
-    params: Git.RepoPath,
-    success: Git.Ref,
-    error: [Git.RepoNotFound, Git.RefNotFound],
-  },
-);
+export const Tip = HttpApiEndpoint.get("tip", "/api/v1/repos/:owner/:repo/tip", {
+  params: Git.RepoPath,
+  success: Git.Ref,
+  error: [Git.RepoNotFound, Git.RefNotFound],
+});
 
-class TipApi extends HttpApi.make("tip").add(
-  HttpApiGroup.make("tip").add(Tip),
-) {}
+class TipApi extends HttpApi.make("tip").add(HttpApiGroup.make("tip").add(Tip)) {}
 
 export const TipLive = HttpApiBuilder.group(TipApi, "tip", (h) =>
   Effect.gen(function* () {
@@ -75,9 +69,7 @@ export const ReposWithLogging = Layer.effect(
         get: (target, key, receiver) =>
           key === "commitPush"
             ? (input: Git.CommitPushInput) =>
-                target
-                  .commitPush(input)
-                  .pipe(Effect.tap((result) => afterPush(repoId, result)))
+                target.commitPush(input).pipe(Effect.tap((result) => afterPush(repoId, result)))
             : Reflect.get(target, key, receiver),
       });
     },
@@ -107,9 +99,7 @@ describe("Repository seams", () => {
       expect(result.unpack).toBe("ok");
       // other methods pass through the proxy untouched
       expect(yield* stub.readMeta()).toBeUndefined();
-      expect(seen).toEqual([
-        { repoId: "01ARZ3NDEKTSV4RRFFQ69G5FAV", refs: ["refs/heads/main"] },
-      ]);
+      expect(seen).toEqual([{ repoId: "01ARZ3NDEKTSV4RRFFQ69G5FAV", refs: ["refs/heads/main"] }]);
     }).pipe(Effect.provide(RuntimeContext.phantom)),
   );
 });

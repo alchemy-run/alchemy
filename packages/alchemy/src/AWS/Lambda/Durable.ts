@@ -71,9 +71,7 @@ export interface DurableCallbackConfig {
  * Internal descriptor passed from {@link step} to the bridge. Bundles the
  * step name and (fully-provided) Effect together with the step config.
  */
-export interface DurableStepOptions<
-  Output = unknown,
-> extends DurableStepConfig {
+export interface DurableStepOptions<Output = unknown> extends DurableStepConfig {
   name: string;
   effect: Effect.Effect<Output>;
 }
@@ -183,7 +181,6 @@ export const waitForCallback = <T = unknown, R = never>(
     return yield* durable.waitForCallback<T>({
       ...config,
       name,
-      submitter: (callbackId) =>
-        submitter(callbackId).pipe(Effect.provide(context)),
+      submitter: (callbackId) => submitter(callbackId).pipe(Effect.provide(context)),
     });
   });

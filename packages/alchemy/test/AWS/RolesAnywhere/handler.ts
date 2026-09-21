@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RolesAnywhere from "@/AWS/RolesAnywhere";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RolesAnywhere from "@/AWS/RolesAnywhere";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -61,12 +61,8 @@ export default RolesAnywhereTestFunction.make(
           const tag = yield* getSubject({
             subjectId: NONEXISTENT_SUBJECT_ID,
           }).pipe(
-            Effect.map((r) =>
-              r.subject === undefined ? "NoSubject" : "Found",
-            ),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.map((r) => (r.subject === undefined ? "NoSubject" : "Found")),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -78,11 +74,6 @@ export default RolesAnywhereTestFunction.make(
       }).pipe(Effect.orDie),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RolesAnywhere.GetSubjectHttp,
-        RolesAnywhere.ListSubjectsHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(RolesAnywhere.GetSubjectHttp, RolesAnywhere.ListSubjectsHttp)),
   ),
 );

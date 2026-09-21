@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -208,9 +203,9 @@ export const ConfigRule = Resource<ConfigRule>("AWS.Config.ConfigRule");
  * Raised when a Config rule that was just written does not become visible
  * to `DescribeConfigRules` within the reconciler's bounded wait.
  */
-export class ConfigRuleNotVisible extends Data.TaggedError(
-  "ConfigRuleNotVisible",
-)<{ message: string }> {}
+export class ConfigRuleNotVisible extends Data.TaggedError("ConfigRuleNotVisible")<{
+  message: string;
+}> {}
 
 /**
  * `PutConfigRule`/`DeleteConfigRule` reject with `ResourceInUseException`
@@ -278,16 +273,10 @@ export const ConfigRuleProvider = () =>
         id: string,
         props: Pick<ConfigRuleProps, "configRuleName">,
       ) {
-        return (
-          props.configRuleName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.configRuleName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const toWireRule = (
-        name: string,
-        props: ConfigRuleProps,
-      ): config.ConfigRule => ({
+      const toWireRule = (name: string, props: ConfigRuleProps): config.ConfigRule => ({
         ConfigRuleName: name,
         Description: props.description,
         Source: {
@@ -302,14 +291,11 @@ export const ConfigRuleProvider = () =>
             ? {
                 PolicyRuntime: props.source.customPolicyDetails.policyRuntime,
                 PolicyText: props.source.customPolicyDetails.policyText,
-                EnableDebugLogDelivery:
-                  props.source.customPolicyDetails.enableDebugLogDelivery,
+                EnableDebugLogDelivery: props.source.customPolicyDetails.enableDebugLogDelivery,
               }
             : undefined,
         },
-        InputParameters: props.inputParameters
-          ? JSON.stringify(props.inputParameters)
-          : undefined,
+        InputParameters: props.inputParameters ? JSON.stringify(props.inputParameters) : undefined,
         MaximumExecutionFrequency: props.maximumExecutionFrequency,
         Scope: props.scope
           ? {
@@ -328,36 +314,27 @@ export const ConfigRuleProvider = () =>
       // OBSERVED cloud state. Fields AWS defaults when unspecified
       // (EvaluationModes, SourceDetails) are only compared when the user
       // declared them, so an omitted prop never causes perpetual drift.
-      const ruleInSync = (
-        observed: config.ConfigRule,
-        desired: config.ConfigRule,
-      ): boolean =>
+      const ruleInSync = (observed: config.ConfigRule, desired: config.ConfigRule): boolean =>
         (observed.Description ?? undefined) === desired.Description &&
-        (observed.MaximumExecutionFrequency ?? undefined) ===
-          desired.MaximumExecutionFrequency &&
+        (observed.MaximumExecutionFrequency ?? undefined) === desired.MaximumExecutionFrequency &&
         canonical(parseParams(observed.InputParameters)) ===
           canonical(parseParams(desired.InputParameters)) &&
         canonical(observed.Scope) === canonical(desired.Scope) &&
         observed.Source.Owner === desired.Source.Owner &&
-        (observed.Source.SourceIdentifier ?? undefined) ===
-          desired.Source.SourceIdentifier &&
+        (observed.Source.SourceIdentifier ?? undefined) === desired.Source.SourceIdentifier &&
         (desired.Source.SourceDetails === undefined ||
-          canonical(observed.Source.SourceDetails) ===
-            canonical(desired.Source.SourceDetails)) &&
+          canonical(observed.Source.SourceDetails) === canonical(desired.Source.SourceDetails)) &&
         (desired.Source.CustomPolicyDetails === undefined ||
           canonical(observed.Source.CustomPolicyDetails) ===
             canonical(desired.Source.CustomPolicyDetails)) &&
         (desired.EvaluationModes === undefined ||
-          canonical(observed.EvaluationModes) ===
-            canonical(desired.EvaluationModes));
+          canonical(observed.EvaluationModes) === canonical(desired.EvaluationModes));
 
       const observeRule = Effect.fn(function* (ruleName: string) {
         const response = yield* config
           .describeConfigRules({ ConfigRuleNames: [ruleName] })
           .pipe(
-            Effect.catchTag("NoSuchConfigRuleException", () =>
-              Effect.succeed({ ConfigRules: [] }),
-            ),
+            Effect.catchTag("NoSuchConfigRuleException", () => Effect.succeed({ ConfigRules: [] })),
           );
         return (response.ConfigRules ?? []).at(0);
       });
@@ -366,9 +343,7 @@ export const ConfigRuleProvider = () =>
         config.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) =>
             Object.fromEntries(
-              (r.Tags ?? []).flatMap((t) =>
-                t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [],
-              ),
+              (r.Tags ?? []).flatMap((t) => (t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [])),
             ),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
@@ -396,8 +371,7 @@ export const ConfigRuleProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const ruleName =
-            output?.configRuleName ?? (yield* createRuleName(id, olds ?? {}));
+          const ruleName = output?.configRuleName ?? (yield* createRuleName(id, olds ?? {}));
           const rule = yield* observeRule(ruleName);
           if (rule?.ConfigRuleArn === undefined) return undefined;
           const attrs = toAttrs(rule);
@@ -414,8 +388,7 @@ export const ConfigRuleProvider = () =>
           // fall through: engine default update logic for mutable fields
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const ruleName =
-            output?.configRuleName ?? (yield* createRuleName(id, news));
+          const ruleName = output?.configRuleName ?? (yield* createRuleName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = toWireRule(ruleName, news);
@@ -441,8 +414,7 @@ export const ConfigRuleProvider = () =>
           const live = yield* retryWhileNotVisible(
             observeRule(ruleName).pipe(
               Effect.flatMap((rule) =>
-                rule?.ConfigRuleArn !== undefined &&
-                rule.ConfigRuleId !== undefined
+                rule?.ConfigRuleArn !== undefined && rule.ConfigRuleId !== undefined
                   ? Effect.succeed(rule)
                   : Effect.fail(
                       new ConfigRuleNotVisible({
@@ -480,9 +452,7 @@ export const ConfigRuleProvider = () =>
             config.deleteConfigRule({
               ConfigRuleName: output.configRuleName,
             }),
-          ).pipe(
-            Effect.catchTag("NoSuchConfigRuleException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("NoSuchConfigRuleException", () => Effect.void));
         }),
       });
     }),

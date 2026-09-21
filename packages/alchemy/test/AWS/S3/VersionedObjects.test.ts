@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -11,6 +8,9 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import VersionedObjectFunctionLive, {
   VersionedObjectFunction,
 } from "./fixtures/versioned-object-handler.ts";
@@ -36,26 +36,16 @@ class NotReady extends Data.TaggedError("NotReady")<{
 }> {}
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
-const request = (
-  operation: string,
-  params: Record<string, string> = {},
-  body?: unknown,
-) =>
+const request = (operation: string, params: Record<string, string> = {}, body?: unknown) =>
   Effect.gen(function* () {
-    const query = yield* Effect.sync(() =>
-      new URLSearchParams(params).toString(),
-    );
+    const query = yield* Effect.sync(() => new URLSearchParams(params).toString());
     const endpoint = `${url}/${operation}?${query}`;
     const req =
       body === undefined
         ? HttpClientRequest.get(endpoint)
         : typeof body === "string"
-          ? HttpClientRequest.post(endpoint).pipe(
-              HttpClientRequest.bodyText(body),
-            )
-          : HttpClientRequest.post(endpoint).pipe(
-              HttpClientRequest.bodyJsonUnsafe(body),
-            );
+          ? HttpClientRequest.post(endpoint).pipe(HttpClientRequest.bodyText(body))
+          : HttpClientRequest.post(endpoint).pipe(HttpClientRequest.bodyJsonUnsafe(body));
     return yield* HttpClient.execute(req).pipe(
       Effect.flatMap((response) =>
         response.status >= 500
@@ -79,11 +69,7 @@ const request = (
       }),
     );
   });
-const call = <T>(
-  operation: string,
-  params: Record<string, string> = {},
-  body?: unknown,
-) =>
+const call = <T>(operation: string, params: Record<string, string> = {}, body?: unknown) =>
   request(operation, params, body).pipe(
     Effect.flatMap((response) =>
       Effect.gen(function* () {
@@ -180,14 +166,10 @@ const inventory = (Bucket: string, Key: string) =>
   );
 const read = (Bucket: string, Key: string, VersionId?: string) =>
   S3.getObject({ Bucket, Key, VersionId }).pipe(
-    Effect.flatMap((result) =>
-      Stream.mkString(Stream.decodeText(result.Body!)),
-    ),
+    Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
   );
 const tags = (Bucket: string, Key: string, VersionId?: string) =>
-  S3.getObjectTagging({ Bucket, Key, VersionId }).pipe(
-    Effect.map((result) => result.TagSet ?? []),
-  );
+  S3.getObjectTagging({ Bucket, Key, VersionId }).pipe(Effect.map((result) => result.TagSet ?? []));
 
 beforeAll(
   Effect.gen(function* () {
@@ -199,9 +181,7 @@ beforeAll(
     roleName = fn.roleName;
     buckets = yield* request("info").pipe(
       Effect.flatMap((response) => response.json),
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(Schema.Record(Schema.String, BucketInfo)),
-      ),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, BucketInfo))),
     );
   }),
   { timeout: 120_000 },
@@ -252,12 +232,8 @@ describe.sequential("versioned S3 bindings", () => {
         .pages({ RoleName: roleName })
         .pipe(Stream.runCollect);
       expect(
-        attached
-          .flatMap((page) => page.AttachedPolicies ?? [])
-          .map((p) => p.PolicyArn),
-      ).toEqual([
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-      ]);
+        attached.flatMap((page) => page.AttachedPolicies ?? []).map((p) => p.PolicyArn),
+      ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
       const pages = yield* IAM.listRolePolicies
         .pages({ RoleName: roleName })
         .pipe(Stream.runCollect);
@@ -271,72 +247,63 @@ describe.sequential("versioned S3 bindings", () => {
             });
             return yield* Schema.decodeUnknownEffect(policy, {
               onExcessProperty: "error",
-            })(
-              yield* Effect.try(() =>
-                decodeURIComponent(result.PolicyDocument),
-              ),
-            );
+            })(yield* Effect.try(() => decodeURIComponent(result.PolicyDocument)));
           }),
       );
       const actual = documents
         .flatMap((doc) =>
           doc.Statement.flatMap((s) =>
-            s.Action.flatMap((action) =>
-              s.Resource.map((resource) => `${action} ${resource}`),
-            ),
+            s.Action.flatMap((action) => s.Resource.map((resource) => `${action} ${resource}`)),
           ),
         )
         .sort();
-      const grants: Record<string, { objects?: string[]; bucket?: string[] }> =
-        {
-          GetObject: {
-            objects: ["GetObject", "GetObjectVersion"],
-            bucket: ["ListBucket"],
-          },
-          PutObject: { objects: ["PutObject"] },
-          HeadObject: {
-            objects: ["GetObject", "GetObjectVersion"],
-            bucket: ["ListBucket"],
-          },
-          GetObjectAttributes: {
-            objects: [
-              "GetObject",
-              "GetObjectVersion",
-              "GetObjectAttributes",
-              "GetObjectVersionAttributes",
-            ],
-            bucket: ["ListBucket"],
-          },
-          CopyObject: {
-            objects: ["PutObject", "GetObject", "GetObjectVersion"],
-          },
-          CopySource: {
-            objects: ["GetObject", "GetObjectVersion"],
-            bucket: ["ListBucket"],
-          },
-          DeleteObject: { objects: ["DeleteObject", "DeleteObjectVersion"] },
-          DeleteObjects: { objects: ["DeleteObject", "DeleteObjectVersion"] },
-          ListObjectsV2: { bucket: ["ListBucket"] },
-          ListObjectVersions: { bucket: ["ListBucketVersions"] },
-          GetObjectTagging: {
-            objects: ["GetObjectTagging", "GetObjectVersionTagging"],
-          },
-          PutObjectTagging: {
-            objects: ["PutObjectTagging", "PutObjectVersionTagging"],
-          },
-          DeleteObjectTagging: {
-            objects: ["DeleteObjectTagging", "DeleteObjectVersionTagging"],
-          },
-          PresignPutObject: { objects: ["PutObject"] },
-        };
+      const grants: Record<string, { objects?: string[]; bucket?: string[] }> = {
+        GetObject: {
+          objects: ["GetObject", "GetObjectVersion"],
+          bucket: ["ListBucket"],
+        },
+        PutObject: { objects: ["PutObject"] },
+        HeadObject: {
+          objects: ["GetObject", "GetObjectVersion"],
+          bucket: ["ListBucket"],
+        },
+        GetObjectAttributes: {
+          objects: [
+            "GetObject",
+            "GetObjectVersion",
+            "GetObjectAttributes",
+            "GetObjectVersionAttributes",
+          ],
+          bucket: ["ListBucket"],
+        },
+        CopyObject: {
+          objects: ["PutObject", "GetObject", "GetObjectVersion"],
+        },
+        CopySource: {
+          objects: ["GetObject", "GetObjectVersion"],
+          bucket: ["ListBucket"],
+        },
+        DeleteObject: { objects: ["DeleteObject", "DeleteObjectVersion"] },
+        DeleteObjects: { objects: ["DeleteObject", "DeleteObjectVersion"] },
+        ListObjectsV2: { bucket: ["ListBucket"] },
+        ListObjectVersions: { bucket: ["ListBucketVersions"] },
+        GetObjectTagging: {
+          objects: ["GetObjectTagging", "GetObjectVersionTagging"],
+        },
+        PutObjectTagging: {
+          objects: ["PutObjectTagging", "PutObjectVersionTagging"],
+        },
+        DeleteObjectTagging: {
+          objects: ["DeleteObjectTagging", "DeleteObjectVersionTagging"],
+        },
+        PresignPutObject: { objects: ["PutObject"] },
+      };
       const expected = Object.entries(grants)
         .flatMap(([operation, grants]) => [
           ...(grants.objects ?? []).map(
             (action) => `s3:${action} ${buckets[operation].bucketArn}/*`,
           ),
-          ...(grants.bucket ?? []).map(
-            (action) => `s3:${action} ${buckets[operation].bucketArn}`,
-          ),
+          ...(grants.bucket ?? []).map((action) => `s3:${action} ${buckets[operation].bucketArn}`),
         ])
         .sort();
       expect(actual).toEqual(expected);
@@ -375,9 +342,7 @@ describe.sequential("versioned S3 bindings", () => {
               },
               body,
             );
-            expect(missing.status).toBe(
-              operation.endsWith("Tagging") ? 403 : 404,
-            );
+            expect(missing.status).toBe(operation.endsWith("Tagging") ? 403 : 404);
             expect(yield* missing.json).toEqual({
               tag: operation.endsWith("Tagging")
                 ? "AccessDeniedException"
@@ -400,9 +365,7 @@ describe.sequential("versioned S3 bindings", () => {
               },
               body,
             );
-            expect(selected.status).toBe(
-              operation.endsWith("Tagging") ? 403 : 405,
-            );
+            expect(selected.status).toBe(operation.endsWith("Tagging") ? 403 : 405);
             if (operation === "HeadObject") {
               const listed = yield* S3.listObjectVersions({
                 Bucket: v.Bucket,
@@ -419,15 +382,11 @@ describe.sequential("versioned S3 bindings", () => {
               });
             } else {
               expect(yield* selected.json).toEqual({
-                tag: operation.endsWith("Tagging")
-                  ? "AccessDeniedException"
-                  : "MethodNotAllowed",
+                tag: operation.endsWith("Tagging") ? "AccessDeniedException" : "MethodNotAllowed",
               });
             }
             expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
-            expect(yield* read(v.Bucket, v.Key, v.current)).toBe(
-              "the current version is longer",
-            );
+            expect(yield* read(v.Bucket, v.Key, v.current)).toBe("the current version is longer");
             if (operation.endsWith("Tagging")) {
               expect(yield* tags(v.Bucket, v.Key, v.current)).toEqual([
                 { Key: "generation", Value: "current" },
@@ -484,9 +443,7 @@ describe.sequential("versioned S3 bindings", () => {
                 });
                 break;
               case "PutObjectTagging":
-                yield* call(operation, params, [
-                  { Key: "generation", Value: "updated-null" },
-                ]);
+                yield* call(operation, params, [{ Key: "generation", Value: "updated-null" }]);
                 expect(yield* tags(v.Bucket, v.Key, "null")).toEqual([
                   { Key: "generation", Value: "updated-null" },
                 ]);
@@ -501,15 +458,11 @@ describe.sequential("versioned S3 bindings", () => {
                 });
                 break;
               case "DeleteObjects": {
-                const deleted = yield* call<S3.DeleteObjectsOutput>(
-                  operation,
-                  {},
-                  [{ Key: v.Key, VersionId: "null" }],
-                );
-                expect(deleted.Errors ?? []).toEqual([]);
-                expect(deleted.Deleted).toEqual([
+                const deleted = yield* call<S3.DeleteObjectsOutput>(operation, {}, [
                   { Key: v.Key, VersionId: "null" },
                 ]);
+                expect(deleted.Errors ?? []).toEqual([]);
+                expect(deleted.Deleted).toEqual([{ Key: v.Key, VersionId: "null" }]);
                 break;
               }
               case "CopyObject": {
@@ -519,9 +472,7 @@ describe.sequential("versioned S3 bindings", () => {
                 });
                 expect(copied.CopySourceVersionId).toBe("null");
                 expect(copied.VersionId).toBeTruthy();
-                expect(yield* read(v.Bucket, "null-copy.txt")).toBe(
-                  "null version",
-                );
+                expect(yield* read(v.Bucket, "null-copy.txt")).toBe("null version");
                 break;
               }
             }
@@ -529,18 +480,14 @@ describe.sequential("versioned S3 bindings", () => {
             expect(after).toEqual(
               operation === "DeleteObject" || operation === "DeleteObjects"
                 ? {
-                    versions: before.versions.filter(
-                      (version) => version.VersionId !== "null",
-                    ),
+                    versions: before.versions.filter((version) => version.VersionId !== "null"),
                     markers: [],
                   }
                 : before,
             );
             expect(yield* read(v.Bucket, v.Key)).toBe("current after null");
             expect(yield* tags(v.Bucket, v.Key, v.current)).toEqual(
-              operation.endsWith("Tagging")
-                ? [{ Key: "generation", Value: "current" }]
-                : [],
+              operation.endsWith("Tagging") ? [{ Key: "generation", Value: "current" }] : [],
             );
           }),
         { timeout: 120_000, retry: 0 },
@@ -549,53 +496,49 @@ describe.sequential("versioned S3 bindings", () => {
   }
 
   describe("GetObject", () => {
-    test.provider(
-      "reads current and older contents, including behind a delete marker",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("GetObject");
-          expect(yield* call("GetObject", { key: v.Key })).toEqual({
-            body: "the current version is longer",
-            versionId: v.current,
-          });
-          expect(
-            yield* call("GetObject", { key: v.Key, versionId: v.old }),
-          ).toEqual({ body: "old version", versionId: v.old });
-          yield* S3.deleteObject({ Bucket: v.Bucket, Key: v.Key });
-          const missing = yield* request("GetObject", { key: v.Key });
-          expect(missing.status).toBe(404);
-          expect(yield* missing.json).toEqual({ tag: "NoSuchKey" });
-          expect(
-            yield* call("GetObject", { key: v.Key, versionId: v.old }),
-          ).toEqual({ body: "old version", versionId: v.old });
-        }),
+    test.provider("reads current and older contents, including behind a delete marker", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("GetObject");
+        expect(yield* call("GetObject", { key: v.Key })).toEqual({
+          body: "the current version is longer",
+          versionId: v.current,
+        });
+        expect(yield* call("GetObject", { key: v.Key, versionId: v.old })).toEqual({
+          body: "old version",
+          versionId: v.old,
+        });
+        yield* S3.deleteObject({ Bucket: v.Bucket, Key: v.Key });
+        const missing = yield* request("GetObject", { key: v.Key });
+        expect(missing.status).toBe(404);
+        expect(yield* missing.json).toEqual({ tag: "NoSuchKey" });
+        expect(yield* call("GetObject", { key: v.Key, versionId: v.old })).toEqual({
+          body: "old version",
+          versionId: v.old,
+        });
+      }),
     );
   });
 
   describe("PutObject", () => {
-    test.provider(
-      "returns new version IDs on overwrite and preserves both contents",
-      () =>
-        Effect.gen(function* () {
-          const first = yield* call<S3.PutObjectOutput>(
-            "PutObject",
-            { key: "written.txt" },
-            "first write",
-          );
-          const second = yield* call<S3.PutObjectOutput>(
-            "PutObject",
-            { key: "written.txt" },
-            "second write",
-          );
-          expect(first.VersionId).toBeTruthy();
-          expect(second.VersionId).toBeTruthy();
-          expect(second.VersionId).not.toBe(first.VersionId);
-          const Bucket = buckets.PutObject.bucketName;
-          expect(yield* read(Bucket, "written.txt", first.VersionId)).toBe(
-            "first write",
-          );
-          expect(yield* read(Bucket, "written.txt")).toBe("second write");
-        }),
+    test.provider("returns new version IDs on overwrite and preserves both contents", () =>
+      Effect.gen(function* () {
+        const first = yield* call<S3.PutObjectOutput>(
+          "PutObject",
+          { key: "written.txt" },
+          "first write",
+        );
+        const second = yield* call<S3.PutObjectOutput>(
+          "PutObject",
+          { key: "written.txt" },
+          "second write",
+        );
+        expect(first.VersionId).toBeTruthy();
+        expect(second.VersionId).toBeTruthy();
+        expect(second.VersionId).not.toBe(first.VersionId);
+        const Bucket = buckets.PutObject.bucketName;
+        expect(yield* read(Bucket, "written.txt", first.VersionId)).toBe("first write");
+        expect(yield* read(Bucket, "written.txt")).toBe("second write");
+      }),
     );
   });
 
@@ -609,34 +552,30 @@ describe.sequential("versioned S3 bindings", () => {
           const missing = yield* request("HeadObject", { key: v.Key });
           expect(missing.status).toBe(404);
           expect(yield* missing.json).toEqual({ tag: "NotFound" });
-          expect(
-            yield* call("HeadObject", { key: v.Key, versionId: v.old }),
-          ).toEqual({ versionId: v.old, length: "old version".length });
+          expect(yield* call("HeadObject", { key: v.Key, versionId: v.old })).toEqual({
+            versionId: v.old,
+            length: "old version".length,
+          });
         }),
     );
   });
 
   describe("GetObjectAttributes", () => {
-    test.provider(
-      "returns the selected version's size rather than the latest object's size",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("GetObjectAttributes");
-          const old = yield* call<S3.GetObjectAttributesOutput>(
-            "GetObjectAttributes",
-            { key: v.Key, versionId: v.old },
-          );
-          const current = yield* call<S3.GetObjectAttributesOutput>(
-            "GetObjectAttributes",
-            { key: v.Key },
-          );
-          expect(old.VersionId).toBe(v.old);
-          expect(old.ObjectSize).toBe("old version".length);
-          expect(current.VersionId).toBe(v.current);
-          expect(current.ObjectSize).toBe(
-            "the current version is longer".length,
-          );
-        }),
+    test.provider("returns the selected version's size rather than the latest object's size", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("GetObjectAttributes");
+        const old = yield* call<S3.GetObjectAttributesOutput>("GetObjectAttributes", {
+          key: v.Key,
+          versionId: v.old,
+        });
+        const current = yield* call<S3.GetObjectAttributesOutput>("GetObjectAttributes", {
+          key: v.Key,
+        });
+        expect(old.VersionId).toBe(v.old);
+        expect(old.ObjectSize).toBe("old version".length);
+        expect(current.VersionId).toBe(v.current);
+        expect(current.ObjectSize).toBe("the current version is longer".length);
+      }),
     );
   });
 
@@ -658,8 +597,7 @@ describe.sequential("versioned S3 bindings", () => {
           const missing = yield* request("CopyObject", {
             key: Key,
             source: yield* Effect.sync(
-              () =>
-                `${v.Bucket}/${v.Key}?versionId=${encodeURIComponent(v.old)}`,
+              () => `${v.Bucket}/${v.Key}?versionId=${encodeURIComponent(v.old)}`,
             ),
           });
           expect(missing.status).toBe(404);
@@ -672,8 +610,7 @@ describe.sequential("versioned S3 bindings", () => {
           const selected = yield* request("CopyObject", {
             key: Key,
             source: yield* Effect.sync(
-              () =>
-                `${v.Bucket}/${v.Key}?versionId=${encodeURIComponent(marker.VersionId!)}`,
+              () => `${v.Bucket}/${v.Key}?versionId=${encodeURIComponent(marker.VersionId!)}`,
             ),
           });
           expect(selected.status).toBe(400);
@@ -686,9 +623,7 @@ describe.sequential("versioned S3 bindings", () => {
           expect(yield* currentMarker.json).toEqual({ tag: "NoSuchKey" });
           expect(yield* inventory(Bucket, Key)).toEqual(before);
           expect(yield* read(Bucket, Key)).toBe("unchanged destination");
-          expect(yield* read(v.Bucket, v.Key, v.current)).toBe(
-            "the current version is longer",
-          );
+          expect(yield* read(v.Bucket, v.Key, v.current)).toBe("the current version is longer");
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -718,16 +653,13 @@ describe.sequential("versioned S3 bindings", () => {
             "original destination",
           );
           const currentSource = yield* Effect.sync(
-            () =>
-              `${v.Bucket}/${v.Key.split("/").map(encodeURIComponent).join("/")}`,
+            () => `${v.Bucket}/${v.Key.split("/").map(encodeURIComponent).join("/")}`,
           );
           yield* call("CopyObject", {
             key: "current-copy.txt",
             source: currentSource,
           });
-          expect(yield* read(v.Bucket, "current-copy.txt")).toBe(
-            "the current version is longer",
-          );
+          expect(yield* read(v.Bucket, "current-copy.txt")).toBe("the current version is longer");
         }),
     );
     test.provider(
@@ -744,9 +676,9 @@ describe.sequential("versioned S3 bindings", () => {
           });
           expect(copied.CopySourceVersionId).toBe(v.old);
           expect(copied.VersionId).toBeTruthy();
-          expect(
-            yield* read(buckets.CopyObject.bucketName, "cross-destination.txt"),
-          ).toBe("old version");
+          expect(yield* read(buckets.CopyObject.bucketName, "cross-destination.txt")).toBe(
+            "old version",
+          );
           const unrelated = yield* seed("UnboundSource");
           const deniedSource = yield* Effect.sync(
             () =>
@@ -789,17 +721,13 @@ describe.sequential("versioned S3 bindings", () => {
             versionId: marker.VersionId!,
           });
           expect(removed.DeleteMarker).toBe(true);
-          expect(yield* read(v.Bucket, v.Key)).toBe(
-            "the current version is longer",
-          );
+          expect(yield* read(v.Bucket, v.Key)).toBe("the current version is longer");
           yield* call("DeleteObject", { key: v.Key, versionId: v.old });
           const remaining = yield* S3.listObjectVersions({
             Bucket: v.Bucket,
             Prefix: v.Key,
           });
-          expect(remaining.Versions?.map((x) => x.VersionId)).toEqual([
-            v.current,
-          ]);
+          expect(remaining.Versions?.map((x) => x.VersionId)).toEqual([v.current]);
           expect(remaining.DeleteMarkers ?? []).toEqual([]);
         }),
     );
@@ -816,33 +744,24 @@ describe.sequential("versioned S3 bindings", () => {
             Key: "marker.txt",
             Body: "still recoverable",
           });
-          const result = yield* call<S3.DeleteObjectsOutput>(
-            "DeleteObjects",
-            {},
-            [{ Key: v.Key, VersionId: v.old }, { Key: "marker.txt" }],
-          );
+          const result = yield* call<S3.DeleteObjectsOutput>("DeleteObjects", {}, [
+            { Key: v.Key, VersionId: v.old },
+            { Key: "marker.txt" },
+          ]);
           expect(result.Errors ?? []).toEqual([]);
-          expect(result.Deleted?.find((x) => x.Key === v.Key)?.VersionId).toBe(
-            v.old,
-          );
+          expect(result.Deleted?.find((x) => x.Key === v.Key)?.VersionId).toBe(v.old);
           const marker = result.Deleted?.find((x) => x.Key === "marker.txt");
           expect(marker?.DeleteMarker).toBe(true);
           expect(marker?.DeleteMarkerVersionId).toBeTruthy();
-          expect(yield* read(v.Bucket, v.Key)).toBe(
-            "the current version is longer",
-          );
+          expect(yield* read(v.Bucket, v.Key)).toBe("the current version is longer");
           const remaining = yield* S3.listObjectVersions({
             Bucket: v.Bucket,
             Prefix: v.Key,
           });
-          expect(remaining.Versions?.map((x) => x.VersionId)).toEqual([
-            v.current,
+          expect(remaining.Versions?.map((x) => x.VersionId)).toEqual([v.current]);
+          const restored = yield* call<S3.DeleteObjectsOutput>("DeleteObjects", {}, [
+            { Key: "marker.txt", VersionId: marker!.DeleteMarkerVersionId },
           ]);
-          const restored = yield* call<S3.DeleteObjectsOutput>(
-            "DeleteObjects",
-            {},
-            [{ Key: "marker.txt", VersionId: marker!.DeleteMarkerVersionId }],
-          );
           expect(restored.Errors ?? []).toEqual([]);
           expect(yield* read(v.Bucket, "marker.txt")).toBe("still recoverable");
         }),
@@ -850,138 +769,108 @@ describe.sequential("versioned S3 bindings", () => {
   });
 
   describe("ListObjectsV2", () => {
-    test.provider(
-      "paginates current objects without exposing old versions or delete markers",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("ListObjectsV2", "list/a.txt");
-          yield* S3.putObject({
-            Bucket: v.Bucket,
-            Key: "list/b.txt",
-            Body: "visible",
-          });
-          yield* S3.putObject({
-            Bucket: v.Bucket,
-            Key: "list/hidden.txt",
-            Body: "hidden",
-          });
-          yield* S3.deleteObject({ Bucket: v.Bucket, Key: "list/hidden.txt" });
-          const first = yield* call<S3.ListObjectsV2Output>("ListObjectsV2", {
-            prefix: "list/",
-          });
-          expect(first.IsTruncated).toBe(true);
-          expect(first.Contents?.map((x) => x.Key)).toEqual(["list/a.txt"]);
-          expect(first.Contents?.[0].Size).toBe(
-            "the current version is longer".length,
-          );
-          const second = yield* call<S3.ListObjectsV2Output>("ListObjectsV2", {
-            prefix: "list/",
-            token: first.NextContinuationToken!,
-          });
-          expect(second.Contents?.map((x) => x.Key)).toEqual(["list/b.txt"]);
-          expect(second.IsTruncated).toBe(false);
-        }),
+    test.provider("paginates current objects without exposing old versions or delete markers", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("ListObjectsV2", "list/a.txt");
+        yield* S3.putObject({
+          Bucket: v.Bucket,
+          Key: "list/b.txt",
+          Body: "visible",
+        });
+        yield* S3.putObject({
+          Bucket: v.Bucket,
+          Key: "list/hidden.txt",
+          Body: "hidden",
+        });
+        yield* S3.deleteObject({ Bucket: v.Bucket, Key: "list/hidden.txt" });
+        const first = yield* call<S3.ListObjectsV2Output>("ListObjectsV2", {
+          prefix: "list/",
+        });
+        expect(first.IsTruncated).toBe(true);
+        expect(first.Contents?.map((x) => x.Key)).toEqual(["list/a.txt"]);
+        expect(first.Contents?.[0].Size).toBe("the current version is longer".length);
+        const second = yield* call<S3.ListObjectsV2Output>("ListObjectsV2", {
+          prefix: "list/",
+          token: first.NextContinuationToken!,
+        });
+        expect(second.Contents?.map((x) => x.Key)).toEqual(["list/b.txt"]);
+        expect(second.IsTruncated).toBe(false);
+      }),
     );
   });
 
   describe("ListObjectVersions", () => {
-    test.provider(
-      "paginates versions and delete markers using both continuation markers",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("ListObjectVersions");
-          const marker = yield* S3.deleteObject({
-            Bucket: v.Bucket,
-            Key: v.Key,
-          });
-          const found: string[] = [];
-          const markers: string[] = [];
-          let params: Record<string, string> = { prefix: v.Key };
-          let complete = false;
-          for (let page = 0; page < 5; page++) {
-            const result = yield* call<S3.ListObjectVersionsOutput>(
-              "ListObjectVersions",
-              params,
-            );
-            found.push(...(result.Versions ?? []).map((x) => x.VersionId!));
-            markers.push(
-              ...(result.DeleteMarkers ?? []).map((x) => x.VersionId!),
-            );
-            if (!result.IsTruncated) {
-              complete = true;
-              break;
-            }
-            expect(result.NextKeyMarker).toBeTruthy();
-            expect(result.NextVersionIdMarker).toBeTruthy();
-            params = {
-              prefix: v.Key,
-              keyMarker: result.NextKeyMarker!,
-              versionMarker: result.NextVersionIdMarker!,
-            };
+    test.provider("paginates versions and delete markers using both continuation markers", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("ListObjectVersions");
+        const marker = yield* S3.deleteObject({
+          Bucket: v.Bucket,
+          Key: v.Key,
+        });
+        const found: string[] = [];
+        const markers: string[] = [];
+        let params: Record<string, string> = { prefix: v.Key };
+        let complete = false;
+        for (let page = 0; page < 5; page++) {
+          const result = yield* call<S3.ListObjectVersionsOutput>("ListObjectVersions", params);
+          found.push(...(result.Versions ?? []).map((x) => x.VersionId!));
+          markers.push(...(result.DeleteMarkers ?? []).map((x) => x.VersionId!));
+          if (!result.IsTruncated) {
+            complete = true;
+            break;
           }
-          expect(complete).toBe(true);
-          expect(found.sort()).toEqual([v.old, v.current].sort());
-          expect(markers).toEqual([marker.VersionId!]);
-        }),
+          expect(result.NextKeyMarker).toBeTruthy();
+          expect(result.NextVersionIdMarker).toBeTruthy();
+          params = {
+            prefix: v.Key,
+            keyMarker: result.NextKeyMarker!,
+            versionMarker: result.NextVersionIdMarker!,
+          };
+        }
+        expect(complete).toBe(true);
+        expect(found.sort()).toEqual([v.old, v.current].sort());
+        expect(markers).toEqual([marker.VersionId!]);
+      }),
     );
   });
 
   describe("GetObjectTagging", () => {
-    test.provider(
-      "reads independent tags for the current and selected old version",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("GetObjectTagging");
-          const old = yield* call<S3.GetObjectTaggingOutput>(
-            "GetObjectTagging",
-            { key: v.Key, versionId: v.old },
-          );
-          const current = yield* call<S3.GetObjectTaggingOutput>(
-            "GetObjectTagging",
-            { key: v.Key },
-          );
-          expect(old.VersionId).toBe(v.old);
-          expect(old.TagSet).toEqual([{ Key: "generation", Value: "old" }]);
-          expect(current.VersionId).toBe(v.current);
-          expect(current.TagSet).toEqual([
-            { Key: "generation", Value: "current" },
-          ]);
-        }),
+    test.provider("reads independent tags for the current and selected old version", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("GetObjectTagging");
+        const old = yield* call<S3.GetObjectTaggingOutput>("GetObjectTagging", {
+          key: v.Key,
+          versionId: v.old,
+        });
+        const current = yield* call<S3.GetObjectTaggingOutput>("GetObjectTagging", { key: v.Key });
+        expect(old.VersionId).toBe(v.old);
+        expect(old.TagSet).toEqual([{ Key: "generation", Value: "old" }]);
+        expect(current.VersionId).toBe(v.current);
+        expect(current.TagSet).toEqual([{ Key: "generation", Value: "current" }]);
+      }),
     );
   });
 
   describe("PutObjectTagging", () => {
-    test.provider(
-      "updates the selected old version without mutating current tags",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("PutObjectTagging");
-          const before = yield* inventory(v.Bucket, v.Key);
-          const updated = [{ Key: "generation", Value: "updated-old" }];
-          yield* call(
-            "PutObjectTagging",
-            { key: v.Key, versionId: v.old },
-            updated,
-          );
-          expect(yield* tags(v.Bucket, v.Key, v.old)).toEqual(updated);
-          expect(yield* tags(v.Bucket, v.Key)).toEqual([
-            { Key: "generation", Value: "current" },
-          ]);
-          yield* call("PutObjectTagging", { key: v.Key }, [
-            { Key: "generation", Value: "updated-current" },
-          ]);
-          expect(yield* tags(v.Bucket, v.Key, v.old)).toEqual(updated);
-          expect(yield* tags(v.Bucket, v.Key)).toEqual([
-            { Key: "generation", Value: "updated-current" },
-          ]);
-          expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
-          yield* call(
-            "PutObjectTagging",
-            { key: v.Key, versionId: v.old },
-            updated,
-          );
-          expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
-        }),
+    test.provider("updates the selected old version without mutating current tags", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("PutObjectTagging");
+        const before = yield* inventory(v.Bucket, v.Key);
+        const updated = [{ Key: "generation", Value: "updated-old" }];
+        yield* call("PutObjectTagging", { key: v.Key, versionId: v.old }, updated);
+        expect(yield* tags(v.Bucket, v.Key, v.old)).toEqual(updated);
+        expect(yield* tags(v.Bucket, v.Key)).toEqual([{ Key: "generation", Value: "current" }]);
+        yield* call("PutObjectTagging", { key: v.Key }, [
+          { Key: "generation", Value: "updated-current" },
+        ]);
+        expect(yield* tags(v.Bucket, v.Key, v.old)).toEqual(updated);
+        expect(yield* tags(v.Bucket, v.Key)).toEqual([
+          { Key: "generation", Value: "updated-current" },
+        ]);
+        expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
+        yield* call("PutObjectTagging", { key: v.Key, versionId: v.old }, updated);
+        expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
+      }),
     );
   });
 
@@ -992,9 +881,7 @@ describe.sequential("versioned S3 bindings", () => {
         const before = yield* inventory(v.Bucket, v.Key);
         yield* call("DeleteObjectTagging", { key: v.Key, versionId: v.old });
         expect(yield* tags(v.Bucket, v.Key, v.old)).toEqual([]);
-        expect(yield* tags(v.Bucket, v.Key)).toEqual([
-          { Key: "generation", Value: "current" },
-        ]);
+        expect(yield* tags(v.Bucket, v.Key)).toEqual([{ Key: "generation", Value: "current" }]);
         yield* call("DeleteObjectTagging", { key: v.Key });
         expect(yield* tags(v.Bucket, v.Key)).toEqual([]);
         expect(yield* inventory(v.Bucket, v.Key)).toEqual(before);
@@ -1005,29 +892,25 @@ describe.sequential("versioned S3 bindings", () => {
   });
 
   describe("PresignPutObject", () => {
-    test.provider(
-      "creates a new version without overwriting the previous contents",
-      () =>
-        Effect.gen(function* () {
-          const v = yield* seed("PresignPutObject");
-          const signed = yield* call<{ url: string }>("PresignPutObject", {
-            key: v.Key,
-          });
-          const result = yield* HttpClient.execute(
-            HttpClientRequest.put(signed.url).pipe(
-              HttpClientRequest.bodyText("presigned version", "text/plain"),
-            ),
-          );
-          expect(result.status).toBe(200);
-          const version = result.headers["x-amz-version-id"];
-          expect(version).toBeTruthy();
-          expect(version).not.toBe(v.current);
-          expect(yield* read(v.Bucket, v.Key)).toBe("presigned version");
-          expect(yield* read(v.Bucket, v.Key, v.current)).toBe(
-            "the current version is longer",
-          );
-          expect(yield* read(v.Bucket, v.Key, v.old)).toBe("old version");
-        }),
+    test.provider("creates a new version without overwriting the previous contents", () =>
+      Effect.gen(function* () {
+        const v = yield* seed("PresignPutObject");
+        const signed = yield* call<{ url: string }>("PresignPutObject", {
+          key: v.Key,
+        });
+        const result = yield* HttpClient.execute(
+          HttpClientRequest.put(signed.url).pipe(
+            HttpClientRequest.bodyText("presigned version", "text/plain"),
+          ),
+        );
+        expect(result.status).toBe(200);
+        const version = result.headers["x-amz-version-id"];
+        expect(version).toBeTruthy();
+        expect(version).not.toBe(v.current);
+        expect(yield* read(v.Bucket, v.Key)).toBe("presigned version");
+        expect(yield* read(v.Bucket, v.Key, v.current)).toBe("the current version is longer");
+        expect(yield* read(v.Bucket, v.Key, v.old)).toBe("old version");
+      }),
     );
   });
 });

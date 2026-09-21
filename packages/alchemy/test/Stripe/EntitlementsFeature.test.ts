@@ -1,27 +1,22 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetEntitlementsFeature } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
   GetEntitlementsFeature({ id }).pipe(
-    Effect.map((feature) =>
-      feature.active ? ("active" as const) : ("inactive" as const),
-    ),
+    Effect.map((feature) => (feature.active ? ("active" as const) : ("inactive" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -59,12 +54,8 @@ test.provider(
       expect(fetched.name).toEqual("Alchemy Seats Feature");
       expect(fetched.active).toEqual(true);
       expect(fetched.metadata?.plan).toEqual("pro");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -131,9 +122,7 @@ test.provider(
       expect(inactive).toEqual("inactive");
 
       const after = yield* provider.list();
-      expect(
-        after.find((feature) => feature.id === deployed.id),
-      ).toBeUndefined();
+      expect(after.find((feature) => feature.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -14,9 +14,7 @@ import { isWorkerEvent } from "./WorkerRuntime.ts";
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
 export const makeRequestHandler =
-  <Req = never>(
-    handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
-  ) =>
+  <Req = never>(handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
       ? makeRequestEffect(event.input, handler)
@@ -28,9 +26,7 @@ export const makeRequestEffect = <Req = never>(
 ) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return Effect.gen(function* () {
-    const request = HttpServerRequest.fromWeb(
-      webRequest as any as globalThis.Request,
-    ).modify({
+    const request = HttpServerRequest.fromWeb(webRequest as any as globalThis.Request).modify({
       remoteAddress: Option.fromUndefinedOr(
         webRequest.headers.get("cf-connecting-ip") ?? undefined,
       ),

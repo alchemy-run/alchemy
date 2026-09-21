@@ -1,8 +1,3 @@
-/** Terminal-emulator features shared by CliKit components. */
-import {
-  detectColorLevel,
-  detectUnicodeSupport,
-} from "@alchemy.run/sigil/capabilities";
 import {
   setClipboard,
   setTerminalProgress,
@@ -10,6 +5,8 @@ import {
   tmuxPassthrough,
   type TerminalProgressState,
 } from "@alchemy.run/sigil/ansi";
+/** Terminal-emulator features shared by CliKit components. */
+import { detectColorLevel, detectUnicodeSupport } from "@alchemy.run/sigil/capabilities";
 
 export const ANSI_RESET = "\u001B[0m";
 export const ANSI_BOLD = "\u001B[1m";

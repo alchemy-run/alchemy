@@ -1,10 +1,10 @@
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { TargetGroup } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -53,11 +53,9 @@ test.provider(
       const provider = yield* Provider.findProvider(TargetGroup);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (tg) => tg.targetGroupArn === deployed.targetGroup.targetGroupArn,
-        ),
-      ).toBe(true);
+      expect(all.some((tg) => tg.targetGroupArn === deployed.targetGroup.targetGroupArn)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
 
@@ -68,9 +66,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => r.TargetGroups?.length ?? 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }),

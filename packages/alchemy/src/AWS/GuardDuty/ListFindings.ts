@@ -30,12 +30,7 @@ export interface ListFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.ListFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.ListFindingsResponse,
-      guardduty.ListFindingsError
-    >
+    ) => Effect.Effect<guardduty.ListFindingsResponse, guardduty.ListFindingsError>
   >
 > {}
-export const ListFindings = Binding.Service<ListFindings>(
-  "AWS.GuardDuty.ListFindings",
-);
+export const ListFindings = Binding.Service<ListFindings>("AWS.GuardDuty.ListFindings");

@@ -1,23 +1,17 @@
-import * as AWS from "@/AWS";
-import { Parameter } from "@/AWS/SSM";
-import * as Test from "@/Test/Alchemy";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Parameter } from "@/AWS/SSM";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 class ParameterStillExists extends Data.TaggedError("ParameterStillExists")<{
   readonly name: string;
@@ -85,9 +79,7 @@ test.provider(
         ResourceType: "Parameter",
         ResourceId: parameter.parameterName,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.TagList ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.TagList ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.Environment).toBe("test");
       expect(tagRecord.Extra).toBe("1");
       expect(tagRecord["alchemy::id"]).toBe("ConfigParam");
@@ -237,9 +229,7 @@ test.provider(
         }),
       );
       expect(first.parameterName).toBe("/alchemy-test/ssm/path-param-a");
-      expect(first.parameterArn).toContain(
-        ":parameter/alchemy-test/ssm/path-param-a",
-      );
+      expect(first.parameterArn).toContain(":parameter/alchemy-test/ssm/path-param-a");
 
       // renaming triggers a replacement: new physical parameter, old one gone
       const second = yield* stack.deploy(

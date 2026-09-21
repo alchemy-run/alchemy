@@ -32,13 +32,9 @@ export interface RestoreVolumeFromSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: fsx.RestoreVolumeFromSnapshotRequest,
-    ) => Effect.Effect<
-      fsx.RestoreVolumeFromSnapshotResponse,
-      fsx.RestoreVolumeFromSnapshotError
-    >
+    ) => Effect.Effect<fsx.RestoreVolumeFromSnapshotResponse, fsx.RestoreVolumeFromSnapshotError>
   >
 > {}
-export const RestoreVolumeFromSnapshot =
-  Binding.Service<RestoreVolumeFromSnapshot>(
-    "AWS.FSx.RestoreVolumeFromSnapshot",
-  );
+export const RestoreVolumeFromSnapshot = Binding.Service<RestoreVolumeFromSnapshot>(
+  "AWS.FSx.RestoreVolumeFromSnapshot",
+);

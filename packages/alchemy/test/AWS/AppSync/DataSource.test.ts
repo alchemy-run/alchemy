@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -80,9 +80,9 @@ test.provider(
       // least-privilege access to the table.
       expect(out.ddbRoleName).toBeTruthy();
       const role = yield* iam.getRole({ RoleName: out.ddbRoleName! });
-      expect(
-        decodeURIComponent(role.Role.AssumeRolePolicyDocument ?? ""),
-      ).toContain("appsync.amazonaws.com");
+      expect(decodeURIComponent(role.Role.AssumeRolePolicyDocument ?? "")).toContain(
+        "appsync.amazonaws.com",
+      );
       const policy = yield* iam.getRolePolicy({
         RoleName: out.ddbRoleName!,
         PolicyName: `${out.ddbRoleName}-policy`,

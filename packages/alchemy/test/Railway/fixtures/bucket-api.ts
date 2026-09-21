@@ -1,8 +1,8 @@
-import * as Railway from "@/Railway";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Railway from "@/Railway";
 import { Partition, Site } from "./suite-env.ts";
 
 export { Site };
@@ -64,9 +64,7 @@ export default class BucketApi extends Railway.Service<BucketApi>()(
         if (path === "/get") {
           const obj = yield* getObject({ Key: OBJECT_KEY });
           const text =
-            obj.Body === undefined
-              ? ""
-              : yield* Stream.mkString(Stream.decodeText(obj.Body));
+            obj.Body === undefined ? "" : yield* Stream.mkString(Stream.decodeText(obj.Body));
           return yield* HttpServerResponse.json({
             ok: text === OBJECT_BODY,
             text,
@@ -76,10 +74,7 @@ export default class BucketApi extends Railway.Service<BucketApi>()(
         return yield* HttpServerResponse.json({ ok: false }, { status: 404 });
       }).pipe(
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

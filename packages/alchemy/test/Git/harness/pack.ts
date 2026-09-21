@@ -19,8 +19,7 @@ export const verifyPackResponse = (
     const four = text(raw.subarray(pos, pos + 4));
     if (four === "PACK" && !sideband) break; // raw mode: the pack starts here
     const len = Number.parseInt(four, 16);
-    if (Number.isNaN(len))
-      return { objects: 0, error: `bad pkt length at ${pos}` };
+    if (Number.isNaN(len)) return { objects: 0, error: `bad pkt length at ${pos}` };
     if (len === 0) {
       pos += 4;
       if (sideband) break; // trailing flush after the last frame
@@ -48,13 +47,10 @@ export const verifyPack = (
   pack: Uint8Array,
 ): { readonly objects: number; readonly error?: string } => {
   const text = (b: Uint8Array) => new TextDecoder().decode(b);
-  if (pack.length < 32)
-    return { objects: 0, error: `pack too short (${pack.length} bytes)` };
-  if (text(pack.subarray(0, 4)) !== "PACK")
-    return { objects: 0, error: "missing PACK magic" };
+  if (pack.length < 32) return { objects: 0, error: `pack too short (${pack.length} bytes)` };
+  if (text(pack.subarray(0, 4)) !== "PACK") return { objects: 0, error: "missing PACK magic" };
   const view = new DataView(pack.buffer, pack.byteOffset, pack.byteLength);
-  if (view.getUint32(4) !== 2)
-    return { objects: 0, error: `pack version ${view.getUint32(4)}` };
+  if (view.getUint32(4) !== 2) return { objects: 0, error: `pack version ${view.getUint32(4)}` };
   const objects = view.getUint32(8);
   const hash = makeSha1();
   hash.update(pack.subarray(0, pack.length - 20));

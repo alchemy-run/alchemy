@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rdc from "@distilled.cloud/cloudflare/r2-data-catalog";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 interface CatalogOpts {
   compaction?: Cloudflare.R2.Compaction;
@@ -63,10 +60,7 @@ const expectGone = (accountId: string, bucketName: string) =>
     Effect.catchTag("WarehouseNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CatalogStillActive",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -97,9 +91,7 @@ test.provider(
       expect(initial.catalog.bucketName).toEqual(initial.bucket.bucketName);
       expect(initial.catalog.accountId).toEqual(accountId);
       expect(initial.catalog.status).toEqual("active");
-      expect(initial.catalog.name).toEqual(
-        `${accountId}_${initial.bucket.bucketName}`,
-      );
+      expect(initial.catalog.name).toEqual(`${accountId}_${initial.bucket.bucketName}`);
       expect(initial.catalog.catalogUri).toEqual(
         `https://catalog.cloudflarestorage.com/${accountId}/${initial.bucket.bucketName}`,
       );
@@ -146,10 +138,7 @@ test.provider(
           minSnapshotsToKeep: 5,
         });
 
-        const liveUpdated = yield* getCatalog(
-          accountId,
-          initial.bucket.bucketName,
-        );
+        const liveUpdated = yield* getCatalog(accountId, initial.bucket.bucketName);
         expect(liveUpdated.credentialStatus).toEqual("present");
         expect(liveUpdated.maintenanceConfig?.compaction).toEqual({
           state: "disabled",
@@ -210,9 +199,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        program({ compaction: { targetSizeMb: "128" } }),
-      );
+      const initial = yield* stack.deploy(program({ compaction: { targetSizeMb: "128" } }));
       expect(initial.catalog.status).toEqual("active");
 
       // Disable the catalog out-of-band. A redeploy with identical props is a
@@ -231,9 +218,7 @@ test.provider(
           }),
         );
 
-      const healed = yield* stack.deploy(
-        program({ compaction: { targetSizeMb: "64" } }),
-      );
+      const healed = yield* stack.deploy(program({ compaction: { targetSizeMb: "64" } }));
 
       // The warehouse id is stable across disable/enable cycles — this is a
       // re-enable of the same catalog, not a replacement.

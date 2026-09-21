@@ -1,19 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import ShutdownProbe from "./shutdown-probe.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const filterLogs = Effect.fn(function* (
-  logGroupName: string,
-  filterPattern: string,
-) {
+const filterLogs = Effect.fn(function* (logGroupName: string, filterPattern: string) {
   const result = yield* logs
     .filterLogEvents({ logGroupName, filterPattern })
     .pipe(Effect.catch(() => Effect.succeed({ events: [] })));
@@ -59,10 +56,7 @@ test.provider(
       expect(yield* res.text).toBe("ok");
 
       const logGroupName = `/aws/lambda/${fn.functionName}`;
-      const registered = yield* filterLogs(
-        logGroupName,
-        '"alchemy-graceful-shutdown"',
-      ).pipe(
+      const registered = yield* filterLogs(logGroupName, '"alchemy-graceful-shutdown"').pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
           until: (found) => found,
@@ -73,10 +67,7 @@ test.provider(
 
       // Request-scope finalizers settle inline per invocation — the marker
       // must reach the logs after a normal request.
-      const requestFinalized = yield* filterLogs(
-        logGroupName,
-        '"ALCHEMY_REQUEST_FINALIZED"',
-      ).pipe(
+      const requestFinalized = yield* filterLogs(logGroupName, '"ALCHEMY_REQUEST_FINALIZED"').pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
           until: (found) => found,
@@ -89,15 +80,10 @@ test.provider(
 
       // Out-of-band proof the destroy removed the function from the cloud.
       yield* Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail(new Error(`Function ${fn.functionName} still exists`)),
-        ),
+        Effect.flatMap(() => Effect.fail(new Error(`Function ${fn.functionName} still exists`))),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }),
@@ -136,10 +122,7 @@ test.provider.skipIf(!process.env.AWS_LAMBDA_TEST_SHUTDOWN)(
       // log group until the shutdown marker lands. No stack.destroy: keep
       // the deployment so a re-run continues observing the same function.
       const logGroupName = `/aws/lambda/${fn.functionName}`;
-      const finalized = yield* filterLogs(
-        logGroupName,
-        '"ALCHEMY_INSTANCE_FINALIZED"',
-      ).pipe(
+      const finalized = yield* filterLogs(logGroupName, '"ALCHEMY_INSTANCE_FINALIZED"').pipe(
         Effect.repeat({
           schedule: Schedule.spaced("30 seconds"),
           until: (found) => found,

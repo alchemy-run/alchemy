@@ -1,8 +1,3 @@
-import * as DataSync from "@/AWS/DataSync";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
-import * as Output from "@/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,6 +6,11 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DataSync from "@/AWS/DataSync";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -30,11 +30,7 @@ const s3Policy = (arn: Output.Output<string>) => ({
   Statement: [
     {
       Effect: "Allow" as const,
-      Action: [
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-        "s3:ListBucketMultipartUploads",
-      ],
+      Action: ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
       Resource: [arn],
     },
     {
@@ -146,10 +142,7 @@ export default DataSyncTestFunction.make(
           const started = yield* startTaskExecution().pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "LocationAccessTestFailed",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(5)]),
             }),
             Effect.result,
           );
@@ -169,10 +162,7 @@ export default DataSyncTestFunction.make(
         }
 
         if (arn === null) {
-          return yield* HttpServerResponse.json(
-            { error: "missing arn" },
-            { status: 400 },
-          );
+          return yield* HttpServerResponse.json({ error: "missing arn" }, { status: 400 });
         }
 
         // Execution-addressed reads/writes: the execution ARN comes from

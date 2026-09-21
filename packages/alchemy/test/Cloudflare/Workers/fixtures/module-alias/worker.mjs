@@ -1,8 +1,8 @@
 import { createRequire } from "module";
 import { createRequire as nodeCreateRequire } from "node:module";
-import typescript from "typescript";
 import execa from "execa";
 import readable from "readable-stream";
+import typescript from "typescript";
 
 const bare = require("module");
 const prefixed = require("node:module");

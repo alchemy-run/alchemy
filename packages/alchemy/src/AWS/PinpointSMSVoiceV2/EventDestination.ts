@@ -173,10 +173,7 @@ export class SmsVoiceEventDestinationMissing extends Data.TaggedError(
   "SmsVoiceEventDestinationMissing",
 )<{ message: string }> {}
 
-const sameStringSet = (
-  left: readonly string[] | undefined,
-  right: readonly string[],
-) => {
+const sameStringSet = (left: readonly string[] | undefined, right: readonly string[]) => {
   const l = [...(left ?? [])].sort();
   const r = [...right].sort();
   return l.length === r.length && l.every((v, i) => v === r[i]);
@@ -199,19 +196,14 @@ const toWireDestinations = (props: {
         DeliveryStreamArn: props.kinesisFirehoseDestination.deliveryStreamArn,
       }
     : undefined,
-  SnsDestination: props.snsDestination
-    ? { TopicArn: props.snsDestination.topicArn }
-    : undefined,
+  SnsDestination: props.snsDestination ? { TopicArn: props.snsDestination.topicArn } : undefined,
 });
 
 export const EventDestinationProvider = () =>
   Provider.effect(
     EventDestination,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { eventDestinationName?: string | undefined },
-      ) =>
+      const toName = (id: string, props: { eventDestinationName?: string | undefined }) =>
         props.eventDestinationName
           ? Effect.succeed(props.eventDestinationName)
           : createPhysicalName({ id, maxLength: 64 });
@@ -222,25 +214,16 @@ export const EventDestinationProvider = () =>
           .describeConfigurationSets({ ConfigurationSetNames: [name] })
           .pipe(
             retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
-        return result?.ConfigurationSets?.find(
-          (cs) => cs.ConfigurationSetName === name,
-        );
+        return result?.ConfigurationSets?.find((cs) => cs.ConfigurationSetName === name);
       });
 
       return {
-        stables: [
-          "configurationSetName",
-          "configurationSetArn",
-          "eventDestinationName",
-        ],
+        stables: ["configurationSetName", "configurationSetArn", "eventDestinationName"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const configurationSetName =
-            output?.configurationSetName ?? olds?.configurationSetName;
+          const configurationSetName = output?.configurationSetName ?? olds?.configurationSetName;
           if (configurationSetName === undefined) return undefined;
           const eventDestinationName =
             output?.eventDestinationName ?? (yield* toName(id, olds ?? {}));
@@ -275,8 +258,7 @@ export const EventDestinationProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const configurationSetName = news.configurationSetName;
-          const eventDestinationName =
-            output?.eventDestinationName ?? (yield* toName(id, news));
+          const eventDestinationName = output?.eventDestinationName ?? (yield* toName(id, news));
           const desiredEnabled = news.enabled ?? true;
           const desiredDestinations = toWireDestinations(news);
 
@@ -322,10 +304,7 @@ export const EventDestinationProvider = () =>
           // (enabled, event types, delivery target) drifted.
           const drifted =
             observed.Enabled !== desiredEnabled ||
-            !sameStringSet(
-              observed.MatchingEventTypes,
-              news.matchingEventTypes,
-            ) ||
+            !sameStringSet(observed.MatchingEventTypes, news.matchingEventTypes) ||
             JSON.stringify({
               cw: observed.CloudWatchLogsDestination,
               kf: observed.KinesisFirehoseDestination,
@@ -348,9 +327,7 @@ export const EventDestinationProvider = () =>
               .pipe(retrySmsVoiceThrottled);
           }
 
-          yield* session.note(
-            `${finalSet.ConfigurationSetArn}/${eventDestinationName}`,
-          );
+          yield* session.note(`${finalSet.ConfigurationSetArn}/${eventDestinationName}`);
           return {
             configurationSetName: finalSet.ConfigurationSetName,
             configurationSetArn: finalSet.ConfigurationSetArn,

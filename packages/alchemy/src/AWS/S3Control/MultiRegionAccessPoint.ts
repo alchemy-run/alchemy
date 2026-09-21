@@ -146,8 +146,7 @@ const retryWhileMrapTransitions = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "MultiRegionAccessPointNotReady" ||
-      e._tag === "MultiRegionAccessPointNotDeleted",
+      e._tag === "MultiRegionAccessPointNotReady" || e._tag === "MultiRegionAccessPointNotDeleted",
     schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]),
   });
 
@@ -180,14 +179,10 @@ export const MultiRegionAccessPointProvider = () =>
 
       const observeMrap = (accountId: string, name: string) =>
         inMrapRegion(
-          s3control
-            .getMultiRegionAccessPoint({ AccountId: accountId, Name: name })
-            .pipe(
-              Effect.map((r) => r.AccessPoint),
-              Effect.catchTag("NoSuchMultiRegionAccessPoint", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          s3control.getMultiRegionAccessPoint({ AccountId: accountId, Name: name }).pipe(
+            Effect.map((r) => r.AccessPoint),
+            Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.succeed(undefined)),
+          ),
         );
 
       const toAttrs = (
@@ -254,12 +249,7 @@ export const MultiRegionAccessPointProvider = () =>
         });
 
       return MultiRegionAccessPoint.Provider.of({
-        stables: [
-          "multiRegionAccessPointName",
-          "multiRegionAccessPointArn",
-          "alias",
-          "accountId",
-        ],
+        stables: ["multiRegionAccessPointName", "multiRegionAccessPointArn", "alias", "accountId"],
         // Multi-Region Access Points do not support tags; the deterministic
         // name is the ownership scope.
         list: () =>
@@ -272,17 +262,13 @@ export const MultiRegionAccessPointProvider = () =>
             );
             return Array.from(pages).flatMap((page) =>
               (page.AccessPoints ?? []).flatMap((report) =>
-                report.Name !== undefined
-                  ? [toAttrs(report.Name, accountId, report)]
-                  : [],
+                report.Name !== undefined ? [toAttrs(report.Name, accountId, report)] : [],
               ),
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const name =
-            output?.multiRegionAccessPointName ??
-            (yield* createName(id, olds ?? {}));
+          const name = output?.multiRegionAccessPointName ?? (yield* createName(id, olds ?? {}));
           const report = yield* observeMrap(accountId, name);
           if (report === undefined) return undefined;
           return toAttrs(name, accountId, report);
@@ -301,8 +287,7 @@ export const MultiRegionAccessPointProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const name =
-            output?.multiRegionAccessPointName ?? (yield* createName(id, news));
+          const name = output?.multiRegionAccessPointName ?? (yield* createName(id, news));
 
           // 1. OBSERVE — cloud state is authoritative.
           const report = yield* observeMrap(accountId, name);
@@ -328,12 +313,9 @@ export const MultiRegionAccessPointProvider = () =>
                   PublicAccessBlock: news.publicAccessBlock
                     ? {
                         BlockPublicAcls: news.publicAccessBlock.blockPublicAcls,
-                        IgnorePublicAcls:
-                          news.publicAccessBlock.ignorePublicAcls,
-                        BlockPublicPolicy:
-                          news.publicAccessBlock.blockPublicPolicy,
-                        RestrictPublicBuckets:
-                          news.publicAccessBlock.restrictPublicBuckets,
+                        IgnorePublicAcls: news.publicAccessBlock.ignorePublicAcls,
+                        BlockPublicPolicy: news.publicAccessBlock.blockPublicPolicy,
+                        RestrictPublicBuckets: news.publicAccessBlock.restrictPublicBuckets,
                       }
                     : undefined,
                 },
@@ -369,12 +351,7 @@ export const MultiRegionAccessPointProvider = () =>
                   ClientToken: clientToken,
                   Details: { Name: name },
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "NoSuchMultiRegionAccessPoint",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.void)),
             );
           }
 

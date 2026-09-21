@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
@@ -175,9 +172,7 @@ test.provider(
         // Unentitled — assert the typed entitlement tag, then verify the
         // provider's `list()` still enumerates without error (returns []).
         expect(probe.failure._tag).toEqual("PhaseNotEntitled");
-        const provider = yield* Provider.findProvider(
-          Cloudflare.Ruleset.CustomRuleset,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.Ruleset.CustomRuleset);
         const all = yield* provider.list();
         expect(Array.isArray(all)).toBe(true);
         yield* stack.destroy();
@@ -205,9 +200,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Ruleset.CustomRuleset,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Ruleset.CustomRuleset);
       const all = yield* provider.list();
 
       expect(all.some((r) => r.rulesetId === deployed.rulesetId)).toBe(true);

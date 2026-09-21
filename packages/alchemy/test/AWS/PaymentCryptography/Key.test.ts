@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Alias, Key } from "@/AWS/PaymentCryptography";
-import * as Test from "@/Test/Alchemy";
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Alias, Key } from "@/AWS/PaymentCryptography";
+import * as Test from "@/Test/Alchemy";
 import { reapLeakedKeys } from "./reapKeys.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -23,30 +23,26 @@ test.provider.skipIf(!!process.env.AWS_TEST_PAYMENTCRYPTO)(
 // Ungated typed-error probes: prove the distilled error unions carry the
 // not-found tag the provider's read/delete paths depend on. These run in
 // every CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getKey on a nonexistent identifier fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        paymentcryptography.getKey({
-          KeyIdentifier: "alias/alchemy-nonexistent-payment-key-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getKey on a nonexistent identifier fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      paymentcryptography.getKey({
+        KeyIdentifier: "alias/alchemy-nonexistent-payment-key-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "getAlias on a nonexistent alias fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        paymentcryptography.getAlias({
-          AliasName: "alias/alchemy-nonexistent-payment-alias-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getAlias on a nonexistent alias fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      paymentcryptography.getAlias({
+        AliasName: "alias/alchemy-nonexistent-payment-alias-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const dataKeyAttributes = {
@@ -96,9 +92,7 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
       expect(observed.Key.KeyState).toBe("CREATE_COMPLETE");
       expect(observed.Key.Enabled).toBe(true);
       expect(observed.Key.KeyAttributes.KeyAlgorithm).toBe("AES_128");
-      expect(observed.Key.KeyAttributes.KeyUsage).toBe(
-        "TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY",
-      );
+      expect(observed.Key.KeyAttributes.KeyUsage).toBe("TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY");
       const observedAlias = yield* paymentcryptography.getAlias({
         AliasName: deployed.alias.aliasName,
       });
@@ -130,13 +124,9 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
         .getKey({ KeyIdentifier: deployed.key.keyArn })
         .pipe(
           Effect.map((r) => r.Key.KeyState),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
         );
-      expect(["DELETE_PENDING", "DELETE_COMPLETE", "gone"]).toContain(
-        stateAfter,
-      );
+      expect(["DELETE_PENDING", "DELETE_COMPLETE", "gone"]).toContain(stateAfter);
       const aliasError = yield* Effect.flip(
         paymentcryptography.getAlias({
           AliasName: deployed.alias.aliasName,

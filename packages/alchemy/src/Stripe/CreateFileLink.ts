@@ -32,6 +32,4 @@ export interface CreateFileLink extends Binding.Service<
   >
 > {}
 
-export const CreateFileLink = Binding.Service<CreateFileLink>(
-  "Stripe.CreateFileLink",
-);
+export const CreateFileLink = Binding.Service<CreateFileLink>("Stripe.CreateFileLink");

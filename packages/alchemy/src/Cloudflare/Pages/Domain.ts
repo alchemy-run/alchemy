@@ -2,7 +2,6 @@ import * as pages from "@distilled.cloud/cloudflare/pages";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -94,13 +93,7 @@ export interface DomainAttributes {
   createdOn: string;
 }
 
-export type Domain = Resource<
-  TypeId,
-  DomainProps,
-  DomainAttributes,
-  never,
-  Providers
->;
+export type Domain = Resource<TypeId, DomainProps, DomainAttributes, never, Providers>;
 
 /**
  * A custom domain attached to a Cloudflare Pages project.
@@ -149,14 +142,7 @@ export const isDomain = (value: unknown): value is Domain =>
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
-    stables: [
-      "domainId",
-      "accountId",
-      "projectName",
-      "name",
-      "zoneTag",
-      "createdOn",
-    ],
+    stables: ["domainId", "accountId", "projectName", "name", "zoneTag", "createdOn"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const o = olds as DomainProps | undefined;
@@ -172,8 +158,7 @@ export const DomainProvider = () =>
       // projectName is Input<string>; compare only once both sides are
       // concrete strings.
       const oldProject =
-        output?.projectName ??
-        (typeof o?.projectName === "string" ? o.projectName : undefined);
+        output?.projectName ?? (typeof o?.projectName === "string" ? o.projectName : undefined);
       if (
         oldProject !== undefined &&
         typeof n.projectName === "string" &&
@@ -194,9 +179,7 @@ export const DomainProvider = () =>
       const projectNames = yield* pages.listProjects.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((project) => project.name),
-          ),
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map((project) => project.name)),
         ),
       );
 
@@ -207,9 +190,7 @@ export const DomainProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((domain) =>
-                  toAttributes(domain, accountId, projectName),
-                ),
+                (page.result ?? []).map((domain) => toAttributes(domain, accountId, projectName)),
               ),
             ),
             // The project can vanish between enumeration and the
@@ -259,11 +240,7 @@ export const DomainProvider = () =>
           .pipe(
             Effect.catchTag("PagesDomainAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const existing = yield* getDomain(
-                  accountId,
-                  projectName,
-                  news.name,
-                );
+                const existing = yield* getDomain(accountId, projectName, news.name);
                 if (!existing) return yield* Effect.fail(originalError);
                 return existing;
               }),
@@ -279,11 +256,7 @@ export const DomainProvider = () =>
             projectName,
             domainName: news.name,
           })
-          .pipe(
-            Effect.catchTag("PagesDomainNotFound", () =>
-              Effect.succeed(observed!),
-            ),
-          );
+          .pipe(Effect.catchTag("PagesDomainNotFound", () => Effect.succeed(observed!)));
       }
 
       // 4. Return fresh attributes.
@@ -316,11 +289,7 @@ type ObservedDomain =
  * domain is not attached (`PagesDomainNotFound`, code 8000021) or the
  * whole project no longer exists (`ProjectNotFound`, code 8000007).
  */
-const getDomain = (
-  accountId: string,
-  projectName: string,
-  domainName: string,
-) =>
+const getDomain = (accountId: string, projectName: string, domainName: string) =>
   pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
     Effect.catchTag("PagesDomainNotFound", () => Effect.succeed(undefined)),
     Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),

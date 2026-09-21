@@ -1,15 +1,15 @@
-import { providers } from "@/Neon/Providers.ts";
-import { WebsiteArtifact } from "@/Neon/Website/Artifact.ts";
-import { deployWebsite } from "@/Neon/Website/FrameworkSite.ts";
-import { Astro } from "@/Neon/Website/Astro.ts";
-import { Nextjs } from "@/Neon/Website/Nextjs.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { providers } from "@/Neon/Providers.ts";
+import { WebsiteArtifact } from "@/Neon/Website/Artifact.ts";
+import { Astro } from "@/Neon/Website/Astro.ts";
+import { deployWebsite } from "@/Neon/Website/FrameworkSite.ts";
+import { Nextjs } from "@/Neon/Website/Nextjs.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { functionRolloutTimeout } from "../FunctionRollout.ts";
 import { exampleRoot, updatedBodyContaining } from "./Fixture.ts";
 
@@ -33,10 +33,7 @@ describe.sequential("Neon Website feasibility", () => {
           path.join(distDir, "index.html"),
           "<h1>Neon static feasibility</h1>",
         );
-        yield* fs.writeFileString(
-          path.join(distDir, "asset.json"),
-          '{"ok":true}',
-        );
+        yield* fs.writeFileString(path.join(distDir, "asset.json"), '{"ok":true}');
         const deploy = stack.deploy(
           Effect.gen(function* () {
             const artifact = yield* WebsiteArtifact("Artifact", {
@@ -51,9 +48,7 @@ describe.sequential("Neon Website feasibility", () => {
         expect(site.function).toBeDefined();
         const fn = site.function!;
         expect(
-          yield* HttpClient.get(`${site.url}/deep/link`).pipe(
-            Effect.flatMap((res) => res.text),
-          ),
+          yield* HttpClient.get(`${site.url}/deep/link`).pipe(Effect.flatMap((res) => res.text)),
         ).toContain("Neon static feasibility");
         const head = yield* HttpClient.head(`${site.url}/asset.json`);
         expect(head.status).toBe(200);
@@ -65,23 +60,13 @@ describe.sequential("Neon Website feasibility", () => {
         });
         expect(observed).toBeDefined();
         const unchanged = yield* deploy;
-        expect(unchanged.function!.activeDeploymentId).toBe(
-          fn.activeDeploymentId,
-        );
-        yield* fs.writeFileString(
-          path.join(distDir, "index.html"),
-          "<h1>Neon static updated</h1>",
-        );
+        expect(unchanged.function!.activeDeploymentId).toBe(fn.activeDeploymentId);
+        yield* fs.writeFileString(path.join(distDir, "index.html"), "<h1>Neon static updated</h1>");
         const updated = yield* deploy;
         expect(updated.function!.functionId).toBe(fn.functionId);
-        expect(updated.function!.activeDeploymentId).not.toBe(
-          fn.activeDeploymentId,
-        );
+        expect(updated.function!.activeDeploymentId).not.toBe(fn.activeDeploymentId);
         expect(updated.url).toBe(site.url);
-        yield* updatedBodyContaining(
-          String(updated.url),
-          "Neon static updated",
-        );
+        yield* updatedBodyContaining(String(updated.url), "Neon static updated");
         yield* stack.destroy();
         expect(
           yield* getProject({ project_id: fn.projectId }).pipe(
@@ -115,13 +100,8 @@ describe.sequential("Neon Website feasibility", () => {
           const response = yield* HttpClient.get(String(site.url));
           expect(response.status).toBe(200);
           expect(yield* response.text).toContain("Neon");
-          expect(
-            (yield* HttpClient.get(`${site.url}/example.json`)).status,
-          ).toBe(200);
-          expect(
-            (yield* HttpClient.get(`${site.url}/api/hello?name=Alchemy`))
-              .status,
-          ).toBe(200);
+          expect((yield* HttpClient.get(`${site.url}/example.json`)).status).toBe(200);
+          expect((yield* HttpClient.get(`${site.url}/api/hello?name=Alchemy`)).status).toBe(200);
           const fn = site.function!;
           yield* getProjectBranchFunction({
             project_id: fn.projectId,

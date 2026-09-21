@@ -1,26 +1,22 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
-import * as Test from "@/Test/Alchemy";
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag the provider's read/observe paths depend on. Runs in every
 // CI pass at near-zero cost.
-test.provider(
-  "describeBot on a nonexistent bot fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        lexm.describeBot({ botId: "BOGUSBOT01" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeBot on a nonexistent bot fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(lexm.describeBot({ botId: "BOGUSBOT01" }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const lexBotRole = Role("LexBotRole", {
@@ -41,21 +37,14 @@ const assertBotGone = (botId: string) =>
   Effect.gen(function* () {
     const status = yield* lexm.describeBot({ botId }).pipe(
       Effect.map((bot) => bot.botStatus ?? "unknown"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone") {
-      return yield* Effect.fail(
-        new Error(`bot '${botId}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`bot '${botId}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -125,18 +114,17 @@ test.provider(
         localeId: "en_US",
         intentId: created.greet.intentId,
       });
-      expect(
-        (intent.sampleUtterances ?? []).map((u) => u.utterance).sort(),
-      ).toEqual(["hello", "hi"]);
+      expect((intent.sampleUtterances ?? []).map((u) => u.utterance).sort()).toEqual([
+        "hello",
+        "hi",
+      ]);
       const slotType = yield* lexm.describeSlotType({
         botId: created.bot.botId,
         botVersion: "DRAFT",
         localeId: "en_US",
         slotTypeId: created.size.slotTypeId,
       });
-      expect(slotType.valueSelectionSetting?.resolutionStrategy).toBe(
-        "TopResolution",
-      );
+      expect(slotType.valueSelectionSetting?.resolutionStrategy).toBe("TopResolution");
       const tags = yield* lexm.listTagsForResource({
         resourceARN: created.bot.botArn,
       });
@@ -206,9 +194,9 @@ test.provider(
         localeId: "en_US",
         intentId: updated.greet.intentId,
       });
-      expect(
-        (updatedIntent.sampleUtterances ?? []).map((u) => u.utterance),
-      ).toContain("good morning");
+      expect((updatedIntent.sampleUtterances ?? []).map((u) => u.utterance)).toContain(
+        "good morning",
+      );
       // Code hook flags synced onto the DRAFT intent by the update.
       expect(updatedIntent.dialogCodeHook?.enabled).toBe(true);
       expect(updatedIntent.fulfillmentCodeHook?.enabled).toBe(true);

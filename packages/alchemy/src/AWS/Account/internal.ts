@@ -12,8 +12,4 @@ import * as Redacted from "effect/Redacted";
 export const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);

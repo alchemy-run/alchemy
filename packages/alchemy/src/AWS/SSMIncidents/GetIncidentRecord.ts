@@ -28,10 +28,7 @@ export interface GetIncidentRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.GetIncidentRecordInput,
-    ) => Effect.Effect<
-      incidents.GetIncidentRecordOutput,
-      incidents.GetIncidentRecordError
-    >
+    ) => Effect.Effect<incidents.GetIncidentRecordOutput, incidents.GetIncidentRecordError>
   >
 > {}
 export const GetIncidentRecord = Binding.Service<GetIncidentRecord>(

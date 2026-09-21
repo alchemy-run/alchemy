@@ -138,9 +138,7 @@ export type RestrictedApiKey = Resource<
  *
  * @resource
  */
-export const RestrictedApiKey = Resource<RestrictedApiKey>(
-  "Stripe.RestrictedApiKey",
-);
+export const RestrictedApiKey = Resource<RestrictedApiKey>("Stripe.RestrictedApiKey");
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

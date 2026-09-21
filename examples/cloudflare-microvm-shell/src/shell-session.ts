@@ -60,9 +60,7 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
           }
           const { endpoint, headers } = current;
           const client = yield* HttpClient.HttpClient;
-          const request = HttpClientRequest.post(
-            `https://${endpoint}/exec`,
-          ).pipe(
+          const request = HttpClientRequest.post(`https://${endpoint}/exec`).pipe(
             HttpClientRequest.setHeaders(headers),
             HttpClientRequest.bodyJsonUnsafe({ command }),
           );
@@ -116,20 +114,14 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
           }),
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();
-          yield* send(
-            socket,
-            "connected to microvm — type a command and press enter\n",
-          );
+          yield* send(socket, "connected to microvm — type a command and press enter\n");
           return response;
         }),
         webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.WebSocket,
           message: string | ArrayBuffer,
         ) {
-          const command =
-            typeof message === "string"
-              ? message
-              : new TextDecoder().decode(message);
+          const command = typeof message === "string" ? message : new TextDecoder().decode(message);
           if (!command.trim()) return;
           yield* runCommand(socket, command.trim());
         }),

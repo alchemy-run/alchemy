@@ -58,12 +58,7 @@ export const makeDirectoryServiceAccountHttpBinding = <I, A, E, R>(options: {
  * directory's ARN (`arn:aws:ds:{region}:{account}:directory/{id}`), and the
  * runtime half injects the directory's `DirectoryId` into every request.
  */
-export const makeDirectoryHttpBinding = <
-  I extends { DirectoryId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDirectoryHttpBinding = <I extends { DirectoryId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DirectoryService.CreateSnapshot`. */
   tag: string;
   /** The distilled operation; `DirectoryId` is injected from the directory. */
@@ -79,11 +74,10 @@ export const makeDirectoryHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           yield* host.bind`Allow(${host}, ${options.tag}(${directory}))`({
             policyStatements: [
               {

@@ -1,16 +1,15 @@
-import * as Glacier from "@/AWS/Glacier";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Glacier from "@/AWS/Glacier";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
 // A syntactically-valid-looking but nonexistent 138-char job/upload id.
-const BOGUS_ID =
-  "alchemy-nonexistent-glacier-id-000000000000000000000000000000000000";
+const BOGUS_ID = "alchemy-nonexistent-glacier-id-000000000000000000000000000000000000";
 
 export class GlacierBindingsFunction extends Lambda.Function<Lambda.Function>()(
   "GlacierBindingsFunction",
@@ -31,11 +30,9 @@ export default GlacierBindingsFunction.make(
     const describeJob = yield* Glacier.DescribeJob(vault);
     const listJobs = yield* Glacier.ListJobs(vault);
     const getJobOutput = yield* Glacier.GetJobOutput(vault);
-    const initiateMultipartUpload =
-      yield* Glacier.InitiateMultipartUpload(vault);
+    const initiateMultipartUpload = yield* Glacier.InitiateMultipartUpload(vault);
     const uploadMultipartPart = yield* Glacier.UploadMultipartPart(vault);
-    const completeMultipartUpload =
-      yield* Glacier.CompleteMultipartUpload(vault);
+    const completeMultipartUpload = yield* Glacier.CompleteMultipartUpload(vault);
     const abortMultipartUpload = yield* Glacier.AbortMultipartUpload(vault);
     const listMultipartUploads = yield* Glacier.ListMultipartUploads(vault);
     const listParts = yield* Glacier.ListParts(vault);
@@ -98,22 +95,15 @@ export default GlacierBindingsFunction.make(
         if (request.method === "GET" && pathname === "/jobs/typed-not-found") {
           const typed = yield* describeJob({ jobId: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({ typed });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/job-output/typed-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/job-output/typed-not-found") {
           const typed = yield* getJobOutput({ jobId: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({ typed });
         }
@@ -121,17 +111,12 @@ export default GlacierBindingsFunction.make(
         if (request.method === "GET" && pathname === "/parts/typed-not-found") {
           const typed = yield* listParts({ uploadId: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({ typed });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/multipart/typed-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/multipart/typed-not-found") {
           // All three mutation ops on a nonexistent upload id round-trip to
           // the typed ResourceNotFoundException without writing anything —
           // the vault stays empty so stack.destroy can delete it.
@@ -140,41 +125,31 @@ export default GlacierBindingsFunction.make(
             range: "bytes 0-1048575/*",
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           const complete = yield* completeMultipartUpload({
             uploadId: BOGUS_ID,
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           const abort = yield* abortMultipartUpload({
             uploadId: BOGUS_ID,
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({ upload, complete, abort });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/archive/typed-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/archive/typed-not-found") {
           // DeleteArchive is documented idempotent for already-deleted
           // archives, but a syntactically-bogus id surfaces the typed
           // not-found / bad-parameter union — either tag proves the grant.
           const typed = yield* deleteArchive({ archiveId: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed(true),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed(true),
             ),
           );
           return yield* HttpServerResponse.json({ typed });
@@ -192,10 +167,7 @@ export default GlacierBindingsFunction.make(
           }).pipe(
             Effect.map(() => false),
             Effect.catchTag(
-              [
-                "InvalidParameterValueException",
-                "MissingParameterValueException",
-              ],
+              ["InvalidParameterValueException", "MissingParameterValueException"],
               () => Effect.succeed(true),
             ),
           );
@@ -211,10 +183,7 @@ export default GlacierBindingsFunction.make(
           }).pipe(
             Effect.map(() => false),
             Effect.catchTag(
-              [
-                "InvalidParameterValueException",
-                "MissingParameterValueException",
-              ],
+              ["InvalidParameterValueException", "MissingParameterValueException"],
               () => Effect.succeed(true),
             ),
           );
@@ -229,9 +198,8 @@ export default GlacierBindingsFunction.make(
             jobParameters: { Type: "inventory-retrieval" },
           }).pipe(
             Effect.map((r) => ({ started: true, jobId: r.jobId })),
-            Effect.catchTag(
-              ["InvalidParameterValueException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ started: false, error: e._tag }),
+            Effect.catchTag(["InvalidParameterValueException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ started: false, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type SchedulerResourceStatus = sagemaker.SchedulerResourceStatus;
@@ -106,9 +101,7 @@ export const ClusterSchedulerConfig = Resource<ClusterSchedulerConfig>(
 );
 
 const createConfigName = (id: string, props: { name?: string | undefined }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 63 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 63 });
 
 const describeConfigOrUndefined = (configId: string) =>
   sagemaker
@@ -120,25 +113,19 @@ const describeConfigOrUndefined = (configId: string) =>
  * without output) or a create raced.
  */
 const findConfigByName = Effect.fn(function* (name: string) {
-  const summaries = yield* sagemaker.listClusterSchedulerConfigs
-    .pages({ NameContains: name })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap(
-          (page) => page.ClusterSchedulerConfigSummaries ?? [],
-        ),
-      ),
-    );
+  const summaries = yield* sagemaker.listClusterSchedulerConfigs.pages({ NameContains: name }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((page) => page.ClusterSchedulerConfigSummaries ?? []),
+    ),
+  );
   return summaries.find((s) => s.Name === name && s.Status !== "Deleted");
 });
 
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -160,9 +147,7 @@ const toAttrs = (
  * The cluster policy is still transitioning toward the awaited state —
  * retried by the bounded wait schedule.
  */
-class SchedulerConfigNotReady extends Data.TaggedError(
-  "SchedulerConfigNotReady",
-)<{
+class SchedulerConfigNotReady extends Data.TaggedError("SchedulerConfigNotReady")<{
   readonly configId: string;
   readonly status: string | undefined;
 }> {}
@@ -170,9 +155,7 @@ class SchedulerConfigNotReady extends Data.TaggedError(
 /**
  * The cluster policy converged to a terminal failed status.
  */
-export class SchedulerConfigFailed extends Data.TaggedError(
-  "SchedulerConfigFailed",
-)<{
+export class SchedulerConfigFailed extends Data.TaggedError("SchedulerConfigFailed")<{
   readonly configId: string;
   readonly status: string | undefined;
   readonly message: string | undefined;
@@ -221,10 +204,7 @@ const waitForConfig = (configId: string, target: "Ready" | "Gone") =>
       if (described?.Status === "Created" || described?.Status === "Updated") {
         return;
       }
-      if (
-        described !== undefined &&
-        FAILED_STATUSES.includes(described.Status)
-      ) {
+      if (described !== undefined && FAILED_STATUSES.includes(described.Status)) {
         return yield* Effect.fail(
           new SchedulerConfigFailed({
             configId,
@@ -244,35 +224,24 @@ export const ClusterSchedulerConfigProvider = () =>
     ClusterSchedulerConfig,
     Effect.gen(function* () {
       return {
-        stables: [
-          "clusterSchedulerConfigId",
-          "clusterSchedulerConfigArn",
-          "name",
-          "clusterArn",
-        ],
+        stables: ["clusterSchedulerConfigId", "clusterSchedulerConfigArn", "name", "clusterArn"],
         list: () =>
           Effect.gen(function* () {
-            const summaries = yield* sagemaker.listClusterSchedulerConfigs
-              .pages({})
-              .pipe(
-                EffectStream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.ClusterSchedulerConfigSummaries ?? [],
-                  ),
-                ),
-              );
+            const summaries = yield* sagemaker.listClusterSchedulerConfigs.pages({}).pipe(
+              EffectStream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.ClusterSchedulerConfigSummaries ?? []),
+              ),
+            );
             return summaries.flatMap((s) =>
               s.ClusterSchedulerConfigId !== undefined && s.Status !== "Deleted"
                 ? [
                     {
                       clusterSchedulerConfigId: s.ClusterSchedulerConfigId,
-                      clusterSchedulerConfigArn:
-                        s.ClusterSchedulerConfigArn ?? "",
+                      clusterSchedulerConfigArn: s.ClusterSchedulerConfigArn ?? "",
                       name: s.Name ?? "",
                       clusterArn: s.ClusterArn ?? "",
-                      clusterSchedulerConfigVersion:
-                        s.ClusterSchedulerConfigVersion ?? 1,
+                      clusterSchedulerConfigVersion: s.ClusterSchedulerConfigVersion ?? 1,
                     },
                   ]
                 : [],
@@ -285,18 +254,12 @@ export const ClusterSchedulerConfigProvider = () =>
               ?.ClusterSchedulerConfigId;
           if (configId === undefined) return undefined;
           const described = yield* describeConfigOrUndefined(configId);
-          if (
-            !described ||
-            described.Status === "Deleting" ||
-            described.Status === "Deleted"
-          ) {
+          if (!described || described.Status === "Deleting" || described.Status === "Deleted") {
             return undefined;
           }
           const attrs = toAttrs(described);
           const tags = yield* fetchConfigTags(attrs.clusterSchedulerConfigArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -310,9 +273,7 @@ export const ClusterSchedulerConfigProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker ClusterSchedulerConfig requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker ClusterSchedulerConfig requires props"));
           }
           const name = yield* createConfigName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -321,16 +282,12 @@ export const ClusterSchedulerConfigProvider = () =>
           // Observe — by cached id first, then by name (lost state or race).
           let configId = output?.clusterSchedulerConfigId;
           let described =
-            configId !== undefined
-              ? yield* describeConfigOrUndefined(configId)
-              : undefined;
+            configId !== undefined ? yield* describeConfigOrUndefined(configId) : undefined;
           if (described === undefined) {
             const found = yield* findConfigByName(name);
             described =
               found?.ClusterSchedulerConfigId !== undefined
-                ? yield* describeConfigOrUndefined(
-                    found.ClusterSchedulerConfigId,
-                  )
+                ? yield* describeConfigOrUndefined(found.ClusterSchedulerConfigId)
                 : undefined;
           }
 
@@ -348,11 +305,7 @@ export const ClusterSchedulerConfigProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             configId =
               created?.ClusterSchedulerConfigId ??
               (yield* findConfigByName(name))?.ClusterSchedulerConfigId;
@@ -371,10 +324,8 @@ export const ClusterSchedulerConfigProvider = () =>
             // Sync — diff observed policy against desired.
             if (
               described !== undefined &&
-              (JSON.stringify(described.SchedulerConfig) !==
-                JSON.stringify(news.schedulerConfig) ||
-                (described.Description ?? undefined) !==
-                  (news.description ?? undefined))
+              (JSON.stringify(described.SchedulerConfig) !== JSON.stringify(news.schedulerConfig) ||
+                (described.Description ?? undefined) !== (news.description ?? undefined))
             ) {
               yield* sagemaker.updateClusterSchedulerConfig({
                 ClusterSchedulerConfigId: configId,
@@ -390,17 +341,13 @@ export const ClusterSchedulerConfigProvider = () =>
           described = yield* describeConfigOrUndefined(configId);
           if (described === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `failed to read reconciled cluster scheduler config ${name}`,
-              ),
+              new Error(`failed to read reconciled cluster scheduler config ${name}`),
             );
           }
           const attrs = toAttrs(described);
 
           // Sync tags — diff against OBSERVED cloud tags.
-          const currentTags = yield* fetchConfigTags(
-            attrs.clusterSchedulerConfigArn,
-          );
+          const currentTags = yield* fetchConfigTags(attrs.clusterSchedulerConfigArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* sagemaker.deleteTags({

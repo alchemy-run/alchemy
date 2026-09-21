@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
-export interface RunMicrovmRequest extends Omit<
-  microvms.RunMicrovmRequest,
-  "imageIdentifier"
-> {}
+export interface RunMicrovmRequest extends Omit<microvms.RunMicrovmRequest, "imageIdentifier"> {}
 
 /**
  * Runtime binding for `RunMicrovm`.

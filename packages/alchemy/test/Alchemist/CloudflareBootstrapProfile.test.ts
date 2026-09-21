@@ -1,16 +1,16 @@
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { resolveStateStoreScope } from "@/Alchemist/routes/cloudflare.ts";
-import { AuthError } from "@/Auth/AuthProvider.ts";
-import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
-import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
-import * as Interaction from "@/Interaction.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { resolveStateStoreScope } from "@/Alchemist/routes/cloudflare.ts";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { AuthError } from "@/Auth/AuthProvider.ts";
+import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
+import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
+import * as Interaction from "@/Interaction.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const STAGING_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const DEFAULT_ACCOUNT = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -34,9 +34,7 @@ const CLOUDFLARE_ENV_KEYS = [
  * An empty `--env-file` in the temp home is passed through so
  * `loadConfigProvider` never falls back to the checkout's cwd `.env`.
  */
-const withIsolatedHome = <A, E, R>(
-  effect: (envFile: string) => Effect.Effect<A, E, R>,
-) =>
+const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -158,9 +156,7 @@ it.live(
         });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
-        const missing = yield* resolveStateStoreScope({ envFile }).pipe(
-          Effect.flip,
-        );
+        const missing = yield* resolveStateStoreScope({ envFile }).pipe(Effect.flip);
         expect(missing).toBeInstanceOf(AuthError);
         expect((missing as AuthError).message).toContain("profile 'default'");
       }),

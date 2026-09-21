@@ -11,20 +11,13 @@ import type { Providers } from "../Providers.ts";
 /**
  * The Amazon Inspector scan types that can be enabled per account.
  */
-export type ResourceScanType =
-  | "EC2"
-  | "ECR"
-  | "LAMBDA"
-  | "LAMBDA_CODE"
-  | "CODE_REPOSITORY";
+export type ResourceScanType = "EC2" | "ECR" | "LAMBDA" | "LAMBDA_CODE" | "CODE_REPOSITORY";
 
 /**
  * Raised when Inspector does not reach the requested scan state within the
  * provider's bounded convergence budget.
  */
-export class Inspector2NotConverged extends Data.TaggedError(
-  "Inspector2NotConverged",
-)<{
+export class Inspector2NotConverged extends Data.TaggedError("Inspector2NotConverged")<{
   readonly accountId: string;
   readonly expected: string;
   readonly actual: Readonly<Record<string, string | undefined>>;
@@ -100,14 +93,10 @@ const statusOfType = (
   return resourceState[key]?.status;
 };
 
-const enabledTypes = (
-  resourceState: inspector2.ResourceState | undefined,
-): string[] => {
+const enabledTypes = (resourceState: inspector2.ResourceState | undefined): string[] => {
   if (!resourceState) return [];
   const out: string[] = [];
-  for (const key of Object.keys(RESOURCE_STATE_KEYS) as Array<
-    keyof typeof RESOURCE_STATE_KEYS
-  >) {
+  for (const key of Object.keys(RESOURCE_STATE_KEYS) as Array<keyof typeof RESOURCE_STATE_KEYS>) {
     if (resourceState[key]?.status === "ENABLED") {
       out.push(RESOURCE_STATE_KEYS[key]);
     }
@@ -119,9 +108,7 @@ const statusesOf = (
   resourceState: inspector2.ResourceState | undefined,
   types: readonly string[],
 ): Record<string, string | undefined> =>
-  Object.fromEntries(
-    types.map((type) => [type, statusOfType(resourceState, type)]),
-  );
+  Object.fromEntries(types.map((type) => [type, statusOfType(resourceState, type)]));
 
 export const EnablerProvider = () =>
   Provider.effect(
@@ -136,25 +123,16 @@ export const EnablerProvider = () =>
       // Keep the provider's wait bounded (~50s) and, critically, check the
       // terminal value because Effect.repeat returns its last success when the
       // repetition budget is exhausted even if `until` never became true.
-      const waitUntilEnabled = Effect.fn(function* (
-        accountId: string,
-        types: readonly string[],
-      ) {
+      const waitUntilEnabled = Effect.fn(function* (accountId: string, types: readonly string[]) {
         const account = yield* getAccount(accountId).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (account) =>
-              types.every(
-                (t) => statusOfType(account?.resourceState, t) === "ENABLED",
-              ),
+              types.every((t) => statusOfType(account?.resourceState, t) === "ENABLED"),
             times: 10,
           }),
         );
-        if (
-          !types.every(
-            (type) => statusOfType(account?.resourceState, type) === "ENABLED",
-          )
-        ) {
+        if (!types.every((type) => statusOfType(account?.resourceState, type) === "ENABLED")) {
           return yield* Effect.fail(
             new Inspector2NotConverged({
               accountId,
@@ -189,22 +167,18 @@ export const EnablerProvider = () =>
         if (enabled.length === 0) return;
         yield* inspector2
           .disable({ accountIds: [accountId], resourceTypes: enabled })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       });
 
       return {
         read: Effect.fn(function* ({ output }) {
-          const accountId =
-            output?.accountId ?? (yield* AWSEnvironment.current).accountId;
+          const accountId = output?.accountId ?? (yield* AWSEnvironment.current).accountId;
           const account = yield* getAccount(accountId);
           if (!account) return undefined;
           const enabled = enabledTypes(account.resourceState);
           const managed = output
             ? output.resourceTypes.filter(
-                (type) =>
-                  statusOfType(account.resourceState, type) !== "DISABLED",
+                (type) => statusOfType(account.resourceState, type) !== "DISABLED",
               )
             : enabled;
           if (managed.length === 0) return undefined;
@@ -267,9 +241,7 @@ export const EnablerProvider = () =>
           // Disable teardown is slow (minutes); fire it and do not block, the
           // account converges to the desired set asynchronously.
           const previouslyManaged = output?.resourceTypes ?? [];
-          const noLongerManaged = previouslyManaged.filter(
-            (type) => !desired.includes(type),
-          );
+          const noLongerManaged = previouslyManaged.filter((type) => !desired.includes(type));
           yield* disableManagedTypes(accountId, noLongerManaged);
 
           const final = yield* getAccount(accountId);

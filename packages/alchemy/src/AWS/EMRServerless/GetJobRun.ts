@@ -35,11 +35,7 @@ export interface GetJobRun extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetJobRunInput,
-    ) => Effect.Effect<emr.GetJobRunResponse, emr.GetJobRunError>
+    (request: GetJobRunInput) => Effect.Effect<emr.GetJobRunResponse, emr.GetJobRunError>
   >
 > {}
-export const GetJobRun = Binding.Service<GetJobRun>(
-  "AWS.EMRServerless.GetJobRun",
-);
+export const GetJobRun = Binding.Service<GetJobRun>("AWS.EMRServerless.GetJobRun");

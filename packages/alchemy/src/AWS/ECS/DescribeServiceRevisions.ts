@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface DescribeServiceRevisionsRequest
-  extends ECS.DescribeServiceRevisionsRequest {}
+export interface DescribeServiceRevisionsRequest extends ECS.DescribeServiceRevisionsRequest {}
 
 /**
  * Runtime binding for `ecs:DescribeServiceRevisions`.
@@ -36,11 +35,9 @@ export interface DescribeServiceRevisions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeServiceRevisionsRequest,
-    ) => Effect.Effect<
-      ECS.DescribeServiceRevisionsResponse,
-      ECS.DescribeServiceRevisionsError
-    >
+    ) => Effect.Effect<ECS.DescribeServiceRevisionsResponse, ECS.DescribeServiceRevisionsError>
   >
 > {}
-export const DescribeServiceRevisions =
-  Binding.Service<DescribeServiceRevisions>("AWS.ECS.DescribeServiceRevisions");
+export const DescribeServiceRevisions = Binding.Service<DescribeServiceRevisions>(
+  "AWS.ECS.DescribeServiceRevisions",
+);

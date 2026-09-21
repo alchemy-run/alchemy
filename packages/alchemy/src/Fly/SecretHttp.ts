@@ -11,9 +11,9 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { bindFlyApiToken } from "./Credentials.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { App } from "./App.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Secret } from "./Secret.ts";
 import type { SecretKey } from "./SecretKey.ts";
 
@@ -30,10 +30,7 @@ import type { SecretKey } from "./SecretKey.ts";
  */
 export type AppNamed = Secret | SecretKey;
 
-export const makeHttpSecretBinding = <
-  Target extends AppNamed,
-  Client,
->(options: {
+export const makeHttpSecretBinding = <Target extends AppNamed, Client>(options: {
   makeClient: (
     auth: SecretAuth,
     appName: Effect.Effect<string>,
@@ -46,11 +43,8 @@ export const makeHttpSecretBinding = <
   kms?: boolean;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth =
-      options.kms === true ? makeKmsAuth(context) : makeSecretAuth(context);
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
+    const auth = options.kms === true ? makeKmsAuth(context) : makeSecretAuth(context);
 
     return Effect.fn(function* (resource: Target) {
       yield* bindFlyApiToken().pipe(Effect.provideContext(context));
@@ -68,9 +62,7 @@ export const makeHttpAppBinding = <Client>(options: {
   makeClient: (auth: SecretAuth, appName: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (app: App) {
       yield* bindFlyApiToken().pipe(Effect.provideContext(context));
@@ -98,17 +90,11 @@ export const makeSecretAuth = (
   ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return eff.pipe(
-        Effect.provide(
-          Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer),
-        ),
+        Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
         Effect.timeout("8 seconds"),
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
-    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
-      A,
-      E,
-      RuntimeContext
-    >;
+    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<A, E, RuntimeContext>;
   },
 });
 
@@ -152,20 +138,11 @@ export const makeKmsAuth = (
             ),
           ),
         ),
-      ).pipe(Effect.timeout("8 seconds")) as Effect.Effect<
-        A,
-        E,
-        RuntimeContext
-      >;
+      ).pipe(Effect.timeout("8 seconds")) as Effect.Effect<A, E, RuntimeContext>;
     }
-    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
-      A,
-      E,
-      RuntimeContext
-    >;
+    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<A, E, RuntimeContext>;
   },
 });
 
-export const unwrapSecretValue = (
-  value: Redacted.Redacted<string> | string,
-): string => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+export const unwrapSecretValue = (value: Redacted.Redacted<string> | string): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;

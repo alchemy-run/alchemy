@@ -1,6 +1,6 @@
-import type { InputProps } from "../../Input.ts";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
@@ -12,12 +12,10 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * The vinext-on-AWS framework module (it is its own deploy target — not
  * OpenNext, not the Cloudflare Worker source).
  */
-export const VINEXT_AWS_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/aws";
+export const VINEXT_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/aws";
 
 /** The AWS Lambda deploy target for the vinext build. */
-export const VINEXT_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/aws";
+export const VINEXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/aws";
 
 /** Env var the S3 data-cache adapter reads for the ISR/fetch cache bucket. */
 export const VINEXT_CACHE_BUCKET_ENV = "CACHE_BUCKET_NAME";
@@ -105,8 +103,7 @@ export const Vinext = (id: string, propsIn: InputProps<VinextProps> = {}) =>
       },
     );
     if (site.server !== undefined) {
-      yield* site.server
-        .bind`Allow(${site.server}, AWS.Website.Vinext.Cache(${cacheBucket}))`({
+      yield* site.server.bind`Allow(${site.server}, AWS.Website.Vinext.Cache(${cacheBucket}))`({
         policyStatements: [
           {
             Effect: "Allow",

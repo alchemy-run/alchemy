@@ -25,10 +25,7 @@ export interface DescribePersistentAppUI extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.DescribePersistentAppUIInput,
-    ) => Effect.Effect<
-      SVC.DescribePersistentAppUIOutput,
-      SVC.DescribePersistentAppUIError
-    >
+    ) => Effect.Effect<SVC.DescribePersistentAppUIOutput, SVC.DescribePersistentAppUIError>
   >
 > {}
 export const DescribePersistentAppUI = Binding.Service<DescribePersistentAppUI>(

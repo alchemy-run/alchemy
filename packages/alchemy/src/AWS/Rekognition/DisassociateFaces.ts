@@ -33,10 +33,7 @@ export interface DisassociateFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DisassociateFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DisassociateFacesResponse,
-      rekognition.DisassociateFacesError
-    >
+    ) => Effect.Effect<rekognition.DisassociateFacesResponse, rekognition.DisassociateFacesError>
   >
 > {}
 export const DisassociateFaces = Binding.Service<DisassociateFaces>(

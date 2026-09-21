@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -32,15 +29,11 @@ const expectGone = (accountId: string, listId: string) =>
     Effect.catchTag("GatewayListNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ListNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
-const itemValues = (items: ReadonlyArray<{ value: string }>) =>
-  items.map((i) => i.value).sort();
+const itemValues = (items: ReadonlyArray<{ value: string }>) => items.map((i) => i.value).sort();
 
 test.provider("create, verify, and destroy a DOMAIN list", (stack) =>
   Effect.gen(function* () {
@@ -53,20 +46,14 @@ test.provider("create, verify, and destroy a DOMAIN list", (stack) =>
         name: "alchemy-zt-list-basic",
         type: "DOMAIN",
         description: "alchemy test list",
-        items: [
-          { value: "a.alchemy-test.example" },
-          { value: "b.alchemy-test.example" },
-        ],
+        items: [{ value: "a.alchemy-test.example" }, { value: "b.alchemy-test.example" }],
       }),
     );
 
     expect(list.listId).toBeTruthy();
     expect(list.accountId).toEqual(accountId);
     expect(list.type).toEqual("DOMAIN");
-    expect(itemValues(list.items)).toEqual([
-      "a.alchemy-test.example",
-      "b.alchemy-test.example",
-    ]);
+    expect(itemValues(list.items)).toEqual(["a.alchemy-test.example", "b.alchemy-test.example"]);
 
     const live = yield* getList(accountId, list.listId);
     expect(live.name).toEqual("alchemy-zt-list-basic");
@@ -91,10 +78,7 @@ test.provider("update items, description, and name in place", (stack) =>
       Cloudflare.Gateway.List("UpdateList", {
         name: "alchemy-zt-list-update",
         type: "DOMAIN",
-        items: [
-          { value: "keep.alchemy-test.example" },
-          { value: "remove.alchemy-test.example" },
-        ],
+        items: [{ value: "keep.alchemy-test.example" }, { value: "remove.alchemy-test.example" }],
       }),
     );
 
@@ -103,10 +87,7 @@ test.provider("update items, description, and name in place", (stack) =>
         name: "alchemy-zt-list-update-v2",
         type: "DOMAIN",
         description: "now with a description",
-        items: [
-          { value: "keep.alchemy-test.example" },
-          { value: "add.alchemy-test.example" },
-        ],
+        items: [{ value: "keep.alchemy-test.example" }, { value: "add.alchemy-test.example" }],
       }),
     );
 
@@ -132,10 +113,7 @@ test.provider("update items, description, and name in place", (stack) =>
         name: "alchemy-zt-list-update-v2",
         type: "DOMAIN",
         description: "now with a description",
-        items: [
-          { value: "keep.alchemy-test.example" },
-          { value: "add.alchemy-test.example" },
-        ],
+        items: [{ value: "keep.alchemy-test.example" }, { value: "add.alchemy-test.example" }],
       }),
     );
     expect(noop.listId).toEqual(initial.listId);

@@ -1,9 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Alchemy from "@/index.ts";
-import * as Provider from "@/Provider";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,6 +5,12 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Alchemy from "@/index.ts";
+import * as Provider from "@/Provider";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { Gateway } from "./fixtures/Gateway.ts";
 import TestWorker from "./fixtures/TestWorker.ts";
 
@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create and delete ai gateway with default props", (stack) =>
   Effect.gen(function* () {
@@ -215,69 +212,64 @@ test.provider("list enumerates the deployed ai gateway", (stack) =>
 // Engine-level adoption: AI Gateways have no ownership signal (Cloudflare
 // doesn't expose tags on AI Gateways), so a name match in `read` is treated
 // as silent adoption.
-test.provider(
-  "existing ai gateway (matching id) is silently adopted without --adopt",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("existing ai gateway (matching id) is silently adopted without --adopt", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Phase 1: deploy normally so a real AI Gateway exists. No explicit
-      // `id` — the engine generates a random-suffixed physical id
-      // (collision-free across concurrent runs); the deploy output hands
-      // back the real id, which pins the gateway's identity for the
-      // adoption phase below.
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.AI.Gateway("AdoptableGateway");
-        }),
-      );
-      const gatewayId = initial.gatewayId;
+    // Phase 1: deploy normally so a real AI Gateway exists. No explicit
+    // `id` — the engine generates a random-suffixed physical id
+    // (collision-free across concurrent runs); the deploy output hands
+    // back the real id, which pins the gateway's identity for the
+    // adoption phase below.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AI.Gateway("AdoptableGateway");
+      }),
+    );
+    const gatewayId = initial.gatewayId;
 
-      // Phase 2: wipe local state — the gateway stays on Cloudflare.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableGateway",
+    // Phase 2: wipe local state — the gateway stays on Cloudflare.
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableGateway",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    // Phase 3: redeploy without `adopt(true)`. The engine calls
+    // `provider.read`, which fetches the gateway by id and returns plain
+    // attrs — silent adoption.
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AI.Gateway("AdoptableGateway", {
+          id: gatewayId,
         });
-      }).pipe(Effect.provide(stack.state));
+      }),
+    );
 
-      // Phase 3: redeploy without `adopt(true)`. The engine calls
-      // `provider.read`, which fetches the gateway by id and returns plain
-      // attrs — silent adoption.
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.AI.Gateway("AdoptableGateway", {
-            id: gatewayId,
-          });
-        }),
-      );
+    expect(adopted.gatewayId).toEqual(gatewayId);
 
-      expect(adopted.gatewayId).toEqual(gatewayId);
+    const persisted = yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      return yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableGateway",
+      });
+    }).pipe(Effect.provide(stack.state));
 
-      const persisted = yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        return yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableGateway",
-        });
-      }).pipe(Effect.provide(stack.state));
+    expect((persisted as any)?.attr).toMatchObject({ gatewayId });
 
-      expect((persisted as any)?.attr).toMatchObject({ gatewayId });
-
-      yield* stack.destroy();
-      yield* waitForGatewayToBeDeleted(gatewayId, accountId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* waitForGatewayToBeDeleted(gatewayId, accountId);
+  }).pipe(logLevel),
 );
 
-const waitForGatewayToBeDeleted = Effect.fn(function* (
-  gatewayId: string,
-  accountId: string,
-) {
+const waitForGatewayToBeDeleted = Effect.fn(function* (gatewayId: string, accountId: string) {
   yield* aiGateway
     .getAiGateway({
       accountId,

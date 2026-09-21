@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
 
 // Bindings fixture: an S3 bucket + access point plus a Lambda that exercises
 // the nine ungated S3 Control runtime bindings against them — the three
@@ -31,10 +31,9 @@ export const BoundAccessPointLive = Layer.effect(
   BoundAccessPoint,
   Effect.gen(function* () {
     const bucket = yield* AWS.S3.Bucket("S3ControlBindingsBucket", {});
-    const accessPoint = yield* AWS.S3Control.AccessPoint(
-      "S3ControlBindingsAccessPoint",
-      { bucket: bucket.bucketName },
-    );
+    const accessPoint = yield* AWS.S3Control.AccessPoint("S3ControlBindingsAccessPoint", {
+      bucket: bucket.bucketName,
+    });
     // Execution role handed to S3 Batch Operations via CreateJob. The job is
     // cancelled while suspended, so the role's policy only needs to satisfy
     // create-time validation.
@@ -56,10 +55,7 @@ export const BoundAccessPointLive = Layer.effect(
             {
               Effect: "Allow",
               Action: ["s3:ListBucket", "s3:GetObject", "s3:PutObjectTagging"],
-              Resource: [
-                bucket.bucketArn,
-                Output.interpolate`${bucket.bucketArn}/*`,
-              ],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
             },
           ],
         },
@@ -79,10 +75,8 @@ export default S3ControlBindingsFunction.make(
     const { accessPoint, bucket, batchRole } = yield* BoundAccessPoint;
 
     const getAccessPoint = yield* AWS.S3Control.GetAccessPoint(accessPoint);
-    const getAccessPointPolicy =
-      yield* AWS.S3Control.GetAccessPointPolicy(accessPoint);
-    const getAccessPointPolicyStatus =
-      yield* AWS.S3Control.GetAccessPointPolicyStatus(accessPoint);
+    const getAccessPointPolicy = yield* AWS.S3Control.GetAccessPointPolicy(accessPoint);
+    const getAccessPointPolicyStatus = yield* AWS.S3Control.GetAccessPointPolicyStatus(accessPoint);
     const listAccessPoints = yield* AWS.S3Control.ListAccessPoints();
     const createJob = yield* AWS.S3Control.CreateJob();
     const describeJob = yield* AWS.S3Control.DescribeJob();
@@ -132,9 +126,7 @@ export default S3ControlBindingsFunction.make(
             Effect.map((r) => ({ hasPolicy: r.Policy !== undefined })),
             // A fresh access point has no policy — the typed tag proves the
             // binding round-trips.
-            Effect.catchTag("NoSuchAccessPointPolicy", () =>
-              Effect.succeed({ hasPolicy: false }),
-            ),
+            Effect.catchTag("NoSuchAccessPointPolicy", () => Effect.succeed({ hasPolicy: false })),
           );
           return yield* HttpServerResponse.json(result);
         }

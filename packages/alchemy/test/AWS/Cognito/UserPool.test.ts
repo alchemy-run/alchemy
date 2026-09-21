@@ -1,6 +1,4 @@
-import * as AWS from "@/AWS";
-import { UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -8,7 +6,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schedule from "effect/Schedule";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import { UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const customEmailSenderPath = fileURLToPath(
   new URL("./custom-email-sender-handler.ts", import.meta.url),
@@ -55,12 +55,8 @@ test.provider(
         UserPoolId: pool.userPoolId,
       });
       expect(created.UserPool?.Name).toBe(pool.userPoolName);
-      expect(created.UserPool?.Policies?.PasswordPolicy?.MinimumLength).toBe(
-        10,
-      );
-      expect(
-        created.UserPool?.AdminCreateUserConfig?.AllowAdminCreateUserOnly,
-      ).toBe(true);
+      expect(created.UserPool?.Policies?.PasswordPolicy?.MinimumLength).toBe(10);
+      expect(created.UserPool?.AdminCreateUserConfig?.AllowAdminCreateUserOnly).toBe(true);
       expect(created.UserPool?.MfaConfiguration).toBe("OFF");
       expect(created.UserPool?.DeletionProtection).toBe("INACTIVE");
 
@@ -85,12 +81,8 @@ test.provider(
       const afterUpdate = yield* cip.describeUserPool({
         UserPoolId: pool.userPoolId,
       });
-      expect(
-        afterUpdate.UserPool?.Policies?.PasswordPolicy?.MinimumLength,
-      ).toBe(14);
-      expect(
-        afterUpdate.UserPool?.Policies?.PasswordPolicy?.RequireSymbols,
-      ).toBe(false);
+      expect(afterUpdate.UserPool?.Policies?.PasswordPolicy?.MinimumLength).toBe(14);
+      expect(afterUpdate.UserPool?.Policies?.PasswordPolicy?.RequireSymbols).toBe(false);
       const updatedTags = yield* cip.listTagsForResource({
         ResourceArn: pool.userPoolArn,
       });
@@ -135,9 +127,7 @@ test.provider(
       const created = yield* cip.describeUserPool({
         UserPoolId: pool.userPoolId,
       });
-      const names = (created.UserPool?.SchemaAttributes ?? []).map(
-        (a) => a.Name,
-      );
+      const names = (created.UserPool?.SchemaAttributes ?? []).map((a) => a.Name);
       expect(names).toContain("custom:tenantId");
 
       // adding an attribute updates in place
@@ -155,9 +145,7 @@ test.provider(
       const afterAdd = yield* cip.describeUserPool({
         UserPoolId: pool.userPoolId,
       });
-      const afterAddNames = (afterAdd.UserPool?.SchemaAttributes ?? []).map(
-        (a) => a.Name,
-      );
+      const afterAddNames = (afterAdd.UserPool?.SchemaAttributes ?? []).map((a) => a.Name);
       expect(afterAddNames).toContain("custom:plan");
 
       // switching to email sign-in is immutable ⇒ replacement
@@ -234,11 +222,10 @@ test.provider(
 
       const initial = yield* describe();
       expect(initial.UserPoolTier).toBe("ESSENTIALS");
-      expect(
-        [
-          ...(initial.Policies?.SignInPolicy?.AllowedFirstAuthFactors ?? []),
-        ].sort(),
-      ).toEqual(["EMAIL_OTP", "PASSWORD"]);
+      expect([...(initial.Policies?.SignInPolicy?.AllowedFirstAuthFactors ?? [])].sort()).toEqual([
+        "EMAIL_OTP",
+        "PASSWORD",
+      ]);
       expect(initial.LambdaConfig?.CustomEmailSender).toEqual({
         LambdaArn: created.fn.functionArn,
         LambdaVersion: "V1_0",
@@ -253,10 +240,7 @@ test.provider(
       const afterUnrelated = yield* describe();
       expect(afterUnrelated.Policies?.PasswordPolicy?.MinimumLength).toBe(12);
       expect(
-        [
-          ...(afterUnrelated.Policies?.SignInPolicy?.AllowedFirstAuthFactors ??
-            []),
-        ].sort(),
+        [...(afterUnrelated.Policies?.SignInPolicy?.AllowedFirstAuthFactors ?? [])].sort(),
       ).toEqual(["EMAIL_OTP", "PASSWORD"]);
       expect(afterUnrelated.LambdaConfig?.CustomEmailSender).toEqual({
         LambdaArn: created.fn.functionArn,
@@ -299,17 +283,11 @@ test.provider(
       );
 
       const describe = () =>
-        cip
-          .describeUserPool({ UserPoolId: pool.userPoolId })
-          .pipe(Effect.map((r) => r.UserPool!));
+        cip.describeUserPool({ UserPoolId: pool.userPoolId }).pipe(Effect.map((r) => r.UserPool!));
 
       const created = yield* describe();
-      expect(created.EmailConfiguration?.EmailSendingAccount).toBe(
-        "COGNITO_DEFAULT",
-      );
-      expect(created.EmailConfiguration?.ReplyToEmailAddress).toBe(
-        "support@example.com",
-      );
+      expect(created.EmailConfiguration?.EmailSendingAccount).toBe("COGNITO_DEFAULT");
+      expect(created.EmailConfiguration?.ReplyToEmailAddress).toBe("support@example.com");
 
       // an unrelated update that OMITS emailConfiguration must preserve the
       // observed configuration (updateUserPool would otherwise reset it)
@@ -324,9 +302,7 @@ test.provider(
       expect(updated.userPoolId).toBe(pool.userPoolId);
       const afterUnrelated = yield* describe();
       expect(afterUnrelated.Policies?.PasswordPolicy?.MinimumLength).toBe(12);
-      expect(afterUnrelated.EmailConfiguration?.ReplyToEmailAddress).toBe(
-        "support@example.com",
-      );
+      expect(afterUnrelated.EmailConfiguration?.ReplyToEmailAddress).toBe("support@example.com");
 
       // changing the declared configuration converges
       yield* stack.deploy(
@@ -341,12 +317,8 @@ test.provider(
         }),
       );
       const afterChange = yield* describe();
-      expect(afterChange.EmailConfiguration?.ReplyToEmailAddress).toBe(
-        "help@example.com",
-      );
-      expect(afterChange.EmailConfiguration?.EmailSendingAccount).toBe(
-        "COGNITO_DEFAULT",
-      );
+      expect(afterChange.EmailConfiguration?.ReplyToEmailAddress).toBe("help@example.com");
+      expect(afterChange.EmailConfiguration?.EmailSendingAccount).toBe("COGNITO_DEFAULT");
 
       yield* stack.destroy();
       yield* assertPoolDeleted(pool.userPoolId);
@@ -371,8 +343,7 @@ test.provider(
         .deploy(
           UserPool("InvalidPool", {
             customEmailSender: {
-              lambdaArn:
-                "arn:aws:lambda:us-east-1:123456789012:function:sender",
+              lambdaArn: "arn:aws:lambda:us-east-1:123456789012:function:sender",
             },
           }),
         )
@@ -398,9 +369,7 @@ test.provider(
           }),
         )
         .pipe(Effect.exit);
-      expect(failureTag(developerWithoutSource)).toBe(
-        "InvalidUserPoolConfiguration",
-      );
+      expect(failureTag(developerWithoutSource)).toBe("InvalidUserPoolConfiguration");
 
       // nothing was created — the validation runs before any API call
       yield* stack.destroy();

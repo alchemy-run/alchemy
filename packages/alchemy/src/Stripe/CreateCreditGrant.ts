@@ -32,14 +32,8 @@ export interface CreateCreditGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateBillingCreditGrantRequest,
-    ) => Effect.Effect<
-      StripeCreditGrant,
-      CreateBillingCreditGrantError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeCreditGrant, CreateBillingCreditGrantError, RuntimeContext>
   >
 > {}
 
-export const CreateCreditGrant = Binding.Service<CreateCreditGrant>(
-  "Stripe.CreateCreditGrant",
-);
+export const CreateCreditGrant = Binding.Service<CreateCreditGrant>("Stripe.CreateCreditGrant");

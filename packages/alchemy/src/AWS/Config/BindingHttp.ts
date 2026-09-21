@@ -108,9 +108,7 @@ export const makeConfigResourceHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: Omit<I, K>) {
         const input: Record<string, unknown> = { ...request };
         const id = yield* identifier;
         input[options.requestKey] = options.asList ? [id] : id;

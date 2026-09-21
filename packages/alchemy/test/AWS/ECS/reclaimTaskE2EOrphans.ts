@@ -1,9 +1,9 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -40,10 +40,7 @@ export const E2E_TEST_TITLE =
 export const E2E_CLUSTER_NAME = "alchemy-test-ecs-task-e2e";
 
 // Mirror of Test/Core.ts `sanitizeStackName`.
-const STACK_NAME = E2E_TEST_TITLE.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(
-  /-+/g,
-  "-",
-);
+const STACK_NAME = E2E_TEST_TITLE.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(/-+/g, "-");
 
 const STAGE = "test";
 
@@ -58,8 +55,7 @@ const physicalNamePrefix = (
   { maxLength, lowercase = false }: { maxLength: number; lowercase?: boolean },
 ) => {
   const prefix = `${STACK_NAME}-${id}-${STAGE}-`;
-  const sliced =
-    prefix.length + 16 > maxLength ? prefix.slice(0, maxLength - 16) : prefix;
+  const sliced = prefix.length + 16 > maxLength ? prefix.slice(0, maxLength - 16) : prefix;
   return (lowercase ? sliced.toLowerCase() : sliced).replaceAll(
     lowercase ? /[^a-z0-9-]/g : /[^a-zA-Z0-9-]/g,
     "-",
@@ -106,14 +102,10 @@ const DRAIN_ATTEMPTS = 11;
 const reclaimEcsCluster = Effect.gen(function* () {
   // Delete any services in the deterministic cluster (force detaches them
   // from the ALB and stops their tasks).
-  const serviceArns = yield* ecs
-    .listServices({ cluster: E2E_CLUSTER_NAME })
-    .pipe(
-      Effect.map((r) => r.serviceArns ?? []),
-      Effect.catchTag("ClusterNotFoundException", () =>
-        Effect.succeed([] as string[]),
-      ),
-    );
+  const serviceArns = yield* ecs.listServices({ cluster: E2E_CLUSTER_NAME }).pipe(
+    Effect.map((r) => r.serviceArns ?? []),
+    Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([] as string[])),
+  );
   yield* Effect.forEach(serviceArns, (serviceArn) =>
     ecs
       .deleteService({
@@ -132,9 +124,7 @@ const reclaimEcsCluster = Effect.gen(function* () {
   // Stop any straggler tasks so the cluster drains quickly.
   const taskArns = yield* ecs.listTasks({ cluster: E2E_CLUSTER_NAME }).pipe(
     Effect.map((r) => r.taskArns ?? []),
-    Effect.catchTag("ClusterNotFoundException", () =>
-      Effect.succeed([] as string[]),
-    ),
+    Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([] as string[])),
   );
   yield* Effect.forEach(taskArns, (taskArn) =>
     ecs
@@ -190,12 +180,10 @@ const reclaimIngress = Effect.gen(function* () {
     ) {
       continue;
     }
-    yield* elbv2
-      .deleteLoadBalancer({ LoadBalancerArn: lb.LoadBalancerArn })
-      .pipe(
-        Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
-        Effect.asVoid,
-      );
+    yield* elbv2.deleteLoadBalancer({ LoadBalancerArn: lb.LoadBalancerArn }).pipe(
+      Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
+      Effect.asVoid,
+    );
   }
 
   const targetGroups = yield* elbv2.describeTargetGroups.items({}).pipe(
@@ -248,29 +236,21 @@ const reclaimNetworking = Effect.gen(function* () {
               AssociationId: association.RouteTableAssociationId,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidAssociationID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidAssociationID.NotFound", () => Effect.void),
               Effect.asVoid,
             );
         }
       }
-      if (
-        routeTable.RouteTableId &&
-        !associations.some((association) => association.Main)
-      ) {
-        yield* ec2
-          .deleteRouteTable({ RouteTableId: routeTable.RouteTableId })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "DependencyViolation",
-              schedule: drainSchedule,
-              times: DRAIN_ATTEMPTS,
-            }),
-            Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
-            Effect.asVoid,
-          );
+      if (routeTable.RouteTableId && !associations.some((association) => association.Main)) {
+        yield* ec2.deleteRouteTable({ RouteTableId: routeTable.RouteTableId }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "DependencyViolation",
+            schedule: drainSchedule,
+            times: DRAIN_ATTEMPTS,
+          }),
+          Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
+          Effect.asVoid,
+        );
       }
     }
 
@@ -299,20 +279,15 @@ const reclaimNetworking = Effect.gen(function* () {
           ),
           Effect.asVoid,
         );
-      yield* ec2
-        .deleteInternetGateway({ InternetGatewayId: igw.InternetGatewayId })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "DependencyViolation",
-            schedule: drainSchedule,
-            times: DRAIN_ATTEMPTS,
-          }),
-          Effect.catchTag(
-            "InvalidInternetGatewayID.NotFound",
-            () => Effect.void,
-          ),
-          Effect.asVoid,
-        );
+      yield* ec2.deleteInternetGateway({ InternetGatewayId: igw.InternetGatewayId }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "DependencyViolation",
+          schedule: drainSchedule,
+          times: DRAIN_ATTEMPTS,
+        }),
+        Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
+        Effect.asVoid,
+      );
     }
 
     // Security groups (waits out lingering task/ALB ENIs).
@@ -430,26 +405,20 @@ const reclaimIamRoles = Effect.gen(function* () {
     const roleName = role.RoleName;
     if (!roleName?.startsWith(ROLE_PREFIX)) continue;
 
-    const inlinePolicies = yield* iam
-      .listRolePolicies({ RoleName: roleName })
-      .pipe(
-        Effect.map((r) => r.PolicyNames ?? []),
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed([] as string[]),
-        ),
-      );
+    const inlinePolicies = yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
+      Effect.map((r) => r.PolicyNames ?? []),
+      Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
+    );
     yield* Effect.forEach(inlinePolicies, (policyName) =>
       iam
         .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
     );
 
-    const attached = yield* iam
-      .listAttachedRolePolicies({ RoleName: roleName })
-      .pipe(
-        Effect.map((r) => r.AttachedPolicies ?? []),
-        Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
-      );
+    const attached = yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
+      Effect.map((r) => r.AttachedPolicies ?? []),
+      Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+    );
     yield* Effect.forEach(attached, (policy) =>
       iam
         .detachRolePolicy({ RoleName: roleName, PolicyArn: policy.PolicyArn! })

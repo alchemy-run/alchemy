@@ -25,10 +25,7 @@ export interface GetMicrovmImageVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMicrovmImageVersionRequest,
-    ) => Effect.Effect<
-      microvms.GetMicrovmImageVersionOutput,
-      microvms.GetMicrovmImageVersionError
-    >
+    ) => Effect.Effect<microvms.GetMicrovmImageVersionOutput, microvms.GetMicrovmImageVersionError>
   >
 > {}
 export const GetMicrovmImageVersion = Binding.Service<GetMicrovmImageVersion>(

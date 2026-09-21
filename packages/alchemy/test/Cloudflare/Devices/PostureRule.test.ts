@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -36,10 +33,7 @@ const expectGone = (accountId: string, ruleId: string) =>
     Effect.catchTag("PostureRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -161,15 +155,11 @@ test.provider("list enumerates the deployed posture rule", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Devices.DevicePostureRule,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Devices.DevicePostureRule);
     const all = yield* provider.list();
 
     // Exhaustive pagination must include the rule we just deployed.
-    expect(
-      all.some((rule) => rule.postureRuleId === deployed.postureRuleId),
-    ).toBe(true);
+    expect(all.some((rule) => rule.postureRuleId === deployed.postureRuleId)).toBe(true);
 
     yield* stack.destroy();
     yield* expectGone(accountId, deployed.postureRuleId);

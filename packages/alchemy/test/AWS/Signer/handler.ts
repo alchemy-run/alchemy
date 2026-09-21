@@ -1,8 +1,3 @@
-import { isBindingHost } from "@/AWS/Lambda/Function.ts";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
-import * as Signer from "@/AWS/Signer";
-import * as Binding from "@/Binding";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,6 +5,11 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import { isBindingHost } from "@/AWS/Lambda/Function.ts";
+import * as S3 from "@/AWS/S3";
+import * as Signer from "@/AWS/Signer";
+import * as Binding from "@/Binding";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -26,8 +26,7 @@ const NOTARY_PAYLOAD = new TextEncoder().encode(
   JSON.stringify({
     targetArtifact: {
       mediaType: "application/vnd.oci.image.manifest.v1+json",
-      digest:
-        "sha256:73c803930ea3ba1e54bc25c2bdc53edd0284c62ed651fe7b00369da519a3c333",
+      digest: "sha256:73c803930ea3ba1e54bc25c2bdc53edd0284c62ed651fe7b00369da519a3c333",
       size: 1024,
     },
   }),
@@ -35,9 +34,7 @@ const NOTARY_PAYLOAD = new TextEncoder().encode(
 
 const SOURCE_KEY = "code.zip";
 
-export class SignerTestFunction extends Lambda.Function<Lambda.Function>()(
-  "SignerTestFunction",
-) {}
+export class SignerTestFunction extends Lambda.Function<Lambda.Function>()("SignerTestFunction") {}
 
 export default SignerTestFunction.make(
   {
@@ -106,8 +103,7 @@ export default SignerTestFunction.make(
 
     const startSigningJob = yield* Signer.StartSigningJob(profile);
     const signPayload = yield* Signer.SignPayload(notationProfile);
-    const revokeSigningProfile =
-      yield* Signer.RevokeSigningProfile(notationProfile);
+    const revokeSigningProfile = yield* Signer.RevokeSigningProfile(notationProfile);
     const describeSigningJob = yield* Signer.DescribeSigningJob();
     const listSigningJobs = yield* Signer.ListSigningJobs();
     const revokeSignature = yield* Signer.RevokeSignature();
@@ -234,18 +230,13 @@ export default SignerTestFunction.make(
         }
 
         if (id === null) {
-          return yield* HttpServerResponse.json(
-            { error: "missing id" },
-            { status: 400 },
-          );
+          return yield* HttpServerResponse.json({ error: "missing id" }, { status: 400 });
         }
 
         if (request.method === "GET" && pathname === "/job") {
           // A freshly-started job can 404 for a few seconds (eventual
           // consistency) — report the typed tag so the test keeps polling.
-          const job = yield* describeSigningJob({ jobId: id }).pipe(
-            Effect.result,
-          );
+          const job = yield* describeSigningJob({ jobId: id }).pipe(Effect.result);
           return yield* HttpServerResponse.json(
             job._tag === "Success"
               ? {

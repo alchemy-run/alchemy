@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Logs from "@/AWS/Logs";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -9,12 +7,12 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Logs from "@/AWS/Logs";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class LogsTestFunction extends Lambda.Function<Lambda.Function>()(
-  "LogsTestFunction",
-) {}
+export class LogsTestFunction extends Lambda.Function<Lambda.Function>()("LogsTestFunction") {}
 
 class QueryNotComplete extends Data.TaggedError("QueryNotComplete")<{
   readonly status: string | undefined;
@@ -97,33 +95,23 @@ export default LogsTestFunction.make(
             endTime: Math.floor(now / 1000) + 60,
           });
           if (!queryId) {
-            return yield* HttpServerResponse.json(
-              { error: "no queryId" },
-              { status: 500 },
-            );
+            return yield* HttpServerResponse.json({ error: "no queryId" }, { status: 500 });
           }
           // Poll bounded (~20s) — well inside the 30s function timeout.
           const results = yield* getQueryResults({ queryId }).pipe(
             Effect.flatMap((response) =>
               response.status === "Complete"
                 ? Effect.succeed(response)
-                : Effect.fail(
-                    new QueryNotComplete({ status: response.status }),
-                  ),
+                : Effect.fail(new QueryNotComplete({ status: response.status })),
             ),
             Effect.retry({
               while: (error) => error._tag === "QueryNotComplete",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           // Surface the first row's @ptr so the test can exercise GetLogRecord.
           const ptr =
-            (results.results ?? [])
-              .flat()
-              .find((field) => field.field === "@ptr")?.value ?? null;
+            (results.results ?? []).flat().find((field) => field.field === "@ptr")?.value ?? null;
           return yield* HttpServerResponse.json({
             queryId,
             status: results.status,
@@ -135,10 +123,7 @@ export default LogsTestFunction.make(
         if (request.method === "GET" && pathname === "/record") {
           const ptr = url.searchParams.get("ptr");
           if (!ptr) {
-            return yield* HttpServerResponse.json(
-              { error: "missing ptr" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing ptr" }, { status: 400 });
           }
           const { logRecord } = yield* getLogRecord({ logRecordPointer: ptr });
           return yield* HttpServerResponse.json({
@@ -154,10 +139,7 @@ export default LogsTestFunction.make(
             endTime: Math.floor(now / 1000) + 60,
           });
           if (!queryId) {
-            return yield* HttpServerResponse.json(
-              { error: "no queryId" },
-              { status: 500 },
-            );
+            return yield* HttpServerResponse.json({ error: "no queryId" }, { status: 500 });
           }
           // Give the query registration a beat to propagate before stopping.
           yield* Effect.sleep("500 millis");
@@ -170,9 +152,8 @@ export default LogsTestFunction.make(
             // (InvalidParameterException) or the stop can outrun the query's
             // registration (ResourceNotFoundException). Both still prove the
             // binding round-tripped with valid credentials.
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (error) => Effect.succeed({ stopped: false, error: error._tag }),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (error) =>
+              Effect.succeed({ stopped: false, error: error._tag }),
             ),
           );
           return yield* HttpServerResponse.json({ ok: true, ...outcome });
@@ -195,32 +176,22 @@ export default LogsTestFunction.make(
         if (request.method === "POST" && pathname === "/stream-lifecycle") {
           const name = url.searchParams.get("name");
           if (!name) {
-            return yield* HttpServerResponse.json(
-              { error: "missing name" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing name" }, { status: 400 });
           }
           yield* createLogStream({ logStreamName: name }).pipe(
-            Effect.catchTag(
-              "ResourceAlreadyExistsException",
-              () => Effect.void,
-            ),
+            Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
           );
           const { logStreams } = yield* describeLogStreams({
             logStreamNamePrefix: name,
           });
-          const seen = (logStreams ?? []).some(
-            (stream) => stream.logStreamName === name,
-          );
+          const seen = (logStreams ?? []).some((stream) => stream.logStreamName === name);
           yield* deleteLogStream({ logStreamName: name }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
           const after = yield* describeLogStreams({
             logStreamNamePrefix: name,
           });
-          const gone = !(after.logStreams ?? []).some(
-            (stream) => stream.logStreamName === name,
-          );
+          const gone = !(after.logStreams ?? []).some((stream) => stream.logStreamName === name);
           return yield* HttpServerResponse.json({ seen, gone });
         }
 

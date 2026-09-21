@@ -25,10 +25,7 @@ export interface ListPageResolutions extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.ListPageResolutionsRequest,
-    ) => Effect.Effect<
-      ssm.ListPageResolutionsResult,
-      ssm.ListPageResolutionsError
-    >
+    ) => Effect.Effect<ssm.ListPageResolutionsResult, ssm.ListPageResolutionsError>
   >
 > {}
 export const ListPageResolutions = Binding.Service<ListPageResolutions>(

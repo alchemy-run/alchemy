@@ -1,6 +1,3 @@
-import { Subnet, Vpc } from "@/AWS/EC2";
-import * as Lambda from "@/AWS/Lambda";
-import * as NetworkFirewall from "@/AWS/NetworkFirewall";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import * as Lambda from "@/AWS/Lambda";
+import * as NetworkFirewall from "@/AWS/NetworkFirewall";
 
 const main = path.resolve(import.meta.dirname, "firewall-handler.ts");
 
@@ -54,21 +54,16 @@ export default NetworkFirewallFirewallBindingsFunction.make(
       describeFirewall: yield* NetworkFirewall.DescribeFirewall(firewall),
       startFlowCapture: yield* NetworkFirewall.StartFlowCapture(firewall),
       startFlowFlush: yield* NetworkFirewall.StartFlowFlush(firewall),
-      describeFlowOperation:
-        yield* NetworkFirewall.DescribeFlowOperation(firewall),
+      describeFlowOperation: yield* NetworkFirewall.DescribeFlowOperation(firewall),
       listFlowOperations: yield* NetworkFirewall.ListFlowOperations(firewall),
-      listFlowOperationResults:
-        yield* NetworkFirewall.ListFlowOperationResults(firewall),
+      listFlowOperationResults: yield* NetworkFirewall.ListFlowOperationResults(firewall),
       startAnalysisReport: yield* NetworkFirewall.StartAnalysisReport(firewall),
       listAnalysisReports: yield* NetworkFirewall.ListAnalysisReports(firewall),
-      getAnalysisReportResults:
-        yield* NetworkFirewall.GetAnalysisReportResults(firewall),
+      getAnalysisReportResults: yield* NetworkFirewall.GetAnalysisReportResults(firewall),
     };
 
     // A narrow filter so the capture/flush stays tiny.
-    const flowFilters = [
-      { SourceAddress: { AddressDefinition: "10.78.1.10/32" } },
-    ];
+    const flowFilters = [{ SourceAddress: { AddressDefinition: "10.78.1.10/32" } }];
 
     return {
       fetch: Effect.gen(function* () {
@@ -87,9 +82,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
           const response = yield* bound.describeFirewall();
           return yield* HttpServerResponse.json({
             status: response.FirewallStatus?.Status,
-            endpointCount: Object.keys(
-              response.FirewallStatus?.SyncStates ?? {},
-            ).length,
+            endpointCount: Object.keys(response.FirewallStatus?.SyncStates ?? {}).length,
           });
         }
 
@@ -135,9 +128,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
               error: String(listed.failure),
             });
           }
-          const results = yield* Effect.result(
-            bound.listFlowOperationResults({ FlowOperationId }),
-          );
+          const results = yield* Effect.result(bound.listFlowOperationResults({ FlowOperationId }));
           if (Result.isFailure(results)) {
             return yield* HttpServerResponse.json({
               step: "listFlowOperationResults",
@@ -156,12 +147,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
 
         // Flush — success or any typed rejection proves the grant.
         if (request.method === "GET" && pathname === "/flush") {
-          const tag = yield* bound
-            .startFlowFlush({ FlowFilters: flowFilters })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+          const tag = yield* bound.startFlowFlush({ FlowFilters: flowFilters }).pipe(
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           return yield* HttpServerResponse.json({ tag });
         }
 
@@ -171,12 +160,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
         // gap would surface AccessDeniedException instead); the list is a
         // real (empty) read.
         if (request.method === "GET" && pathname === "/analysis") {
-          const startTag = yield* bound
-            .startAnalysisReport({ AnalysisType: "TLS_SNI" })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+          const startTag = yield* bound.startAnalysisReport({ AnalysisType: "TLS_SNI" }).pipe(
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           const listed = yield* Effect.result(bound.listAnalysisReports());
           if (Result.isFailure(listed)) {
             return yield* HttpServerResponse.json({

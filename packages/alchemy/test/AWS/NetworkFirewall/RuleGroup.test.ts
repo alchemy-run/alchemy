@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { RuleGroup } from "@/AWS/NetworkFirewall";
-import * as Test from "@/Test/Alchemy";
 import * as nfw from "@distilled.cloud/aws/network-firewall";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { RuleGroup } from "@/AWS/NetworkFirewall";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,10 +24,8 @@ test.provider(
     }),
 );
 
-const suricataV1 =
-  'pass tcp any any -> any 80 (msg:"allow http"; sid:100001; rev:1;)';
-const suricataV2 =
-  'drop tcp any any -> any 23 (msg:"block telnet"; sid:100002; rev:1;)';
+const suricataV1 = 'pass tcp any any -> any 80 (msg:"allow http"; sid:100001; rev:1;)';
+const suricataV2 = 'drop tcp any any -> any 23 (msg:"block telnet"; sid:100002; rev:1;)';
 
 const statelessRuleGroup: nfw.RuleGroup = {
   RulesSource: {
@@ -56,30 +54,19 @@ const statelessRuleGroup: nfw.RuleGroup = {
 const assertRuleGroupGone = (arn: string) =>
   Effect.gen(function* () {
     const status = yield* nfw.describeRuleGroup({ RuleGroupArn: arn }).pipe(
-      Effect.map(
-        (r) => r.RuleGroupResponse.RuleGroupStatus ?? ("UNKNOWN" as const),
-      ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
-      Effect.catchTag("ThrottlingException", () =>
-        Effect.succeed("THROTTLED" as const),
-      ),
+      Effect.map((r) => r.RuleGroupResponse.RuleGroupStatus ?? ("UNKNOWN" as const)),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
+      Effect.catchTag("ThrottlingException", () => Effect.succeed("THROTTLED" as const)),
     );
     if (status !== "gone" && status !== "DELETING") {
       yield* Effect.log(`rule group '${arn}' status: ${status}`);
     }
     if (status !== "gone") {
-      return yield* Effect.fail(
-        new Error(`rule group '${arn}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`rule group '${arn}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 

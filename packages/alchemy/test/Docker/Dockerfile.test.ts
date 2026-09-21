@@ -1,3 +1,6 @@
+import { describe, expect, it, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { imageSourceKind, validateImageSource } from "@/AWS/ECR/ImageSource.ts";
 import {
   buildFinalDockerfile,
@@ -6,9 +9,6 @@ import {
 } from "@/Cloudflare/Containers/ContainerBundle.ts";
 import * as Dockerfile from "@/Docker/Dockerfile.ts";
 import * as Output from "@/Output.ts";
-import { describe, expect, it, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 describe("Dockerfile.inline", () => {
   test("no interpolations produce plain string content", () => {
@@ -43,14 +43,10 @@ RUN echo hi`;
 describe("AWS ImageSource composition", () => {
   test("main wins as the source kind; other fields describe its environment", () => {
     expect(imageSourceKind({ main: "./index.ts" })).toBe("main");
-    expect(imageSourceKind({ main: "./index.ts", image: "oven/bun:1" })).toBe(
-      "main",
-    );
+    expect(imageSourceKind({ main: "./index.ts", image: "oven/bun:1" })).toBe("main");
     expect(imageSourceKind({ image: "busybox:stable" })).toBe("image");
     expect(imageSourceKind({ context: "./app" })).toBe("context");
-    expect(
-      imageSourceKind({ dockerfile: Dockerfile.inline`FROM alpine` }),
-    ).toBe("context");
+    expect(imageSourceKind({ dockerfile: Dockerfile.inline`FROM alpine` })).toBe("context");
     expect(imageSourceKind({})).toBeUndefined();
   });
 
@@ -66,9 +62,7 @@ describe("AWS ImageSource composition", () => {
           return Result.isFailure(result);
         });
 
-      expect(
-        yield* dies({ image: "busybox", dockerfile: "./Dockerfile" }),
-      ).toBe(true);
+      expect(yield* dies({ image: "busybox", dockerfile: "./Dockerfile" })).toBe(true);
       expect(yield* dies({ image: "busybox", context: "./app" })).toBe(true);
       expect(
         yield* dies({
@@ -78,12 +72,8 @@ describe("AWS ImageSource composition", () => {
       ).toBe(true);
       // Valid combinations pass.
       expect(yield* dies({ main: "./i.ts", image: "oven/bun:1" })).toBe(false);
-      expect(
-        yield* dies({ main: "./i.ts", dockerfile: Dockerfile.inline`FROM x` }),
-      ).toBe(false);
-      expect(
-        yield* dies({ context: "./app", dockerfile: "./app/Dockerfile" }),
-      ).toBe(false);
+      expect(yield* dies({ main: "./i.ts", dockerfile: Dockerfile.inline`FROM x` })).toBe(false);
+      expect(yield* dies({ context: "./app", dockerfile: "./app/Dockerfile" })).toBe(false);
     }),
   );
 });
@@ -104,9 +94,7 @@ const dies = <A>(effect: Effect.Effect<A>) =>
 describe("Cloudflare container environment composition", () => {
   it.effect("containerEnvPreamble: image ref becomes FROM line", () =>
     Effect.gen(function* () {
-      expect(yield* containerEnvPreamble({ image: "oven/bun:1" })).toBe(
-        "FROM oven/bun:1",
-      );
+      expect(yield* containerEnvPreamble({ image: "oven/bun:1" })).toBe("FROM oven/bun:1");
       expect(yield* containerEnvPreamble({})).toBeUndefined();
     }),
   );
@@ -121,16 +109,12 @@ RUN apt-get install -y ffmpeg`,
     }),
   );
 
-  it.effect(
-    "containerEnvPreamble: dies on Dockerfile content passed as image",
-    () =>
-      Effect.gen(function* () {
-        expect(
-          yield* dies(
-            containerEnvPreamble({ image: "FROM oven/bun:1\nRUN echo hi" }),
-          ),
-        ).toBe(true);
-      }),
+  it.effect("containerEnvPreamble: dies on Dockerfile content passed as image", () =>
+    Effect.gen(function* () {
+      expect(yield* dies(containerEnvPreamble({ image: "FROM oven/bun:1\nRUN echo hi" }))).toBe(
+        true,
+      );
+    }),
   );
 
   test("buildFinalDockerfile layers the bundle on top of the preamble", () => {
@@ -146,21 +130,15 @@ RUN apt-get install -y ffmpeg`,
   });
 
   test("buildFinalDockerfile falls back to the runtime default base", () => {
-    expect(buildFinalDockerfile(undefined, "bun").split("\n")[0]).toBe(
-      "FROM oven/bun:1",
-    );
-    expect(buildFinalDockerfile(undefined, "node").split("\n")[0]).toBe(
-      "FROM node:22-slim",
-    );
+    expect(buildFinalDockerfile(undefined, "bun").split("\n")[0]).toBe("FROM oven/bun:1");
+    expect(buildFinalDockerfile(undefined, "node").split("\n")[0]).toBe("FROM node:22-slim");
   });
 
   it.effect("validateContainerImageProps enforces exclusivity", () =>
     Effect.gen(function* () {
       // main + image and main + inline dockerfile are the two environments.
       expect(
-        yield* dies(
-          validateContainerImageProps({ main: "./i.ts", image: "oven/bun:1" }),
-        ),
+        yield* dies(validateContainerImageProps({ main: "./i.ts", image: "oven/bun:1" })),
       ).toBe(false);
       expect(
         yield* dies(
@@ -188,22 +166,16 @@ RUN apt-get install -y ffmpeg`,
           }),
         ),
       ).toBe(true);
-      expect(
-        yield* dies(
-          validateContainerImageProps({ main: "./i.ts", context: "./app" }),
-        ),
-      ).toBe(true);
+      expect(yield* dies(validateContainerImageProps({ main: "./i.ts", context: "./app" }))).toBe(
+        true,
+      );
       // Without main: image is exclusive with dockerfile/context.
       expect(
-        yield* dies(
-          validateContainerImageProps({ image: "busybox", dockerfile: "./f" }),
-        ),
+        yield* dies(validateContainerImageProps({ image: "busybox", dockerfile: "./f" })),
       ).toBe(true);
-      expect(
-        yield* dies(
-          validateContainerImageProps({ image: "busybox", context: "./app" }),
-        ),
-      ).toBe(true);
+      expect(yield* dies(validateContainerImageProps({ image: "busybox", context: "./app" }))).toBe(
+        true,
+      );
       // Inline content has no build context.
       expect(
         yield* dies(

@@ -32,13 +32,9 @@ export interface DescribeApplicationVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeApplicationVersionRequest,
-    ) => Effect.Effect<
-      SVC.DescribeApplicationVersionResponse,
-      SVC.DescribeApplicationVersionError
-    >
+    ) => Effect.Effect<SVC.DescribeApplicationVersionResponse, SVC.DescribeApplicationVersionError>
   >
 > {}
-export const DescribeApplicationVersion =
-  Binding.Service<DescribeApplicationVersion>(
-    "AWS.KinesisAnalyticsV2.DescribeApplicationVersion",
-  );
+export const DescribeApplicationVersion = Binding.Service<DescribeApplicationVersion>(
+  "AWS.KinesisAnalyticsV2.DescribeApplicationVersion",
+);

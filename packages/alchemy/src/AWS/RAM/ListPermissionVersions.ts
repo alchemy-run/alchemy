@@ -30,10 +30,7 @@ export interface ListPermissionVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request: ram.ListPermissionVersionsRequest,
-    ) => Effect.Effect<
-      ram.ListPermissionVersionsResponse,
-      ram.ListPermissionVersionsError
-    >
+    ) => Effect.Effect<ram.ListPermissionVersionsResponse, ram.ListPermissionVersionsError>
   >
 > {}
 export const ListPermissionVersions = Binding.Service<ListPermissionVersions>(

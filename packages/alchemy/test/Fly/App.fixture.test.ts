@@ -1,9 +1,4 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Alchemy from "@/index.ts";
-import { Stack as StackService } from "@/Stack.ts";
-import { Stage } from "@/Stage.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,24 +6,20 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Alchemy from "@/index.ts";
+import { Stack as StackService } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/app/api.ts";
-import {
-  Marker,
-  PublicIp,
-  SECRET_NAME,
-  Site,
-  VOLUME_PATH,
-} from "./fixtures/app/shared.ts";
+import { Marker, PublicIp, SECRET_NAME, Site, VOLUME_PATH } from "./fixtures/app/shared.ts";
 import Worker from "./fixtures/app/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Fly.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Out-of-band verification resolves Fly credentials the same way the stack
 // does — through the Alchemy profile via `Fly.providers()` — not from
@@ -141,13 +132,9 @@ test(
     );
     expect(liveWorker.id).toEqual(out.workerMachineId);
     expect(liveWorker.state).toEqual("started");
-    expect(liveWorker.config?.metadata?.["alchemy.type"]).toEqual(
-      "Fly.Service",
-    );
+    expect(liveWorker.config?.metadata?.["alchemy.type"]).toEqual("Fly.Service");
     expect(liveWorker.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
-    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(
-      out.workerMounts[0]?.volumeId,
-    );
+    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(out.workerMounts[0]?.volumeId);
 
     const liveVolume = yield* distilled(
       machines.getVolumeById({
@@ -178,9 +165,7 @@ test(
       }),
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json.pipe(
-              Effect.mapError(() => new ApiNotReady({ status: res.status })),
-            )
+          ? res.json.pipe(Effect.mapError(() => new ApiNotReady({ status: res.status })))
           : Effect.fail(new ApiNotReady({ status: res.status })),
       ),
       Effect.retry({

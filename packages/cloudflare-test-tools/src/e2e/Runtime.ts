@@ -13,9 +13,7 @@ export const layer = Server.layer.pipe(
   Layer.provideMerge(Framework.layer),
   Layer.provideMerge(
     ConfigProvider.layer(
-      ConfigProvider.fromDotEnv().pipe(
-        Effect.orElseSucceed(() => ConfigProvider.fromEnv()),
-      ),
+      ConfigProvider.fromDotEnv().pipe(Effect.orElseSucceed(() => ConfigProvider.fromEnv())),
     ),
   ),
   Layer.provideMerge(NodeServices.layer),

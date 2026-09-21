@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { RuleGroup } from "@/AWS/WAFv2";
-import * as Test from "@/Test/Alchemy";
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { RuleGroup } from "@/AWS/WAFv2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -75,8 +75,7 @@ test.provider(
       expect(created.RuleGroup?.Capacity).toBe(50);
       expect(created.RuleGroup?.Rules?.length).toBe(1);
       expect(
-        created.RuleGroup?.Rules?.[0]?.Statement?.ByteMatchStatement
-          ?.PositionalConstraint,
+        created.RuleGroup?.Rules?.[0]?.Statement?.ByteMatchStatement?.PositionalConstraint,
       ).toBe("STARTS_WITH");
 
       const tags = yield* wafv2.listTagsForResource({
@@ -106,9 +105,7 @@ test.provider(
         Id: group.ruleGroupId,
       });
       expect(afterUpdate.RuleGroup?.Description).toBe("blocks internal paths");
-      const search =
-        afterUpdate.RuleGroup?.Rules?.[0]?.Statement?.ByteMatchStatement
-          ?.SearchString;
+      const search = afterUpdate.RuleGroup?.Rules?.[0]?.Statement?.ByteMatchStatement?.SearchString;
       expect(new TextDecoder().decode(search)).toBe("/internal");
 
       // capacity is immutable ⇒ replacement
@@ -125,10 +122,7 @@ test.provider(
       yield* assertRuleGroupDeleted(group.ruleGroupName, group.ruleGroupId);
 
       yield* stack.destroy();
-      yield* assertRuleGroupDeleted(
-        replaced.ruleGroupName,
-        replaced.ruleGroupId,
-      );
+      yield* assertRuleGroupDeleted(replaced.ruleGroupName, replaced.ruleGroupId);
     }),
   { timeout: 120_000 },
 );

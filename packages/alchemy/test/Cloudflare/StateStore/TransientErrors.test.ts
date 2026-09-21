@@ -1,3 +1,7 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { EdgeSessionError } from "@/Cloudflare/EdgeSession.ts";
 import {
   isTransientBootstrapWriteError,
@@ -5,10 +9,6 @@ import {
 } from "@/Cloudflare/StateStore/State.ts";
 import { makeHttpStateStore } from "@/State/HttpStateStore.ts";
 import type { StateStoreError } from "@/State/State.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 /**
  * Predicate coverage for the retry policies added in response to
@@ -29,16 +29,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
  */
 
 /** Minimal fetch signature — Bun's `typeof fetch` also demands `preconnect`. */
-type FetchStub = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+type FetchStub = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 const stubHttpClient = (stub: FetchStub) =>
   FetchHttpClient.layer.pipe(
-    Layer.provide(
-      Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch),
-    ),
+    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch)),
   );
 
 /** Run a state-store write against a stubbed transport, return its failure. */
@@ -60,20 +55,14 @@ const failingWrite = (stub: FetchStub): Effect.Effect<StateStoreError> =>
   }).pipe(Effect.provide(stubHttpClient(stub)), Effect.orDie);
 
 describe("isTransientBootstrapWriteError", () => {
-  it.live(
-    "retries 401 Unauthorized (token-binding propagation) but not other 4xx",
-    () =>
-      Effect.gen(function* () {
-        const unauthorized = yield* failingWrite(
-          async () => new Response(null, { status: 401 }),
-        );
-        expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
+  it.live("retries 401 Unauthorized (token-binding propagation) but not other 4xx", () =>
+    Effect.gen(function* () {
+      const unauthorized = yield* failingWrite(async () => new Response(null, { status: 401 }));
+      expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
 
-        const badRequest = yield* failingWrite(
-          async () => new Response("no", { status: 400 }),
-        );
-        expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
-      }),
+      const badRequest = yield* failingWrite(async () => new Response("no", { status: 400 }));
+      expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
+    }),
   );
 
   it.live(

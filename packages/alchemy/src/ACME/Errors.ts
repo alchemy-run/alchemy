@@ -39,9 +39,7 @@ export class ChallengeFailed extends Data.TaggedError("ACME.ChallengeFailed")<{
 }
 
 /** The CA offered no `dns-01` challenge for an identifier. */
-export class ChallengeUnsupported extends Data.TaggedError(
-  "ACME.ChallengeUnsupported",
-)<{
+export class ChallengeUnsupported extends Data.TaggedError("ACME.ChallengeUnsupported")<{
   readonly identifier: string;
   readonly offered: ReadonlyArray<string>;
 }> {
@@ -61,9 +59,7 @@ export class OrderTimeout extends Data.TaggedError("ACME.OrderTimeout")<{
 }
 
 /** The `_acme-challenge` TXT record never became visible to public resolvers. */
-export class DnsPropagationTimeout extends Data.TaggedError(
-  "ACME.DnsPropagationTimeout",
-)<{
+export class DnsPropagationTimeout extends Data.TaggedError("ACME.DnsPropagationTimeout")<{
   readonly fqdn: string;
   readonly value: string;
 }> {
@@ -79,9 +75,7 @@ export class DnsSolverError extends Data.TaggedError("ACME.DnsSolverError")<{
 }> {}
 
 /** A solver descriptor names a `type` no registered DNS provider handles. */
-export class DnsSolverNotRegistered extends Data.TaggedError(
-  "ACME.DnsSolverNotRegistered",
-)<{
+export class DnsSolverNotRegistered extends Data.TaggedError("ACME.DnsSolverNotRegistered")<{
   readonly type: string;
 }> {
   override get message() {

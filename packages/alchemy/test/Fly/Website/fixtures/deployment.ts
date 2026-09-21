@@ -52,15 +52,11 @@ export const getText = (url: string) =>
   );
 
 export const initialText = (url: string) =>
-  getText(url).pipe(
-    Effect.retry({ times: 8, schedule: Schedule.spaced("2 seconds") }),
-  );
+  getText(url).pipe(Effect.retry({ times: 8, schedule: Schedule.spaced("2 seconds") }));
 
 export const startTraffic = (url: string) =>
   Effect.gen(function* () {
-    const samples = yield* Ref.make<
-      Array<{ body: string } | { failure: string }>
-    >([]);
+    const samples = yield* Ref.make<Array<{ body: string } | { failure: string }>>([]);
     let active = true;
     const fiber = yield* Stream.range(0, 1799, 1).pipe(
       Stream.takeWhile(() => active),
@@ -88,25 +84,18 @@ export const startTraffic = (url: string) =>
       yield* Fiber.join(fiber);
       const values = yield* Ref.get(samples);
       expect(values.filter((sample) => "failure" in sample)).toEqual([]);
-      return values.flatMap((sample) =>
-        "body" in sample ? [sample.body] : [],
-      );
+      return values.flatMap((sample) => ("body" in sample ? [sample.body] : []));
     });
     const waitFor = (predicate: (body: string) => boolean) =>
       Ref.get(samples).pipe(
         Effect.repeat({
-          until: (values) =>
-            values.some((sample) => "body" in sample && predicate(sample.body)),
+          until: (values) => values.some((sample) => "body" in sample && predicate(sample.body)),
           times: 8,
           schedule: Schedule.spaced("500 millis"),
         }),
         Effect.tap((values) =>
           Effect.sync(() => {
-            expect(
-              values.some(
-                (sample) => "body" in sample && predicate(sample.body),
-              ),
-            ).toBe(true);
+            expect(values.some((sample) => "body" in sample && predicate(sample.body))).toBe(true);
           }),
         ),
       );
@@ -123,12 +112,10 @@ export const assertOnlyMachine = (appName: string, machineId: string) =>
 
 export const assertMachineGone = (appName: string, machineId: string) =>
   Effect.gen(function* () {
-    const gone = yield* machines
-      .getMachine({ app_name: appName, machine_id: machineId })
-      .pipe(
-        Effect.map((machine) => machine.state === "destroyed"),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-      );
+    const gone = yield* machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
+      Effect.map((machine) => machine.state === "destroyed"),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    );
     expect(gone).toBe(true);
   });
 

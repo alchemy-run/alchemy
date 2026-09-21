@@ -31,12 +31,7 @@ export interface ListQueries extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<cloudtrail.ListQueriesRequest, "EventDataStore">,
-    ) => Effect.Effect<
-      cloudtrail.ListQueriesResponse,
-      cloudtrail.ListQueriesError
-    >
+    ) => Effect.Effect<cloudtrail.ListQueriesResponse, cloudtrail.ListQueriesError>
   >
 > {}
-export const ListQueries = Binding.Service<ListQueries>(
-  "AWS.CloudTrail.ListQueries",
-);
+export const ListQueries = Binding.Service<ListQueries>("AWS.CloudTrail.ListQueries");

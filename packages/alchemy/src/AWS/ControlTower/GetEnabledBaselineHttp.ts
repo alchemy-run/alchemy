@@ -10,8 +10,7 @@ export const GetEnabledBaselineHttp = Layer.effect(
     capability: "GetEnabledBaseline",
     iamActions: ["controltower:GetEnabledBaseline"],
     requestKey: "enabledBaselineIdentifier",
-    identifier: (enabledBaseline: EnabledBaseline) =>
-      enabledBaseline.enabledBaselineArn,
+    identifier: (enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn,
     operation: controltower.getEnabledBaseline,
   }),
 );

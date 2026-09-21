@@ -76,17 +76,14 @@ export class InvalidOrganizationSpendingLimit extends Data.TaggedError(
 }> {}
 
 /** @internal */
-export const validateOrganizationSpendingLimit = (
-  props: OrganizationSpendingLimitProps,
-) =>
+export const validateOrganizationSpendingLimit = (props: OrganizationSpendingLimitProps) =>
   /^[a-z0-9-]{1,60}$/.test(props.orgId) &&
   Number.isSafeInteger(props.spendingLimitCents) &&
   props.spendingLimitCents > 0
     ? Effect.void
     : Effect.fail(
         new InvalidOrganizationSpendingLimit({
-          message:
-            "An organization ID and a positive safe integer threshold in cents are required",
+          message: "An organization ID and a positive safe integer threshold in cents are required",
         }),
       );
 
@@ -158,8 +155,7 @@ export const OrganizationSpendingLimitProvider = () =>
         observed !== news.spendingLimitCents
       ) {
         return yield* new InvalidOrganizationSpendingLimit({
-          message:
-            "Spending threshold changed since its adoption baseline was captured",
+          message: "Spending threshold changed since its adoption baseline was captured",
         });
       }
       if (observed !== news.spendingLimitCents) {
@@ -184,13 +180,9 @@ export const OrganizationSpendingLimitProvider = () =>
     delete: Effect.fn(function* ({ output, olds }) {
       const observed = yield* observe(output.orgId);
       if (observed === output.initialSpendingLimitCents) return;
-      if (
-        observed !== output.managedSpendingLimitCents &&
-        observed !== olds.spendingLimitCents
-      ) {
+      if (observed !== output.managedSpendingLimitCents && observed !== olds.spendingLimitCents) {
         return yield* new InvalidOrganizationSpendingLimit({
-          message:
-            "Refusing to overwrite an externally changed spending threshold during cleanup",
+          message: "Refusing to overwrite an externally changed spending threshold during cleanup",
         });
       }
       if (output.initialSpendingLimitCents === null) {

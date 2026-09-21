@@ -56,12 +56,7 @@ export const makeDaxAccountHttpBinding = <I, A, E, R>(options: {
  * injects the bound {@link Cluster}'s name as `ClusterName` and the
  * deploy-time half grants `actions` on the cluster ARN.
  */
-export const makeDaxClusterHttpBinding = <
-  I extends { ClusterName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDaxClusterHttpBinding = <I extends { ClusterName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DAX.RebootNode`. */
   tag: string;
   /** The distilled operation; `ClusterName` is injected from the cluster. */

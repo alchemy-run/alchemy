@@ -1,18 +1,13 @@
-import * as Plan from "@/Plan";
-import * as Planetscale from "@/Planetscale";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import {
-  InMemoryService,
-  inMemoryState,
-  State,
-  type ResourceState,
-} from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Plan from "@/Plan";
+import * as Planetscale from "@/Planetscale";
+import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
+import { InMemoryService, inMemoryState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const TEST_STACK = "planetscale-plan-stables";
 const TEST_STAGE = "test";

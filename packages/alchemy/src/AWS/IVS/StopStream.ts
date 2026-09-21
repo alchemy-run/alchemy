@@ -31,8 +31,6 @@ export interface StopStream extends Binding.Service<
   "AWS.IVS.StopStream",
   (
     channel: Channel,
-  ) => Effect.Effect<
-    () => Effect.Effect<ivs.StopStreamResponse, ivs.StopStreamError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ivs.StopStreamResponse, ivs.StopStreamError>>
 > {}
 export const StopStream = Binding.Service<StopStream>("AWS.IVS.StopStream");

@@ -18,32 +18,18 @@ export interface CheckpointClient {
    */
   create: (options?: {
     comment?: string;
-  }) => Effect.Effect<
-    ReadonlyArray<StreamEvent>,
-    CreateCheckpointError,
-    RuntimeContext
-  >;
+  }) => Effect.Effect<ReadonlyArray<StreamEvent>, CreateCheckpointError, RuntimeContext>;
   /** List checkpoints on the Sprite. */
-  list: () => Effect.Effect<
-    ReadonlyArray<FlyCheckpoint>,
-    ListCheckpointsError,
-    RuntimeContext
-  >;
+  list: () => Effect.Effect<ReadonlyArray<FlyCheckpoint>, ListCheckpointsError, RuntimeContext>;
   /** Get one checkpoint by id (`v1`, `v2`, …). */
-  get: (
-    checkpointId: string,
-  ) => Effect.Effect<FlyCheckpoint, GetCheckpointError, RuntimeContext>;
+  get: (checkpointId: string) => Effect.Effect<FlyCheckpoint, GetCheckpointError, RuntimeContext>;
   /**
    * Restore the Sprite filesystem to a checkpoint. Destructive.
    * Returns NDJSON progress events.
    */
   restore: (
     checkpointId: string,
-  ) => Effect.Effect<
-    ReadonlyArray<StreamEvent>,
-    RestoreCheckpointError,
-    RuntimeContext
-  >;
+  ) => Effect.Effect<ReadonlyArray<StreamEvent>, RestoreCheckpointError, RuntimeContext>;
 }
 
 /**

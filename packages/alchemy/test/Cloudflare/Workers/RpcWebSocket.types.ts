@@ -1,20 +1,12 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SchemaGetter from "effect/SchemaGetter";
-import {
-  Rpc,
-  RpcGroup,
-  RpcMiddleware,
-  RpcSerialization,
-  RpcServer,
-} from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcMiddleware, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
-class Dependency extends Context.Service<Dependency, string>()(
-  "RpcSocketDependency",
-) {}
+class Dependency extends Context.Service<Dependency, string>()("RpcSocketDependency") {}
 class Api extends RpcGroup.make(Rpc.make("read", { success: Schema.String })) {}
 
 const impl = Effect.gen(function* () {
@@ -23,11 +15,7 @@ const impl = Effect.gen(function* () {
   });
 });
 
-class Inline extends Cloudflare.RpcDurableObject<Inline>()(
-  "Inline",
-  { schema: Api },
-  impl,
-) {}
+class Inline extends Cloudflare.RpcDurableObject<Inline>()("Inline", { schema: Api }, impl) {}
 
 class Modular extends Cloudflare.RpcDurableObject<Modular>()("Modular", {
   schema: Api,
@@ -36,21 +24,9 @@ class Modular extends Cloudflare.RpcDurableObject<Modular>()("Modular", {
 const bare = Cloudflare.RpcDurableObject("Bare", { schema: Api }, impl);
 const live = Modular.make(impl);
 
-const inlineRequirements: Effect.Effect<
-  unknown,
-  never,
-  Cloudflare.Worker | Dependency
-> = Inline;
-const bareRequirements: Effect.Effect<
-  unknown,
-  never,
-  Cloudflare.Worker | Dependency
-> = bare;
-const modularRequirements: Layer.Layer<
-  Modular,
-  never,
-  Cloudflare.Worker | Dependency
-> = live;
+const inlineRequirements: Effect.Effect<unknown, never, Cloudflare.Worker | Dependency> = Inline;
+const bareRequirements: Effect.Effect<unknown, never, Cloudflare.Worker | Dependency> = bare;
+const modularRequirements: Layer.Layer<Modular, never, Cloudflare.Worker | Dependency> = live;
 
 // @ts-expect-error Handler dependencies must remain required by the inline class.
 const missingInline: Effect.Effect<unknown, never, Cloudflare.Worker> = Inline;
@@ -73,22 +49,15 @@ class MergedInline extends Cloudflare.RpcDurableObject<MergedInline>()(
   { schema: Api },
   mergedImpl,
 ) {}
-const mergedBare = Cloudflare.RpcDurableObject(
-  "MergedBare",
-  { schema: Api },
-  mergedImpl,
-);
+const mergedBare = Cloudflare.RpcDurableObject("MergedBare", { schema: Api }, mergedImpl);
 const mergedLive = Modular.make(mergedImpl);
 
 // @ts-expect-error Merged outputs do not supply sibling handler inputs.
-const missingMergedInline: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  MergedInline;
+const missingMergedInline: Effect.Effect<unknown, never, Cloudflare.Worker> = MergedInline;
 // @ts-expect-error Merged outputs do not supply sibling handler inputs.
-const missingMergedBare: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  mergedBare;
+const missingMergedBare: Effect.Effect<unknown, never, Cloudflare.Worker> = mergedBare;
 // @ts-expect-error Merged outputs do not supply sibling handler inputs.
-const missingMergedModular: Layer.Layer<Modular, never, Cloudflare.Worker> =
-  mergedLive;
+const missingMergedModular: Layer.Layer<Modular, never, Cloudflare.Worker> = mergedLive;
 
 const outerImpl = Effect.gen(function* () {
   const value = yield* Dependency;
@@ -105,34 +74,23 @@ class OuterInline extends Cloudflare.RpcDurableObject<OuterInline>()(
   { schema: Api },
   outerImpl,
 ) {}
-const outerBare = Cloudflare.RpcDurableObject(
-  "OuterBare",
-  { schema: Api },
-  outerImpl,
-);
+const outerBare = Cloudflare.RpcDurableObject("OuterBare", { schema: Api }, outerImpl);
 const outerLive = Modular.make(outerImpl);
 
 // @ts-expect-error Inner layer outputs cannot satisfy outer initialization.
-const missingOuterInline: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  OuterInline;
+const missingOuterInline: Effect.Effect<unknown, never, Cloudflare.Worker> = OuterInline;
 // @ts-expect-error Inner layer outputs cannot satisfy outer initialization.
-const missingOuterBare: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  outerBare;
+const missingOuterBare: Effect.Effect<unknown, never, Cloudflare.Worker> = outerBare;
 // @ts-expect-error Inner layer outputs cannot satisfy outer initialization.
-const missingOuterModular: Layer.Layer<Modular, never, Cloudflare.Worker> =
-  outerLive;
+const missingOuterModular: Layer.Layer<Modular, never, Cloudflare.Worker> = outerLive;
 
 const CodecString = Schema.String.pipe(
   Schema.decodeTo(Schema.String, {
     decode: SchemaGetter.passthrough<string>(),
-    encode: SchemaGetter.transformEffect((value: string) =>
-      Dependency.pipe(Effect.as(value)),
-    ),
+    encode: SchemaGetter.transformEffect((value: string) => Dependency.pipe(Effect.as(value))),
   }),
 );
-class CodecApi extends RpcGroup.make(
-  Rpc.make("read", { success: CodecString }),
-) {}
+class CodecApi extends RpcGroup.make(Rpc.make("read", { success: CodecString })) {}
 const codecImpl = Effect.succeed(
   Effect.succeed(
     Layer.mergeAll(
@@ -146,30 +104,20 @@ class CodecInline extends Cloudflare.RpcDurableObject<CodecInline>()(
   { schema: CodecApi },
   codecImpl,
 ) {}
-class CodecModular extends Cloudflare.RpcDurableObject<CodecModular>()(
-  "CodecModular",
-  { schema: CodecApi },
-) {}
-const codecBare = Cloudflare.RpcDurableObject(
-  "CodecBare",
-  { schema: CodecApi },
-  codecImpl,
-);
+class CodecModular extends Cloudflare.RpcDurableObject<CodecModular>()("CodecModular", {
+  schema: CodecApi,
+}) {}
+const codecBare = Cloudflare.RpcDurableObject("CodecBare", { schema: CodecApi }, codecImpl);
 const codecLive = CodecModular.make(codecImpl);
 
 // @ts-expect-error Codecs use the handler's captured input context, not outputs.
-const missingCodecInline: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  CodecInline;
+const missingCodecInline: Effect.Effect<unknown, never, Cloudflare.Worker> = CodecInline;
 // @ts-expect-error Codecs use the handler's captured input context, not outputs.
-const missingCodecBare: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  codecBare;
+const missingCodecBare: Effect.Effect<unknown, never, Cloudflare.Worker> = codecBare;
 // @ts-expect-error Codecs use the handler's captured input context, not outputs.
-const missingCodecModular: Layer.Layer<CodecModular, never, Cloudflare.Worker> =
-  codecLive;
+const missingCodecModular: Layer.Layer<CodecModular, never, Cloudflare.Worker> = codecLive;
 
-class Middleware extends RpcMiddleware.Service<Middleware>()(
-  "RpcSocketMiddleware",
-) {}
+class Middleware extends RpcMiddleware.Service<Middleware>()("RpcSocketMiddleware") {}
 const MiddlewareApi = Api.middleware(Middleware);
 const middlewareImpl = Effect.succeed(
   Effect.succeed(
@@ -184,15 +132,16 @@ class MiddlewareInline extends Cloudflare.RpcDurableObject<MiddlewareInline>()(
   { schema: MiddlewareApi },
   middlewareImpl,
 ) {}
-const middlewareRequirements: Effect.Effect<unknown, never, Cloudflare.Worker> =
-  MiddlewareInline;
+const middlewareRequirements: Effect.Effect<unknown, never, Cloudflare.Worker> = MiddlewareInline;
 
 const dependencyEffects: ReadonlyArray<
   Effect.Effect<unknown, never, Cloudflare.Worker | Dependency>
 > = [MergedInline, mergedBare, OuterInline, outerBare, CodecInline, codecBare];
-const dependencyLayers: ReadonlyArray<
-  Layer.Layer<never, never, Cloudflare.Worker | Dependency>
-> = [mergedLive, outerLive, codecLive];
+const dependencyLayers: ReadonlyArray<Layer.Layer<never, never, Cloudflare.Worker | Dependency>> = [
+  mergedLive,
+  outerLive,
+  codecLive,
+];
 
 const legacyImpl = Effect.succeed(
   Effect.succeed(
@@ -211,18 +160,14 @@ class LegacyInline extends Cloudflare.RpcDurableObject<LegacyInline>()(
   { schema: Api },
   legacyImpl,
 ) {}
-class LegacyModular extends Cloudflare.RpcDurableObject<LegacyModular>()(
-  "LegacyModular",
-  { schema: Api },
-) {}
-const legacyBare = Cloudflare.RpcDurableObject(
-  "LegacyBare",
-  { schema: Api },
-  legacyImpl,
-);
-const legacyEffects: ReadonlyArray<
-  Effect.Effect<unknown, never, Cloudflare.Worker>
-> = [LegacyInline, legacyBare];
+class LegacyModular extends Cloudflare.RpcDurableObject<LegacyModular>()("LegacyModular", {
+  schema: Api,
+}) {}
+const legacyBare = Cloudflare.RpcDurableObject("LegacyBare", { schema: Api }, legacyImpl);
+const legacyEffects: ReadonlyArray<Effect.Effect<unknown, never, Cloudflare.Worker>> = [
+  LegacyInline,
+  legacyBare,
+];
 const legacyLive: Layer.Layer<LegacyModular, never, Cloudflare.Worker> =
   LegacyModular.make(legacyImpl);
 

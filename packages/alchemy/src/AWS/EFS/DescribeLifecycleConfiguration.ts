@@ -36,7 +36,6 @@ export interface DescribeLifecycleConfiguration extends Binding.Service<
     >
   >
 > {}
-export const DescribeLifecycleConfiguration =
-  Binding.Service<DescribeLifecycleConfiguration>(
-    "AWS.EFS.DescribeLifecycleConfiguration",
-  );
+export const DescribeLifecycleConfiguration = Binding.Service<DescribeLifecycleConfiguration>(
+  "AWS.EFS.DescribeLifecycleConfiguration",
+);

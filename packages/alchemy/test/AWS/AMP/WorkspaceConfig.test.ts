@@ -1,3 +1,10 @@
+import * as amp from "@distilled.cloud/aws/amp";
+import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   AnomalyDetector,
@@ -9,13 +16,6 @@ import {
 import * as Logs from "@/AWS/Logs";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as amp from "@distilled.cloud/aws/amp";
-import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import type * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,15 +41,10 @@ const assertWorkspaceDeleted = (workspaceId: string) =>
         ? Effect.fail(new WorkspaceStillExists({ workspaceId }))
         : Effect.succeed(undefined),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "WorkspaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -88,23 +83,17 @@ test.provider(
             retention: "1 day",
           });
           const queryLogs = yield* Logs.LogGroup("QueryLogs", {
-            logGroupName:
-              "/aws/vendedlogs/prometheus/alchemy-test-amp-config-queries",
+            logGroupName: "/aws/vendedlogs/prometheus/alchemy-test-amp-config-queries",
             retention: "1 day",
           });
           const logging = yield* LoggingConfiguration("Logging", {
             workspaceId: workspace.workspaceId,
             logGroupArn: ruleLogs.logGroupArn,
           });
-          const queryLogging = yield* QueryLoggingConfiguration(
-            "QueryLogging",
-            {
-              workspaceId: workspace.workspaceId,
-              destinations: [
-                { logGroupArn: queryLogs.logGroupArn, qspThreshold },
-              ],
-            },
-          );
+          const queryLogging = yield* QueryLoggingConfiguration("QueryLogging", {
+            workspaceId: workspace.workspaceId,
+            destinations: [{ logGroupArn: queryLogs.logGroupArn, qspThreshold }],
+          });
           const policy = yield* ResourcePolicy("Policy", {
             workspaceId: workspace.workspaceId,
             policyDocument: Output.map(workspace.workspaceArn, (arn) =>
@@ -131,20 +120,13 @@ test.provider(
       expect(retentionAfterCreate).toBe(30);
 
       const logging = yield* amp.describeLoggingConfiguration({ workspaceId });
-      expect(logging.loggingConfiguration.logGroupArn).toContain(
-        "alchemy-test-amp-config",
-      );
+      expect(logging.loggingConfiguration.logGroupArn).toContain("alchemy-test-amp-config");
 
       const queryLogging = yield* amp.describeQueryLoggingConfiguration({
         workspaceId,
       });
-      expect(queryLogging.queryLoggingConfiguration.destinations).toHaveLength(
-        1,
-      );
-      expect(
-        queryLogging.queryLoggingConfiguration.destinations[0].filters
-          .qspThreshold,
-      ).toBe(0);
+      expect(queryLogging.queryLoggingConfiguration.destinations).toHaveLength(1);
+      expect(queryLogging.queryLoggingConfiguration.destinations[0].filters.qspThreshold).toBe(0);
 
       const policy = yield* amp.describeResourcePolicy({ workspaceId });
       expect(policy.policyDocument).toContain("aps:QueryMetrics");
@@ -161,19 +143,16 @@ test.provider(
       const queryLoggingAfter = yield* amp.describeQueryLoggingConfiguration({
         workspaceId,
       });
-      expect(
-        queryLoggingAfter.queryLoggingConfiguration.destinations[0].filters
-          .qspThreshold,
-      ).toBe(1000);
+      expect(queryLoggingAfter.queryLoggingConfiguration.destinations[0].filters.qspThreshold).toBe(
+        1000,
+      );
 
       yield* stack.destroy();
       yield* assertWorkspaceDeleted(workspaceId);
 
       // The sub-configurations died with the workspace; a fresh describe on
       // the deleted workspace id is a typed not-found.
-      const error = yield* Effect.flip(
-        amp.describeLoggingConfiguration({ workspaceId }),
-      );
+      const error = yield* Effect.flip(amp.describeLoggingConfiguration({ workspaceId }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 300_000 },
@@ -227,9 +206,7 @@ test.provider(
         workspaceId,
         anomalyDetectorId: detectorId,
       });
-      expect(describedAfter.anomalyDetector.evaluationIntervalInSeconds).toBe(
-        120,
-      );
+      expect(describedAfter.anomalyDetector.evaluationIntervalInSeconds).toBe(120);
 
       yield* stack.destroy();
       yield* assertWorkspaceDeleted(workspaceId);

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -313,11 +312,7 @@ export const HealthcheckProvider = () =>
       const n = news as Props;
       // zoneId is Input<string>; by diff time both sides are concrete
       // strings when statically known.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -325,10 +320,7 @@ export const HealthcheckProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       // Owned path: we have persisted state (our own id) — refresh it.
       if (output?.healthcheckId) {
-        const observed = yield* getHealthcheck(
-          output.zoneId,
-          output.healthcheckId,
-        );
+        const observed = yield* getHealthcheck(output.zoneId, output.healthcheckId);
         if (observed) return toAttributes(observed, output.zoneId);
         return undefined;
       }
@@ -371,25 +363,17 @@ export const HealthcheckProvider = () =>
       //    a race: re-read by name and converge via update below.
       let justCreated = false;
       if (!observed) {
-        observed = yield* healthchecks
-          .createHealthcheck({ zoneId, ...desired })
-          .pipe(
-            Effect.map((created): ObservedHealthcheck | undefined => created),
-            Effect.catchTag("HealthcheckAlreadyExists", () =>
-              findByName(zoneId, name),
-            ),
-          );
+        observed = yield* healthchecks.createHealthcheck({ zoneId, ...desired }).pipe(
+          Effect.map((created): ObservedHealthcheck | undefined => created),
+          Effect.catchTag("HealthcheckAlreadyExists", () => findByName(zoneId, name)),
+        );
         justCreated = observed !== undefined;
       }
 
       // 3. Sync — the update endpoint is a PUT that takes the full body;
       //    diff observed cloud state against desired and skip the call
       //    entirely on a no-op.
-      if (
-        observed?.id &&
-        !justCreated &&
-        !desiredEqualsObserved(desired, observed)
-      ) {
+      if (observed?.id && !justCreated && !desiredEqualsObserved(desired, observed)) {
         observed = yield* healthchecks.updateHealthcheck({
           zoneId,
           healthcheckId: observed.id,
@@ -401,9 +385,7 @@ export const HealthcheckProvider = () =>
       const attrs = observed ? toAttributes(observed, zoneId) : undefined;
       if (!attrs) {
         return yield* Effect.fail(
-          new Error(
-            `Cloudflare did not return a usable health check for "${name}"`,
-          ),
+          new Error(`Cloudflare did not return a usable health check for "${name}"`),
         );
       }
       return attrs;
@@ -442,9 +424,7 @@ export const HealthcheckProvider = () =>
                 }),
               ),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as Attributes[])),
           ),
         { concurrency: 10 },
       );
@@ -461,9 +441,7 @@ type ObservedHealthcheck = healthchecks.GetHealthcheckResponse;
 const getHealthcheck = (zoneId: string, healthcheckId: string) =>
   healthchecks
     .getHealthcheck({ zoneId, healthcheckId })
-    .pipe(
-      Effect.catchTag("HealthcheckNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("HealthcheckNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a health check by exact name. Names are unique per zone, so the
@@ -473,9 +451,7 @@ const findByName = (zoneId: string, name: string) =>
   healthchecks.listHealthchecks.items({ zoneId }).pipe(
     Stream.filter((h) => h.name === name),
     Stream.runHead,
-    Effect.map((h): ObservedHealthcheck | undefined =>
-      Option.getOrUndefined(h),
-    ),
+    Effect.map((h): ObservedHealthcheck | undefined => Option.getOrUndefined(h)),
   );
 
 const createHealthcheckName = (id: string, name: string | undefined) =>
@@ -520,10 +496,7 @@ const buildDesiredBody = (news: Props, name: string): DesiredBody => ({
   tcpConfig: news.tcpConfig,
 });
 
-const desiredEqualsObserved = (
-  desired: DesiredBody,
-  observed: ObservedHealthcheck,
-): boolean => {
+const desiredEqualsObserved = (desired: DesiredBody, observed: ObservedHealthcheck): boolean => {
   if (desired.name !== observed.name) return false;
   if (desired.address !== observed.address) return false;
   if (desired.type !== observed.type) return false;
@@ -602,10 +575,7 @@ const httpConfigEquals = (
   if (desired.port !== undefined && desired.port !== observed.port) {
     return false;
   }
-  if (
-    desired.header !== undefined &&
-    !headerEquals(desired.header, observed.header)
-  ) {
+  if (desired.header !== undefined && !headerEquals(desired.header, observed.header)) {
     return false;
   }
   return true;
@@ -620,9 +590,7 @@ const headerEquals = (
   if (keys.length !== Object.keys(obs).length) return false;
   return keys.every((k) => {
     const o = obs[k];
-    return (
-      Array.isArray(o) && arrayEqualsUnordered(desired[k] ?? [], o.map(String))
-    );
+    return Array.isArray(o) && arrayEqualsUnordered(desired[k] ?? [], o.map(String));
   });
 };
 
@@ -643,10 +611,7 @@ const tcpConfigEquals = (
   return true;
 };
 
-const toAttributes = (
-  observed: ObservedHealthcheck,
-  zoneId: string,
-): Attributes | undefined => {
+const toAttributes = (observed: ObservedHealthcheck, zoneId: string): Attributes | undefined => {
   if (!observed.id || !observed.name || !observed.address || !observed.type) {
     return undefined;
   }

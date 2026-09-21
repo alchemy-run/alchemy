@@ -6,8 +6,8 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import type { Providers } from "../Providers.ts";
 import { toRedactedString } from "./common.ts";
 
 export interface ServiceSpecificCredentialProps {
@@ -110,8 +110,7 @@ export const ServiceSpecificCredentialProvider = () =>
               (response.ServiceSpecificCredentials ?? []).map((metadata) => ({
                 userName: metadata.UserName,
                 serviceName: metadata.ServiceName,
-                serviceSpecificCredentialId:
-                  metadata.ServiceSpecificCredentialId,
+                serviceSpecificCredentialId: metadata.ServiceSpecificCredentialId,
                 status: metadata.Status,
                 createDate: metadata.CreateDate,
                 expirationDate: metadata.ExpirationDate,
@@ -147,9 +146,7 @@ export const ServiceSpecificCredentialProvider = () =>
         ServiceName: output.serviceName,
       });
       const metadata = listed.ServiceSpecificCredentials?.find(
-        (entry) =>
-          entry.ServiceSpecificCredentialId ===
-          output.serviceSpecificCredentialId,
+        (entry) => entry.ServiceSpecificCredentialId === output.serviceSpecificCredentialId,
       );
       if (!metadata?.ServiceSpecificCredentialId) {
         return undefined;
@@ -183,13 +180,10 @@ export const ServiceSpecificCredentialProvider = () =>
               Effect.map((r) =>
                 r.ServiceSpecificCredentials?.find(
                   (entry) =>
-                    entry.ServiceSpecificCredentialId ===
-                    output.serviceSpecificCredentialId,
+                    entry.ServiceSpecificCredentialId === output.serviceSpecificCredentialId,
                 ),
               ),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
             )
         : undefined;
 
@@ -197,15 +191,12 @@ export const ServiceSpecificCredentialProvider = () =>
       // returned on first creation, so adoption preserves the prior
       // redacted values.
       let credentialId =
-        observed?.ServiceSpecificCredentialId ??
-        output?.serviceSpecificCredentialId;
+        observed?.ServiceSpecificCredentialId ?? output?.serviceSpecificCredentialId;
       let userName = observed?.UserName ?? output?.userName ?? news.userName;
-      let serviceName =
-        observed?.ServiceName ?? output?.serviceName ?? news.serviceName;
+      let serviceName = observed?.ServiceName ?? output?.serviceName ?? news.serviceName;
       let createDate = observed?.CreateDate ?? output?.createDate;
       let expirationDate = observed?.ExpirationDate ?? output?.expirationDate;
-      let serviceUserName =
-        observed?.ServiceUserName ?? output?.serviceUserName;
+      let serviceUserName = observed?.ServiceUserName ?? output?.serviceUserName;
       let serviceCredentialAlias =
         observed?.ServiceCredentialAlias ?? output?.serviceCredentialAlias;
       let servicePassword = output?.servicePassword;
@@ -221,9 +212,7 @@ export const ServiceSpecificCredentialProvider = () =>
         const credential = created.ServiceSpecificCredential;
         if (!credential?.ServiceSpecificCredentialId) {
           return yield* Effect.fail(
-            new Error(
-              `createServiceSpecificCredential returned no credential id`,
-            ),
+            new Error(`createServiceSpecificCredential returned no credential id`),
           );
         }
         credentialId = credential.ServiceSpecificCredentialId;
@@ -234,17 +223,13 @@ export const ServiceSpecificCredentialProvider = () =>
         serviceUserName = credential.ServiceUserName;
         serviceCredentialAlias = credential.ServiceCredentialAlias;
         servicePassword = toRedactedString(credential.ServicePassword);
-        serviceCredentialSecret = toRedactedString(
-          credential.ServiceCredentialSecret,
-        );
+        serviceCredentialSecret = toRedactedString(credential.ServiceCredentialSecret);
         observedStatus = credential.Status;
       }
 
       if (!credentialId) {
         return yield* Effect.fail(
-          new Error(
-            `ServiceSpecificCredential for user '${news.userName}' has no id`,
-          ),
+          new Error(`ServiceSpecificCredential for user '${news.userName}' has no id`),
         );
       }
 

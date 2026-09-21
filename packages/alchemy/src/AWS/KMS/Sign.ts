@@ -42,9 +42,7 @@ export interface Sign extends Binding.Service<
   "AWS.KMS.Sign",
   (
     key: Key | AliasName,
-  ) => Effect.Effect<
-    (request: SignRequest) => Effect.Effect<kms.SignResponse, kms.SignError>
-  >
+  ) => Effect.Effect<(request: SignRequest) => Effect.Effect<kms.SignResponse, kms.SignError>>
 > {}
 
 export const Sign = Binding.Service<Sign>("AWS.KMS.Sign");

@@ -36,10 +36,7 @@ export interface AssociateQAppWithUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: AssociateQAppWithUserRequest,
-    ) => Effect.Effect<
-      qapps.AssociateQAppWithUserResponse,
-      qapps.AssociateQAppWithUserError
-    >
+    ) => Effect.Effect<qapps.AssociateQAppWithUserResponse, qapps.AssociateQAppWithUserError>
   >
 > {}
 

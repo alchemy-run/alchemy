@@ -127,46 +127,27 @@ export const DataSourceProvider = () =>
   Provider.effect(
     DataSource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<DataSourceProps, "name">,
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 100 }))
+      const createName = Effect.fn(function* (id: string, props: Pick<DataSourceProps, "name">) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
+      });
+
+      const getDsOrUndefined = Effect.fn(function* (knowledgeBaseId: string, dataSourceId: string) {
+        return yield* bedrock.getDataSource({ knowledgeBaseId, dataSourceId }).pipe(
+          Effect.map((r) => r.dataSource),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
-      const getDsOrUndefined = Effect.fn(function* (
-        knowledgeBaseId: string,
-        dataSourceId: string,
-      ) {
-        return yield* bedrock
-          .getDataSource({ knowledgeBaseId, dataSourceId })
-          .pipe(
-            Effect.map((r) => r.dataSource),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-      });
-
-      const waitForSettled = Effect.fn(function* (
-        knowledgeBaseId: string,
-        dataSourceId: string,
-      ) {
-        return yield* bedrock
-          .getDataSource({ knowledgeBaseId, dataSourceId })
-          .pipe(
-            Effect.map((r) => r.dataSource),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.repeat({
-              schedule: Schedule.fixed("3 seconds"),
-              until: (ds) => ds === undefined || !DS_TRANSIENT.has(ds.status),
-              times: 40,
-            }),
-          );
+      const waitForSettled = Effect.fn(function* (knowledgeBaseId: string, dataSourceId: string) {
+        return yield* bedrock.getDataSource({ knowledgeBaseId, dataSourceId }).pipe(
+          Effect.map((r) => r.dataSource),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.repeat({
+            schedule: Schedule.fixed("3 seconds"),
+            until: (ds) => ds === undefined || !DS_TRANSIENT.has(ds.status),
+            times: 40,
+          }),
+        );
       });
 
       return DataSource.Provider.of({
@@ -177,8 +158,7 @@ export const DataSourceProvider = () =>
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const knowledgeBaseId =
-            output?.knowledgeBaseId ?? olds?.knowledgeBaseId;
+          const knowledgeBaseId = output?.knowledgeBaseId ?? olds?.knowledgeBaseId;
           const dataSourceId = output?.dataSourceId;
           if (knowledgeBaseId === undefined || dataSourceId === undefined) {
             return undefined;
@@ -194,32 +174,18 @@ export const DataSourceProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (olds?.knowledgeBaseId ?? undefined) !==
-            (news?.knowledgeBaseId ?? undefined)
-          ) {
+          if ((olds?.knowledgeBaseId ?? undefined) !== (news?.knowledgeBaseId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          const oldName = yield* createName(
-            id,
-            olds ?? ({} as DataSourceProps),
-          );
-          const newName = yield* createName(
-            id,
-            news ?? ({} as DataSourceProps),
-          );
+          const oldName = yield* createName(id, olds ?? ({} as DataSourceProps));
+          const newName = yield* createName(id, news ?? ({} as DataSourceProps));
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
           // description, config, and deletion policy converge via update.
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {} as DataSourceProps,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {} as DataSourceProps, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
           const knowledgeBaseId = news.knowledgeBaseId;
 
@@ -239,18 +205,15 @@ export const DataSourceProvider = () =>
               vectorIngestionConfiguration: news.vectorIngestionConfiguration,
             });
             ds = created.dataSource;
-            ds =
-              (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
+            ds = (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
           } else {
             // 3. SYNC
-            ds =
-              (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
+            ds = (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
             const drifted =
               ds.description !== news.description ||
               JSON.stringify(ds.dataSourceConfiguration) !==
                 JSON.stringify(news.dataSourceConfiguration) ||
-              (ds.dataDeletionPolicy ?? undefined) !==
-                (news.dataDeletionPolicy ?? undefined) ||
+              (ds.dataDeletionPolicy ?? undefined) !== (news.dataDeletionPolicy ?? undefined) ||
               JSON.stringify(ds.vectorIngestionConfiguration ?? null) !==
                 JSON.stringify(news.vectorIngestionConfiguration ?? null);
             if (drifted) {
@@ -263,8 +226,7 @@ export const DataSourceProvider = () =>
                 dataDeletionPolicy: news.dataDeletionPolicy,
                 vectorIngestionConfiguration: news.vectorIngestionConfiguration,
               });
-              ds =
-                (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
+              ds = (yield* waitForSettled(knowledgeBaseId, ds.dataSourceId)) ?? ds;
             }
           }
 
@@ -282,9 +244,7 @@ export const DataSourceProvider = () =>
               knowledgeBaseId: output.knowledgeBaseId,
               dataSourceId: output.dataSourceId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

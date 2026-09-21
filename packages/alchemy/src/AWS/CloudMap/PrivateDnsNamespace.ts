@@ -3,12 +3,12 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
@@ -127,14 +127,8 @@ export const PrivateDnsNamespaceProvider = () =>
   Provider.effect(
     PrivateDnsNamespace,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }));
       });
 
       const toAttributes = (namespace: sd.Namespace) => ({
@@ -151,19 +145,12 @@ export const PrivateDnsNamespaceProvider = () =>
           Effect.gen(function* () {
             const pages = yield* sd.listNamespaces
               .pages({
-                Filters: [
-                  { Name: "TYPE", Values: ["DNS_PRIVATE"], Condition: "EQ" },
-                ],
+                Filters: [{ Name: "TYPE", Values: ["DNS_PRIVATE"], Condition: "EQ" }],
               })
               .pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Namespaces ?? [])
-              .filter(
-                (n) =>
-                  n.Id !== undefined &&
-                  n.Arn !== undefined &&
-                  n.Name !== undefined,
-              )
+              .filter((n) => n.Id !== undefined && n.Arn !== undefined && n.Name !== undefined)
               .map((n) => ({
                 namespaceId: n.Id!,
                 namespaceArn: n.Arn!,
@@ -173,13 +160,8 @@ export const PrivateDnsNamespaceProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.namespaceName ?? (yield* createName(id, olds ?? {}));
-          const namespace = yield* observeNamespace(
-            "DNS_PRIVATE",
-            name,
-            output?.namespaceId,
-          );
+          const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));
+          const namespace = yield* observeNamespace("DNS_PRIVATE", name, output?.namespaceId);
           if (namespace?.Id === undefined) {
             return undefined;
           }
@@ -208,19 +190,13 @@ export const PrivateDnsNamespaceProvider = () =>
           const desiredTtl = toWireSeconds(news.ttl);
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache
-          let namespace = yield* observeNamespace(
-            "DNS_PRIVATE",
-            name,
-            output?.namespaceId,
-          );
+          let namespace = yield* observeNamespace("DNS_PRIVATE", name, output?.namespaceId);
 
           // 2. ENSURE — create if missing; namespace creation is async. The
           // created namespace is observed by the operation's target id,
           // riding out a same-name predecessor still deleting
           if (namespace === undefined) {
-            yield* session.note(
-              `creating private DNS namespace ${name} (async)...`,
-            );
+            yield* session.note(`creating private DNS namespace ${name} (async)...`);
             namespace = yield* ensureNamespace(
               "DNS_PRIVATE",
               name,
@@ -250,18 +226,14 @@ export const PrivateDnsNamespaceProvider = () =>
           // 3. SYNC — description + SOA TTL, observed vs desired
           const observedTtl = namespace.Properties?.DnsProperties?.SOA?.TTL;
           const descriptionDelta =
-            news.description !== undefined &&
-            news.description !== namespace.Description;
-          const ttlDelta =
-            desiredTtl !== undefined && desiredTtl !== observedTtl;
+            news.description !== undefined && news.description !== namespace.Description;
+          const ttlDelta = desiredTtl !== undefined && desiredTtl !== observedTtl;
           if (descriptionDelta || ttlDelta) {
             const update = yield* sd.updatePrivateDnsNamespace({
               Id: namespace.Id,
               Namespace: {
                 Description: descriptionDelta ? news.description : undefined,
-                Properties: ttlDelta
-                  ? { DnsProperties: { SOA: { TTL: desiredTtl! } } }
-                  : undefined,
+                Properties: ttlDelta ? { DnsProperties: { SOA: { TTL: desiredTtl! } } } : undefined,
               },
             });
             if (update.OperationId !== undefined) {
@@ -281,9 +253,7 @@ export const PrivateDnsNamespaceProvider = () =>
           const deleted = yield* retryWhileResourceInUse(
             sd.deleteNamespace({ Id: output.namespaceId }),
           ).pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed({ OperationId: undefined }),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed({ OperationId: undefined })),
             // an identical delete is already in flight — await THAT operation
             // instead of silently skipping the deletion
             Effect.catchTag("DuplicateRequest", (e) =>

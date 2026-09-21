@@ -34,10 +34,7 @@ export interface GetReadSetActivationJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetReadSetActivationJobRequest,
-    ) => Effect.Effect<
-      omics.GetReadSetActivationJobResponse,
-      omics.GetReadSetActivationJobError
-    >
+    ) => Effect.Effect<omics.GetReadSetActivationJobResponse, omics.GetReadSetActivationJobError>
   >
 > {}
 

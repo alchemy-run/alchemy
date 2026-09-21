@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import OpenSearchBindingsTestFunctionLive, {
   OpenSearchBindingsTestFunction,
 } from "./fixtures/handler";
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "OpenSearchBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -30,10 +27,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -41,9 +35,7 @@ const getJson = (path: string) =>
 describe.sequential("OpenSearch Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "OpenSearch test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("OpenSearch test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("OpenSearch test setup: deploying fixture");
@@ -81,35 +73,29 @@ describe.sequential("OpenSearch Bindings", () => {
   });
 
   describe("DescribeDomain", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/domain");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/domain");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("DescribeDomains", () => {
-    test.provider(
-      "returns an empty status list for unknown domain names",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/domains-batch");
-          expect((response as any).count).toBe(0);
-        }),
+    test.provider("returns an empty status list for unknown domain names", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/domains-batch");
+        expect((response as any).count).toBe(0);
+      }),
     );
   });
 
   describe("DescribeDomainConfig", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/domain-config");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/domain-config");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
@@ -127,13 +113,11 @@ describe.sequential("OpenSearch Bindings", () => {
   });
 
   describe("DescribeDomainNodes", () => {
-    test.provider(
-      "surfaces the typed BaseException tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/domain-nodes");
-          expect((response as any).tag).toBe("BaseException");
-        }),
+    test.provider("surfaces the typed BaseException tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/domain-nodes");
+        expect((response as any).tag).toBe("BaseException");
+      }),
     );
   });
 
@@ -159,101 +143,83 @@ describe.sequential("OpenSearch Bindings", () => {
   });
 
   describe("DescribeDomainAutoTunes", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/auto-tunes");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/auto-tunes");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("ListScheduledActions", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/scheduled-actions");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/scheduled-actions");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("StartDomainMaintenance", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/start-maintenance-probe");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/start-maintenance-probe");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("GetDomainMaintenanceStatus", () => {
-    test.provider(
-      "surfaces the typed BaseException tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/maintenance-status-probe");
-          expect((response as any).tag).toBe("BaseException");
-        }),
+    test.provider("surfaces the typed BaseException tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/maintenance-status-probe");
+        expect((response as any).tag).toBe("BaseException");
+      }),
     );
   });
 
   describe("ListDomainMaintenances", () => {
-    test.provider(
-      "surfaces the typed BaseException tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/maintenances");
-          expect((response as any).tag).toBe("BaseException");
-        }),
+    test.provider("surfaces the typed BaseException tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/maintenances");
+        expect((response as any).tag).toBe("BaseException");
+      }),
     );
   });
 
   describe("StartServiceSoftwareUpdate", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/software-update-probe");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/software-update-probe");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("CancelServiceSoftwareUpdate", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/cancel-software-update-probe");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/cancel-software-update-probe");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("GetUpgradeStatus", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/upgrade-status");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/upgrade-status");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("GetUpgradeHistory", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/upgrade-history");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/upgrade-history");
+        expect((response as any).tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 

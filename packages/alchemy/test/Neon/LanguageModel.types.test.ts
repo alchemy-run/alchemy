@@ -1,14 +1,14 @@
-import { AIGateway } from "@/Neon/AIGateway.ts";
-import type { Branch } from "@/Neon/Branch.ts";
-import { QueryAIGateway } from "@/Neon/QueryAIGateway.ts";
-import type { Credential } from "@/Neon/Credential.ts";
-import type { Project } from "@/Neon/Project.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
+import { AIGateway } from "@/Neon/AIGateway.ts";
+import type { Branch } from "@/Neon/Branch.ts";
+import type { Credential } from "@/Neon/Credential.ts";
+import type { Project } from "@/Neon/Project.ts";
+import { QueryAIGateway } from "@/Neon/QueryAIGateway.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 
 const typeCases = (project: Project, branch: Branch, credential: Credential) =>
   Effect.gen(function* () {
@@ -33,11 +33,7 @@ const typeCases = (project: Project, branch: Branch, credential: Credential) =>
     const model: Layer.Layer<LanguageModel, never, RuntimeContext> = ai.model({
       model: "gpt-5-mini",
     });
-    const token: Effect.Effect<
-      Redacted.Redacted<string>,
-      never,
-      RuntimeContext
-    > = ai.token;
+    const token: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext> = ai.token;
     // @ts-expect-error Model construction retains its runtime-only requirement.
     const deploymentModel: Layer.Layer<LanguageModel> = ai.model({
       model: "gpt-5-mini",
@@ -47,10 +43,8 @@ const typeCases = (project: Project, branch: Branch, credential: Credential) =>
     return { model, token, deploymentModel, plaintext };
   });
 
-test.effect(
-  "model and construct type assertions are compiled by the workspace check",
-  () =>
-    Effect.sync(() => {
-      expect(typeof typeCases).toBe("function");
-    }),
+test.effect("model and construct type assertions are compiled by the workspace check", () =>
+  Effect.sync(() => {
+    expect(typeof typeCases).toBe("function");
+  }),
 );

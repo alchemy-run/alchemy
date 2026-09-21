@@ -25,9 +25,7 @@ export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
  * The parallel data did not reach a terminal status within the bounded
  * polling window.
  */
-export class ParallelDataNotConverged extends Data.TaggedError(
-  "ParallelDataNotConverged",
-)<{
+export class ParallelDataNotConverged extends Data.TaggedError("ParallelDataNotConverged")<{
   readonly name: string;
   readonly status: string | undefined;
 }> {}
@@ -123,18 +121,14 @@ export interface ParallelData extends Resource<
  *
  * @resource
  */
-export const ParallelData = Resource<ParallelData>(
-  "AWS.Translate.ParallelData",
-);
+export const ParallelData = Resource<ParallelData>("AWS.Translate.ParallelData");
 
 const toAttributes = (props: translate.ParallelDataProperties) => ({
   parallelDataName: props.Name!,
   parallelDataArn: props.Arn!,
   status: props.Status,
   sourceLanguageCode: props.SourceLanguageCode,
-  targetLanguageCodes: props.TargetLanguageCodes
-    ? [...props.TargetLanguageCodes]
-    : undefined,
+  targetLanguageCodes: props.TargetLanguageCodes ? [...props.TargetLanguageCodes] : undefined,
   importedRecordCount: props.ImportedRecordCount,
   failedRecordCount: props.FailedRecordCount,
 });
@@ -143,24 +137,14 @@ export const ParallelDataProvider = () =>
   Provider.effect(
     ParallelData,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: ParallelDataProps,
-      ) {
-        return (
-          props.parallelDataName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: ParallelDataProps) {
+        return props.parallelDataName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getParallelData({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // The import runs asynchronously (CREATING/UPDATING → ACTIVE|FAILED);
@@ -172,23 +156,17 @@ export const ParallelDataProvider = () =>
             schedule: Schedule.spaced("10 seconds"),
             until: (r): boolean => {
               const status = r?.ParallelDataProperties?.Status;
-              return (
-                r === undefined || status === "ACTIVE" || status === "FAILED"
-              );
+              return r === undefined || status === "ACTIVE" || status === "FAILED";
             },
             times: 60,
           }),
         );
         const props = final?.ParallelDataProperties;
         if (props?.Status === "FAILED") {
-          return yield* Effect.fail(
-            new ParallelDataFailed({ name, message: props.Message }),
-          );
+          return yield* Effect.fail(new ParallelDataFailed({ name, message: props.Message }));
         }
         if (props?.Status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new ParallelDataNotConverged({ name, status: props?.Status }),
-          );
+          return yield* Effect.fail(new ParallelDataNotConverged({ name, status: props?.Status }));
         }
         return props;
       });
@@ -204,9 +182,7 @@ export const ParallelDataProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.parallelDataName ??
-            (yield* createName(id, olds ?? { s3Uri: "" }));
+          const name = output?.parallelDataName ?? (yield* createName(id, olds ?? { s3Uri: "" }));
           const found = yield* getOne(name);
           if (found?.ParallelDataProperties === undefined) return undefined;
           const attrs = toAttributes(found.ParallelDataProperties);
@@ -215,8 +191,7 @@ export const ParallelDataProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.parallelDataName ?? (yield* createName(id, news));
+          const name = output?.parallelDataName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -252,8 +227,7 @@ export const ParallelDataProvider = () =>
             const drift =
               config?.S3Uri !== news.s3Uri ||
               (news.format !== undefined && config?.Format !== news.format) ||
-              (observedProps.Description ?? undefined) !==
-                (news.description ?? undefined);
+              (observedProps.Description ?? undefined) !== (news.description ?? undefined);
             if (drift) {
               // Computed outside the retry so replays of the same submission
               // reuse one idempotency token.
@@ -290,31 +264,24 @@ export const ParallelDataProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the parallel data may already be gone. A delete
           // during CREATING/UPDATING conflicts; retry bounded.
-          yield* translate
-            .deleteParallelData({ Name: output.parallelDataName })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "ConcurrentModificationException",
-                schedule: Schedule.spaced("10 seconds"),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* translate.deleteParallelData({ Name: output.parallelDataName }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
           // Deletion is asynchronous (DELETING) — wait until gone so a
           // replacement can immediately reuse the name.
-          yield* translate
-            .getParallelData({ Name: output.parallelDataName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("5 seconds"),
-                until: (r): boolean => r === undefined,
-                times: 36,
-              }),
-            );
+          yield* translate.getParallelData({ Name: output.parallelDataName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (r): boolean => r === undefined,
+              times: 36,
+            }),
+          );
         }),
 
         list: () =>

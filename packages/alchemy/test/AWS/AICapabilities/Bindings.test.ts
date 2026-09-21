@@ -1,16 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { HELLO_PNG_TEXT, TRANSLATE_TEXT } from "./constants.ts";
-import AICapabilitiesTestFunctionLive, {
-  AICapabilitiesTestFunction,
-} from "./handler.ts";
+import AICapabilitiesTestFunctionLive, { AICapabilitiesTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "AICapabilitiesBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -41,28 +36,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("AI Capabilities Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "AICapabilities test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("AICapabilities test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("AICapabilities test setup: deploying fixture");
@@ -76,9 +64,7 @@ describe("AI Capabilities Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `AICapabilities test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`AICapabilities test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -86,9 +72,7 @@ describe("AI Capabilities Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `AICapabilities test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`AICapabilities test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -103,9 +87,9 @@ describe("AI Capabilities Bindings", () => {
       "detects labels in checked-in image bytes",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/detect-labels`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/detect-labels`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             labels: string[];
             labelModelVersion?: string;
           };
@@ -145,9 +129,9 @@ describe("AI Capabilities Bindings", () => {
       "synthesizes text to non-empty mp3 audio bytes",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/synthesize-speech`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/synthesize-speech`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             contentType?: string;
             byteLength: number;
           };
@@ -164,9 +148,9 @@ describe("AI Capabilities Bindings", () => {
       "translates English to Spanish",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/translate-text`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/translate-text`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             translatedText: string;
             sourceLanguageCode: string;
             targetLanguageCode: string;
@@ -186,16 +170,14 @@ describe("AI Capabilities Bindings", () => {
       "detects positive sentiment",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/detect-sentiment`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/detect-sentiment`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             sentiment?: string;
             sentimentScore?: { Positive?: number };
           };
 
-          expect(["POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"]).toContain(
-            response.sentiment,
-          );
+          expect(["POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"]).toContain(response.sentiment);
           // SENTIMENT_TEXT is unambiguously positive.
           expect(response.sentiment).toBe("POSITIVE");
           expect(response.sentimentScore?.Positive ?? 0).toBeGreaterThan(0.5);

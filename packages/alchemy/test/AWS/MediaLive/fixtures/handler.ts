@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as MediaLive from "@/AWS/MediaLive";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as MediaLive from "@/AWS/MediaLive";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -30,14 +30,12 @@ export default MediaLiveTestFunction.make(
     // Event source: subscribe the host to MediaLive state-change/alert
     // events. The deploy proves the EventBridge rule + invoke permission
     // wiring.
-    yield* MediaLive.consumeChannelEvents(
-      { kinds: ["state-change", "alert"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `medialive event: ${event["detail-type"]} ${event.detail.state ?? event.detail.message ?? ""}`,
-          ),
+    yield* MediaLive.consumeChannelEvents({ kinds: ["state-change", "alert"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `medialive event: ${event["detail-type"]} ${event.detail.state ?? event.detail.message ?? ""}`,
         ),
+      ),
     );
 
     const describeInput = yield* MediaLive.DescribeInput(input);

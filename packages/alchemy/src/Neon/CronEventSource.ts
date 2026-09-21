@@ -36,12 +36,6 @@ export interface CronEventSource extends Binding.Service<
     name: string,
     props: CronEventSourceProps,
     handler: (event: CronEvent) => Effect.Effect<void, unknown, R>,
-  ): Effect.Effect<
-    void,
-    never,
-    CronEventSource | Exclude<R, RuntimeContext | Scope>
-  >;
+  ): Effect.Effect<void, never, CronEventSource | Exclude<R, RuntimeContext | Scope>>;
 }
-export const CronEventSource = Binding.Service<CronEventSource>(
-  "Neon.CronEventSource",
-);
+export const CronEventSource = Binding.Service<CronEventSource>("Neon.CronEventSource");

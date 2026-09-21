@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListPlatformApplicationsRequest
-  extends sns.ListPlatformApplicationsInput {}
+export interface ListPlatformApplicationsRequest extends sns.ListPlatformApplicationsInput {}
 
 /**
  * Runtime binding for `sns:ListPlatformApplications`.
@@ -26,12 +25,10 @@ export interface ListPlatformApplications extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListPlatformApplicationsRequest,
-    ) => Effect.Effect<
-      sns.ListPlatformApplicationsResponse,
-      sns.ListPlatformApplicationsError
-    >
+    ) => Effect.Effect<sns.ListPlatformApplicationsResponse, sns.ListPlatformApplicationsError>
   >
 > {}
 
-export const ListPlatformApplications =
-  Binding.Service<ListPlatformApplications>("AWS.SNS.ListPlatformApplications");
+export const ListPlatformApplications = Binding.Service<ListPlatformApplications>(
+  "AWS.SNS.ListPlatformApplications",
+);

@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
 import ChatBackendRpc from "./ChatBackendRpc.ts";
 import { ChatRpcs } from "./ChatRpcs.ts";
 
@@ -24,9 +24,7 @@ export default class ChatPersistenceRpcWorker extends Cloudflare.RpcWorker<ChatP
 
     const handlers = ChatRpcs.toLayer({
       send: ({ id, prompt }) =>
-        Effect.flatMap(chats.getByName(id), (client) =>
-          client.send({ prompt }),
-        ).pipe(Effect.orDie),
+        Effect.flatMap(chats.getByName(id), (client) => client.send({ prompt })).pipe(Effect.orDie),
       streamMessage: ({ id, prompt }) =>
         chats.getByName(id).pipe(
           Effect.map((client) => client.streamMessage({ prompt })),

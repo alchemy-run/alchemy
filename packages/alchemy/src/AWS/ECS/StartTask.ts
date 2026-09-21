@@ -53,9 +53,7 @@ export interface StartTask extends Binding.Service<
     cluster: Cluster,
     task: Task,
   ) => Effect.Effect<
-    (
-      request: StartTaskRequest,
-    ) => Effect.Effect<ECS.StartTaskResponse, ECS.StartTaskError>
+    (request: StartTaskRequest) => Effect.Effect<ECS.StartTaskResponse, ECS.StartTaskError>
   >
 > {}
 export const StartTask = Binding.Service<StartTask>("AWS.ECS.StartTask");

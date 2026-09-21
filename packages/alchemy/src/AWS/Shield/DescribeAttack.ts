@@ -30,12 +30,7 @@ export interface DescribeAttack extends Binding.Service<
   () => Effect.Effect<
     (
       request: shield.DescribeAttackRequest,
-    ) => Effect.Effect<
-      shield.DescribeAttackResponse,
-      shield.DescribeAttackError
-    >
+    ) => Effect.Effect<shield.DescribeAttackResponse, shield.DescribeAttackError>
   >
 > {}
-export const DescribeAttack = Binding.Service<DescribeAttack>(
-  "AWS.Shield.DescribeAttack",
-);
+export const DescribeAttack = Binding.Service<DescribeAttack>("AWS.Shield.DescribeAttack");

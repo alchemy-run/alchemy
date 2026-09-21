@@ -1,26 +1,16 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/nuxt-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nuxt-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 describe("Hetzner.Website.Nuxt local", () => {
   test.provider(
@@ -53,16 +43,12 @@ describe("Hetzner.Website.Nuxt local", () => {
           timeout: "90 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "NUXT_AWS_API_MARKER",
-          { label: "api route (dev)" },
-        );
-        yield* expectUrlContains(
-          `${url}/prerendered`,
-          "NUXT_AWS_PRERENDERED_MARKER",
-          { label: "extra route (dev)" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NUXT_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
+        yield* expectUrlContains(`${url}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+          label: "extra route (dev)",
+        });
 
         yield* stack.destroy();
       }),

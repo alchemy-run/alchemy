@@ -30,10 +30,7 @@ export interface ListApplicationVersions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListApplicationVersionsRequest,
-    ) => Effect.Effect<
-      SVC.ListApplicationVersionsResponse,
-      SVC.ListApplicationVersionsError
-    >
+    ) => Effect.Effect<SVC.ListApplicationVersionsResponse, SVC.ListApplicationVersionsError>
   >
 > {}
 export const ListApplicationVersions = Binding.Service<ListApplicationVersions>(

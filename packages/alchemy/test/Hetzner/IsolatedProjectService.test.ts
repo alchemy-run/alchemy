@@ -1,24 +1,16 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../IsolatedProject.ts";
-import IsolatedProjectApi, {
-  project,
-} from "./fixtures/isolated-project-service.ts";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
+import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
+import IsolatedProjectApi, { project } from "./fixtures/isolated-project-service.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -44,9 +36,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         );
         expect(deployed.url).toBeTruthy();
 
-        const health = yield* HttpClient.get(
-          new URL("/health", deployed.url!),
-        ).pipe(
+        const health = yield* HttpClient.get(new URL("/health", deployed.url!)).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json

@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class FlagStillExists extends Data.TaggedError("FlagStillExists") {}
 
@@ -26,15 +23,9 @@ const expectFlagGone = (accountId: string, appId: string, flagKey: string) =>
     Effect.flatMap(() => Effect.fail(new FlagStillExists())),
     Effect.retry({
       while: (e): e is FlagStillExists => e instanceof FlagStillExists,
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(10)]),
     }),
-    Effect.catchTag(
-      ["FlagshipFlagNotFound", "FlagshipAppNotFound"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () => Effect.void),
   );
 
 test.provider("create, update, delete a flag in an app", (stack) =>
@@ -92,9 +83,7 @@ test.provider("create, update, delete a flag in an app", (stack) =>
           rules: [
             {
               priority: 1,
-              conditions: [
-                { attribute: "country", operator: "equals", value: "US" },
-              ],
+              conditions: [{ attribute: "country", operator: "equals", value: "US" }],
               serveVariation: "on",
               rollout: { percentage: 50 },
             },
@@ -143,9 +132,7 @@ test.provider("create, update, delete a flag in an app", (stack) =>
           rules: [
             {
               priority: 1,
-              conditions: [
-                { attribute: "country", operator: "equals", value: "US" },
-              ],
+              conditions: [{ attribute: "country", operator: "equals", value: "US" }],
               serveVariation: "on",
               rollout: { percentage: 50 },
             },
@@ -268,11 +255,7 @@ test.provider("recreates a flag after out-of-band delete", (stack) =>
 
     yield* stack.destroy();
 
-    yield* expectFlagGone(
-      accountId,
-      initial.app.appId,
-      "alchemy-test-flag-heal",
-    );
+    yield* expectFlagGone(accountId, initial.app.appId, "alchemy-test-flag-heal");
   }).pipe(logLevel),
 );
 
@@ -309,21 +292,13 @@ test.provider(
         description: "list() includes the deployed flag",
         effect: provider.list(),
         predicate: (all) =>
-          all.some(
-            (f) =>
-              f.appId === deployed.app.appId && f.key === deployed.flag.key,
-          ),
-        schedule: Schedule.max([
-          Schedule.spaced("3 seconds"),
-          Schedule.recurs(30),
-        ]),
+          all.some((f) => f.appId === deployed.app.appId && f.key === deployed.flag.key),
+        schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(30)]),
       });
 
-      expect(
-        all.some(
-          (f) => f.appId === deployed.app.appId && f.key === deployed.flag.key,
-        ),
-      ).toBe(true);
+      expect(all.some((f) => f.appId === deployed.app.appId && f.key === deployed.flag.key)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

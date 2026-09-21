@@ -7,11 +7,7 @@ import { diffTags } from "../../Tags.ts";
 export const unredact = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 /**
  * Coerce a Grafana wire tag map (values are `string | undefined`) into a

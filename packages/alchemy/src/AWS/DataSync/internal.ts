@@ -17,17 +17,14 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "LocationRoleNotAssumable" ||
-      e._tag === "LocationAccessTestFailed",
+    while: (e) => e._tag === "LocationRoleNotAssumable" || e._tag === "LocationAccessTestFailed",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /** Convert a DataSync tag list to a plain record. */
 export const dsTagsToRecord = (
   tags: readonly datasync.TagListEntry[] | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value ?? ""]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value ?? ""]));
 
 /** Read the observed tags currently attached to a DataSync resource. */
 export const readObservedTags = Effect.fn(function* (resourceArn: string) {
@@ -69,7 +66,6 @@ export const findLocationArnByUri = Effect.fn(function* (expectedUri: string) {
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk).flatMap((p) => p.Locations ?? [])),
   );
-  return locations.find(
-    (l) => l.LocationUri !== undefined && strip(l.LocationUri) === target,
-  )?.LocationArn;
+  return locations.find((l) => l.LocationUri !== undefined && strip(l.LocationUri) === target)
+    ?.LocationArn;
 });

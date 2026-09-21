@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { DataAutomationLibrary } from "@/AWS/BedrockDataAutomation";
-import * as Test from "@/Test/Alchemy";
 import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
@@ -9,6 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { DataAutomationLibrary } from "@/AWS/BedrockDataAutomation";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,9 +18,7 @@ const unredact = (value: string | Redacted.Redacted<string>): string =>
 const findLibrary = (libraryArn: string) =>
   bda.getDataAutomationLibrary({ libraryArn }).pipe(
     Effect.map((r) => r.library),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class LibraryStillExists extends Data.TaggedError("LibraryStillExists")<{
@@ -30,9 +28,7 @@ class LibraryStillExists extends Data.TaggedError("LibraryStillExists")<{
 const assertLibraryDeleted = (libraryArn: string) =>
   findLibrary(libraryArn).pipe(
     Effect.flatMap((library) =>
-      library === undefined
-        ? Effect.void
-        : Effect.fail(new LibraryStillExists({ libraryArn })),
+      library === undefined ? Effect.void : Effect.fail(new LibraryStillExists({ libraryArn })),
     ),
     Effect.retry({
       while: (e) => e._tag === "LibraryStillExists",
@@ -43,14 +39,10 @@ const assertLibraryDeleted = (libraryArn: string) =>
 // Sweep libraries leaked by interrupted probe/dev runs (deterministic names
 // only — never touches libraries owned by other suites).
 const sweepLeakedProbeLibraries = Effect.gen(function* () {
-  const summaries = yield* bda.listDataAutomationLibraries
-    .items({})
-    .pipe(Stream.runCollect);
+  const summaries = yield* bda.listDataAutomationLibraries.items({}).pipe(Stream.runCollect);
   yield* Effect.forEach(
     Array.from(summaries).filter(
-      (s) =>
-        s.libraryName !== undefined &&
-        unredact(s.libraryName) === "alchemy-probe-lib",
+      (s) => s.libraryName !== undefined && unredact(s.libraryName) === "alchemy-probe-lib",
     ),
     (s) =>
       bda
@@ -67,9 +59,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { Account } = yield* sts.getCallerIdentity({});
-      const region = yield* Effect.sync(
-        () => process.env.AWS_REGION ?? "us-west-2",
-      );
+      const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
       const error = yield* Effect.flip(
         bda.getDataAutomationLibrary({
           libraryArn: `arn:aws:bedrock:${region}:${Account}:data-automation-library/nonexistentalchemyprobe0`,
@@ -102,16 +92,10 @@ test.provider(
       const created = yield* findLibrary(library.libraryArn);
       expect(created).toBeDefined();
       expect(unredact(created!.libraryName)).toBe(library.libraryName);
-      expect(unredact(created!.libraryDescription ?? "")).toBe(
-        "alchemy test library",
-      );
+      expect(unredact(created!.libraryDescription ?? "")).toBe("alchemy test library");
       const tags = yield* bda
         .listTagsForResource({ resourceARN: library.libraryArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestLibrary");
 

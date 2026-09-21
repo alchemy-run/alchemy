@@ -27,12 +27,7 @@ export interface GetTerminology extends Binding.Service<
   () => Effect.Effect<
     (
       request: translate.GetTerminologyRequest,
-    ) => Effect.Effect<
-      translate.GetTerminologyResponse,
-      translate.GetTerminologyError
-    >
+    ) => Effect.Effect<translate.GetTerminologyResponse, translate.GetTerminologyError>
   >
 > {}
-export const GetTerminology = Binding.Service<GetTerminology>(
-  "AWS.Translate.GetTerminology",
-);
+export const GetTerminology = Binding.Service<GetTerminology>("AWS.Translate.GetTerminology");

@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/cloudflare/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic names — the same on every run (never Date.now()/random).
 const UG_NAME = "alchemy-iam-ug-crud";
@@ -64,11 +61,7 @@ const expectGone = (accountId: string, userGroupId: string) =>
 // references it. The policy props reference the resource group's output, so
 // the engine orders the user group after it on deploy (and before it on
 // destroy).
-const program = (opts: {
-  name: string;
-  permissionGroupId: string;
-  accountScopeKey: string;
-}) =>
+const program = (opts: { name: string; permissionGroupId: string; accountScopeKey: string }) =>
   Effect.gen(function* () {
     const rg = yield* Cloudflare.Iam.ResourceGroup("Rg", {
       name: RG_NAME,
@@ -95,14 +88,8 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const accountScopeKey = `com.cloudflare.api.account.${accountId}`;
-      const permissionGroupId = yield* findPermissionGroupId(
-        accountId,
-        PERMISSION_GROUP_NAME,
-      );
-      const permissionGroupId2 = yield* findPermissionGroupId(
-        accountId,
-        PERMISSION_GROUP_NAME_2,
-      );
+      const permissionGroupId = yield* findPermissionGroupId(accountId, PERMISSION_GROUP_NAME);
+      const permissionGroupId2 = yield* findPermissionGroupId(accountId, PERMISSION_GROUP_NAME_2);
 
       yield* stack.destroy();
 
@@ -122,12 +109,8 @@ test.provider(
       expect(v1.group.createdOn).toBeTruthy();
       expect(v1.group.policies).toHaveLength(1);
       expect(v1.group.policies[0]!.access).toEqual("allow");
-      expect(v1.group.policies[0]!.permissionGroups).toEqual([
-        permissionGroupId,
-      ]);
-      expect(v1.group.policies[0]!.resourceGroups).toEqual([
-        v1.rg.resourceGroupId,
-      ]);
+      expect(v1.group.policies[0]!.permissionGroups).toEqual([permissionGroupId]);
+      expect(v1.group.policies[0]!.resourceGroups).toEqual([v1.rg.resourceGroupId]);
 
       // Out-of-band verification via the distilled API.
       const live = yield* getUserGroup(accountId, v1.group.userGroupId);
@@ -147,15 +130,11 @@ test.provider(
 
       expect(v2.group.userGroupId).toEqual(v1.group.userGroupId);
       expect(v2.group.name).toEqual(UG_NAME_RENAMED);
-      expect(v2.group.policies[0]!.permissionGroups).toEqual([
-        permissionGroupId2,
-      ]);
+      expect(v2.group.policies[0]!.permissionGroups).toEqual([permissionGroupId2]);
 
       const updated = yield* getUserGroup(accountId, v2.group.userGroupId);
       expect(updated.name).toEqual(UG_NAME_RENAMED);
-      expect(updated.policies?.[0]?.permissionGroups?.[0]?.id).toEqual(
-        permissionGroupId2,
-      );
+      expect(updated.policies?.[0]?.permissionGroups?.[0]?.id).toEqual(permissionGroupId2);
 
       // No-op deploy — same desired state, same identity, reconcile
       // observes the in-sync state and applies nothing.

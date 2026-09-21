@@ -1,6 +1,6 @@
-import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
-import * as Duration from "effect/Duration";
 import { describe, expect, it } from "alchemy-test";
+import * as Duration from "effect/Duration";
+import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
 
 describe("toTimeoutSeconds", () => {
   it("returns undefined for undefined", () => {
@@ -23,8 +23,7 @@ describe("toTimeoutSeconds", () => {
   });
 
   describe("after state JSON round-trip", () => {
-    const roundTrip = (d: Duration.Duration) =>
-      JSON.parse(JSON.stringify(d)) as Duration.Duration;
+    const roundTrip = (d: Duration.Duration) => JSON.parse(JSON.stringify(d)) as Duration.Duration;
 
     it("converts a rehydrated Millis Duration", () => {
       const json = roundTrip(Duration.seconds(42));

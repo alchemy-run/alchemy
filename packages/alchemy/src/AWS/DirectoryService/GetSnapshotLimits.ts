@@ -32,9 +32,7 @@ export interface GetSnapshotLimits extends Binding.Service<
   "AWS.DirectoryService.GetSnapshotLimits",
   (
     directory: Directory,
-  ) => Effect.Effect<
-    () => Effect.Effect<ds.GetSnapshotLimitsResult, ds.GetSnapshotLimitsError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ds.GetSnapshotLimitsResult, ds.GetSnapshotLimitsError>>
 > {}
 export const GetSnapshotLimits = Binding.Service<GetSnapshotLimits>(
   "AWS.DirectoryService.GetSnapshotLimits",

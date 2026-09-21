@@ -29,9 +29,7 @@ export interface JobRunEventDetail {
 export type JobRunEvent = EventRecord<JobRunEventDetail>;
 
 /** Which EMR Serverless notifications to subscribe to. */
-export type JobRunEventKind =
-  | "job-run-state-change"
-  | "application-state-change";
+export type JobRunEventKind = "job-run-state-change" | "application-state-change";
 
 const DETAIL_TYPES: Record<JobRunEventKind, string> = {
   "job-run-state-change": "EMR Serverless Job Run State Change",
@@ -116,9 +114,7 @@ export const consumeJobRunEvents = <StreamReq = never, Req = never>(
               ...(props.applicationIds !== undefined
                 ? { applicationId: [...props.applicationIds] }
                 : {}),
-              ...(props.states !== undefined
-                ? { state: [...props.states] }
-                : {}),
+              ...(props.states !== undefined ? { state: [...props.states] } : {}),
             },
           }
         : {}),

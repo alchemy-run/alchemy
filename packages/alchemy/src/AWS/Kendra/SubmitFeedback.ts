@@ -6,10 +6,7 @@ import type { Index } from "./SearchIndex.ts";
 /**
  * `SubmitFeedback` request with `IndexId` injected from the bound index.
  */
-export interface SubmitFeedbackRequest extends Omit<
-  kendra.SubmitFeedbackRequest,
-  "IndexId"
-> {}
+export interface SubmitFeedbackRequest extends Omit<kendra.SubmitFeedbackRequest, "IndexId"> {}
 
 /**
  * Runtime binding for the `SubmitFeedback` operation (IAM action
@@ -41,12 +38,7 @@ export interface SubmitFeedback extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SubmitFeedbackRequest,
-    ) => Effect.Effect<
-      kendra.SubmitFeedbackResponse,
-      kendra.SubmitFeedbackError
-    >
+    ) => Effect.Effect<kendra.SubmitFeedbackResponse, kendra.SubmitFeedbackError>
   >
 > {}
-export const SubmitFeedback = Binding.Service<SubmitFeedback>(
-  "AWS.Kendra.SubmitFeedback",
-);
+export const SubmitFeedback = Binding.Service<SubmitFeedback>("AWS.Kendra.SubmitFeedback");

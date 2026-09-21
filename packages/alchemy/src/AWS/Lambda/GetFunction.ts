@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Function } from "./Function.ts";
 
-export interface GetFunctionRequest extends Omit<
-  Lambda.GetFunctionRequest,
-  "FunctionName"
-> {}
+export interface GetFunctionRequest extends Omit<Lambda.GetFunctionRequest, "FunctionName"> {}
 
 /**
  * Runtime binding for `lambda:GetFunction`.
@@ -36,6 +33,4 @@ export interface GetFunction extends Binding.Service<
     ) => Effect.Effect<Lambda.GetFunctionResponse, Lambda.GetFunctionError>
   >
 > {}
-export const GetFunction = Binding.Service<GetFunction>(
-  "AWS.Lambda.GetFunction",
-);
+export const GetFunction = Binding.Service<GetFunction>("AWS.Lambda.GetFunction");

@@ -30,6 +30,4 @@ export interface ListFunctions extends Binding.Service<
     ) => Effect.Effect<Lambda.ListFunctionsResponse, Lambda.ListFunctionsError>
   >
 > {}
-export const ListFunctions = Binding.Service<ListFunctions>(
-  "AWS.Lambda.ListFunctions",
-);
+export const ListFunctions = Binding.Service<ListFunctions>("AWS.Lambda.ListFunctions");

@@ -40,11 +40,7 @@ export interface CreateCheckoutSession extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateCheckoutSessionRequest,
-    ) => Effect.Effect<
-      CheckoutSession,
-      CreateCheckoutSessionError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<CheckoutSession, CreateCheckoutSessionError, RuntimeContext>
   >
 > {}
 

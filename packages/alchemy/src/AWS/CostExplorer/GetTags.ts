@@ -32,9 +32,7 @@ export interface GetTags extends Binding.Service<
   GetTags,
   "AWS.CostExplorer.GetTags",
   () => Effect.Effect<
-    (
-      request: GetTagsRequest,
-    ) => Effect.Effect<ce.GetTagsResponse, ce.GetTagsError>
+    (request: GetTagsRequest) => Effect.Effect<ce.GetTagsResponse, ce.GetTagsError>
   >
 > {}
 

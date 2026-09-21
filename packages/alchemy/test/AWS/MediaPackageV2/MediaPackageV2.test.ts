@@ -1,27 +1,25 @@
-import * as AWS from "@/AWS";
-import { Channel, ChannelGroup, OriginEndpoint } from "@/AWS/MediaPackageV2";
-import * as Test from "@/Test/Alchemy";
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Channel, ChannelGroup, OriginEndpoint } from "@/AWS/MediaPackageV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/reconcile paths depend on.
-test.provider(
-  "getChannelGroup on a bogus name fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        mediapackagev2.getChannelGroup({
-          ChannelGroupName: "alchemy-nonexistent-channel-group-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getChannelGroup on a bogus name fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      mediapackagev2.getChannelGroup({
+        ChannelGroupName: "alchemy-nonexistent-channel-group-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertGroupGone = (channelGroupName: string) =>
@@ -30,21 +28,14 @@ const assertGroupGone = (channelGroupName: string) =>
       .getChannelGroup({ ChannelGroupName: channelGroupName })
       .pipe(
         Effect.map(() => "exists" as const),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("gone" as const),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
       );
     if (status !== "gone") {
-      return yield* Effect.fail(
-        new Error(`channel group '${channelGroupName}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`channel group '${channelGroupName}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -111,9 +102,7 @@ test.provider(
         ChannelGroupName: first.group.channelGroupName,
       });
       expect(observedGroup.EgressDomain).toBe(first.group.egressDomain);
-      expect(observedGroup.Description).toBe(
-        "alchemy mediapackagev2 test group",
-      );
+      expect(observedGroup.Description).toBe("alchemy mediapackagev2 test group");
       const observedChannel = yield* mediapackagev2.getChannel({
         ChannelGroupName: first.group.channelGroupName,
         ChannelName: first.channel.channelName,
@@ -150,10 +139,7 @@ test.provider(
             Sid: "AllowPlayback",
             Effect: "Allow",
             Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-            Action: [
-              "mediapackagev2:GetObject",
-              "mediapackagev2:GetHeadObject",
-            ],
+            Action: ["mediapackagev2:GetObject", "mediapackagev2:GetHeadObject"],
             Resource: first.endpoint.originEndpointArn,
           },
         ],
@@ -167,9 +153,7 @@ test.provider(
       });
       expect(second.group.channelGroupArn).toBe(first.group.channelGroupArn);
       expect(second.channel.channelArn).toBe(first.channel.channelArn);
-      expect(second.endpoint.originEndpointArn).toBe(
-        first.endpoint.originEndpointArn,
-      );
+      expect(second.endpoint.originEndpointArn).toBe(first.endpoint.originEndpointArn);
       const updatedEndpoint = yield* mediapackagev2.getOriginEndpoint({
         ChannelGroupName: second.group.channelGroupName,
         ChannelName: second.channel.channelName,
@@ -182,18 +166,13 @@ test.provider(
         ChannelGroupName: second.group.channelGroupName,
         ChannelName: second.channel.channelName,
       });
-      expect(JSON.parse(observedChannelPolicy.Policy).Statement[0].Sid).toBe(
-        "AllowIngest",
-      );
-      const observedEndpointPolicy =
-        yield* mediapackagev2.getOriginEndpointPolicy({
-          ChannelGroupName: second.group.channelGroupName,
-          ChannelName: second.channel.channelName,
-          OriginEndpointName: second.endpoint.originEndpointName,
-        });
-      expect(JSON.parse(observedEndpointPolicy.Policy).Statement[0].Sid).toBe(
-        "AllowPlayback",
-      );
+      expect(JSON.parse(observedChannelPolicy.Policy).Statement[0].Sid).toBe("AllowIngest");
+      const observedEndpointPolicy = yield* mediapackagev2.getOriginEndpointPolicy({
+        ChannelGroupName: second.group.channelGroupName,
+        ChannelName: second.channel.channelName,
+        OriginEndpointName: second.endpoint.originEndpointName,
+      });
+      expect(JSON.parse(observedEndpointPolicy.Policy).Statement[0].Sid).toBe("AllowPlayback");
 
       // 3. Replacement: the container type is immutable, so TS → CMAF must
       //    replace the endpoint (new physical name) while the channel and
@@ -206,12 +185,8 @@ test.provider(
       });
       expect(third.group.channelGroupArn).toBe(first.group.channelGroupArn);
       expect(third.channel.channelArn).toBe(first.channel.channelArn);
-      expect(third.endpoint.originEndpointArn).not.toBe(
-        first.endpoint.originEndpointArn,
-      );
-      expect(third.endpoint.originEndpointName).not.toBe(
-        first.endpoint.originEndpointName,
-      );
+      expect(third.endpoint.originEndpointArn).not.toBe(first.endpoint.originEndpointArn);
+      expect(third.endpoint.originEndpointName).not.toBe(first.endpoint.originEndpointName);
       expect(third.endpoint.containerType).toBe("CMAF");
       // The replaced endpoint is deleted.
       const oldEndpointError = yield* Effect.flip(

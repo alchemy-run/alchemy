@@ -89,29 +89,20 @@ export interface DatasetGroup extends Resource<
  *
  * @resource
  */
-export const DatasetGroup = Resource<DatasetGroup>(
-  "AWS.Personalize.DatasetGroup",
-);
+export const DatasetGroup = Resource<DatasetGroup>("AWS.Personalize.DatasetGroup");
 
 export const DatasetGroupProvider = () =>
   Provider.effect(
     DatasetGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: DatasetGroupProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: DatasetGroupProps) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 63 }));
       });
 
       const describe = Effect.fn(function* (datasetGroupArn: string) {
         const response = yield* personalize
           .describeDatasetGroup({ datasetGroupArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.datasetGroup;
       });
 
@@ -119,12 +110,8 @@ export const DatasetGroupProvider = () =>
       const waitActive = Effect.fn(function* (datasetGroupArn: string) {
         const group = yield* describe(datasetGroupArn).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(40),
-            ]),
-            until: (g) =>
-              g?.status === "ACTIVE" || (g?.status ?? "").includes("FAILED"),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(40)]),
+            until: (g) => g?.status === "ACTIVE" || (g?.status ?? "").includes("FAILED"),
           }),
         );
         if (group?.status !== "ACTIVE") {
@@ -139,9 +126,7 @@ export const DatasetGroupProvider = () =>
 
       /** Find an existing dataset group's ARN by its (deterministic) name. */
       const findArnByName = Effect.fn(function* (name: string) {
-        const pages = yield* personalize.listDatasetGroups
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* personalize.listDatasetGroups.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.datasetGroups ?? [])
           .find((summary) => summary.name === name)?.datasetGroupArn;
@@ -157,10 +142,7 @@ export const DatasetGroupProvider = () =>
       /** Bounded retry schedule for ResourceInUse while async deletes drain. */
       const inUseRetry = {
         while: (e: { _tag: string }) => e._tag === "ResourceInUseException",
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
       };
 
       const listChildren = Effect.fn(function* (datasetGroupArn: string) {
@@ -168,27 +150,19 @@ export const DatasetGroupProvider = () =>
           [
             personalize.listEventTrackers.pages({ datasetGroupArn }).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.eventTrackers ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.eventTrackers ?? [])),
             ),
             personalize.listFilters.pages({ datasetGroupArn }).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Filters ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Filters ?? [])),
             ),
             personalize.listSolutions.pages({ datasetGroupArn }).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.solutions ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.solutions ?? [])),
             ),
             personalize.listDatasets.pages({ datasetGroupArn }).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.datasets ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.datasets ?? [])),
             ),
           ],
           { concurrency: 4 },
@@ -205,18 +179,15 @@ export const DatasetGroupProvider = () =>
        * after issuing the deletes we poll (bounded) until the group is empty.
        */
       const drainChildren = Effect.fn(function* (datasetGroupArn: string) {
-        const { trackers, filters, solutions, datasets } =
-          yield* listChildren(datasetGroupArn);
+        const { trackers, filters, solutions, datasets } = yield* listChildren(datasetGroupArn);
 
         yield* Effect.forEach(
           trackers,
           (t) =>
-            personalize
-              .deleteEventTracker({ eventTrackerArn: t.eventTrackerArn! })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                Effect.retry(inUseRetry),
-              ),
+            personalize.deleteEventTracker({ eventTrackerArn: t.eventTrackerArn! }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.retry(inUseRetry),
+            ),
           { concurrency: 4 },
         );
 
@@ -239,31 +210,22 @@ export const DatasetGroupProvider = () =>
               .pages({ solutionArn: s.solutionArn })
               .pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.campaigns ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.campaigns ?? [])),
               );
             yield* Effect.forEach(
               campaigns,
               (c) =>
-                personalize
-                  .deleteCampaign({ campaignArn: c.campaignArn! })
-                  .pipe(
-                    Effect.catchTag(
-                      "ResourceNotFoundException",
-                      () => Effect.void,
-                    ),
-                    Effect.retry(inUseRetry),
-                  ),
+                personalize.deleteCampaign({ campaignArn: c.campaignArn! }).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                  Effect.retry(inUseRetry),
+                ),
               { concurrency: 4 },
             );
-            yield* personalize
-              .deleteSolution({ solutionArn: s.solutionArn! })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                // Campaign deletion is async — retry while it drains.
-                Effect.retry(inUseRetry),
-              );
+            yield* personalize.deleteSolution({ solutionArn: s.solutionArn! }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              // Campaign deletion is async — retry while it drains.
+              Effect.retry(inUseRetry),
+            );
           }),
           { concurrency: 2 },
         );
@@ -282,10 +244,7 @@ export const DatasetGroupProvider = () =>
         // reports no remaining children so DeleteDatasetGroup succeeds.
         const remaining = yield* listChildren(datasetGroupArn).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(40),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
             until: (children): boolean =>
               children.trackers.length === 0 &&
               children.filters.length === 0 &&
@@ -365,9 +324,7 @@ export const DatasetGroupProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsException", (error) =>
                   findArnByName(name).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -395,29 +352,21 @@ export const DatasetGroupProvider = () =>
           if (group !== undefined) {
             yield* drainChildren(output.datasetGroupArn);
           }
-          yield* personalize
-            .deleteDatasetGroup({ datasetGroupArn: output.datasetGroupArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Tolerate the eventual-consistency window while the drained
-              // children finish their own asynchronous deletions.
-              Effect.retry({
-                while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* personalize.deleteDatasetGroup({ datasetGroupArn: output.datasetGroupArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // Tolerate the eventual-consistency window while the drained
+            // children finish their own asynchronous deletions.
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
           // Deletion is asynchronous (DELETE IN_PROGRESS) — wait until the
           // group is actually gone so the run leaves no lingering resources
           // (the group's auto-created event schema is removed with it).
           const remaining = yield* describe(output.datasetGroupArn).pipe(
             Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
               until: (group): boolean => group === undefined,
             }),
           );
@@ -433,9 +382,7 @@ export const DatasetGroupProvider = () =>
         list: () =>
           personalize.listDatasetGroups.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.datasetGroups ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.datasetGroups ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

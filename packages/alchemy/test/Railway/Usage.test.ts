@@ -1,43 +1,34 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const SOFT_V1 = 100_000;
 const SOFT_V2 = 100_001;
 
 const waitUntilLimitGone = (workspaceId: string, usageLimitId: string) =>
-  railway
-    .workspace({ workspaceId }, { customer: { usageLimit: { id: true } } })
-    .pipe(
-      Effect.map((workspace) => {
-        const limit = workspace.customer.usageLimit;
-        if (limit == null) return "gone" as const;
-        return limit.id === usageLimitId
-          ? ("found" as const)
-          : ("gone" as const);
-      }),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed("gone" as const),
-      ),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  railway.workspace({ workspaceId }, { customer: { usageLimit: { id: true } } }).pipe(
+    Effect.map((workspace) => {
+      const limit = workspace.customer.usageLimit;
+      if (limit == null) return "gone" as const;
+      return limit.id === usageLimitId ? ("found" as const) : ("gone" as const);
+    }),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "usage() returns rows for the current workspace",
@@ -92,10 +83,7 @@ test.provider(
       );
       if (Result.isFailure(probe)) {
         expect(
-          railway.isErrorTag(probe.failure, [
-            "RailwayForbidden",
-            "RailwayPlanLimitExceeded",
-          ]),
+          railway.isErrorTag(probe.failure, ["RailwayForbidden", "RailwayPlanLimitExceeded"]),
         ).toEqual(true);
         yield* stack.destroy();
         return;
@@ -133,9 +121,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.UsageLimit);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (row) => row.usageLimitId === created.usageLimitId,
-      );
+      const found = listed.find((row) => row.usageLimitId === created.usageLimitId);
       expect(found).toBeDefined();
       expect(found?.customerId).toEqual(created.customerId);
       expect(found?.softLimitDollars).toEqual(SOFT_V1);
@@ -163,10 +149,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilLimitGone(
-        created.workspaceId,
-        created.usageLimitId,
-      );
+      const gone = yield* waitUntilLimitGone(created.workspaceId, created.usageLimitId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },

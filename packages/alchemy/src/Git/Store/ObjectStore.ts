@@ -1,3 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The concrete object store: DO SQLite rows + R2 overflow (DESIGN.md §3.3).
  *
@@ -19,17 +23,9 @@
  * (`staged_push IS NULL`); staged rows become visible to fetches only after
  * the final `transactionSync` flips them live.
  */
-import type { BlobBody, BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import type { ObjectType, Oid } from "../Protocol/ObjectCodec.ts";
-import {
-  concatBytes,
-  encodeTypeSize,
-  type PackEntryType,
-} from "../Protocol/ObjectCodec.ts";
+import { concatBytes, encodeTypeSize, type PackEntryType } from "../Protocol/ObjectCodec.ts";
 import type { ManifestEntry } from "../Protocol/Store.ts";
 import {
   StoreError,
@@ -82,10 +78,7 @@ export const EMIT_BATCH = 256;
  */
 export const STAGE_INSERT_ROWS = 16;
 
-const chunkArray = <T>(
-  items: ReadonlyArray<T>,
-  size: number,
-): Array<Array<T>> => {
+const chunkArray = <T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> => {
   const out: Array<Array<T>> = [];
   for (let i = 0; i < items.length; i += size) {
     out.push(items.slice(i, i + size) as Array<T>);
@@ -116,10 +109,7 @@ export const PACK_LOOKAHEAD = 3;
 
 const windows = new Map<string, { start: number; bytes: Uint8Array }>();
 let windowBytes = 0;
-const retainWindow = (
-  cacheKey: string,
-  slab: { start: number; bytes: Uint8Array },
-) => {
+const retainWindow = (cacheKey: string, slab: { start: number; bytes: Uint8Array }) => {
   windows.set(cacheKey, slab);
   windowBytes += slab.bytes.byteLength;
   while (windowBytes > WINDOW_CACHE_BYTES && windows.size > 1) {
@@ -166,9 +156,7 @@ export interface StagedObject {
    * wire pack, DESIGN §22.5): the row is staged as `location='pack'` with
    * these coordinates and `zdata` is NOT stored.
    */
-  readonly pack?:
-    | { readonly packId: string; readonly offset: number }
-    | undefined;
+  readonly pack?: { readonly packId: string; readonly offset: number } | undefined;
   /**
    * Compressed span when `zdata` is not carried (a promoted row whose
    * bytes live in the pack): the insert must record the real size.
@@ -291,9 +279,7 @@ const VALID_LOCATIONS: ReadonlySet<string> = new Set(["row", "r2", "pack"]);
 const isObjectType = (type: number): type is ObjectType =>
   type === 1 || type === 2 || type === 3 || type === 4;
 
-const metaFromRow = (
-  row: ObjectMetaRow,
-): Effect.Effect<ObjectMeta, StoreError> => {
+const metaFromRow = (row: ObjectMetaRow): Effect.Effect<ObjectMeta, StoreError> => {
   if (!isObjectType(row.type) || !VALID_LOCATIONS.has(row.location)) {
     return Effect.fail(
       new StoreError({
@@ -320,16 +306,10 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.byteLength === bytes.buffer.byteLength &&
   bytes.buffer instanceof ArrayBuffer
     ? bytes.buffer
-    : (bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      ) as ArrayBuffer);
+    : (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
 
 /** Row projection used by the byte-read dispatch. */
-interface ZDataRow extends Record<
-  string,
-  string | number | ArrayBuffer | null
-> {
+interface ZDataRow extends Record<string, string | number | ArrayBuffer | null> {
   readonly oid: string;
   readonly location: string;
   readonly zdata: ArrayBuffer | null;
@@ -357,9 +337,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     what: string,
   ): Effect.Effect<A, StoreError> =>
     effect.pipe(
-      Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
-      ),
+      Effect.mapError((error) => new StoreError({ reason: `${what}: ${error.reason}` })),
       Effect.provide(RuntimeContext.phantom),
     );
 
@@ -377,15 +355,10 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       pushId,
     );
 
-  const requireRow = Effect.fn(function* (
-    oid: Oid,
-    pushId: string | null = null,
-  ) {
+  const requireRow = Effect.fn(function* (oid: Oid, pushId: string | null = null) {
     const row = yield* readRow(oid, pushId);
     if (row === undefined) {
-      return yield* Effect.fail(
-        new StoreError({ reason: `object not found: ${oid}` }),
-      );
+      return yield* Effect.fail(new StoreError({ reason: `object not found: ${oid}` }));
     }
     return row;
   });
@@ -401,9 +374,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     }
     const body = yield* runBlob(blobs.get(r2Key), `blob get ${r2Key}`);
     if (body === null) {
-      return yield* Effect.fail(
-        new StoreError({ reason: `R2 object missing: ${r2Key}` }),
-      );
+      return yield* Effect.fail(new StoreError({ reason: `R2 object missing: ${r2Key}` }));
     }
     return body;
   });
@@ -439,15 +410,10 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       `blob window get ${key}`,
     );
     if (body === null) {
-      return yield* Effect.fail(
-        new StoreError({ reason: `pack missing: ${key}` }),
-      );
+      return yield* Effect.fail(new StoreError({ reason: `pack missing: ${key}` }));
     }
     const bytes = yield* body.bytes.pipe(
-      Effect.mapError(
-        (error) =>
-          new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
-      ),
+      Effect.mapError((error) => new StoreError({ reason: `R2 read ${key}: ${error.message}` })),
     );
     const slab = { start, bytes };
     retainWindow(cacheKey, slab);
@@ -487,23 +453,15 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       `blob ranged get ${key}`,
     );
     if (body === null) {
-      return yield* Effect.fail(
-        new StoreError({ reason: `pack missing: ${key}` }),
-      );
+      return yield* Effect.fail(new StoreError({ reason: `pack missing: ${key}` }));
     }
     return yield* body.bytes.pipe(
-      Effect.mapError(
-        (error) =>
-          new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
-      ),
+      Effect.mapError((error) => new StoreError({ reason: `R2 read ${key}: ${error.message}` })),
     );
   });
 
   /** Reads the stored compressed bytes fully into memory. */
-  const readZBytes = Effect.fn(function* (
-    oid: Oid,
-    pushId: string | null = null,
-  ) {
+  const readZBytes = Effect.fn(function* (oid: Oid, pushId: string | null = null) {
     const row = yield* requireRow(oid, pushId);
     switch (row.location) {
       case "row": {
@@ -558,10 +516,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       return map;
     });
 
-  const insertStagedOne = Effect.fn(function* (
-    pushId: string,
-    object: StagedObject,
-  ) {
+  const insertStagedOne = Effect.fn(function* (pushId: string, object: StagedObject) {
     const existing = yield* sql.first<{ staged_push: string | null }>(
       `SELECT staged_push FROM objects WHERE oid = ?`,
       object.oid,
@@ -663,8 +618,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           return [];
         }
         const rows = yield* sql.inChunks<{ oid: string }>(
-          (ph) =>
-            `SELECT oid FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
+          (ph) => `SELECT oid FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
           unique,
         );
         return rows.map((row) => row.oid);
@@ -686,9 +640,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
 
     readContent: (oid) =>
       readZBytes(oid).pipe(
-        Effect.flatMap((zdata) =>
-          Zlib.inflate(zdata).pipe(Effect.mapError(zlibToStore)),
-        ),
+        Effect.flatMap((zdata) => Zlib.inflate(zdata).pipe(Effect.mapError(zlibToStore))),
       ),
 
     readContentBatch: (oids) =>
@@ -702,8 +654,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
                FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
           unique,
         );
-        const inflate = (z: Uint8Array) =>
-          Zlib.inflate(z).pipe(Effect.mapError(zlibToStore));
+        const inflate = (z: Uint8Array) => Zlib.inflate(z).pipe(Effect.mapError(zlibToStore));
         // Pack-resident rows in pack order so consecutive window reads hit.
         const packRows = rows
           .filter((row) => row.location === "pack")
@@ -716,10 +667,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           if (row.location === "row" && row.zdata !== null) {
             out.set(row.oid, yield* inflate(new Uint8Array(row.zdata)));
           } else if (row.location === "r2") {
-            out.set(
-              row.oid,
-              yield* readZBytes(row.oid).pipe(Effect.flatMap(inflate)),
-            );
+            out.set(row.oid, yield* readZBytes(row.oid).pipe(Effect.flatMap(inflate)));
           }
         }
         for (const row of packRows) {
@@ -749,17 +697,14 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         const header = (entry: ManifestEntry) =>
           encodeTypeSize(entry.type as PackEntryType, entry.size);
 
-        const rowStream = Stream.fromIterable(
-          chunkArray(rowEntries, EMIT_BATCH),
-        ).pipe(
+        const rowStream = Stream.fromIterable(chunkArray(rowEntries, EMIT_BATCH)).pipe(
           Stream.mapEffect((run) =>
             Effect.gen(function* () {
               const rows = yield* sql.inChunks<{
                 oid: string;
                 zdata: ArrayBuffer | null;
               }>(
-                (ph) =>
-                  `SELECT oid, zdata FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
+                (ph) => `SELECT oid, zdata FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
                 run.map((entry) => entry.oid),
               );
               const zdataOf = new Map(rows.map((row) => [row.oid, row.zdata]));
@@ -825,11 +770,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               const key = packKeyOf(repoId, coord.pack_id);
               const window = Math.floor(coord.pack_offset / WINDOW_BYTES);
               let run = runs[runs.length - 1];
-              if (
-                run === undefined ||
-                run.key !== key ||
-                run.window !== window
-              ) {
+              if (run === undefined || run.key !== key || run.window !== window) {
                 run = { key, window, inside: [], straddling: [] };
                 runs.push(run);
               }
@@ -851,19 +792,14 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
             // concurrently with this one; each is a cache hit when its
             // turn comes. Bounded by WINDOW_CACHE_BYTES (8 windows).
             return Stream.fromIterable(
-              runs.map(
-                (run, i) =>
-                  [run, runs.slice(i + 1, i + 1 + PACK_LOOKAHEAD)] as const,
-              ),
+              runs.map((run, i) => [run, runs.slice(i + 1, i + 1 + PACK_LOOKAHEAD)] as const),
             ).pipe(
               Stream.mapEffect(([run, ahead]) =>
                 Effect.gen(function* () {
                   const [slab] = yield* Effect.all(
                     [
                       readWindow(run.key, run.window),
-                      ...ahead.map((next) =>
-                        readWindow(next.key, next.window).pipe(Effect.ignore),
-                      ),
+                      ...ahead.map((next) => readWindow(next.key, next.window).pipe(Effect.ignore)),
                     ],
                     { concurrency: 1 + PACK_LOOKAHEAD },
                   );
@@ -873,20 +809,14 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
                       const entry = byOid.get(coord.oid);
                       if (entry === undefined) continue;
                       const at = coord.pack_offset! - slab.start;
-                      out.push(
-                        header(entry),
-                        slab.bytes.subarray(at, at + coord.zsize),
-                      );
+                      out.push(header(entry), slab.bytes.subarray(at, at + coord.zsize));
                     }
                     return out;
                   });
                   for (const coord of run.straddling) {
                     const entry = byOid.get(coord.oid);
                     if (entry === undefined) continue;
-                    pieces.push(
-                      header(entry),
-                      yield* packBytes(coord.oid, rowOf(coord)),
-                    );
+                    pieces.push(header(entry), yield* packBytes(coord.oid, rowOf(coord)));
                   }
                   return concatBytes(pieces);
                 }),
@@ -897,25 +827,17 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
 
         const r2Stream = Stream.fromIterable(r2Entries).pipe(
           Stream.flatMap((entry) =>
-            Stream.succeed(header(entry)).pipe(
-              Stream.concat(readZDataOf(entry.oid)),
-            ),
+            Stream.succeed(header(entry)).pipe(Stream.concat(readZDataOf(entry.oid))),
           ),
         );
 
-        return rowStream.pipe(
-          Stream.concat(packStream),
-          Stream.concat(r2Stream),
-        );
+        return rowStream.pipe(Stream.concat(packStream), Stream.concat(r2Stream));
       }),
 
     // ── Store-side surface ──────────────────────────────────────────────────
     getMetaBatch,
 
-    insertStagedBatch: Effect.fn(function* (
-      pushId: string,
-      objects: ReadonlyArray<StagedObject>,
-    ) {
+    insertStagedBatch: Effect.fn(function* (pushId: string, objects: ReadonlyArray<StagedObject>) {
       if (objects.length === 0) return;
       const inline: Array<StagedObject> = [];
       const promoted: Array<StagedObject> = [];
@@ -932,16 +854,12 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         // Rows that point into a pack already in blob storage: no BLOB
         // written to SQLite at all. 7 bindings per row → 14 rows per
         // statement under the 100-parameter cap.
-        const sorted = [...promoted].sort((a, b) =>
-          a.oid < b.oid ? -1 : a.oid > b.oid ? 1 : 0,
-        );
+        const sorted = [...promoted].sort((a, b) => (a.oid < b.oid ? -1 : a.oid > b.oid ? 1 : 0));
         const written = yield* sql.transactionSync((raw) => {
           let changed = 0;
           for (let at = 0; at < sorted.length; at += 14) {
             const part = sorted.slice(at, at + 14);
-            const values = part
-              .map(() => "(?, ?, ?, ?, 'pack', NULL, ?, ?, ?)")
-              .join(", ");
+            const values = part.map(() => "(?, ?, ?, ?, 'pack', NULL, ?, ?, ?)").join(", ");
             const bindings: Array<string | number> = [];
             for (const object of part) {
               bindings.push(
@@ -999,14 +917,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           const values = part.map(() => "(?, ?, ?, ?, 'row', ?, ?)").join(", ");
           const bindings: Array<string | number | ArrayBuffer> = [];
           for (const row of part) {
-            bindings.push(
-              row.oid,
-              row.type,
-              row.size,
-              row.zsize,
-              row.zdata,
-              pushId,
-            );
+            bindings.push(row.oid, row.type, row.size, row.zsize, row.zdata, pushId);
           }
           const cursor = raw.exec(
             `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push) VALUES ${values}`,
@@ -1044,9 +955,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
             reason: `object exceeds ${maxBytes} byte read limit`,
           });
         const zdata = yield* readZBytes(oid, pushId);
-        const content = yield* Zlib.inflate(zdata).pipe(
-          Effect.mapError(zlibToStore),
-        );
+        const content = yield* Zlib.inflate(zdata).pipe(Effect.mapError(zlibToStore));
         return { type: meta.type, content };
       }),
 
@@ -1057,11 +966,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           Effect.flatMap((meta) =>
             meta === undefined
               ? Effect.succeed(undefined)
-              : self
-                  .readContent(oid)
-                  .pipe(
-                    Effect.map((content) => ({ type: meta.type, content })),
-                  ),
+              : self.readContent(oid).pipe(Effect.map((content) => ({ type: meta.type, content }))),
           ),
         ),
     insertStaged: insertStagedOne,

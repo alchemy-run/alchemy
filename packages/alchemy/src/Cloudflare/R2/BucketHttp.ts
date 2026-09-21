@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import { Self } from "../../Self.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -145,12 +145,9 @@ export const readHttpMetadata = (
 /** Write an object's HTTP metadata onto a `Headers` instance. */
 const applyHttpMetadata = (headers: Headers, meta: HttpMetadata): void => {
   if (meta.contentType) headers.set("content-type", meta.contentType);
-  if (meta.contentEncoding)
-    headers.set("content-encoding", meta.contentEncoding);
-  if (meta.contentDisposition)
-    headers.set("content-disposition", meta.contentDisposition);
-  if (meta.contentLanguage)
-    headers.set("content-language", meta.contentLanguage);
+  if (meta.contentEncoding) headers.set("content-encoding", meta.contentEncoding);
+  if (meta.contentDisposition) headers.set("content-disposition", meta.contentDisposition);
+  if (meta.contentLanguage) headers.set("content-language", meta.contentLanguage);
   if (meta.cacheControl) headers.set("cache-control", meta.cacheControl);
 };
 
@@ -177,8 +174,7 @@ export const baseObject = (
     customMetadata: attrs.customMetadata ?? {},
     range: undefined,
     storageClass: attrs.storageClass ?? "Standard",
-    writeHttpMetadata: (headers: Headers) =>
-      Effect.sync(() => applyHttpMetadata(headers, meta)),
+    writeHttpMetadata: (headers: Headers) => Effect.sync(() => applyHttpMetadata(headers, meta)),
   }) as unknown as R2Object;
 
 /** Collect a put `value` into a body accepted by the R2 HTTP API. */
@@ -198,14 +194,10 @@ export const toBody = (
   Effect.gen(function* () {
     if (value === null) return { body: new Uint8Array(0), contentLength: 0 };
     if (typeof value === "string") return { body: value };
-    if (value instanceof Blob)
-      return { body: value, contentLength: value.size };
-    if (value instanceof ArrayBuffer)
-      return { body: value, contentLength: value.byteLength };
+    if (value instanceof Blob) return { body: value, contentLength: value.size };
+    if (value instanceof ArrayBuffer) return { body: value, contentLength: value.byteLength };
     if (Stream.isStream(value) || value instanceof ReadableStream) {
-      const readable = Stream.isStream(value)
-        ? Stream.toReadableStream(value)
-        : value;
+      const readable = Stream.isStream(value) ? Stream.toReadableStream(value) : value;
       const buffer = yield* Effect.tryPromise({
         try: () => new Response(readable as any).arrayBuffer(),
         catch: toR2Error,

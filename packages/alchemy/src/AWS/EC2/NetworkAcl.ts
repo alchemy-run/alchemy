@@ -2,7 +2,6 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -14,9 +13,8 @@ import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type NetworkAclId<ID extends string = string> = `acl-${ID}`;
-export const NetworkAclId = <ID extends string>(
-  id: ID,
-): ID & NetworkAclId<ID> => `acl-${id}` as ID & NetworkAclId<ID>;
+export const NetworkAclId = <ID extends string>(id: ID): ID & NetworkAclId<ID> =>
+  `acl-${id}` as ID & NetworkAclId<ID>;
 
 export type NetworkAclArn<ID extends NetworkAclId = NetworkAclId> =
   `arn:aws:ec2:${RegionID}:${AccountID}:network-acl/${ID}`;
@@ -160,10 +158,7 @@ export const NetworkAclProvider = () =>
   Provider.effect(
     NetworkAcl,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -332,23 +327,15 @@ export const NetworkAclProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidNetworkAclID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
               // Retry on dependency violations (e.g., associations still being removed)
               Effect.retry({
                 while: (e) => {
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.max([
-                  Schedule.exponential(1000, 1.5),
-                  Schedule.recurs(15),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.exponential(1000, 1.5), Schedule.recurs(15)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
+                    session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
                   ),
                 ),
               }),

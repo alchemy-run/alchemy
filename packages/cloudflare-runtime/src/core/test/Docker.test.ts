@@ -50,9 +50,9 @@ describe("Docker", () => {
       expect(rewriteLoopbackHosts("http://localhost:3000/path?q=1")).toBe(
         `http://${CONTAINER_LOOPBACK_ALIAS}:3000/path?q=1`,
       );
-      expect(
-        rewriteLoopbackHosts("postgres://user:pass@127.0.0.1:5432/db"),
-      ).toBe(`postgres://user:pass@${CONTAINER_LOOPBACK_ALIAS}:5432/db`);
+      expect(rewriteLoopbackHosts("postgres://user:pass@127.0.0.1:5432/db")).toBe(
+        `postgres://user:pass@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+      );
       expect(rewriteLoopbackHosts("http://0.0.0.0:8080")).toBe(
         `http://${CONTAINER_LOOPBACK_ALIAS}:8080`,
       );
@@ -63,11 +63,7 @@ describe("Docker", () => {
 
     it("rewrites the local Prisma Postgres URL but not the api_key payload", () => {
       const apiKey = "eyJkYXRhYmFzZVVybCI6InBvc3RncmVzOi8vbG9jYWxob3N0In0";
-      expect(
-        rewriteLoopbackHosts(
-          `prisma+postgres://localhost:51216/?api_key=${apiKey}`,
-        ),
-      ).toBe(
+      expect(rewriteLoopbackHosts(`prisma+postgres://localhost:51216/?api_key=${apiKey}`)).toBe(
         `prisma+postgres://${CONTAINER_LOOPBACK_ALIAS}:51216/?api_key=${apiKey}`,
       );
     });
@@ -105,13 +101,11 @@ describe("Docker", () => {
     });
 
     it("rewrites bare host values and DSN keyword form", () => {
-      expect(rewriteLoopbackHosts("localhost:5432")).toBe(
-        `${CONTAINER_LOOPBACK_ALIAS}:5432`,
-      );
+      expect(rewriteLoopbackHosts("localhost:5432")).toBe(`${CONTAINER_LOOPBACK_ALIAS}:5432`);
       expect(rewriteLoopbackHosts("localhost")).toBe(CONTAINER_LOOPBACK_ALIAS);
-      expect(
-        rewriteLoopbackHosts("host=127.0.0.1 port=5432 sslmode=disable"),
-      ).toBe(`host=${CONTAINER_LOOPBACK_ALIAS} port=5432 sslmode=disable`);
+      expect(rewriteLoopbackHosts("host=127.0.0.1 port=5432 sslmode=disable")).toBe(
+        `host=${CONTAINER_LOOPBACK_ALIAS} port=5432 sslmode=disable`,
+      );
     });
 
     it("leaves non-loopback hosts and lookalike substrings alone", () => {
@@ -121,9 +115,7 @@ describe("Docker", () => {
       expect(rewriteLoopbackHosts("http://localhost.example.com/")).toBe(
         "http://localhost.example.com/",
       );
-      expect(rewriteLoopbackHosts("http://notlocalhost:3000")).toBe(
-        "http://notlocalhost:3000",
-      );
+      expect(rewriteLoopbackHosts("http://notlocalhost:3000")).toBe("http://notlocalhost:3000");
       expect(rewriteLoopbackHosts("8080")).toBe("8080");
     });
 
@@ -152,10 +144,7 @@ describe("Docker", () => {
     it("rewrites and replaces by name instead of appending a second value", () => {
       expect(
         mergeContainerCreateEnv(
-          [
-            "PATH=/usr/bin",
-            "DATABASE_URL=postgres://postgres@127.0.0.1:5432/db",
-          ],
+          ["PATH=/usr/bin", "DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"],
           {
             DATABASE_URL: "postgres://postgres@127.0.0.1:5432/db",
             PPG_URL: "prisma+postgres://localhost:51216/?api_key=test",
@@ -170,19 +159,15 @@ describe("Docker", () => {
 
     it("rewrites loopback hosts already present on the create body", () => {
       expect(
-        mergeContainerCreateEnv(
-          ["DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"],
-          undefined,
-        ),
-      ).toEqual([
-        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
-      ]);
+        mergeContainerCreateEnv(["DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"], undefined),
+      ).toEqual([`DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`]);
     });
 
     it("preserves flag-style entries that have no value", () => {
-      expect(
-        mergeContainerCreateEnv(["DEBUG", "FOO=bar"], { FOO: "baz" }),
-      ).toEqual(["DEBUG", "FOO=baz"]);
+      expect(mergeContainerCreateEnv(["DEBUG", "FOO=bar"], { FOO: "baz" })).toEqual([
+        "DEBUG",
+        "FOO=baz",
+      ]);
     });
   });
 });
@@ -213,48 +198,41 @@ const SpawnerStub = Layer.succeed(
   }),
 );
 
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))(
-  (it) => {
-    it.effect("pull strips the tag from digest-pinned refs", () =>
-      Effect.gen(function* () {
-        spawned.length = 0;
-        const docker = yield* Docker;
-        yield* docker.pull("alchemy-test:latest", { imageUri: PINNED });
-        expect(spawned).toContainEqual([
-          "docker",
-          "pull",
-          PINNED_WITHOUT_TAG,
-          "--platform",
-          "linux/amd64",
-        ]);
-        // only the pull ref is rewritten — the local tag alias keeps the original uri
-        expect(spawned).toContainEqual([
-          "docker",
-          "tag",
-          PINNED,
-          "alchemy-test:latest",
-        ]);
-      }),
-    );
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((it) => {
+  it.effect("pull strips the tag from digest-pinned refs", () =>
+    Effect.gen(function* () {
+      spawned.length = 0;
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: PINNED });
+      expect(spawned).toContainEqual([
+        "docker",
+        "pull",
+        PINNED_WITHOUT_TAG,
+        "--platform",
+        "linux/amd64",
+      ]);
+      // only the pull ref is rewritten — the local tag alias keeps the original uri
+      expect(spawned).toContainEqual(["docker", "tag", PINNED, "alchemy-test:latest"]);
+    }),
+  );
 
-    it.effect("pull passes refs without a digest through unchanged", () =>
-      Effect.gen(function* () {
-        spawned.length = 0;
-        const docker = yield* Docker;
-        yield* docker.pull("alchemy-test:latest", {
-          imageUri: "rocicorp/zero:1.8.0",
-        });
-        expect(spawned).toContainEqual([
-          "docker",
-          "pull",
-          "rocicorp/zero:1.8.0",
-          "--platform",
-          "linux/amd64",
-        ]);
-      }),
-    );
-  },
-);
+  it.effect("pull passes refs without a digest through unchanged", () =>
+    Effect.gen(function* () {
+      spawned.length = 0;
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", {
+        imageUri: "rocicorp/zero:1.8.0",
+      });
+      expect(spawned).toContainEqual([
+        "docker",
+        "pull",
+        "rocicorp/zero:1.8.0",
+        "--platform",
+        "linux/amd64",
+      ]);
+    }),
+  );
+});
 
 /**
  * A stub whose `docker image inspect` stdout is configurable per test, so
@@ -286,16 +264,12 @@ const makeInspectStub = (inspectStdout: string) => {
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
           exitCode: Effect.succeed(
-            ChildProcessSpawner.ExitCode(
-              isInspect && inspectStdout === "" ? 1 : 0,
-            ),
+            ChildProcessSpawner.ExitCode(isInspect && inspectStdout === "" ? 1 : 0),
           ),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
-          stdout: isInspect
-            ? Stream.make(new TextEncoder().encode(inspectStdout))
-            : Stream.empty,
+          stdout: isInspect ? Stream.make(new TextEncoder().encode(inspectStdout)) : Stream.empty,
           stderr: Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
@@ -309,60 +283,50 @@ const makeInspectStub = (inspectStdout: string) => {
 };
 
 const present = makeInspectStub("sha256:deadbeef");
-layer(
-  Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)),
-)((it) => {
-  it.effect(
-    "skips the pull when the interceptor image is already present locally",
-    () =>
-      Effect.gen(function* () {
-        const docker = yield* Docker;
-        yield* docker.getWorkerdDockerConfiguration;
-        expect(present.spawned).toContainEqual([
-          "docker",
-          "image",
-          "inspect",
-          PINNED,
-          "--format",
-          "{{.Id}}",
-        ]);
-        expect(present.spawned.filter(([, verb]) => verb === "pull")).toEqual(
-          [],
-        );
-      }),
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
+  it.effect("skips the pull when the interceptor image is already present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(present.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        PINNED,
+        "--format",
+        "{{.Id}}",
+      ]);
+      expect(present.spawned.filter(([, verb]) => verb === "pull")).toEqual([]);
+    }),
   );
 });
 
 const absent = makeInspectStub("");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))(
-  (it) => {
-    it.effect(
-      "pulls the interceptor image when it is not present locally",
-      () =>
-        Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.getWorkerdDockerConfiguration;
-          expect(absent.spawned).toContainEqual([
-            "docker",
-            "image",
-            "inspect",
-            PINNED,
-            "--format",
-            "{{.Id}}",
-          ]);
-          // Exactly one pull, with no `--platform`: the interceptor is a
-          // host-side sidecar, so Docker must resolve the host-native variant
-          // of this multi-arch image. Forcing `linux/amd64` here runs it
-          // under emulation on arm64 hosts, where it exits 1 with
-          // `setsockoptint: protocol not available` before workerd can create
-          // the user container.
-          expect(absent.spawned.filter(([, verb]) => verb === "pull")).toEqual([
-            ["docker", "pull", PINNED_WITHOUT_TAG],
-          ]);
-        }),
-    );
-  },
-);
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))((it) => {
+  it.effect("pulls the interceptor image when it is not present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(absent.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        PINNED,
+        "--format",
+        "{{.Id}}",
+      ]);
+      // Exactly one pull, with no `--platform`: the interceptor is a
+      // host-side sidecar, so Docker must resolve the host-native variant
+      // of this multi-arch image. Forcing `linux/amd64` here runs it
+      // under emulation on arm64 hosts, where it exits 1 with
+      // `setsockoptint: protocol not available` before workerd can create
+      // the user container.
+      expect(absent.spawned.filter(([, verb]) => verb === "pull")).toEqual([
+        ["docker", "pull", PINNED_WITHOUT_TAG],
+      ]);
+    }),
+  );
+});
 
 /**
  * Spawner whose `docker <verb>` exits non-zero with `stderr`, so the tests
@@ -373,21 +337,16 @@ const makeFailingStub = (verb: string, stderr: string, exitCode = 1) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) => {
-      const fails =
-        command._tag === "StandardCommand" && command.args[0] === verb;
+      const fails = command._tag === "StandardCommand" && command.args[0] === verb;
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(
-            ChildProcessSpawner.ExitCode(fails ? exitCode : 0),
-          ),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(fails ? exitCode : 0)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
           stdout: Stream.empty,
-          stderr: fails
-            ? Stream.make(new TextEncoder().encode(stderr))
-            : Stream.empty,
+          stderr: fails ? Stream.make(new TextEncoder().encode(stderr)) : Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
@@ -403,9 +362,7 @@ describe("buildFailureHint", () => {
   });
 
   it("stays silent for ordinary build failures", () => {
-    expect(
-      buildFailureHint("ERROR: failed to solve: dockerfile parse error"),
-    ).toBeUndefined();
+    expect(buildFailureHint("ERROR: failed to solve: dockerfile parse error")).toBeUndefined();
   });
 });
 
@@ -419,10 +376,7 @@ describe("buildFailureHint", () => {
 layer(
   Layer.provide(
     DockerLive,
-    Layer.merge(
-      NodeServices.layer,
-      makeFailingStub("build", "unknown flag: --load"),
-    ),
+    Layer.merge(NodeServices.layer, makeFailingStub("build", "unknown flag: --load")),
   ),
 )((it) => {
   it.effect("build fails when docker build exits non-zero", () =>
@@ -461,9 +415,7 @@ layer(
   it.effect("pull fails when the follow-up docker tag exits non-zero", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
-      const result = yield* Effect.result(
-        docker.pull("alchemy-test:latest", { imageUri: PINNED }),
-      );
+      const result = yield* Effect.result(docker.pull("alchemy-test:latest", { imageUri: PINNED }));
       expect(result._tag).toBe("Failure");
       if (result._tag !== "Failure") return;
       const error = result.failure as {

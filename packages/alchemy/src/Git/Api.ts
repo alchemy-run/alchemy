@@ -68,15 +68,11 @@ export class GitApi extends HttpApi.make("git-service")
  *   })
  * ```
  */
-export const isRead = (
-  request: HttpServerRequest.HttpServerRequest,
-): boolean => {
+export const isRead = (request: HttpServerRequest.HttpServerRequest): boolean => {
   const url = new URL(request.url, "http://localhost");
-  if (request.method === "POST")
-    return url.pathname.endsWith("/git-upload-pack");
+  if (request.method === "POST") return url.pathname.endsWith("/git-upload-pack");
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   return (
-    !url.pathname.endsWith("/info/refs") ||
-    url.searchParams.get("service") !== "git-receive-pack"
+    !url.pathname.endsWith("/info/refs") || url.searchParams.get("service") !== "git-receive-pack"
   );
 };

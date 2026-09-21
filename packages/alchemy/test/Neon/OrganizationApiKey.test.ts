@@ -1,3 +1,9 @@
+import * as SDK from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import {
   OrganizationApiKey,
   recoverOrganizationApiKey,
@@ -8,12 +14,6 @@ import { Project } from "@/Neon/Project.ts";
 import { providers } from "@/Neon/Providers.ts";
 import * as Output from "@/Output.ts";
 import * as Test from "@/Test/Alchemy";
-import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -33,21 +33,11 @@ const context = {
 
 type Assert<T extends true> = T;
 type OutputAlwaysRedacted = Assert<
-  OrganizationApiKeyAttributes["key"] extends Redacted.Redacted<string>
-    ? true
-    : false
+  OrganizationApiKeyAttributes["key"] extends Redacted.Redacted<string> ? true : false
 >;
-type NoBranchScope = Assert<
-  "branchId" extends keyof OrganizationApiKeyProps ? false : true
->;
-type NoSecretInput = Assert<
-  "key" extends keyof OrganizationApiKeyProps ? false : true
->;
-const typeAssertions: [OutputAlwaysRedacted, NoBranchScope, NoSecretInput] = [
-  true,
-  true,
-  true,
-];
+type NoBranchScope = Assert<"branchId" extends keyof OrganizationApiKeyProps ? false : true>;
+type NoSecretInput = Assert<"key" extends keyof OrganizationApiKeyProps ? false : true>;
+const typeAssertions: [OutputAlwaysRedacted, NoBranchScope, NoSecretInput] = [true, true, true];
 
 const scope = { orgId: "org-safety", projectId: "project-safety" };
 const cached: OrganizationApiKeyAttributes = {
@@ -97,26 +87,10 @@ test(
       recoverOrganizationApiKey(scope, undefined, cached),
       recoverOrganizationApiKey(scope, { ...metadata, id: 124 }, cached),
       recoverOrganizationApiKey(scope, { ...metadata, id: NaN }, cached),
-      recoverOrganizationApiKey(
-        scope,
-        { ...metadata, project_id: "other-project" },
-        cached,
-      ),
-      recoverOrganizationApiKey(
-        scope,
-        { ...metadata, project_id: undefined },
-        cached,
-      ),
-      recoverOrganizationApiKey(
-        { ...scope, orgId: "other-org" },
-        metadata,
-        cached,
-      ),
-      recoverOrganizationApiKey(
-        { ...scope, projectId: undefined },
-        metadata,
-        cached,
-      ),
+      recoverOrganizationApiKey(scope, { ...metadata, project_id: "other-project" }, cached),
+      recoverOrganizationApiKey(scope, { ...metadata, project_id: undefined }, cached),
+      recoverOrganizationApiKey({ ...scope, orgId: "other-org" }, metadata, cached),
+      recoverOrganizationApiKey({ ...scope, projectId: undefined }, metadata, cached),
       recoverOrganizationApiKey(scope, metadata, {
         ...cached,
         key: Redacted.make(""),
@@ -127,15 +101,9 @@ test(
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(result.failure._tag).toBe("OrganizationApiKeyRecoveryError");
-        expect(result.failure.message).toContain(
-          "Restore the original Alchemy state",
-        );
-        expect(result.failure.message).not.toContain(
-          Redacted.value(cached.key),
-        );
-        expect(JSON.stringify(result.failure)).not.toContain(
-          Redacted.value(cached.key),
-        );
+        expect(result.failure.message).toContain("Restore the original Alchemy state");
+        expect(result.failure.message).not.toContain(Redacted.value(cached.key));
+        expect(JSON.stringify(result.failure)).not.toContain(Redacted.value(cached.key));
       }
     }
   }),
@@ -196,14 +164,10 @@ test.provider(
         { ...scope, projectId: "" },
       ]) {
         expect(
-          yield* provider
-            .reconcile({ ...context, olds: scope, news, output: cached })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("OrganizationApiKeyRecoveryError", () =>
-                Effect.succeed(true),
-              ),
-            ),
+          yield* provider.reconcile({ ...context, olds: scope, news, output: cached }).pipe(
+            Effect.as(false),
+            Effect.catchTag("OrganizationApiKeyRecoveryError", () => Effect.succeed(true)),
+          ),
         ).toBe(true);
       }
       expect(
@@ -216,9 +180,7 @@ test.provider(
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("OrganizationApiKeyRecoveryError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("OrganizationApiKeyRecoveryError", () => Effect.succeed(true)),
           ),
       ).toBe(true);
     }),
@@ -234,18 +196,14 @@ test.provider(
         [named, scope],
         [scope, named],
       ] as const) {
+        expect(yield* provider.diff!({ ...context, olds, news, output: cached })).toMatchObject({
+          action: "replace",
+        });
         expect(
-          yield* provider.diff!({ ...context, olds, news, output: cached }),
-        ).toMatchObject({ action: "replace" });
-        expect(
-          yield* provider
-            .reconcile({ ...context, olds, news, output: cached })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("OrganizationApiKeyRecoveryError", () =>
-                Effect.succeed(true),
-              ),
-            ),
+          yield* provider.reconcile({ ...context, olds, news, output: cached }).pipe(
+            Effect.as(false),
+            Effect.catchTag("OrganizationApiKeyRecoveryError", () => Effect.succeed(true)),
+          ),
         ).toBe(true);
       }
       expect(
@@ -324,9 +282,7 @@ test.provider.skipIf(!orgId)(
         expect(
           yield* recovery.pipe(
             Effect.as(false),
-            Effect.catchTag("OrganizationApiKeyRecoveryError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("OrganizationApiKeyRecoveryError", () => Effect.succeed(true)),
           ),
         ).toBe(true);
       }
@@ -344,9 +300,9 @@ test.provider.skipIf(!orgId)(
         }),
       );
       expect(remaining.some((key) => key.id === first.key.keyId)).toBe(false);
-      expect(
-        remaining.find((key) => key.id === replaced.key.keyId)?.project_id,
-      ).toBe(first.project.projectId);
+      expect(remaining.find((key) => key.id === replaced.key.keyId)?.project_id).toBe(
+        first.project.projectId,
+      );
       yield* SDK.revokeOrgApiKey({ ...request, key_id: replaced.key.keyId });
       expect(
         yield* provider
@@ -358,9 +314,7 @@ test.provider.skipIf(!orgId)(
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("OrganizationApiKeyRecoveryError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("OrganizationApiKeyRecoveryError", () => Effect.succeed(true)),
           ),
       ).toBe(true);
       yield* provider.delete({

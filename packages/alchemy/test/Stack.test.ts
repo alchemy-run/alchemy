@@ -1,12 +1,12 @@
-import * as Alchemy from "@/index.ts";
-import { Stage } from "@/Stage.ts";
-import * as State from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect, it } from "alchemy-test";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Alchemy from "@/index.ts";
+import { Stage } from "@/Stage.ts";
+import * as State from "@/State/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without
@@ -31,9 +31,7 @@ describe("Alchemy.Stack error channel", () => {
     // The resulting effect surfaces `ConfigError` in its error channel rather
     // than `never` — the whole point of the change.
     type ErrorOf<T> = T extends Effect.Effect<any, infer E, any> ? E : never;
-    const _assertError: ErrorOf<typeof stack> extends ConfigError
-      ? true
-      : false = true;
+    const _assertError: ErrorOf<typeof stack> extends ConfigError ? true : false = true;
     expect(_assertError).toBe(true);
   });
 
@@ -57,11 +55,7 @@ describe("Alchemy.Stack runtime metadata", () => {
   it("exposes stackName, providers, and state on a configured stack", () => {
     const providers = Layer.empty;
     const state = State.inMemoryState();
-    const stack = Alchemy.Stack(
-      "MetaStack",
-      { providers, state },
-      Effect.succeed({ value: "ok" }),
-    );
+    const stack = Alchemy.Stack("MetaStack", { providers, state }, Effect.succeed({ value: "ok" }));
 
     expect(stack.stackName).toBe("MetaStack");
     expect(stack.providers).toBe(providers);
@@ -69,23 +63,16 @@ describe("Alchemy.Stack runtime metadata", () => {
   });
 
   it("exposes stackName on a class reference", () => {
-    class NamedStack extends Alchemy.Stack<NamedStack, { value: string }>()(
-      "NamedStack",
-    ) {}
+    class NamedStack extends Alchemy.Stack<NamedStack, { value: string }>()("NamedStack") {}
 
     expect(NamedStack.stackName).toBe("NamedStack");
   });
 
   it("exposes configured metadata identities on a class reference's make result", () => {
-    class NamedStack extends Alchemy.Stack<NamedStack, { value: string }>()(
-      "MadeStack",
-    ) {}
+    class NamedStack extends Alchemy.Stack<NamedStack, { value: string }>()("MadeStack") {}
     const providers = Layer.empty;
     const state = State.inMemoryState();
-    const stack = NamedStack.make(
-      { providers, state },
-      Effect.succeed({ value: "ok" }),
-    );
+    const stack = NamedStack.make({ providers, state }, Effect.succeed({ value: "ok" }));
 
     expect(stack.stackName).toBe("MadeStack");
     expect(stack.providers).toBe(providers);
@@ -142,11 +129,7 @@ describe("Test.make configured stack", () => {
       });
       expect(override.stage).toBe("metadata-call");
     }).pipe(
-      Effect.ensuring(
-        explicit
-          .destroy(configured, { stage: "metadata-call" })
-          .pipe(Effect.orDie),
-      ),
+      Effect.ensuring(explicit.destroy(configured, { stage: "metadata-call" }).pipe(Effect.orDie)),
       Effect.ensuring(explicit.destroy(configured).pipe(Effect.orDie)),
     ),
   );

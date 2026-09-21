@@ -64,9 +64,7 @@ export default class MicrovmWorker extends Cloudflare.Worker<MicrovmWorker>()(
         return yield* Effect.gen(function* () {
           yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
             Effect.flatMap((m) =>
-              m.state === "RUNNING"
-                ? Effect.void
-                : Effect.fail(new Error(`microvm ${m.state}`)),
+              m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
             ),
             Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
             Effect.orDie,
@@ -94,10 +92,7 @@ export default class MicrovmWorker extends Cloudflare.Worker<MicrovmWorker>()(
           const client = yield* HttpClient.HttpClient;
           const headers = AWS.Lambda.microvmAuthHeaders(authToken);
           const response = yield* client
-            .get(
-              `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-              { headers },
-            )
+            .get(`https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`, { headers })
             .pipe(
               Effect.retry({
                 schedule: Schedule.exponential("500 millis"),
@@ -118,9 +113,7 @@ export default class MicrovmWorker extends Cloudflare.Worker<MicrovmWorker>()(
           });
         }).pipe(
           Effect.ensuring(
-            terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-              Effect.ignore,
-            ),
+            terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
           ),
           Effect.provide(FetchHttpClient.layer),
         );

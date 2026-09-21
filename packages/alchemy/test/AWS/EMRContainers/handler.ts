@@ -1,6 +1,3 @@
-import * as EMRContainers from "@/AWS/EMRContainers";
-import { Role } from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,12 +6,13 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as EMRContainers from "@/AWS/EMRContainers";
+import { Role } from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class EmrcTestFunction extends Lambda.Function<Lambda.Function>()(
-  "EmrcTestFunction",
-) {}
+export class EmrcTestFunction extends Lambda.Function<Lambda.Function>()("EmrcTestFunction") {}
 
 export default EmrcTestFunction.make(
   {
@@ -51,16 +49,13 @@ export default EmrcTestFunction.make(
 
     // Event source: subscribe the host to EMR on EKS job run state changes.
     // The deploy proves the EventBridge rule + invoke permission wiring.
-    yield* EMRContainers.consumeJobRunEvents(
-      { states: ["FAILED", "COMPLETED"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(`job run ${event.detail.id} -> ${event.detail.state}`),
-        ),
+    yield* EMRContainers.consumeJobRunEvents({ states: ["FAILED", "COMPLETED"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`job run ${event.detail.id} -> ${event.detail.state}`),
+      ),
     );
 
-    const describeJobTemplate =
-      yield* EMRContainers.DescribeJobTemplate(template);
+    const describeJobTemplate = yield* EMRContainers.DescribeJobTemplate(template);
     const listJobTemplates = yield* EMRContainers.ListJobTemplates();
     const listVirtualClusters = yield* EMRContainers.ListVirtualClusters();
     const templateId = yield* template.jobTemplateId;
@@ -117,8 +112,7 @@ export default EmrcTestFunction.make(
           const expectedTemplateId = yield* templateId;
           const templates = yield* Effect.repeat(listAllJobTemplates(), {
             schedule: Schedule.fixed("2 seconds"),
-            until: (items) =>
-              items.some((item) => item.id === expectedTemplateId),
+            until: (items) => items.some((item) => item.id === expectedTemplateId),
             times: 10,
           });
           return yield* HttpServerResponse.json({

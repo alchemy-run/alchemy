@@ -49,7 +49,6 @@ export interface SaveBrowserSessionProfile extends Binding.Service<
     >
   >
 > {}
-export const SaveBrowserSessionProfile =
-  Binding.Service<SaveBrowserSessionProfile>(
-    "AWS.BedrockAgentCore.SaveBrowserSessionProfile",
-  );
+export const SaveBrowserSessionProfile = Binding.Service<SaveBrowserSessionProfile>(
+  "AWS.BedrockAgentCore.SaveBrowserSessionProfile",
+);

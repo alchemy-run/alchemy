@@ -14,16 +14,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { render, renderSvg } from "takumi-js";
 import { brandFonts } from "../src/brand/fonts.ts";
-import {
-  OG_DEFAULT_H,
-  OG_DEFAULT_W,
-  OgDefault,
-} from "../src/brand/OgDefault.tsx";
-import {
-  YANTRA_THEMES,
-  type YantraTheme,
-  yantraSvg,
-} from "../src/brand/yantra.ts";
+import { OG_DEFAULT_H, OG_DEFAULT_W, OgDefault } from "../src/brand/OgDefault.tsx";
+import { YANTRA_THEMES, type YantraTheme, yantraSvg } from "../src/brand/yantra.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(here, "../public");
@@ -109,10 +101,7 @@ async function main() {
   const favLight = faviconMarkSvg("light");
   const favDark = faviconMarkSvg("dark");
   for (const size of [16, 32] as const) {
-    await writeFile(
-      path.join(publicDir, `favicon-${size}.png`),
-      await rasterize(favLight, size),
-    );
+    await writeFile(path.join(publicDir, `favicon-${size}.png`), await rasterize(favLight, size));
     await writeFile(
       path.join(publicDir, `favicon-${size}-dark.png`),
       await rasterize(favDark, size),
@@ -150,10 +139,7 @@ async function main() {
 
   // 6. Backwards-compat: keep the old /favicon.png reference (used by
   //    some cached nav code) pointing to the 32px raster.
-  await writeFile(
-    path.join(publicDir, "favicon.png"),
-    await rasterize(favLight, 32),
-  );
+  await writeFile(path.join(publicDir, "favicon.png"), await rasterize(favLight, 32));
 
   // 7. Fallback OG: Takumi emits both PNG and outlined SVG from one layout.
   const card = OgDefault();
@@ -163,10 +149,7 @@ async function main() {
     fonts: await brandFonts,
     emoji: "from-font" as const,
   };
-  await writeFile(
-    path.join(publicDir, "og-default.svg"),
-    await renderSvg(card, options),
-  );
+  await writeFile(path.join(publicDir, "og-default.svg"), await renderSvg(card, options));
   await writeFile(
     path.join(publicDir, "og-default.png"),
     await render(card, {

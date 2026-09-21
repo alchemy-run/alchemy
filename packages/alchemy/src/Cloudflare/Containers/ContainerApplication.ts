@@ -1,16 +1,12 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
-import {
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -57,8 +53,7 @@ export namespace ContainerApplication {
   export type Affinities = {
     colocation?: "datacenter";
   };
-  export type Configuration =
-    Containers.CreateContainerApplicationRequest["configuration"];
+  export type Configuration = Containers.CreateContainerApplicationRequest["configuration"];
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -410,10 +405,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   build?: Bundle.BundleConfig;
 }
 
-export type ContainerServices =
-  | ContainerApplication
-  | PlatformServices
-  | ProcessServices;
+export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 

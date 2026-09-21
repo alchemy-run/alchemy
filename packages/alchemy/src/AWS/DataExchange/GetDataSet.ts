@@ -30,12 +30,7 @@ export interface GetDataSet extends Binding.Service<
   (
     dataSet: DataSet,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dataexchange.GetDataSetResponse,
-      dataexchange.GetDataSetError
-    >
+    () => Effect.Effect<dataexchange.GetDataSetResponse, dataexchange.GetDataSetError>
   >
 > {}
-export const GetDataSet = Binding.Service<GetDataSet>(
-  "AWS.DataExchange.GetDataSet",
-);
+export const GetDataSet = Binding.Service<GetDataSet>("AWS.DataExchange.GetDataSet");

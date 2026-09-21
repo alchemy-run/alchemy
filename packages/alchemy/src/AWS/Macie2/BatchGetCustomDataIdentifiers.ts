@@ -33,7 +33,6 @@ export interface BatchGetCustomDataIdentifiers extends Binding.Service<
     >
   >
 > {}
-export const BatchGetCustomDataIdentifiers =
-  Binding.Service<BatchGetCustomDataIdentifiers>(
-    "AWS.Macie2.BatchGetCustomDataIdentifiers",
-  );
+export const BatchGetCustomDataIdentifiers = Binding.Service<BatchGetCustomDataIdentifiers>(
+  "AWS.Macie2.BatchGetCustomDataIdentifiers",
+);

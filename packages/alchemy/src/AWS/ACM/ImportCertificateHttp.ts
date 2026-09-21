@@ -1,10 +1,7 @@
 import * as acm from "@distilled.cloud/aws/acm";
 import * as Layer from "effect/Layer";
 import { makeAcmAccountHttpBinding } from "./BindingHttp.ts";
-import {
-  ImportCertificate,
-  type ImportCertificateRequest,
-} from "./ImportCertificate.ts";
+import { ImportCertificate } from "./ImportCertificate.ts";
 
 export const ImportCertificateHttp = Layer.effect(
   ImportCertificate,

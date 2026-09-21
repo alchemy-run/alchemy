@@ -1,14 +1,14 @@
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Stream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Kinesis from "@distilled.cloud/aws/kinesis";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,13 +30,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual(
-          "ACTIVE",
+        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+        expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+          "ON_DEMAND",
         );
-        expect(
-          streamDescription.StreamDescriptionSummary.StreamModeDetails
-            ?.StreamMode,
-        ).toEqual("ON_DEMAND");
 
         yield* stack.destroy();
 
@@ -62,16 +59,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual(
-          "ACTIVE",
+        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+        expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+          "ON_DEMAND",
         );
-        expect(
-          streamDescription.StreamDescriptionSummary.StreamModeDetails
-            ?.StreamMode,
-        ).toEqual("ON_DEMAND");
-        expect(
-          streamDescription.StreamDescriptionSummary.RetentionPeriodHours,
-        ).toEqual(24);
+        expect(streamDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(24);
 
         // Verify tags
         const tagging = yield* Kinesis.listTagsForStream({
@@ -97,9 +89,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const updatedDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          updatedDescription.StreamDescriptionSummary.RetentionPeriodHours,
-        ).toEqual(48);
+        expect(updatedDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(48);
 
         // Verify tags were updated
         const updatedTagging = yield* Kinesis.listTagsForStream({
@@ -138,16 +128,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual(
-          "ACTIVE",
+        expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+        expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+          "PROVISIONED",
         );
-        expect(
-          streamDescription.StreamDescriptionSummary.StreamModeDetails
-            ?.StreamMode,
-        ).toEqual("PROVISIONED");
-        expect(
-          streamDescription.StreamDescriptionSummary.OpenShardCount,
-        ).toEqual(2);
+        expect(streamDescription.StreamDescriptionSummary.OpenShardCount).toEqual(2);
 
         yield* stack.destroy();
 
@@ -173,9 +158,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          streamDescription.StreamDescriptionSummary.OpenShardCount,
-        ).toEqual(1);
+        expect(streamDescription.StreamDescriptionSummary.OpenShardCount).toEqual(1);
 
         // Update shard count
         yield* stack.deploy(
@@ -191,9 +174,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const updatedDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          updatedDescription.StreamDescriptionSummary.OpenShardCount,
-        ).toEqual(2);
+        expect(updatedDescription.StreamDescriptionSummary.OpenShardCount).toEqual(2);
 
         yield* stack.destroy();
 
@@ -223,9 +204,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: customName,
         });
-        expect(streamDescription.StreamDescriptionSummary.StreamName).toEqual(
-          customName,
-        );
+        expect(streamDescription.StreamDescriptionSummary.StreamName).toEqual(customName);
 
         yield* stack.destroy();
 
@@ -250,9 +229,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          streamDescription.StreamDescriptionSummary.EncryptionType,
-        ).toEqual("KMS");
+        expect(streamDescription.StreamDescriptionSummary.EncryptionType).toEqual("KMS");
 
         // Update to disable encryption
         yield* stack.deploy(
@@ -267,9 +244,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const updatedDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          updatedDescription.StreamDescriptionSummary.EncryptionType,
-        ).toEqual("NONE");
+        expect(updatedDescription.StreamDescriptionSummary.EncryptionType).toEqual("NONE");
 
         yield* stack.destroy();
 
@@ -295,8 +270,8 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           StreamName: stream.streamName,
         });
         const metrics =
-          streamDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]
-            ?.ShardLevelMetrics ?? [];
+          streamDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]?.ShardLevelMetrics ??
+          [];
         expect(metrics).toContain("IncomingBytes");
         expect(metrics).toContain("OutgoingRecords");
 
@@ -304,11 +279,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stream("MonitoredStream", {
-              shardLevelMetrics: [
-                "IncomingBytes",
-                "IncomingRecords",
-                "IteratorAgeMilliseconds",
-              ],
+              shardLevelMetrics: ["IncomingBytes", "IncomingRecords", "IteratorAgeMilliseconds"],
             });
           }),
         );
@@ -318,8 +289,8 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           StreamName: stream.streamName,
         });
         const updatedMetrics =
-          updatedDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]
-            ?.ShardLevelMetrics ?? [];
+          updatedDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]?.ShardLevelMetrics ??
+          [];
         expect(updatedMetrics).toContain("IncomingBytes");
         expect(updatedMetrics).toContain("IncomingRecords");
         expect(updatedMetrics).toContain("IteratorAgeMilliseconds");
@@ -376,10 +347,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          streamDescription.StreamDescriptionSummary.StreamModeDetails
-            ?.StreamMode,
-        ).toEqual("PROVISIONED");
+        expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+          "PROVISIONED",
+        );
 
         // Update to on-demand mode
         yield* stack.deploy(
@@ -394,10 +364,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const updatedDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          updatedDescription.StreamDescriptionSummary.StreamModeDetails
-            ?.StreamMode,
-        ).toEqual("ON_DEMAND");
+        expect(updatedDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+          "ON_DEMAND",
+        );
 
         yield* stack.destroy();
 
@@ -422,9 +391,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const streamDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          streamDescription.StreamDescriptionSummary.RetentionPeriodHours,
-        ).toEqual(48);
+        expect(streamDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(48);
 
         // Decrease retention period back to default
         yield* stack.deploy(
@@ -439,9 +406,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const updatedDescription = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          updatedDescription.StreamDescriptionSummary.RetentionPeriodHours,
-        ).toEqual(24);
+        expect(updatedDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(24);
 
         yield* stack.destroy();
 
@@ -500,9 +465,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const summary = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(summary.StreamDescriptionSummary.MaxRecordSizeInKiB).toEqual(
-          2048,
-        );
+        expect(summary.StreamDescriptionSummary.MaxRecordSizeInKiB).toEqual(2048);
 
         yield* stack.destroy();
         yield* assertStreamDeleted(stream.streamName);
@@ -515,9 +478,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
     (stack) =>
       Effect.gen(function* () {
         const accountSettings = yield* Kinesis.describeAccountSettings({});
-        const status =
-          accountSettings.MinimumThroughputBillingCommitment?.Status ??
-          "DISABLED";
+        const status = accountSettings.MinimumThroughputBillingCommitment?.Status ?? "DISABLED";
 
         if (status === "DISABLED") {
           return;
@@ -542,9 +503,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const summary = yield* Kinesis.describeStreamSummary({
           StreamName: stream.streamName,
         });
-        expect(
-          summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps,
-        ).toEqual(10);
+        expect(summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps).toEqual(10);
 
         yield* stack.destroy();
         yield* assertStreamDeleted(stream.streamName);
@@ -648,10 +607,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           });
           const tagMap = Object.fromEntries(
             (tagsResp.Tags ?? [])
-              .filter(
-                (t): t is { Key: string; Value: string } =>
-                  typeof t.Value === "string",
-              )
+              .filter((t): t is { Key: string; Value: string } => typeof t.Value === "string")
               .map((t) => [t.Key, t.Value]),
           );
           expect(tagMap["alchemy::id"]).toEqual("Different");
@@ -710,9 +666,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
       EnforceConsumerDeletion: true,
     }).pipe(
       Effect.retry({
-        while: (e) =>
-          e._tag === "ResourceInUseException" ||
-          e._tag === "LimitExceededException",
+        while: (e) => e._tag === "ResourceInUseException" || e._tag === "LimitExceededException",
         schedule: Schedule.spaced("5 seconds"),
         times: 8,
       }),

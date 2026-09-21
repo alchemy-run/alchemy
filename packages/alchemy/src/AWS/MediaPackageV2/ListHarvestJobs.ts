@@ -31,10 +31,7 @@ export interface ListHarvestJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<mediapackagev2.ListHarvestJobsRequest, "ChannelGroupName">,
-    ) => Effect.Effect<
-      mediapackagev2.ListHarvestJobsResponse,
-      mediapackagev2.ListHarvestJobsError
-    >
+    ) => Effect.Effect<mediapackagev2.ListHarvestJobsResponse, mediapackagev2.ListHarvestJobsError>
   >
 > {}
 export const ListHarvestJobs = Binding.Service<ListHarvestJobs>(

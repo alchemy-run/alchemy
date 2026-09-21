@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { SigningCertificate, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { testCertificateBody } from "./fixtures.ts";
 import { withSigningCertificateFixture } from "./SigningCertificateTestLease.ts";
 
@@ -26,13 +26,10 @@ describe("AWS.IAM.SigningCertificate", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const user = yield* User("SigningCertListOwner", {});
-            const certificate = yield* SigningCertificate(
-              "SigningCertListCert",
-              {
-                userName: user.userName,
-                certificateBody: testCertificateBody,
-              },
-            );
+            const certificate = yield* SigningCertificate("SigningCertListCert", {
+              userName: user.userName,
+              certificateBody: testCertificateBody,
+            });
             return { user, certificate };
           }),
         );

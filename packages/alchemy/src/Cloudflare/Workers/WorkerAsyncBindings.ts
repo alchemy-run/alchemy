@@ -2,10 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import type { ResourceBinding } from "../../Resource.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import { defaultProviderMode } from "../../ProviderMode.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import {
   Application,
@@ -37,23 +37,13 @@ import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
 import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import {
-  isWorkflowLike,
-  WorkflowResource,
-  type WorkflowBinding,
-} from "../Workflows/Workflow.ts";
-import {
-  asScriptNameOutput,
-  makeWorkflowName,
-} from "../Workflows/WorkflowName.ts";
+import { isWorkflowLike, WorkflowResource, type WorkflowBinding } from "../Workflows/Workflow.ts";
+import { asScriptNameOutput, makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
-import {
-  isDurableObjectLike,
-  normalizeTransferredFrom,
-} from "./DurableObject.ts";
+import { isDurableObjectLike, normalizeTransferredFrom } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
@@ -184,10 +174,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         continue;
       }
 
-      const bindingMeta:
-        | BindingSpec
-        | Output.Output<WorkerBinding>
-        | undefined = toBinding(bindingName, binding);
+      const bindingMeta: BindingSpec | Output.Output<WorkerBinding> | undefined = toBinding(
+        bindingName,
+        binding,
+      );
 
       if (Output.isOutput(bindingMeta)) {
         // A whole-resource Output resolves to the resource's raw attributes;
@@ -213,8 +203,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         if (isWorkflowLike(binding)) {
           const className = binding.className ?? binding.name;
           const scriptName = binding.scriptName ?? resource.workerName;
-          const workflowName =
-            binding.workflowName ?? makeWorkflowName(scriptName, className);
+          const workflowName = binding.workflowName ?? makeWorkflowName(scriptName, className);
           resolvedBindingMeta = {
             ...resolvedBindingMeta,
             workflowName,
@@ -230,10 +219,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             : yield* WorkflowResource(binding.name, {
                 workflowName: binding.workflowName,
                 className,
-                scriptName:
-                  binding.workflowName === undefined
-                    ? resource.workerName
-                    : undefined,
+                scriptName: binding.workflowName === undefined ? resource.workerName : undefined,
                 limits: binding.limits,
                 schedules: binding.schedules,
               });
@@ -255,12 +241,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             kind: binding.kind,
             name: binding.name,
             className,
-            workflowName: workflow
-              ? workflow.workflowName
-              : Output.asOutput(workflowName),
-            scriptName: workflow
-              ? workflow.scriptName
-              : asScriptNameOutput(scriptName),
+            workflowName: workflow ? workflow.workflowName : Output.asOutput(workflowName),
+            scriptName: workflow ? workflow.scriptName : asScriptNameOutput(scriptName),
           } satisfies WorkflowBinding;
         }
 
@@ -275,8 +257,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           // binding value; contribute it as binding data so the wire binding
           // stays pure.
           devRemote:
-            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) &&
-            binding.devRemote
+            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote
               ? { [bindingName]: true }
               : undefined,
         });
@@ -312,9 +293,7 @@ export const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
  * Structural check for a yielded {@link ContainerApplication} resource
  * instance (same import-cycle note as above).
  */
-const isContainerApplicationResource = (
-  value: unknown,
-): value is ContainerApplication =>
+const isContainerApplicationResource = (value: unknown): value is ContainerApplication =>
   typeof value === "object" &&
   value !== null &&
   (value as { Type?: unknown }).Type === "Cloudflare.Container";
@@ -345,9 +324,8 @@ const bindContainerClass = Effect.fn(function* (
   // the props Effect runs.
   const declaredClassName = decl["~alchemy/Container/ClassName"];
   const className =
-    (Effect.isEffect(declaredClassName)
-      ? yield* declaredClassName
-      : declaredClassName) ?? bindingName;
+    (Effect.isEffect(declaredClassName) ? yield* declaredClassName : declaredClassName) ??
+    bindingName;
   // Resolve the ContainerApplication resource declaration carried on the
   // class. An effectful (`main`) container has no application declaration of
   // its own here (it is created by its `.make()` Layer inside a Durable
@@ -544,9 +522,7 @@ const toBinding = (
       name: bindingName,
       bucketName: binding.bucketName,
       jurisdiction: binding.jurisdiction.pipe(
-        Output.map((jurisdiction) =>
-          jurisdiction === "default" ? undefined : jurisdiction,
-        ),
+        Output.map((jurisdiction) => (jurisdiction === "default" ? undefined : jurisdiction)),
       ),
     };
   } else if (isKVNamespace(binding)) {
@@ -671,22 +647,17 @@ const toBinding = (
       pipeline: binding.name,
     };
   } else if (Output.isOutput(binding)) {
-    return Output.map(
-      binding,
-      (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
-        // A `VpcService.lookup(...)` data source resolves to the service's
-        // attributes branded with the resource `Type`; classify it like the
-        // managed resource instead of a plain json env value.
-        isVpcService(value)
-          ? {
-              type: "vpc_service" as const,
-              name: bindingName,
-              serviceId: (value as VpcServiceLookup).serviceId,
-            }
-          : toValueBinding(
-              bindingName,
-              value as Json | Redacted.Redacted<Json>,
-            ),
+    return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
+      // A `VpcService.lookup(...)` data source resolves to the service's
+      // attributes branded with the resource `Type`; classify it like the
+      // managed resource instead of a plain json env value.
+      isVpcService(value)
+        ? {
+            type: "vpc_service" as const,
+            name: bindingName,
+            serviceId: (value as VpcServiceLookup).serviceId,
+          }
+        : toValueBinding(bindingName, value as Json | Redacted.Redacted<Json>),
     );
   } else {
     return {
@@ -697,18 +668,15 @@ const toBinding = (
   }
 };
 
-export const getCronBindings = (
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-) => Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+export const getCronBindings = (bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>) =>
+  Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
 
 /**
  * Merge the Workers Cache settings contributed by `yield* Cloudflare.cache()`
  * bindings. Commutative: the cache is enabled (and cross-version) if any
  * contributor asked for it.
  */
-export const getCacheBinding = (
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-) => {
+export const getCacheBinding = (bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>) => {
   const configs = bindings.flatMap((b) => (b.data.cache ? [b.data.cache] : []));
   if (configs.length === 0) {
     return undefined;
@@ -739,8 +707,8 @@ export const resolveObservability = (
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
 ): WorkerObservability => {
   const observability = news.observability ?? DEFAULT_OBSERVABILITY;
-  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data
-    .observability?.traces;
+  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data.observability
+    ?.traces;
   return observability.traces != null || bound == null
     ? observability
     : { ...observability, traces: bound };

@@ -1,3 +1,7 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster } from "@/AWS/RDS/DBCluster.ts";
@@ -5,10 +9,6 @@ import type { DBClusterProps } from "@/AWS/RDS/DBCluster.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -55,10 +55,7 @@ test.provider("diff: changing databaseName forces replacement", () =>
 
 test.provider("diff: changing kmsKeyId forces replacement", () =>
   Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, kmsKeyId: "key-a" },
-      { ...base, kmsKeyId: "key-b" },
-    );
+    const result = yield* callDiff({ ...base, kmsKeyId: "key-a" }, { ...base, kmsKeyId: "key-b" });
     expect(result).toEqual({ action: "replace" });
   }),
 );
@@ -210,9 +207,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
       const provider = yield* Provider.findProvider(DBCluster);
       const all = yield* provider.list();
 
-      expect(
-        all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier),
-      ).toBe(true);
+      expect(all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier)).toBe(true);
 
       yield* stack.destroy();
     }),

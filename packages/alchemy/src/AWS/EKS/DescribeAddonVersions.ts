@@ -30,10 +30,7 @@ export interface DescribeAddonVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: eks.DescribeAddonVersionsRequest,
-    ) => Effect.Effect<
-      eks.DescribeAddonVersionsResponse,
-      eks.DescribeAddonVersionsError
-    >
+    ) => Effect.Effect<eks.DescribeAddonVersionsResponse, eks.DescribeAddonVersionsError>
   >
 > {}
 export const DescribeAddonVersions = Binding.Service<DescribeAddonVersions>(

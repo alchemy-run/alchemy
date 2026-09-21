@@ -1,3 +1,9 @@
+import { Octokit as OctokitClient } from "@octokit/rest";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as GitHub from "@/GitHub";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,12 +11,6 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { Octokit as OctokitClient } from "@octokit/rest";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 
 const requireTestOwner = (owner: string) => {
   if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -19,9 +19,7 @@ const requireTestOwner = (owner: string) => {
   return owner;
 };
 
-const owner = requireTestOwner(
-  process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test",
-);
+const owner = requireTestOwner(process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test");
 const fixtureNames = [
   "alchemy-pr-1571-collaborator-lifecycle",
   "alchemy-pr-1571-collaborator-replacement",
@@ -99,16 +97,12 @@ const assertRemoved = (repo: string, username: string) =>
     const remaining = yield* directCollaborators(repo).pipe(
       Effect.repeat({
         until: (collaborators) =>
-          !collaborators.some(
-            (collaborator) => collaborator.login === username,
-          ),
+          !collaborators.some((collaborator) => collaborator.login === username),
         schedule: Schedule.spaced("1 second"),
         times: 8,
       }),
     );
-    expect(
-      remaining.some((collaborator) => collaborator.login === username),
-    ).toBe(false);
+    expect(remaining.some((collaborator) => collaborator.login === username)).toBe(false);
     const client = yield* Octokit;
     const invitations = yield* Effect.tryPromise({
       try: () =>
@@ -119,9 +113,7 @@ const assertRemoved = (repo: string, username: string) =>
         }),
       catch: (error) => error as Error,
     });
-    expect(
-      invitations.some((invitation) => invitation.invitee?.login === username),
-    ).toBe(false);
+    expect(invitations.some((invitation) => invitation.invitee?.login === username)).toBe(false);
   });
 
 test.provider(
@@ -131,10 +123,7 @@ test.provider(
       // Verify authorization before even replaying persisted deletes.
       const username = yield* verifiedMember;
       yield* stack.destroy();
-      const deploy = (
-        index: number,
-        permission?: GitHub.CollaboratorProps["permission"],
-      ) =>
+      const deploy = (index: number, permission?: GitHub.CollaboratorProps["permission"]) =>
         stack.deploy(
           Effect.gen(function* () {
             // Keep both dependencies present while replacing the collaborator.
@@ -155,26 +144,22 @@ test.provider(
       expect(created.username).toBe(username);
       expect(created.permission).toBe("push");
       expect(
-        (yield* directCollaborators(fixtureNames[0]!)).find(
-          (member) => member.login === username,
-        )?.permissions?.push,
+        (yield* directCollaborators(fixtureNames[0]!)).find((member) => member.login === username)
+          ?.permissions?.push,
       ).toBe(true);
 
       const updated = yield* deploy(0, "admin");
       expect(updated.permission).toBe("admin");
       expect(
-        (yield* directCollaborators(fixtureNames[0]!)).find(
-          (member) => member.login === username,
-        )?.permissions?.admin,
+        (yield* directCollaborators(fixtureNames[0]!)).find((member) => member.login === username)
+          ?.permissions?.admin,
       ).toBe(true);
 
       const replaced = yield* deploy(1, "triage");
       expect(replaced.permission).toBe("triage");
       yield* assertRemoved(fixtureNames[0]!, username);
       expect(
-        (yield* directCollaborators(fixtureNames[1]!)).some(
-          (member) => member.login === username,
-        ),
+        (yield* directCollaborators(fixtureNames[1]!)).some((member) => member.login === username),
       ).toBe(true);
 
       // Remove access independently while both retained repositories still exist.
@@ -226,8 +211,7 @@ test.provider(
                 if (
                   url.origin !== "https://api.github.com" ||
                   (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !==
-                      `/repos/${owner}/${fixtureNames[2]!}/collaborators`)
+                    url.pathname !== `/repos/${owner}/${fixtureNames[2]!}/collaborators`)
                 ) {
                   throw new Error(`Unsafe Collaborator list request: ${url}`);
                 }
@@ -235,9 +219,9 @@ test.provider(
               octokit.hook.after("request", (response, options) => {
                 const url = new URL(options.url, "https://api.github.com");
                 if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repo) => repo.name === fixtureNames[2]!);
+                  response.data = (response.data as Array<{ name: string }>).filter(
+                    (repo) => repo.name === fixtureNames[2]!,
+                  );
                 }
               });
               return octokit;
@@ -246,9 +230,7 @@ test.provider(
         ),
       );
       for (const member of expected) {
-        expect(
-          listed.some((collaborator) => collaborator.username === member.login),
-        ).toBe(true);
+        expect(listed.some((collaborator) => collaborator.username === member.login)).toBe(true);
       }
       yield* stack.destroy();
     }),
@@ -276,10 +258,7 @@ const mockCredentials = (calls: string[], access: Map<string, string>) =>
                   throw new Error(`Unexpected mock request ${method} ${path}`);
                 }
                 if (method === "PUT") {
-                  access.set(
-                    path,
-                    JSON.parse(String(options?.body)).permission,
-                  );
+                  access.set(path, JSON.parse(String(options?.body)).permission);
                   return new Response(null, { status: 204 });
                 }
                 if (method === "DELETE") {
@@ -309,10 +288,9 @@ const unitTest = (
   const calls: string[] = [];
   const access = new Map<string, string>();
   const { test } = Test.make({
-    providers: Layer.succeed(
-      GitHubCredentials,
-      mockCredentials(calls, access),
-    ).pipe(Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" }))),
+    providers: Layer.succeed(GitHubCredentials, mockCredentials(calls, access)).pipe(
+      Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" })),
+    ),
   });
   test.provider(name, (stack) => body(stack, calls, access));
 };
@@ -322,10 +300,7 @@ unitTest(
   (stack, calls, access) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const deploy = (
-        repo: string,
-        permission?: GitHub.CollaboratorProps["permission"],
-      ) =>
+      const deploy = (repo: string, permission?: GitHub.CollaboratorProps["permission"]) =>
         stack.deploy(
           GitHub.Collaborator("Collab", {
             owner: "alchemy-run-test",
@@ -348,29 +323,25 @@ unitTest(
       // Simulate out-of-band removal; the provider's DELETE must tolerate 404.
       access.clear();
       yield* stack.destroy();
-      expect(calls.filter((call) => call.startsWith("DELETE "))).toHaveLength(
-        2,
-      );
+      expect(calls.filter((call) => call.startsWith("DELETE "))).toHaveLength(2);
       expect(access.size).toBe(0);
     }),
 );
 
-unitTest(
-  "unit: collaborator defaults to retain on destroy",
-  (stack, calls, access) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      yield* stack.deploy(
-        GitHub.Collaborator("Collab", {
-          owner: "alchemy-run-test",
-          repository: "alchemy-pr-1571-unit",
-          username: "test-member",
-        }),
-      );
-      yield* stack.destroy();
-      expect(access.size).toBe(1);
-      expect(calls.some((call) => call.startsWith("DELETE "))).toBe(false);
-    }),
+unitTest("unit: collaborator defaults to retain on destroy", (stack, calls, access) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* stack.deploy(
+      GitHub.Collaborator("Collab", {
+        owner: "alchemy-run-test",
+        repository: "alchemy-pr-1571-unit",
+        username: "test-member",
+      }),
+    );
+    yield* stack.destroy();
+    expect(access.size).toBe(1);
+    expect(calls.some((call) => call.startsWith("DELETE "))).toBe(false);
+  }),
 );
 
 test(
@@ -379,9 +350,7 @@ test(
     expect(requireTestOwner("alchemy-run-test")).toBe("alchemy-run-test");
     expect(requireTestOwner("alchemy-run-test-2")).toBe("alchemy-run-test-2");
     for (const unsafe of ["alchemy-run", "sam-goodwin", "", "other-org"]) {
-      expect(() => requireTestOwner(unsafe)).toThrow(
-        "Refusing GitHub collaborator tests",
-      );
+      expect(() => requireTestOwner(unsafe)).toThrow("Refusing GitHub collaborator tests");
     }
   }),
 );

@@ -1,23 +1,14 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  ServerlessResources,
-  ServerlessResourcesLive,
-} from "./serverless-resources.ts";
+import * as AWS from "@/AWS";
+import { ServerlessResources, ServerlessResourcesLive } from "./serverless-resources.ts";
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const PASSWORD = "Alchemy-Smoke-Passw0rd!";
 
@@ -56,8 +47,7 @@ export const SmokeApiFunctionLive = SmokeApiFunction.make(
     const getItem = yield* AWS.DynamoDB.GetItem(table);
     const presignPutObject = yield* AWS.S3.PresignPutObject(bucket);
     const sendMessage = yield* AWS.SQS.SendMessage(jobsQueue);
-    const startSyncExecution =
-      yield* AWS.StepFunctions.StartSyncExecution(machine);
+    const startSyncExecution = yield* AWS.StepFunctions.StartSyncExecution(machine);
 
     // Output → deferred effect; resolved per-request inside the handler.
     const UserPoolId = yield* pool.userPoolId;
@@ -161,9 +151,7 @@ export const SmokeApiFunctionLive = SmokeApiFunction.make(
             ConsistentRead: true,
           });
           return yield* HttpServerResponse.json({
-            item: result.Item
-              ? { id: result.Item.sk?.S, text: result.Item.text?.S }
-              : null,
+            item: result.Item ? { id: result.Item.sk?.S, text: result.Item.text?.S } : null,
           });
         }
 

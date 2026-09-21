@@ -10,9 +10,7 @@ import { Service, ServiceProvider } from "./Service.ts";
 import { Swarm, SwarmProvider } from "./Swarm.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Docker",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Docker") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -25,16 +23,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([
-      Container,
-      Image,
-      Network,
-      RemoteImage,
-      Volume,
-      Context,
-      Service,
-      Swarm,
-    ]),
+    Provider.collection([Container, Image, Network, RemoteImage, Volume, Context, Service, Swarm]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(

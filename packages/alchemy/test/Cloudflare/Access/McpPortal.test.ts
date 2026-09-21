@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic identifiers — the portal id is the API identity, so reruns
 // converge on the same portal instead of leaking. The two cases run
@@ -30,9 +27,7 @@ const LIST_HOSTNAME = "alchemy-test-mcp-list.alchemy-test-2.us";
 const getLivePortal = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpPortal({ accountId, id })
-    .pipe(
-      Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)));
 
 // Delete every portal currently occupying `hostname`, regardless of its portal
 // id. A per-stack `destroy()` only removes the portal tracked under this
@@ -154,9 +149,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.McpPortal,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.McpPortal);
       const all = yield* provider.list();
 
       expect(all.some((p) => p.portalId === deployed.portalId)).toBe(true);

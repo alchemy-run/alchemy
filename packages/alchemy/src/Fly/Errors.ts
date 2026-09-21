@@ -9,8 +9,6 @@ import * as Data from "effect/Data";
  * bucket, or one whose create-only secrets were never persisted — the
  * operation fails with this instead of signing an anonymous request.
  */
-export class TigrisCredentialsMissing extends Data.TaggedError(
-  "Fly.TigrisCredentialsMissing",
-)<{
+export class TigrisCredentialsMissing extends Data.TaggedError("Fly.TigrisCredentialsMissing")<{
   name: string;
 }> {}

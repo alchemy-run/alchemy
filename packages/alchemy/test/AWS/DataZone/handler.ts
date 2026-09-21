@@ -1,5 +1,3 @@
-import * as DataZone from "@/AWS/DataZone";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +6,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DataZone from "@/AWS/DataZone";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -72,30 +72,22 @@ export default DataZoneTestFunction.make(
       rejectPredictions: yield* DataZone.RejectPredictions(domain),
       postLineageEvent: yield* DataZone.PostLineageEvent(domain),
       getLineageNode: yield* DataZone.GetLineageNode(domain),
-      postTimeSeriesDataPoints:
-        yield* DataZone.PostTimeSeriesDataPoints(domain),
-      listTimeSeriesDataPoints:
-        yield* DataZone.ListTimeSeriesDataPoints(domain),
+      postTimeSeriesDataPoints: yield* DataZone.PostTimeSeriesDataPoints(domain),
+      listTimeSeriesDataPoints: yield* DataZone.ListTimeSeriesDataPoints(domain),
       getTimeSeriesDataPoint: yield* DataZone.GetTimeSeriesDataPoint(domain),
-      createSubscriptionRequest:
-        yield* DataZone.CreateSubscriptionRequest(domain),
-      acceptSubscriptionRequest:
-        yield* DataZone.AcceptSubscriptionRequest(domain),
-      rejectSubscriptionRequest:
-        yield* DataZone.RejectSubscriptionRequest(domain),
+      createSubscriptionRequest: yield* DataZone.CreateSubscriptionRequest(domain),
+      acceptSubscriptionRequest: yield* DataZone.AcceptSubscriptionRequest(domain),
+      rejectSubscriptionRequest: yield* DataZone.RejectSubscriptionRequest(domain),
       getSubscription: yield* DataZone.GetSubscription(domain),
       listSubscriptions: yield* DataZone.ListSubscriptions(domain),
-      listSubscriptionRequests:
-        yield* DataZone.ListSubscriptionRequests(domain),
+      listSubscriptionRequests: yield* DataZone.ListSubscriptionRequests(domain),
       cancelSubscription: yield* DataZone.CancelSubscription(domain),
       revokeSubscription: yield* DataZone.RevokeSubscription(domain),
       startDataSourceRun: yield* DataZone.StartDataSourceRun(domain),
       getDataSourceRun: yield* DataZone.GetDataSourceRun(domain),
       listDataSourceRuns: yield* DataZone.ListDataSourceRuns(domain),
-      startMetadataGenerationRun:
-        yield* DataZone.StartMetadataGenerationRun(domain),
-      getMetadataGenerationRun:
-        yield* DataZone.GetMetadataGenerationRun(domain),
+      startMetadataGenerationRun: yield* DataZone.StartMetadataGenerationRun(domain),
+      getMetadataGenerationRun: yield* DataZone.GetMetadataGenerationRun(domain),
       getIamPortalLoginUrl: yield* DataZone.GetIamPortalLoginUrl(domain),
       listNotifications: yield* DataZone.ListNotifications(domain),
       getUserProfile: yield* DataZone.GetUserProfile(domain),
@@ -114,10 +106,7 @@ export default DataZoneTestFunction.make(
         const result = yield* Effect.result(effect);
         return yield* Result.isSuccess(result)
           ? HttpServerResponse.json({ ok: true, ...body(result.success) })
-          : HttpServerResponse.json(
-              { ok: false, error: String(result.failure) },
-              { status: 502 },
-            );
+          : HttpServerResponse.json({ ok: false, error: String(result.failure) }, { status: 502 });
       });
 
     return {

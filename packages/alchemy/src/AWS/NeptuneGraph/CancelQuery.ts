@@ -27,12 +27,7 @@ export interface CancelQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<neptunegraph.CancelQueryInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.CancelQueryResponse,
-      neptunegraph.CancelQueryError
-    >
+    ) => Effect.Effect<neptunegraph.CancelQueryResponse, neptunegraph.CancelQueryError>
   >
 > {}
-export const CancelQuery = Binding.Service<CancelQuery>(
-  "AWS.NeptuneGraph.CancelQuery",
-);
+export const CancelQuery = Binding.Service<CancelQuery>("AWS.NeptuneGraph.CancelQuery");

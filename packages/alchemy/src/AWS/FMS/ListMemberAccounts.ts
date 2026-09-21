@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListMemberAccounts}.
  */
-export interface ListMemberAccountsRequest
-  extends fms.ListMemberAccountsRequest {}
+export interface ListMemberAccountsRequest extends fms.ListMemberAccountsRequest {}
 
 /**
  * Runtime binding for `fms:ListMemberAccounts`.
@@ -32,13 +31,8 @@ export interface ListMemberAccounts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListMemberAccountsRequest,
-    ) => Effect.Effect<
-      fms.ListMemberAccountsResponse,
-      fms.ListMemberAccountsError
-    >
+    ) => Effect.Effect<fms.ListMemberAccountsResponse, fms.ListMemberAccountsError>
   >
 > {}
 
-export const ListMemberAccounts = Binding.Service<ListMemberAccounts>(
-  "AWS.FMS.ListMemberAccounts",
-);
+export const ListMemberAccounts = Binding.Service<ListMemberAccounts>("AWS.FMS.ListMemberAccounts");

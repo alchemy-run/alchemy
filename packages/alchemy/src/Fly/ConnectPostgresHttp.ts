@@ -11,9 +11,7 @@ import {
 import type { ServiceBinding } from "./MountVolume.ts";
 import { type Postgres } from "./Postgres.ts";
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isFlyHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||
@@ -24,11 +22,7 @@ const asRedactedUrl = (
   name: string,
 ): Effect.Effect<Redacted.Redacted<string>, PostgresUrlMissing> => {
   const plain =
-    typeof value === "string"
-      ? value
-      : Redacted.isRedacted(value)
-        ? Redacted.value(value)
-        : "";
+    typeof value === "string" ? value : Redacted.isRedacted(value) ? Redacted.value(value) : "";
   const url = typeof plain === "string" ? plain : "";
   return url.length > 0
     ? Effect.succeed(Redacted.make(url))
@@ -74,12 +68,8 @@ export const ConnectPostgresHttp = Layer.effect(
       const direct = yield* postgres.connectionUri;
 
       return {
-        connectionString: pooled.pipe(
-          Effect.flatMap((value) => asRedactedUrl(value, name)),
-        ),
-        directConnectionString: direct.pipe(
-          Effect.flatMap((value) => asRedactedUrl(value, name)),
-        ),
+        connectionString: pooled.pipe(Effect.flatMap((value) => asRedactedUrl(value, name))),
+        directConnectionString: direct.pipe(Effect.flatMap((value) => asRedactedUrl(value, name))),
       } satisfies ConnectPostgresClient;
     }),
   ),

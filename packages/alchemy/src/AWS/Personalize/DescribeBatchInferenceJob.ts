@@ -34,7 +34,6 @@ export interface DescribeBatchInferenceJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeBatchInferenceJob =
-  Binding.Service<DescribeBatchInferenceJob>(
-    "AWS.Personalize.DescribeBatchInferenceJob",
-  );
+export const DescribeBatchInferenceJob = Binding.Service<DescribeBatchInferenceJob>(
+  "AWS.Personalize.DescribeBatchInferenceJob",
+);

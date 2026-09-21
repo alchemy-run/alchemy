@@ -47,7 +47,6 @@ export interface BatchAddChannelRoleToAccessors extends Binding.Service<
     >
   >
 > {}
-export const BatchAddChannelRoleToAccessors =
-  Binding.Service<BatchAddChannelRoleToAccessors>(
-    "AWS.RePostSpace.BatchAddChannelRoleToAccessors",
-  );
+export const BatchAddChannelRoleToAccessors = Binding.Service<BatchAddChannelRoleToAccessors>(
+  "AWS.RePostSpace.BatchAddChannelRoleToAccessors",
+);

@@ -6,10 +6,7 @@ import type { Dataset } from "./Dataset.ts";
 /**
  * `PutUsers` request with `datasetArn` injected from the bound dataset.
  */
-export interface PutUsersRequest extends Omit<
-  personalizeevents.PutUsersRequest,
-  "datasetArn"
-> {}
+export interface PutUsersRequest extends Omit<personalizeevents.PutUsersRequest, "datasetArn"> {}
 
 /**
  * Runtime binding for `personalize:PutUsers`, scoped to one {@link Dataset} —
@@ -43,10 +40,7 @@ export interface PutUsers extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutUsersRequest,
-    ) => Effect.Effect<
-      personalizeevents.PutUsersResponse,
-      personalizeevents.PutUsersError
-    >
+    ) => Effect.Effect<personalizeevents.PutUsersResponse, personalizeevents.PutUsersError>
   >
 > {}
 export const PutUsers = Binding.Service<PutUsers>("AWS.Personalize.PutUsers");

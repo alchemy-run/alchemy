@@ -2,10 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ALCHEMY_DEFAULT_TABLE } from "../../SQL/Migrations/AlchemyFormat.ts";
-import {
-  MigrationError,
-  type MigrationHistoryConflictError,
-} from "../../SQL/Migrations/Format.ts";
+import { MigrationError, type MigrationHistoryConflictError } from "../../SQL/Migrations/Format.ts";
 import type { DurableObjectState } from "./DurableObjectState.ts";
 import { applySqlMigrations } from "./SqlMigrationsApply.ts";
 import {
@@ -106,8 +103,7 @@ export type SqlMigrationsInput =
 export const SqlMigrations = Effect.fn("Cloudflare.SqlMigrations")(function* (
   input: SqlMigrationsInput,
 ) {
-  const { dir, table = ALCHEMY_DEFAULT_TABLE } =
-    typeof input === "string" ? { dir: input } : input;
+  const { dir, table = ALCHEMY_DEFAULT_TABLE } = typeof input === "string" ? { dir: input } : input;
   const key = `alchemy:sql-migrations:${JSON.stringify([dir, table])}`;
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const { readMigrationRecords } = yield* Effect.promise(

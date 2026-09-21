@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { TrustedServiceAccess } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,8 +39,7 @@ test.provider("list enumerates trusted service access", () =>
 // env var so an entitled account runs it unchanged. Off a management account
 // `enableAWSServiceAccess` rejects with `AWSOrganizationsNotInUseException` /
 // `AccessDeniedException`, so this is skipped by default.
-const servicePrincipal =
-  process.env.AWS_ORG_TRUSTED_SERVICE_PRINCIPAL ?? "config.amazonaws.com";
+const servicePrincipal = process.env.AWS_ORG_TRUSTED_SERVICE_PRINCIPAL ?? "config.amazonaws.com";
 
 test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
   "list contains the deployed trusted service access",
@@ -59,9 +58,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const provider = yield* Provider.findProvider(TrustedServiceAccess);
       const all = yield* provider.list();
 
-      expect(
-        all.some((item) => item.servicePrincipal === access.servicePrincipal),
-      ).toBe(true);
+      expect(all.some((item) => item.servicePrincipal === access.servicePrincipal)).toBe(true);
 
       yield* stack.destroy();
     }),
@@ -108,20 +105,15 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Organizations.TrustedServiceAccess",
+          isResourceState(r.row) && r.row.resourceType === "AWS.Organizations.TrustedServiceAccess",
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.TrustedServiceAccess state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.TrustedServiceAccess state row found after deploy"),
         );
       }
       yield* state.set({
@@ -143,9 +135,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const recovered = yield* deployAccess();
       expect(recovered.servicePrincipal).toEqual(created.servicePrincipal);
       // Same enablement observed — not disabled/re-enabled.
-      expect(recovered.dateEnabled?.getTime()).toEqual(
-        created.dateEnabled?.getTime(),
-      );
+      expect(recovered.dateEnabled?.getTime()).toEqual(created.dateEnabled?.getTime());
 
       yield* stack.destroy();
     }),

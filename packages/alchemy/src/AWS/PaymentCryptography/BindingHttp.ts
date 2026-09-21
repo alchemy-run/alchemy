@@ -92,10 +92,7 @@ export const makePaymentCryptographyKeyPairHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* <A1 extends Key, A2 extends Key>(
-      first: A1,
-      second: A2,
-    ) {
+    return Effect.fn(function* <A1 extends Key, A2 extends Key>(first: A1, second: A2) {
       const FirstArn = yield* first.keyArn;
       const SecondArn = yield* second.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -114,9 +111,9 @@ export const makePaymentCryptographyKeyPairHttpBinding = <
           }
         }
       }
-      return Effect.fn(
-        `${options.tag}(${first.LogicalId}, ${second.LogicalId})`,
-      )(function* (request: Omit<I, F1 | F2>) {
+      return Effect.fn(`${options.tag}(${first.LogicalId}, ${second.LogicalId})`)(function* (
+        request: Omit<I, F1 | F2>,
+      ) {
         return yield* op({
           ...request,
           [options.keyFields[0]]: yield* FirstArn,

@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
-export interface GetExecutionHistoryRequest
-  extends sfn.GetExecutionHistoryInput {}
+export interface GetExecutionHistoryRequest extends sfn.GetExecutionHistoryInput {}
 
 /**
  * Runtime binding for `states:GetExecutionHistory`.
@@ -37,10 +36,7 @@ export interface GetExecutionHistory extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetExecutionHistoryRequest,
-    ) => Effect.Effect<
-      sfn.GetExecutionHistoryOutput,
-      sfn.GetExecutionHistoryError
-    >
+    ) => Effect.Effect<sfn.GetExecutionHistoryOutput, sfn.GetExecutionHistoryError>
   >
 > {}
 export const GetExecutionHistory = Binding.Service<GetExecutionHistory>(

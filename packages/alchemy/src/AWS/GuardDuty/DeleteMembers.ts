@@ -30,12 +30,7 @@ export interface DeleteMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.DeleteMembersRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.DeleteMembersResponse,
-      guardduty.DeleteMembersError
-    >
+    ) => Effect.Effect<guardduty.DeleteMembersResponse, guardduty.DeleteMembersError>
   >
 > {}
-export const DeleteMembers = Binding.Service<DeleteMembers>(
-  "AWS.GuardDuty.DeleteMembers",
-);
+export const DeleteMembers = Binding.Service<DeleteMembers>("AWS.GuardDuty.DeleteMembers");

@@ -33,12 +33,7 @@ export interface DetectFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DetectFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DetectFacesResponse,
-      rekognition.DetectFacesError
-    >
+    ) => Effect.Effect<rekognition.DetectFacesResponse, rekognition.DetectFacesError>
   >
 > {}
-export const DetectFaces = Binding.Service<DetectFaces>(
-  "AWS.Rekognition.DetectFaces",
-);
+export const DetectFaces = Binding.Service<DetectFaces>("AWS.Rekognition.DetectFaces");

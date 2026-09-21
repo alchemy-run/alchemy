@@ -53,10 +53,7 @@ export interface StartBrowserSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartBrowserSessionRequest,
-    ) => Effect.Effect<
-      agentcore.StartBrowserSessionResponse,
-      agentcore.StartBrowserSessionError
-    >
+    ) => Effect.Effect<agentcore.StartBrowserSessionResponse, agentcore.StartBrowserSessionError>
   >
 > {}
 export const StartBrowserSession = Binding.Service<StartBrowserSession>(

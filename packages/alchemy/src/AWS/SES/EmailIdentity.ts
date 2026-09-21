@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -190,8 +185,7 @@ export const EmailIdentity = Resource<EmailIdentity>("AWS.SES.EmailIdentity");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const identityArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:identity/${name}`;
@@ -217,11 +211,7 @@ export const EmailIdentityProvider = () =>
       const getIdentity = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getEmailIdentity({ EmailIdentity: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       return EmailIdentity.Provider.of({
@@ -230,16 +220,11 @@ export const EmailIdentityProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* sesv2.listEmailIdentities
-              .pages({})
-              .pipe(Stream.runCollect);
-            const infos = Array.from(pages).flatMap(
-              (page) => page.EmailIdentities ?? [],
-            );
+            const pages = yield* sesv2.listEmailIdentities.pages({}).pipe(Stream.runCollect);
+            const infos = Array.from(pages).flatMap((page) => page.EmailIdentities ?? []);
             const attrs = yield* Effect.forEach(
               infos.filter(
-                (info): info is typeof info & { IdentityName: string } =>
-                  info.IdentityName != null,
+                (info): info is typeof info & { IdentityName: string } => info.IdentityName != null,
               ),
               (info) =>
                 Effect.gen(function* () {
@@ -263,11 +248,7 @@ export const EmailIdentityProvider = () =>
           if (name === undefined) return undefined;
           const found = yield* getIdentity(name);
           if (!found) return undefined;
-          const attrs = toAttributes(
-            name,
-            identityArnOf(region, accountId, name),
-            found,
-          );
+          const attrs = toAttributes(name, identityArnOf(region, accountId, name), found);
           const tags = toTagRecord(found.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
@@ -307,11 +288,7 @@ export const EmailIdentityProvider = () =>
                     : undefined,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             observed = yield* sesv2.getEmailIdentity({ EmailIdentity: name });
           }
 
@@ -330,8 +307,7 @@ export const EmailIdentityProvider = () =>
           if (
             news.dkimSigningKeyLength !== undefined &&
             observed.DkimAttributes?.NextSigningKeyLength !== undefined &&
-            observed.DkimAttributes.NextSigningKeyLength !==
-              news.dkimSigningKeyLength
+            observed.DkimAttributes.NextSigningKeyLength !== news.dkimSigningKeyLength
           ) {
             yield* sesv2.putEmailIdentityDkimSigningAttributes({
               EmailIdentity: name,
@@ -346,8 +322,7 @@ export const EmailIdentityProvider = () =>
           //     explicitly requested and observably different.
           if (
             news.dkimSigningEnabled !== undefined &&
-            (observed.DkimAttributes?.SigningEnabled ?? false) !==
-              news.dkimSigningEnabled
+            (observed.DkimAttributes?.SigningEnabled ?? false) !== news.dkimSigningEnabled
           ) {
             yield* sesv2.putEmailIdentityDkimAttributes({
               EmailIdentity: name,
@@ -359,8 +334,7 @@ export const EmailIdentityProvider = () =>
           //     requested and observably different (SES defaults it to on).
           if (
             news.feedbackForwardingEnabled !== undefined &&
-            (observed.FeedbackForwardingStatus ?? true) !==
-              news.feedbackForwardingEnabled
+            (observed.FeedbackForwardingStatus ?? true) !== news.feedbackForwardingEnabled
           ) {
             yield* sesv2.putEmailIdentityFeedbackAttributes({
               EmailIdentity: name,
@@ -372,8 +346,7 @@ export const EmailIdentityProvider = () =>
           //     requested and observably different.
           if (
             news.mailFromDomain !== undefined &&
-            (observed.MailFromAttributes?.MailFromDomain !==
-              news.mailFromDomain ||
+            (observed.MailFromAttributes?.MailFromDomain !== news.mailFromDomain ||
               (news.mailFromBehaviorOnMxFailure !== undefined &&
                 observed.MailFromAttributes?.BehaviorOnMxFailure !==
                   news.mailFromBehaviorOnMxFailure))

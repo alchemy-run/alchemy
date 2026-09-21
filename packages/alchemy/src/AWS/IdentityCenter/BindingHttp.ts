@@ -54,10 +54,9 @@ export const makeIdentityStoreHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-            }>;
+          const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+          }>;
           yield* host.bind`Allow(${host}, ${options.tag}(${instance}))`({
             policyStatements: [
               {

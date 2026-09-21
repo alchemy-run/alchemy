@@ -6,10 +6,7 @@ import type { Index } from "./SearchIndex.ts";
 /**
  * `BatchPutDocument` request with `IndexId` injected from the bound index.
  */
-export interface BatchPutDocumentRequest extends Omit<
-  kendra.BatchPutDocumentRequest,
-  "IndexId"
-> {}
+export interface BatchPutDocumentRequest extends Omit<kendra.BatchPutDocumentRequest, "IndexId"> {}
 
 /**
  * Runtime binding for the `BatchPutDocument` operation (IAM action
@@ -50,12 +47,7 @@ export interface BatchPutDocument extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchPutDocumentRequest,
-    ) => Effect.Effect<
-      kendra.BatchPutDocumentResponse,
-      kendra.BatchPutDocumentError
-    >
+    ) => Effect.Effect<kendra.BatchPutDocumentResponse, kendra.BatchPutDocumentError>
   >
 > {}
-export const BatchPutDocument = Binding.Service<BatchPutDocument>(
-  "AWS.Kendra.BatchPutDocument",
-);
+export const BatchPutDocument = Binding.Service<BatchPutDocument>("AWS.Kendra.BatchPutDocument");

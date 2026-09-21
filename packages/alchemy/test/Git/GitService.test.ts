@@ -1,3 +1,11 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 /**
  * Tier-2 deployed REST lifecycle suite (DESIGN.md §9): drives the typed
  * `HttpApiClient` against a real Cloudflare deployment of the git-service
@@ -9,26 +17,15 @@
  * local dev-mode mirror of this suite is `GitService.local.test.ts`.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { GitApi, type Oid } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeTestStack("GitServiceTestStack");
 
@@ -47,10 +44,8 @@ const edgeRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         (error as { _tag?: string })._tag === "TimeoutError" ||
         ((error as { _tag?: string })._tag === "HttpClientError" &&
           (!(error as { response?: { status: number } }).response ||
-            (error as { response: { status: number } }).response.status ===
-              404 ||
-            (error as { response: { status: number } }).response.status >=
-              500)),
+            (error as { response: { status: number } }).response.status === 404 ||
+            (error as { response: { status: number } }).response.status >= 500)),
       schedule: Schedule.spaced("1500 millis"),
       times: 40,
     }),
@@ -85,11 +80,7 @@ const expectTag = <A, E extends { readonly _tag: string }, R>(
  * purge: `status: "deleting"` → 404). Keeps repo names deterministic across
  * runs without leaking 409s from interrupted prior runs.
  */
-const purgeRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  repo: string,
-) {
+const purgeRepo = Effect.fn(function* (url: string, owner: string, repo: string) {
   const admin = yield* makeClient(url, TEST_SECRET);
   yield* admin.repos
     .delete({ params: { owner, repo } })
@@ -154,9 +145,7 @@ test(
 
     // list-all (admin only) sees it
     const listed = yield* admin.repos.list({ query: { owner: "e2e" } });
-    expect(listed.items.some((repo) => repo.name === "rest-lifecycle")).toBe(
-      true,
-    );
+    expect(listed.items.some((repo) => repo.name === "rest-lifecycle")).toBe(true);
 
     // refs are empty on a fresh repo
     const refs = yield* admin.refs.list({
@@ -169,19 +158,17 @@ test(
     yield* admin.repos.delete({
       params: { owner: "e2e", repo: "rest-lifecycle" },
     });
-    const gone = yield* admin.repos
-      .get({ params: { owner: "e2e", repo: "rest-lifecycle" } })
-      .pipe(
-        Effect.map((repo) => ({ deleted: false, status: repo.status })),
-        Effect.catchTag("RepoNotFound", () =>
-          Effect.succeed({ deleted: true as const, status: undefined }),
-        ),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (state) => state.deleted,
-          times: 45,
-        }),
-      );
+    const gone = yield* admin.repos.get({ params: { owner: "e2e", repo: "rest-lifecycle" } }).pipe(
+      Effect.map((repo) => ({ deleted: false, status: repo.status })),
+      Effect.catchTag("RepoNotFound", () =>
+        Effect.succeed({ deleted: true as const, status: undefined }),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (state) => state.deleted,
+        times: 45,
+      }),
+    );
     expect(gone.deleted).toBe(true);
   }).pipe(logLevel),
   { timeout: 180_000 },
@@ -219,10 +206,7 @@ test(
     yield* admin.repos.update({ params, payload: { readOnly: false } });
 
     // reads of missing refs/objects decode as the tagged classes
-    yield* expectTag(
-      admin.refs.get({ params, query: { name: "refs/heads/main" } }),
-      "RefNotFound",
-    );
+    yield* expectTag(admin.refs.get({ params, query: { name: "refs/heads/main" } }), "RefNotFound");
     yield* expectTag(
       admin.objects.commit({
         params: { ...params, oid: asOid("e".repeat(40)) },

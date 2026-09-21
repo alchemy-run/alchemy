@@ -40,7 +40,6 @@ export interface GetBlueprintOptimizationStatus extends Binding.Service<
     >
   >
 > {}
-export const GetBlueprintOptimizationStatus =
-  Binding.Service<GetBlueprintOptimizationStatus>(
-    "AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus",
-  );
+export const GetBlueprintOptimizationStatus = Binding.Service<GetBlueprintOptimizationStatus>(
+  "AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus",
+);

@@ -30,10 +30,7 @@ export interface ListInvestigations extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.ListInvestigationsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.ListInvestigationsResponse,
-      guardduty.ListInvestigationsError
-    >
+    ) => Effect.Effect<guardduty.ListInvestigationsResponse, guardduty.ListInvestigationsError>
   >
 > {}
 export const ListInvestigations = Binding.Service<ListInvestigations>(

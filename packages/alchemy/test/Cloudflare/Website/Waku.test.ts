@@ -1,6 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -13,23 +10,16 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import {
-  expectDirectStatus,
-  expectUrlContains,
-  expectUrlHeader,
-} from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectDirectStatus, expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "waku-app");
 
@@ -69,13 +59,7 @@ describe.concurrent("Waku", () => {
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-waku-",
           tempRoot,
-          entries: [
-            ".gitignore",
-            "package.json",
-            "tsconfig.json",
-            "public",
-            "src",
-          ],
+          entries: [".gitignore", "package.json", "tsconfig.json", "public", "src"],
         });
 
         const bindingMarker = "waku-binding-marker";
@@ -118,24 +102,16 @@ describe.concurrent("Waku", () => {
         });
 
         // Static asset from `public/`.
-        yield* expectUrlContains(
-          `${site1.url!}/hello.txt`,
-          "hello from public/",
-          {
-            timeout: "60 seconds",
-            label: "waku static asset",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/hello.txt`, "hello from public/", {
+          timeout: "60 seconds",
+          label: "waku static asset",
+        });
 
         // SSG page prerendered at build time and served from assets.
-        yield* expectUrlContains(
-          `${site1.url!}/about`,
-          "WAKU_ABOUT_STATIC_MARKER",
-          {
-            timeout: "60 seconds",
-            label: "waku SSG page",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/about`, "WAKU_ABOUT_STATIC_MARKER", {
+          timeout: "60 seconds",
+          label: "waku SSG page",
+        });
 
         // The SSG page serves 200 directly at the extensionless URL — the
         // default `drop-trailing-slash` asset handling must not 307-redirect
@@ -160,15 +136,10 @@ describe.concurrent("Waku", () => {
         // ── middleware: `src/middleware/*.ts` runs ahead of the RSC
         // middleware for every worker-handled request — the header shows on
         // the dynamic SSR page (static assets bypass the worker) ────────────
-        yield* expectUrlHeader(
-          `${site1.url!}/`,
-          "x-waku-middleware",
-          "alchemy-waku-fixture",
-          {
-            timeout: "60 seconds",
-            label: "waku middleware response header",
-          },
-        );
+        yield* expectUrlHeader(`${site1.url!}/`, "x-waku-middleware", "alchemy-waku-fixture", {
+          timeout: "60 seconds",
+          label: "waku middleware response header",
+        });
 
         // ── KV: the SITE_KV namespace binding round-trips through the
         // `/api/kv` route ───────────────────────────────────────────────────
@@ -184,9 +155,7 @@ describe.concurrent("Waku", () => {
         const kvRead = yield* requestJsonReady<{
           key: string;
           value: string | null;
-        }>(
-          HttpClientRequest.get(`${site1.url!}/api/kv?key=waku-live-key`),
-        ).pipe(
+        }>(HttpClientRequest.get(`${site1.url!}/api/kv?key=waku-live-key`)).pipe(
           Effect.filterOrFail(
             (res) => res.value === "kv-live-value",
             (res) => new Error(`kv value not visible yet: ${res.value}`),
@@ -209,9 +178,7 @@ describe.concurrent("Waku", () => {
           .pipe(
             Effect.flatMap((res) =>
               Effect.tryPromise(() =>
-                new Response(
-                  Stream.toReadableStream(res.body) as BodyInit,
-                ).text(),
+                new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
               ),
             ),
             // The KV REST read can lag the worker's write briefly.
@@ -282,13 +249,7 @@ describe.concurrent("Waku", () => {
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-waku-main-",
           tempRoot,
-          entries: [
-            ".gitignore",
-            "package.json",
-            "tsconfig.json",
-            "public",
-            "src",
-          ],
+          entries: [".gitignore", "package.json", "tsconfig.json", "public", "src"],
         });
 
         const site = yield* stack.deploy(
@@ -312,9 +273,7 @@ describe.concurrent("Waku", () => {
         yield* expectWorkerExists(site.workerName, accountId);
 
         // The deployed entry is the USER module, not waku's own entry.
-        const entry = yield* fetchJsonReady<{ entry: string }>(
-          `${site.url!}/api/entry`,
-        );
+        const entry = yield* fetchJsonReady<{ entry: string }>(`${site.url!}/api/entry`);
         expect(entry.entry).toBe("worker-entry");
 
         // The DO namespace is bound and state increments ACROSS requests —
@@ -327,9 +286,7 @@ describe.concurrent("Waku", () => {
         );
         expect(second.count).toBe(first.count + 1);
 
-        const read = yield* fetchJsonReady<{ count: number }>(
-          `${site.url!}/api/counter`,
-        );
+        const read = yield* fetchJsonReady<{ count: number }>(`${site.url!}/api/counter`);
         expect(read.count).toBe(second.count);
 
         // Wrapping waku's handler keeps every framework route working:
@@ -345,22 +302,14 @@ describe.concurrent("Waku", () => {
 
         // SSG page + public asset still serve from assets alongside the
         // custom entry.
-        yield* expectUrlContains(
-          `${site.url!}/about`,
-          "WAKU_ABOUT_STATIC_MARKER",
-          {
-            timeout: "60 seconds",
-            label: "waku SSG page with custom entry",
-          },
-        );
-        yield* expectUrlContains(
-          `${site.url!}/hello.txt`,
-          "hello from public/",
-          {
-            timeout: "60 seconds",
-            label: "waku static asset with custom entry",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/about`, "WAKU_ABOUT_STATIC_MARKER", {
+          timeout: "60 seconds",
+          label: "waku SSG page with custom entry",
+        });
+        yield* expectUrlContains(`${site.url!}/hello.txt`, "hello from public/", {
+          timeout: "60 seconds",
+          label: "waku static asset with custom entry",
+        });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -391,17 +340,13 @@ const requestJsonReady = <T>(request: HttpClientRequest.HttpClientRequest) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
   });
 
-const fetchJsonReady = <T>(url: string) =>
-  requestJsonReady<T>(HttpClientRequest.get(url));
+const fetchJsonReady = <T>(url: string) => requestJsonReady<T>(HttpClientRequest.get(url));
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
@@ -409,19 +354,12 @@ class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
  * Poll until the KV namespace is gone from the cloud (bounded). Same
  * pattern as Astro.test.ts.
  */
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
   yield* kv.getNamespace({ accountId, namespaceId }).pipe(
     Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
     Effect.retry({
-      while: (e): e is NamespaceStillExists =>
-        e instanceof NamespaceStillExists,
-      schedule: Schedule.min([
-        Schedule.exponential(250),
-        Schedule.spaced("2 seconds"),
-      ]),
+      while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+      schedule: Schedule.min([Schedule.exponential(250), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),

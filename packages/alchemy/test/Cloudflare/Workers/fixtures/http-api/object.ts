@@ -1,4 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -8,7 +7,7 @@ import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-
+import * as Cloudflare from "@/Cloudflare";
 import { createTask, decodeTask, encodeTask, getTask, Task } from "./api.ts";
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
@@ -18,13 +17,10 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
     compressResponse: (response) => Effect.succeed(response),
   },
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
-export class TasksDOGroup extends HttpApiGroup.make("TasksDO")
-  .add(getTask)
-  .add(createTask) {}
+export class TasksDOGroup extends HttpApiGroup.make("TasksDO").add(getTask).add(createTask) {}
 
 export class TaskDOApi extends HttpApi.make("TaskDOApi").add(TasksDOGroup) {}
 
@@ -39,27 +35,20 @@ export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const tasksGroup = HttpApiBuilder.group(
-        TaskDOApi,
-        "TasksDO",
-        (handlers) =>
-          handlers
-            .handle("getTask", ({ params }) =>
-              state.storage
-                .get<Task>(params.id)
-                .pipe(Effect.flatMap(decodeTask), Effect.orDie),
-            )
-            .handle("createTask", ({ payload }) => {
-              const id = crypto.randomUUID();
-              const task = new Task({
-                id,
-                title: payload.title,
-                completed: false,
-              });
-              return state.storage
-                .put(id, encodeTask(task))
-                .pipe(Effect.as(task));
-            }),
+      const tasksGroup = HttpApiBuilder.group(TaskDOApi, "TasksDO", (handlers) =>
+        handlers
+          .handle("getTask", ({ params }) =>
+            state.storage.get<Task>(params.id).pipe(Effect.flatMap(decodeTask), Effect.orDie),
+          )
+          .handle("createTask", ({ payload }) => {
+            const id = crypto.randomUUID();
+            const task = new Task({
+              id,
+              title: payload.title,
+              completed: false,
+            });
+            return state.storage.put(id, encodeTask(task)).pipe(Effect.as(task));
+          }),
       );
 
       return {

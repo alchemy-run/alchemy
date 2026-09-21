@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ConfigurationSet, ConfigurationSetEventDestination } from "@/AWS/SES";
-import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigurationSet, ConfigurationSetEventDestination } from "@/AWS/SES";
+import { Topic } from "@/AWS/SNS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,15 +14,13 @@ const { test } = Test.make({ providers: AWS.providers() });
 // tracking links. SES rejects a redirect domain the account does not own.
 const TRACKING_REDIRECT_DOMAIN = process.env.AWS_TEST_SES_REDIRECT_DOMAIN;
 
-class ConfigurationSetStillExists extends Data.TaggedError(
-  "ConfigurationSetStillExists",
-)<{ readonly name: string }> {}
+class ConfigurationSetStillExists extends Data.TaggedError("ConfigurationSetStillExists")<{
+  readonly name: string;
+}> {}
 
 const assertConfigurationSetDeleted = (name: string) =>
   sesv2.getConfigurationSet({ ConfigurationSetName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ConfigurationSetStillExists({ name })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ConfigurationSetStillExists({ name }))),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ConfigurationSetStillExists",
@@ -59,12 +57,8 @@ test.provider(
       expect(observed.DeliveryOptions?.TlsPolicy).toBe("REQUIRE");
       // Duration.Input prop converted to whole wire seconds
       expect(observed.DeliveryOptions?.MaxDeliverySeconds).toBe(3600);
-      expect(observed.SuppressionOptions?.SuppressedReasons).toEqual([
-        "BOUNCE",
-      ]);
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect(observed.SuppressionOptions?.SuppressedReasons).toEqual(["BOUNCE"]);
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("LifecycleConfigSet");
 
@@ -88,12 +82,11 @@ test.provider(
       expect(updated.ReputationOptions?.ReputationMetricsEnabled).toBe(false);
       expect(updated.DeliveryOptions?.TlsPolicy ?? "OPTIONAL").toBe("OPTIONAL");
       expect(updated.DeliveryOptions?.MaxDeliverySeconds).toBe(1800);
-      expect(
-        [...(updated.SuppressionOptions?.SuppressedReasons ?? [])].sort(),
-      ).toEqual(["BOUNCE", "COMPLAINT"]);
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect([...(updated.SuppressionOptions?.SuppressedReasons ?? [])].sort()).toEqual([
+        "BOUNCE",
+        "COMPLAINT",
+      ]);
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.Extra).toBe("1");
 
       yield* stack.destroy();
@@ -143,14 +136,11 @@ test.provider(
         Effect.gen(function* () {
           const topic = yield* Topic("SesEventsTopic", {});
           const configSet = yield* ConfigurationSet("EventsConfigSet", {});
-          const destination = yield* ConfigurationSetEventDestination(
-            "SnsDestination",
-            {
-              configurationSetName: configSet.configurationSetName,
-              matchingEventTypes: ["SEND", "DELIVERY"],
-              snsDestination: { topicArn: topic.topicArn },
-            },
-          );
+          const destination = yield* ConfigurationSetEventDestination("SnsDestination", {
+            configurationSetName: configSet.configurationSetName,
+            matchingEventTypes: ["SEND", "DELIVERY"],
+            snsDestination: { topicArn: topic.topicArn },
+          });
           return { topic, configSet, destination };
         }),
       );
@@ -166,10 +156,7 @@ test.provider(
       );
       expect(found).toBeDefined();
       expect(found!.Enabled).toBe(true);
-      expect([...found!.MatchingEventTypes].sort()).toEqual([
-        "DELIVERY",
-        "SEND",
-      ]);
+      expect([...found!.MatchingEventTypes].sort()).toEqual(["DELIVERY", "SEND"]);
       expect(found!.SnsDestination?.TopicArn).toBe(topic.topicArn);
 
       // update event types + disable in place
@@ -177,15 +164,12 @@ test.provider(
         Effect.gen(function* () {
           const topic = yield* Topic("SesEventsTopic", {});
           const configSet = yield* ConfigurationSet("EventsConfigSet", {});
-          const destination = yield* ConfigurationSetEventDestination(
-            "SnsDestination",
-            {
-              configurationSetName: configSet.configurationSetName,
-              enabled: false,
-              matchingEventTypes: ["SEND", "DELIVERY", "BOUNCE", "COMPLAINT"],
-              snsDestination: { topicArn: topic.topicArn },
-            },
-          );
+          const destination = yield* ConfigurationSetEventDestination("SnsDestination", {
+            configurationSetName: configSet.configurationSetName,
+            enabled: false,
+            matchingEventTypes: ["SEND", "DELIVERY", "BOUNCE", "COMPLAINT"],
+            snsDestination: { topicArn: topic.topicArn },
+          });
           return { configSet, destination };
         }),
       );
@@ -227,12 +211,8 @@ test.provider(
       const created = yield* sesv2.getConfigurationSet({
         ConfigurationSetName: configSet.configurationSetName,
       });
-      expect(created.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe(
-        "ENABLED",
-      );
-      expect(created.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery).toBe(
-        "ENABLED",
-      );
+      expect(created.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe("ENABLED");
+      expect(created.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery).toBe("ENABLED");
 
       // flip both off in place — no replacement
       yield* stack.deploy(
@@ -248,12 +228,8 @@ test.provider(
       const updated = yield* sesv2.getConfigurationSet({
         ConfigurationSetName: configSet.configurationSetName,
       });
-      expect(updated.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe(
-        "DISABLED",
-      );
-      expect(updated.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery).toBe(
-        "DISABLED",
-      );
+      expect(updated.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe("DISABLED");
+      expect(updated.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery).toBe("DISABLED");
 
       yield* stack.destroy();
       yield* assertConfigurationSetDeleted(configSet.configurationSetName);
@@ -283,9 +259,7 @@ test.provider.skipIf(!TRACKING_REDIRECT_DOMAIN)(
       const created = yield* sesv2.getConfigurationSet({
         ConfigurationSetName: configSet.configurationSetName,
       });
-      expect(created.TrackingOptions?.CustomRedirectDomain).toBe(
-        TRACKING_REDIRECT_DOMAIN,
-      );
+      expect(created.TrackingOptions?.CustomRedirectDomain).toBe(TRACKING_REDIRECT_DOMAIN);
       expect(created.TrackingOptions?.HttpsPolicy).toBe("REQUIRE");
 
       // change only the HTTPS policy — applied in place
@@ -342,13 +316,9 @@ test.provider(
       const observed = yield* sesv2.getConfigurationSet({
         ConfigurationSetName: configSet.configurationSetName,
       });
-      expect(observed.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe(
-        "DISABLED",
-      );
+      expect(observed.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe("DISABLED");
       // Guardian was never mentioned in the second deploy — it must survive.
-      expect(
-        observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery,
-      ).toBe("ENABLED");
+      expect(observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery).toBe("ENABLED");
 
       yield* stack.destroy();
       yield* assertConfigurationSetDeleted(configSet.configurationSetName);

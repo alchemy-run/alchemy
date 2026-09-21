@@ -48,10 +48,7 @@ export interface UpdateTaskProtection extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateTaskProtectionRequest,
-    ) => Effect.Effect<
-      ECS.UpdateTaskProtectionResponse,
-      ECS.UpdateTaskProtectionError
-    >
+    ) => Effect.Effect<ECS.UpdateTaskProtectionResponse, ECS.UpdateTaskProtectionError>
   >
 > {}
 export const UpdateTaskProtection = Binding.Service<UpdateTaskProtection>(

@@ -12,7 +12,6 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,
@@ -113,9 +112,7 @@ export type PlacementGroup = Resource<
  *
  * @resource
  */
-export const PlacementGroup = Resource<PlacementGroup>(
-  "Hetzner.PlacementGroup",
-);
+export const PlacementGroup = Resource<PlacementGroup>("Hetzner.PlacementGroup");
 
 export class PlacementGroupNotResolved extends Data.TaggedError(
   "Hetzner.PlacementGroupNotResolved",
@@ -131,9 +128,7 @@ const userLabels = (
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 64 }));
   });
 
 const toAttrs = (group: GetPlacementGroupResponsePlacementGroup) => ({
@@ -155,32 +150,23 @@ const findByName = (name: string) =>
   Services.placementGroups
     .listPlacementGroups({ name, per_page: 50 })
     .pipe(
-      Effect.map(({ placement_groups }) =>
-        placement_groups.find((group) => group.name === name),
-      ),
+      Effect.map(({ placement_groups }) => placement_groups.find((group) => group.name === name)),
     );
 
 const findByAlchemyLabels = (id: string) =>
   Effect.gen(function* () {
     const internal = yield* createInternalLabels(id);
-    const { placement_groups } =
-      yield* Services.placementGroups.listPlacementGroups({
-        label_selector: labelSelector(internal),
-        per_page: 50,
-      });
+    const { placement_groups } = yield* Services.placementGroups.listPlacementGroups({
+      label_selector: labelSelector(internal),
+      per_page: 50,
+    });
     return placement_groups.find((group) => {
       const labels = tagRecord(group.labels);
-      return Object.entries(internal).every(
-        ([key, value]) => labels[key] === value,
-      );
+      return Object.entries(internal).every(([key, value]) => labels[key] === value);
     });
   });
 
-const observe = Effect.fn(function* (input: {
-  id?: number;
-  name?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: number; name?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -229,9 +215,7 @@ export const PlacementGroupProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -267,8 +251,7 @@ export const PlacementGroupProvider = () =>
         if (created?.action != null) {
           yield* waitForAction(created.action.id);
         }
-        current =
-          created?.placement_group ?? (yield* observe({ name, logicalId: id }));
+        current = created?.placement_group ?? (yield* observe({ name, logicalId: id }));
       }
 
       if (current === undefined) {

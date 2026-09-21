@@ -18,10 +18,7 @@ export const getEnv = (key: string) =>
 
 export const getEnvRequired = (key: string) =>
   Config.String(key).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AuthError({ message: `Missing required env: ${key}`, cause }),
-    ),
+    Effect.mapError((cause) => new AuthError({ message: `Missing required env: ${key}`, cause })),
   );
 
 export const getEnvRedacted = (key: string) =>
@@ -38,10 +35,7 @@ export const getEnvRedacted = (key: string) =>
 
 export const getEnvRedactedRequired = (key: string) =>
   Config.Redacted(key).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AuthError({ message: `Missing required env: ${key}`, cause }),
-    ),
+    Effect.mapError((cause) => new AuthError({ message: `Missing required env: ${key}`, cause })),
   );
 
 export const mapPromptCancellation = <A, R>(
@@ -51,10 +45,7 @@ export const mapPromptCancellation = <A, R>(
     Effect.mapError(
       (cause) =>
         new AuthError({
-          message:
-            cause._tag === "TerminalCancelled"
-              ? "User cancelled prompt"
-              : cause.message,
+          message: cause._tag === "TerminalCancelled" ? "User cancelled prompt" : cause.message,
           cause,
         }),
     ),

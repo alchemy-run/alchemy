@@ -26,9 +26,7 @@ const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
  */
 const DEFAULT_WORKER_ENTRY = "worker/index.ts";
 
-export interface VinextProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
 > {
@@ -173,9 +171,10 @@ export const Vinext: {
         | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -186,9 +185,10 @@ export const Vinext: {
       | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -199,8 +199,7 @@ export const Vinext: {
     : Worker(
         id,
         Effect.gen(function* () {
-          const props: any =
-            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          const props: any = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
           // Do not bind VINEXT_KV_CACHE in user `env`.
@@ -208,8 +207,7 @@ export const Vinext: {
           const env = {
             ...props.env,
             VINEXT_KV_CACHE: cache,
-            CF_VERSION_METADATA:
-              props.env?.CF_VERSION_METADATA ?? VersionMetadata(),
+            CF_VERSION_METADATA: props.env?.CF_VERSION_METADATA ?? VersionMetadata(),
           };
           return {
             ...props,
@@ -220,12 +218,7 @@ export const Vinext: {
             },
             compatibility: {
               date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,
-              flags: Array.from(
-                new Set([
-                  "nodejs_compat",
-                  ...(props?.compatibility?.flags ?? []),
-                ]),
-              ),
+              flags: Array.from(new Set(["nodejs_compat", ...(props?.compatibility?.flags ?? [])])),
             },
             assets: {
               htmlHandling: "none",

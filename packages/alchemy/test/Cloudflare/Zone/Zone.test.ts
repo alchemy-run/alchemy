@@ -1,10 +1,3 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Alchemy";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -12,6 +5,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import { destroy } from "@/RemovalPolicy";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -37,9 +37,7 @@ const softSkipWhenZoneCreationBlocked = <A, E, R>(
               : undefined,
         )
         .some(
-          (value) =>
-            Predicate.hasProperty(value, "_tag") &&
-            value._tag === "ZoneCreationBlocked",
+          (value) => Predicate.hasProperty(value, "_tag") && value._tag === "ZoneCreationBlocked",
         );
       return blocked
         ? Effect.logWarning(
@@ -87,26 +85,18 @@ test.provider.skipIf(!!process.env.FAST)(
         expect(zone.status).toBe(live.status ?? undefined);
         expect(zone.paused).toBe(live.paused ?? false);
         expect(zone.nameServers).toEqual(live.nameServers);
-        expect(zone.originalNameServers).toEqual(
-          live.originalNameServers ?? undefined,
-        );
-        expect(zone.vanityNameServers).toEqual(
-          live.vanityNameServers ?? undefined,
-        );
+        expect(zone.originalNameServers).toEqual(live.originalNameServers ?? undefined);
+        expect(zone.vanityNameServers).toEqual(live.vanityNameServers ?? undefined);
         expect(zone.activatedOn).toBe(live.activatedOn ?? undefined);
         expect(zone.createdOn).toBe(live.createdOn);
         expect(zone.modifiedOn).toBe(live.modifiedOn);
         expect(zone.developmentMode).toBe(live.developmentMode);
         expect(zone.originalDnshost).toBe(live.originalDnshost ?? undefined);
-        expect(zone.originalRegistrar).toBe(
-          live.originalRegistrar ?? undefined,
-        );
+        expect(zone.originalRegistrar).toBe(live.originalRegistrar ?? undefined);
         expect(zone.cnameSuffix).toBe(live.cnameSuffix ?? undefined);
         expect(zone.verificationKey).toBe(live.verificationKey ?? undefined);
         expect(zone.owner.id).toBe(live.owner.id ?? undefined);
-        expect(zone.meta.foundationDns).toBe(
-          live.meta.foundationDns ?? undefined,
-        );
+        expect(zone.meta.foundationDns).toBe(live.meta.foundationDns ?? undefined);
 
         yield* stack.destroy();
 
@@ -217,33 +207,31 @@ test.provider.skipIf(!!process.env.FAST)(
 // Standing test zone — always present in the testing account.
 const TEST_ZONE_NAME = "alchemy-test-2.us";
 
-test.provider.skipIf(!!process.env.FAST)(
-  "list enumerates every zone in the account",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider.skipIf(!!process.env.FAST)("list enumerates every zone in the account", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const testZone = yield* findZoneByName({
-        accountId,
-        name: TEST_ZONE_NAME,
-      });
-      expect(testZone).toBeDefined();
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const testZone = yield* findZoneByName({
+      accountId,
+      name: TEST_ZONE_NAME,
+    });
+    expect(testZone).toBeDefined();
 
-      const provider = yield* Provider.findProvider(Cloudflare.Zone.Zone);
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.Zone.Zone);
+    const all = yield* provider.list();
 
-      // Exhaustive enumeration must include the standing test zone, returned in
-      // the full `read` Attributes shape.
-      const found = all.find((z) => z.zoneId === testZone!.id);
-      expect(found).toBeDefined();
-      expect(found!.name).toBe(TEST_ZONE_NAME);
-      expect(found!.accountId).toBe(accountId);
-      expect(typeof found!.createdOn).toBe("string");
-      expect(Array.isArray(found!.nameServers)).toBe(true);
+    // Exhaustive enumeration must include the standing test zone, returned in
+    // the full `read` Attributes shape.
+    const found = all.find((z) => z.zoneId === testZone!.id);
+    expect(found).toBeDefined();
+    expect(found!.name).toBe(TEST_ZONE_NAME);
+    expect(found!.accountId).toBe(accountId);
+    expect(typeof found!.createdOn).toBe("string");
+    expect(Array.isArray(found!.nameServers)).toBe(true);
 
-      yield* stack.destroy();
-    }),
+    yield* stack.destroy();
+  }),
 );
 
 const waitForZoneToBeDeleted = Effect.fn(function* (zoneId: string) {
@@ -252,9 +240,7 @@ const waitForZoneToBeDeleted = Effect.fn(function* (zoneId: string) {
     Effect.flatMap(() => new ZoneStillExists()),
     // Any other failure (e.g. `Invalid zone identifier` / 404) means the zone
     // is gone, which is exactly what we're waiting for.
-    Effect.catch((e) =>
-      e instanceof ZoneStillExists ? Effect.fail(e) : Effect.void,
-    ),
+    Effect.catch((e) => (e instanceof ZoneStillExists ? Effect.fail(e) : Effect.void)),
     Effect.retry({
       while: (e): e is ZoneStillExists => e instanceof ZoneStillExists,
       schedule: Schedule.exponential(100),
@@ -269,9 +255,7 @@ class ZoneStillExists extends Data.TaggedError("ZoneStillExists") {}
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -280,7 +264,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

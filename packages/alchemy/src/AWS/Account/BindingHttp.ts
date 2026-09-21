@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared HTTP scaffolding for the AWS Account Management runtime bindings.
@@ -51,16 +51,12 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.Account.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Account.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.Account.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Account.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

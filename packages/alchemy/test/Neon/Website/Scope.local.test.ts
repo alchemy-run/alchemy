@@ -1,8 +1,8 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { providers } from "@/Neon/Providers.ts";
 import * as Website from "@/Neon/Website/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { bodyContaining, exampleRoot } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers(), dev: true });
@@ -69,16 +69,12 @@ describe.sequential("Neon Website explicit local scope", () => {
           outdir: "dist",
           dev: { command: "bun run dev:site" },
         };
-        const first = yield* stack.deploy(
-          Website.StaticSite("Web", { ...props, branch }),
-        );
+        const first = yield* stack.deploy(Website.StaticSite("Web", { ...props, branch }));
         expect(first.branch).toEqual(branch);
         expect(first.project).toBeUndefined();
         expect(first.function).toBeUndefined();
         yield* bodyContaining(String(first.url), "Static site on Neon");
-        const second = yield* stack.deploy(
-          Website.StaticSite("Web", { ...props, project }),
-        );
+        const second = yield* stack.deploy(Website.StaticSite("Web", { ...props, project }));
         expect(second.project).toEqual(project);
         expect(second.branch).toBeUndefined();
         expect(second.function).toBeUndefined();

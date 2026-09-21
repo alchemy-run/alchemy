@@ -1,3 +1,8 @@
+import * as ElastiCache from "@distilled.cloud/aws/elasticache";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
 import {
   CacheCluster,
   cacheClusterConnectEnvPrefix,
@@ -9,15 +14,10 @@ import {
   replicationGroupConnectEnvPrefix,
   validateReplicationGroupProps,
 } from "@/AWS/ElastiCache";
-import * as AWS from "@/AWS";
 import { sameStringSet } from "@/AWS/ElastiCache/internal.ts";
-import * as Test from "@/Test/Alchemy";
-import * as ElastiCache from "@distilled.cloud/aws/elasticache";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import * as Output from "@/Output.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Schedule from "effect/Schedule";
+import * as Test from "@/Test/Alchemy";
 import {
   assertCacheClusterGone,
   assertReplicationGroupGone,
@@ -32,15 +32,9 @@ shareProvisionedNetwork({ beforeAll, afterAll });
 test(
   "connection names and unordered subnet IDs are stable",
   Effect.sync(() => {
-    expect(replicationGroupConnectEnvPrefix("SessionCache")).toBe(
-      "ELASTICACHE_SESSIONCACHE",
-    );
-    expect(cacheClusterConnectEnvPrefix("SessionCache")).toBe(
-      "ELASTICACHE_SESSIONCACHE",
-    );
-    expect(
-      sameStringSet(["subnet-a", "subnet-b"], ["subnet-b", "subnet-a"]),
-    ).toBe(true);
+    expect(replicationGroupConnectEnvPrefix("SessionCache")).toBe("ELASTICACHE_SESSIONCACHE");
+    expect(cacheClusterConnectEnvPrefix("SessionCache")).toBe("ELASTICACHE_SESSIONCACHE");
+    expect(sameStringSet(["subnet-a", "subnet-b"], ["subnet-b", "subnet-a"])).toBe(true);
     expect(sameStringSet(["subnet-a"], ["subnet-b"])).toBe(false);
   }),
   { timeout: 2_700_000 },
@@ -80,9 +74,7 @@ const withEnv = <A, E = never, R = never>(
   values: Record<string, string>,
   effect: Effect.Effect<A, E, R>,
 ) => {
-  const previous = Object.fromEntries(
-    Object.keys(values).map((key) => [key, process.env[key]]),
-  );
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   return Effect.gen(function* () {
     yield* Effect.sync(() => Object.assign(process.env, values));
     return yield* effect;
@@ -116,13 +108,11 @@ test(
       endpoints: Output.asOutput([{ address: "node.example", port: 11211 }]),
       transitEncryptionEnabled: Output.asOutput(false),
     } as unknown as CacheCluster;
-    const replicationPrefix = replicationGroupConnectEnvPrefix(
-      replicationGroup.LogicalId,
-    );
+    const replicationPrefix = replicationGroupConnectEnvPrefix(replicationGroup.LogicalId);
     const memcachedPrefix = cacheClusterConnectEnvPrefix(memcached.LogicalId);
-    const replicationConnect = yield* ConnectReplicationGroup(
-      replicationGroup,
-    ).pipe(Effect.provide(ConnectReplicationGroupHttp));
+    const replicationConnect = yield* ConnectReplicationGroup(replicationGroup).pipe(
+      Effect.provide(ConnectReplicationGroupHttp),
+    );
     const memcachedConnect = yield* ConnectCacheCluster(memcached).pipe(
       Effect.provide(ConnectCacheClusterHttp),
     );
@@ -160,15 +150,10 @@ test(
 
 const assertSubnetGroupGone = (name: string) =>
   ElastiCache.describeCacheSubnetGroups({ CacheSubnetGroupName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`subnet group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`subnet group '${name}' still exists`))),
     Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -179,10 +164,7 @@ const deleteFinalSnapshot = () =>
     Effect.catchTag("SnapshotNotFoundFault", () => Effect.void),
     Effect.retry({
       while: (error) => error._tag === "InvalidSnapshotStateFault",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -191,15 +173,10 @@ const assertFinalSnapshotAvailable = () =>
     Effect.flatMap((result) =>
       result.Snapshots?.[0]?.SnapshotStatus === "available"
         ? Effect.void
-        : Effect.fail(
-            new Error(`snapshot '${finalSnapshotName}' is not ready`),
-          ),
+        : Effect.fail(new Error(`snapshot '${finalSnapshotName}' is not ready`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("30 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -228,9 +205,9 @@ test.provider(
       const described = yield* ElastiCache.describeCacheSubnetGroups({
         CacheSubnetGroupName: group.subnetGroupName,
       });
-      expect(
-        described.CacheSubnetGroups?.[0]?.CacheSubnetGroupDescription,
-      ).toBe("alchemy cache subnets");
+      expect(described.CacheSubnetGroups?.[0]?.CacheSubnetGroupDescription).toBe(
+        "alchemy cache subnets",
+      );
 
       const { group: updated } = yield* deploy("alchemy cache subnets v2");
       expect(updated.subnetGroupName).toBe(group.subnetGroupName);
@@ -387,18 +364,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const withReplica = yield* ElastiCache.describeReplicationGroups({
         ReplicationGroupId: scaled.replicationGroupId,
       });
-      expect(
-        withReplica.ReplicationGroups?.[0]?.NodeGroups?.[0]?.NodeGroupMembers,
-      ).toHaveLength(2);
+      expect(withReplica.ReplicationGroups?.[0]?.NodeGroups?.[0]?.NodeGroupMembers).toHaveLength(2);
 
       const { cache: reduced } = yield* deploy(0);
       const withoutReplica = yield* ElastiCache.describeReplicationGroups({
         ReplicationGroupId: reduced.replicationGroupId,
       });
-      expect(
-        withoutReplica.ReplicationGroups?.[0]?.NodeGroups?.[0]
-          ?.NodeGroupMembers,
-      ).toHaveLength(1);
+      expect(withoutReplica.ReplicationGroups?.[0]?.NodeGroups?.[0]?.NodeGroupMembers).toHaveLength(
+        1,
+      );
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(reduced.replicationGroupId);

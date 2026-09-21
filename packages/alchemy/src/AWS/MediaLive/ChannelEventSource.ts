@@ -121,12 +121,8 @@ export const consumeChannelEvents = <StreamReq = never, Req = never>(
     props.id ?? "MediaLiveChannelEvents",
     {
       source: ["aws.medialive"],
-      "detail-type": (props.kinds ?? (["state-change"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.channelArns !== undefined
-        ? { resources: [...props.channelArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["state-change"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.channelArns !== undefined ? { resources: [...props.channelArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

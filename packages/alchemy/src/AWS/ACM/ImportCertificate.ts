@@ -8,8 +8,7 @@ import * as Binding from "../../Binding.ts";
  * `CertificateArn` to re-import (rotate) an existing imported certificate;
  * omit it to import a new one.
  */
-export interface ImportCertificateRequest
-  extends acm.ImportCertificateRequest {}
+export interface ImportCertificateRequest extends acm.ImportCertificateRequest {}
 
 /**
  * Runtime binding for `acm:ImportCertificate`.
@@ -44,13 +43,8 @@ export interface ImportCertificate extends Binding.Service<
   () => Effect.Effect<
     (
       request: ImportCertificateRequest,
-    ) => Effect.Effect<
-      acm.ImportCertificateResponse,
-      acm.ImportCertificateError
-    >
+    ) => Effect.Effect<acm.ImportCertificateResponse, acm.ImportCertificateError>
   >
 > {}
 
-export const ImportCertificate = Binding.Service<ImportCertificate>(
-  "AWS.ACM.ImportCertificate",
-);
+export const ImportCertificate = Binding.Service<ImportCertificate>("AWS.ACM.ImportCertificate");

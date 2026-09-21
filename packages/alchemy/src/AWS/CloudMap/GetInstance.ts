@@ -7,10 +7,7 @@ import type { Service } from "./Service.ts";
  * `GetInstance` request with `ServiceId` injected from the bound
  * {@link Service}.
  */
-export interface GetInstanceRequest extends Omit<
-  SD.GetInstanceRequest,
-  "ServiceId"
-> {}
+export interface GetInstanceRequest extends Omit<SD.GetInstanceRequest, "ServiceId"> {}
 
 /**
  * Runtime binding for `servicediscovery:GetInstance` — reads a single
@@ -34,11 +31,7 @@ export interface GetInstance extends Binding.Service<
   <S extends Service>(
     service: S,
   ) => Effect.Effect<
-    (
-      request: GetInstanceRequest,
-    ) => Effect.Effect<SD.GetInstanceResponse, SD.GetInstanceError>
+    (request: GetInstanceRequest) => Effect.Effect<SD.GetInstanceResponse, SD.GetInstanceError>
   >
 > {}
-export const GetInstance = Binding.Service<GetInstance>(
-  "AWS.CloudMap.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("AWS.CloudMap.GetInstance");

@@ -32,10 +32,7 @@ export interface ListAccessPreviews extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAccessPreviewsRequest,
-    ) => Effect.Effect<
-      aa.ListAccessPreviewsResponse,
-      aa.ListAccessPreviewsError
-    >
+    ) => Effect.Effect<aa.ListAccessPreviewsResponse, aa.ListAccessPreviewsError>
   >
 > {}
 

@@ -23,12 +23,7 @@ export interface ListInstanceFleets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListInstanceFleetsInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.ListInstanceFleetsOutput,
-      SVC.ListInstanceFleetsError
-    >
+    ) => Effect.Effect<SVC.ListInstanceFleetsOutput, SVC.ListInstanceFleetsError>
   >
 > {}
-export const ListInstanceFleets = Binding.Service<ListInstanceFleets>(
-  "AWS.EMR.ListInstanceFleets",
-);
+export const ListInstanceFleets = Binding.Service<ListInstanceFleets>("AWS.EMR.ListInstanceFleets");

@@ -6,10 +6,7 @@ import { makeBucketBinding } from "./BucketBinding.ts";
 import type { BucketCredentials } from "./BucketTypes.ts";
 import { makeBucketAccess } from "./Internal/BucketClient.ts";
 import { readBucketOperations, type ReadBucketClient } from "./ReadBucket.ts";
-import {
-  writeBucketOperations,
-  type WriteBucketClient,
-} from "./WriteBucket.ts";
+import { writeBucketOperations, type WriteBucketClient } from "./WriteBucket.ts";
 
 export interface ReadWriteBucket extends Binding.Service<
   ReadWriteBucket,
@@ -21,8 +18,7 @@ export interface ReadWriteBucket extends Binding.Service<
  * Full-access client for a Prisma Object Store bucket: every operation of
  * {@link ReadBucketClient} and {@link WriteBucketClient}.
  */
-export interface ReadWriteBucketClient
-  extends ReadBucketClient, WriteBucketClient {}
+export interface ReadWriteBucketClient extends ReadBucketClient, WriteBucketClient {}
 
 /**
  * Bind a Prisma Object Store {@link Bucket} to a Prisma Compute app, AWS
@@ -63,9 +59,7 @@ export interface ReadWriteBucketClient
  *
  * @binding
  */
-export const ReadWriteBucket = Binding.Service<ReadWriteBucket>(
-  "Prisma.ReadWriteBucket",
-);
+export const ReadWriteBucket = Binding.Service<ReadWriteBucket>("Prisma.ReadWriteBucket");
 
 /**
  * Build a read-write bucket client from a bound bucket key's credentials.

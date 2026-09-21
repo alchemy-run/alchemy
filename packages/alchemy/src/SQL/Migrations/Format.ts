@@ -48,9 +48,7 @@ export interface SqlExecutor {
    * target supports one (pg/mysql), a single batched query on D1 (which has
    * no transactions over HTTP).
    */
-  readonly batch: (
-    statements: ReadonlyArray<string>,
-  ) => Effect.Effect<void, MigrationError>;
+  readonly batch: (statements: ReadonlyArray<string>) => Effect.Effect<void, MigrationError>;
 }
 
 /** A migration failed to read, convert, or apply. */
@@ -63,9 +61,7 @@ export class MigrationError extends Data.TaggedError("MigrationError")<{
  * The migrations directory uses drizzle-kit's pre-v1 layout
  * (`meta/_journal.json`). The fix is upstream: `drizzle-kit up`.
  */
-export class DrizzleV0LayoutError extends Data.TaggedError(
-  "DrizzleV0LayoutError",
-)<{
+export class DrizzleV0LayoutError extends Data.TaggedError("DrizzleV0LayoutError")<{
   dir: string;
   message: string;
 }> {}
@@ -84,6 +80,4 @@ export class MigrationHistoryConflictError extends Data.TaggedError(
   message: string;
 }> {}
 
-export type MigrationApplyError =
-  | MigrationError
-  | MigrationHistoryConflictError;
+export type MigrationApplyError = MigrationError | MigrationHistoryConflictError;

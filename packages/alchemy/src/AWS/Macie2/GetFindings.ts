@@ -30,6 +30,4 @@ export interface GetFindings extends Binding.Service<
     ) => Effect.Effect<macie2.GetFindingsResponse, macie2.GetFindingsError>
   >
 > {}
-export const GetFindings = Binding.Service<GetFindings>(
-  "AWS.Macie2.GetFindings",
-);
+export const GetFindings = Binding.Service<GetFindings>("AWS.Macie2.GetFindings");

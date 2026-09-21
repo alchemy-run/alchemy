@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as IoTWireless from "@/AWS/IoTWireless";
-import * as Lambda from "@/AWS/Lambda";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -12,6 +9,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
+import * as IoTWireless from "@/AWS/IoTWireless";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -34,10 +34,9 @@ export class IoTWirelessTestFunction extends Lambda.Function<Lambda.Function>()(
 // Result queue observed by the test: the DestinationEventSource handler
 // forwards every uplink routed through the destination into this queue so
 // delivery can be verified out-of-band.
-export class ResultQueue extends Context.Service<
-  ResultQueue,
-  { result: AWS.SQS.Queue }
->()("IoTWirelessResultQueue") {}
+export class ResultQueue extends Context.Service<ResultQueue, { result: AWS.SQS.Queue }>()(
+  "IoTWirelessResultQueue",
+) {}
 
 export const ResultQueueLive = Layer.effect(
   ResultQueue,
@@ -126,14 +125,12 @@ export default IoTWirelessTestFunction.make(
     const sendData = yield* IoTWireless.SendDataToWirelessDevice(device);
     const listQueued = yield* IoTWireless.ListQueuedMessages(device);
     const deleteQueued = yield* IoTWireless.DeleteQueuedMessages(device);
-    const getDeviceStats =
-      yield* IoTWireless.GetWirelessDeviceStatistics(device);
+    const getDeviceStats = yield* IoTWireless.GetWirelessDeviceStatistics(device);
     const testDevice = yield* IoTWireless.TestWirelessDevice(device);
     const getPosition = yield* IoTWireless.GetResourcePosition(device);
     const updatePosition = yield* IoTWireless.UpdateResourcePosition(device);
     // gateway-scoped
-    const getGatewayStats =
-      yield* IoTWireless.GetWirelessGatewayStatistics(gateway);
+    const getGatewayStats = yield* IoTWireless.GetWirelessGatewayStatistics(gateway);
     // account-level
     const getEndpoint = yield* IoTWireless.GetServiceEndpoint();
     const estimatePosition = yield* IoTWireless.GetPositionEstimate();
@@ -152,9 +149,7 @@ export default IoTWirelessTestFunction.make(
     );
     const resultQueueUrl = yield* result.queueUrl;
 
-    const decodeGeoJson = (
-      payload: Stream.Stream<Uint8Array, Error> | undefined,
-    ) =>
+    const decodeGeoJson = (payload: Stream.Stream<Uint8Array, Error> | undefined) =>
       payload === undefined
         ? Effect.succeed(undefined)
         : Stream.mkString(Stream.decodeText(payload));
@@ -280,10 +275,9 @@ export default IoTWirelessTestFunction.make(
         // test's post helper retries 5xx through IAM propagation).
         Effect.catchCause((cause) =>
           Effect.succeed(
-            HttpServerResponse.text(
-              `IoTWireless fixture error: ${String(Cause.squash(cause))}`,
-              { status: 500 },
-            ),
+            HttpServerResponse.text(`IoTWireless fixture error: ${String(Cause.squash(cause))}`, {
+              status: 500,
+            }),
           ),
         ),
       ),

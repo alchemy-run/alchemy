@@ -34,10 +34,7 @@ export interface DetectStackDrift extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<cloudformation.DetectStackDriftInput, "StackName">,
-    ) => Effect.Effect<
-      cloudformation.DetectStackDriftOutput,
-      cloudformation.DetectStackDriftError
-    >
+    ) => Effect.Effect<cloudformation.DetectStackDriftOutput, cloudformation.DetectStackDriftError>
   >
 > {}
 export const DetectStackDrift = Binding.Service<DetectStackDrift>(

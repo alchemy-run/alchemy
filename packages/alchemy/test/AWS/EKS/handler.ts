@@ -1,17 +1,15 @@
-import * as EKS from "@/AWS/EKS";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as EKS from "@/AWS/EKS";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class EksTestFunction extends Lambda.Function<Lambda.Function>()(
-  "EksTestFunction",
-) {}
+export class EksTestFunction extends Lambda.Function<Lambda.Function>()("EksTestFunction") {}
 
 /**
  * Account-level EKS bindings fixture. The cluster-scoped bindings
@@ -111,9 +109,7 @@ export default EksTestFunction.make(
           });
           return yield* HttpServerResponse.json({
             addonVersion,
-            hasSchema:
-              typeof configurationSchema === "string" &&
-              configurationSchema.length > 0,
+            hasSchema: typeof configurationSchema === "string" && configurationSchema.length > 0,
           });
         }
 

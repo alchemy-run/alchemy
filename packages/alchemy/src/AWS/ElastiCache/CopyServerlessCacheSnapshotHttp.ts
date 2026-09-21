@@ -12,10 +12,7 @@ export const CopyServerlessCacheSnapshotHttp = Layer.effect(
     tag: "AWS.ElastiCache.CopyServerlessCacheSnapshot",
     operation: elasticache.copyServerlessCacheSnapshot,
     // AddTagsToResource authorizes tag-on-create for the target snapshot.
-    actions: [
-      "elasticache:CopyServerlessCacheSnapshot",
-      "elasticache:AddTagsToResource",
-    ],
+    actions: ["elasticache:CopyServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
     // The action authorizes against both the source and target snapshots,
     // whose names are runtime data.
     resources: [SERVERLESS_SNAPSHOT_ARN_WILDCARD],

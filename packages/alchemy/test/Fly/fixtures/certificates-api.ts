@@ -1,9 +1,9 @@
-import * as Fly from "@/Fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export const CERT_API_PORT = 3000;
 
@@ -40,14 +40,9 @@ export default class CertificatesApi extends Fly.Service<CertificatesApi>()(
         // defect the cause handler below can report.
         const respond = <A, E, R>(make: () => Effect.Effect<A, E, R>) =>
           Effect.suspend(make).pipe(
-            Effect.flatMap((value) =>
-              HttpServerResponse.json({ ok: true, value: value ?? null }),
-            ),
+            Effect.flatMap((value) => HttpServerResponse.json({ ok: true, value: value ?? null })),
             Effect.catchCause((cause) =>
-              HttpServerResponse.json(
-                { ok: false, error: Cause.pretty(cause) },
-                { status: 500 },
-              ),
+              HttpServerResponse.json({ ok: false, error: Cause.pretty(cause) }, { status: 500 }),
             ),
           );
 

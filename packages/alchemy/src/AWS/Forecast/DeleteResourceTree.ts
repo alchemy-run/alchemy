@@ -30,10 +30,7 @@ export interface DeleteResourceTree extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.DeleteResourceTreeRequest,
-    ) => Effect.Effect<
-      forecast.DeleteResourceTreeResponse,
-      forecast.DeleteResourceTreeError
-    >
+    ) => Effect.Effect<forecast.DeleteResourceTreeResponse, forecast.DeleteResourceTreeError>
   >
 > {}
 export const DeleteResourceTree = Binding.Service<DeleteResourceTree>(

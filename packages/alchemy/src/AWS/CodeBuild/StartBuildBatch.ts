@@ -28,6 +28,4 @@ export interface StartBuildBatch extends Binding.Service<
     ) => Effect.Effect<SVC.StartBuildBatchOutput, SVC.StartBuildBatchError>
   >
 > {}
-export const StartBuildBatch = Binding.Service<StartBuildBatch>(
-  "AWS.CodeBuild.StartBuildBatch",
-);
+export const StartBuildBatch = Binding.Service<StartBuildBatch>("AWS.CodeBuild.StartBuildBatch");

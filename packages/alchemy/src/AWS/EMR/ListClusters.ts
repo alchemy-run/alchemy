@@ -25,6 +25,4 @@ export interface ListClusters extends Binding.Service<
     ) => Effect.Effect<SVC.ListClustersOutput, SVC.ListClustersError>
   >
 > {}
-export const ListClusters = Binding.Service<ListClusters>(
-  "AWS.EMR.ListClusters",
-);
+export const ListClusters = Binding.Service<ListClusters>("AWS.EMR.ListClusters");

@@ -20,8 +20,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -145,14 +145,9 @@ const toAttrs = (link: StripeFileLink) => ({
 const isMissingFileLink = isMissingStripeResource;
 
 const getById = (link: string) =>
-  GetFileLink({ link }).pipe(
-    Effect.catchIf(isMissingFileLink, () => Effect.succeed(undefined)),
-  );
+  GetFileLink({ link }).pipe(Effect.catchIf(isMissingFileLink, () => Effect.succeed(undefined)));
 
-const paginateFileLinks = Effect.fn(function* (query: {
-  expired?: boolean;
-  file?: string;
-}) {
+const paginateFileLinks = Effect.fn(function* (query: { expired?: boolean; file?: string }) {
   const links: StripeFileLink[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
@@ -176,10 +171,7 @@ const paginateFileLinks = Effect.fn(function* (query: {
 
 const listUnexpired = () => paginateFileLinks({ expired: false });
 
-const findByAlchemyId = Effect.fn(function* (
-  id: string,
-  links: ReadonlyArray<StripeFileLink>,
-) {
+const findByAlchemyId = Effect.fn(function* (id: string, links: ReadonlyArray<StripeFileLink>) {
   const matches: StripeFileLink[] = [];
   for (const link of links) {
     if (link.expired) continue;
@@ -191,11 +183,7 @@ const findByAlchemyId = Effect.fn(function* (
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-  file?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string; file?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined && !byId.expired) return byId;
@@ -240,9 +228,7 @@ export const FileLinkProvider = () =>
       });
       if (existing === undefined || existing.expired) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -279,9 +265,7 @@ export const FileLinkProvider = () =>
         current = yield* CreateFileLink({
           file: news.file,
           metadata,
-          ...(desiredExpiresAt !== undefined
-            ? { expires_at: desiredExpiresAt }
-            : {}),
+          ...(desiredExpiresAt !== undefined ? { expires_at: desiredExpiresAt } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-file-link-${instanceId}`,
@@ -303,16 +287,13 @@ export const FileLinkProvider = () =>
         link: current.id,
         ...(expiresAtChanged
           ? {
-              expires_at:
-                desiredExpiresAt !== undefined ? desiredExpiresAt : "",
+              expires_at: desiredExpiresAt !== undefined ? desiredExpiresAt : "",
             }
           : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

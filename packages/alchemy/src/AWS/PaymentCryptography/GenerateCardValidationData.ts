@@ -45,7 +45,6 @@ export interface GenerateCardValidationData extends Binding.Service<
   >
 > {}
 
-export const GenerateCardValidationData =
-  Binding.Service<GenerateCardValidationData>(
-    "AWS.PaymentCryptography.GenerateCardValidationData",
-  );
+export const GenerateCardValidationData = Binding.Service<GenerateCardValidationData>(
+  "AWS.PaymentCryptography.GenerateCardValidationData",
+);

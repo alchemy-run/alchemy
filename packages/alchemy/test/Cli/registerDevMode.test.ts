@@ -1,9 +1,9 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 // Pins buildless node dev end to end: the register-dev-mode hooks must
@@ -22,9 +22,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
   () =>
     Effect.gen(function* () {
       const packageDir = fileURLToPath(new URL("../..", import.meta.url));
-      const exampleDir = fileURLToPath(
-        new URL("../../../../examples/aws-dev", import.meta.url),
-      );
+      const exampleDir = fileURLToPath(new URL("../../../../examples/aws-dev", import.meta.url));
       const runtimeTsx = fileURLToPath(
         new URL("../../src/Cli/components/view/Runtime.tsx", import.meta.url),
       );
@@ -43,13 +41,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
       `;
       const handle = yield* ChildProcess.make(
         nodePath!,
-        [
-          "--import",
-          `${packageDir}/bin/register-dev-mode.js`,
-          "--input-type=module",
-          "-e",
-          script,
-        ],
+        ["--import", `${packageDir}/bin/register-dev-mode.js`, "--input-type=module", "-e", script],
         {
           cwd: exampleDir,
           env: {

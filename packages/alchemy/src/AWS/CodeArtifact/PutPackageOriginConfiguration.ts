@@ -48,7 +48,6 @@ export interface PutPackageOriginConfiguration extends Binding.Service<
   >
 > {}
 
-export const PutPackageOriginConfiguration =
-  Binding.Service<PutPackageOriginConfiguration>(
-    "AWS.CodeArtifact.PutPackageOriginConfiguration",
-  );
+export const PutPackageOriginConfiguration = Binding.Service<PutPackageOriginConfiguration>(
+  "AWS.CodeArtifact.PutPackageOriginConfiguration",
+);

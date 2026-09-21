@@ -27,13 +27,9 @@ export interface DeactivateContactChannel extends Binding.Service<
   (
     channel: ContactChannel,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      ssm.DeactivateContactChannelResult,
-      ssm.DeactivateContactChannelError
-    >
+    () => Effect.Effect<ssm.DeactivateContactChannelResult, ssm.DeactivateContactChannelError>
   >
 > {}
-export const DeactivateContactChannel =
-  Binding.Service<DeactivateContactChannel>(
-    "AWS.SSMContacts.DeactivateContactChannel",
-  );
+export const DeactivateContactChannel = Binding.Service<DeactivateContactChannel>(
+  "AWS.SSMContacts.DeactivateContactChannel",
+);

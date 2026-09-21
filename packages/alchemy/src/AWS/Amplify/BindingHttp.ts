@@ -13,12 +13,7 @@ import type { App } from "./App.ts";
  *
  * NOT exported from `index.ts` — internal scaffolding only.
  */
-export interface AmplifyHttpBindingOptions<
-  I extends { appId: string },
-  A,
-  E,
-  R,
-> {
+export interface AmplifyHttpBindingOptions<I extends { appId: string }, A, E, R> {
   /** Capability name, e.g. `"StartJob"` — used for the bind sid and span name. */
   name: string;
   /** The distilled Amplify operation implementing the capability. */
@@ -46,28 +41,26 @@ export const makeAmplifyHttpBinding = <I extends { appId: string }, A, E, R>(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Amplify.${options.name}(${app}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: options.actions,
-                  Resource: options.resources(app),
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Amplify.${options.name}(${app}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: options.actions,
+                Resource: options.resources(app),
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.Amplify.${options.name}(${app.LogicalId})`)(
-        function* (request: Omit<I, "appId">) {
-          // Omit<I, "appId"> + the injected appId reconstructs I; TS cannot
-          // prove that for a generic I, hence the assertion.
-          return yield* operation({
-            ...request,
-            appId: yield* AppId,
-          } as unknown as I);
-        },
-      );
+      return Effect.fn(`AWS.Amplify.${options.name}(${app.LogicalId})`)(function* (
+        request: Omit<I, "appId">,
+      ) {
+        // Omit<I, "appId"> + the injected appId reconstructs I; TS cannot
+        // prove that for a generic I, hence the assertion.
+        return yield* operation({
+          ...request,
+          appId: yield* AppId,
+        } as unknown as I);
+      });
     });
   });

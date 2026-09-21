@@ -1,16 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import CfnTestFunctionLive, {
-  CfnTestFunction,
-  FIXTURE_EXPORT_NAME,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import CfnTestFunctionLive, { CfnTestFunction, FIXTURE_EXPORT_NAME } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CloudFormationBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(120),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(120)]);
 
 let baseUrl: string;
 
@@ -40,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -76,9 +65,7 @@ describe.sequential("CloudFormation Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/describe`;
 
-      yield* Effect.logInfo(
-        `CFN test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CFN test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -155,9 +142,9 @@ describe.sequential("CloudFormation Bindings", () => {
       "starts drift detection and polls it to a terminal status",
       (_stack) =>
         Effect.gen(function* () {
-          const started = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/drift`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const started = (yield* send(HttpClientRequest.post(`${baseUrl}/drift`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
 
           expect(started.detectionId).toBeTruthy();
 
@@ -165,9 +152,7 @@ describe.sequential("CloudFormation Bindings", () => {
           // DETECTION_IN_PROGRESS. DETECTION_FAILED is acceptable — the
           // fixture role has no ssm read access, and either terminal status
           // proves the cloudformation:* IAM + binding wiring.
-          const status = yield* getJson(
-            `${baseUrl}/drift-status?id=${started.detectionId}`,
-          ).pipe(
+          const status = yield* getJson(`${baseUrl}/drift-status?id=${started.detectionId}`).pipe(
             Effect.flatMap((body: any) =>
               body.detectionStatus === "DETECTION_IN_PROGRESS"
                 ? Effect.fail(new DriftInProgress())
@@ -175,10 +160,7 @@ describe.sequential("CloudFormation Bindings", () => {
             ),
             Effect.retry({
               while: (e) => e._tag === "DriftInProgress",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
 
@@ -208,8 +190,7 @@ describe.sequential("CloudFormation Bindings", () => {
         // Exports are eventually consistent for fresh stacks.
         const body = yield* fetchUntil(
           getJson(`${baseUrl}/exports`),
-          (b) =>
-            Array.isArray(b?.names) && b.names.includes(FIXTURE_EXPORT_NAME),
+          (b) => Array.isArray(b?.names) && b.names.includes(FIXTURE_EXPORT_NAME),
         );
 
         expect((body as any).names).toContain(FIXTURE_EXPORT_NAME);
@@ -218,19 +199,15 @@ describe.sequential("CloudFormation Bindings", () => {
   });
 
   describe("ListImports", () => {
-    test.provider(
-      "fails with a typed error for an un-imported export",
-      (_stack) =>
-        Effect.gen(function* () {
-          const body = (yield* getJson(
-            `${baseUrl}/imports?name=${FIXTURE_EXPORT_NAME}`,
-          )) as any;
+    test.provider("fails with a typed error for an un-imported export", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* getJson(`${baseUrl}/imports?name=${FIXTURE_EXPORT_NAME}`)) as any;
 
-          // Nothing imports the fixture export — CloudFormation must reject
-          // with a TYPED tag (an untyped catch-all would crash into a 500).
-          expect(typeof body.errorTag).toBe("string");
-          expect(body.errorTag.length).toBeGreaterThan(0);
-        }),
+        // Nothing imports the fixture export — CloudFormation must reject
+        // with a TYPED tag (an untyped catch-all would crash into a 500).
+        expect(typeof body.errorTag).toBe("string");
+        expect(body.errorTag.length).toBeGreaterThan(0);
+      }),
     );
   });
 
@@ -238,10 +215,7 @@ describe.sequential("CloudFormation Bindings", () => {
     test.provider("validates the fixture template", (_stack) =>
       Effect.gen(function* () {
         const body = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/validate`),
-            {},
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/validate`), {}),
         ).pipe(Effect.flatMap((r) => r.json))) as any;
 
         expect(Array.isArray(body.parameters)).toBe(true);
@@ -252,10 +226,9 @@ describe.sequential("CloudFormation Bindings", () => {
     test.provider("rejects an invalid template with a typed error", (_stack) =>
       Effect.gen(function* () {
         const body = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/validate`),
-            { template: '{"Resources": {}}' },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/validate`), {
+            template: '{"Resources": {}}',
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as any;
 
         expect(typeof body.errorTag).toBe("string");
@@ -267,9 +240,9 @@ describe.sequential("CloudFormation Bindings", () => {
   describe("SignalResource", () => {
     test.provider("delivers a signal for a stack resource", (_stack) =>
       Effect.gen(function* () {
-        const body = (yield* send(
-          HttpClientRequest.post(`${baseUrl}/signal`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const body = (yield* send(HttpClientRequest.post(`${baseUrl}/signal`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
 
         // CloudFormation accepts (and ignores) signals for resources that
         // are not waiting on a CreationPolicy — a 200 proves the
@@ -292,15 +265,10 @@ const fetchUntil = <A>(
 ) =>
   fetch.pipe(
     Effect.flatMap((body) =>
-      ready(body)
-        ? Effect.succeed(body as A)
-        : Effect.fail(new BindingNotConsistent()),
+      ready(body) ? Effect.succeed(body as A) : Effect.fail(new BindingNotConsistent()),
     ),
     Effect.retry({
       while: (e) => e._tag === "BindingNotConsistent",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );

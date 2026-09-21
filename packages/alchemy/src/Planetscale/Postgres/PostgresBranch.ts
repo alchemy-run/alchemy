@@ -1,16 +1,9 @@
 import { Resource } from "../../Resource.ts";
-import {
-  type BaseBranchAttributes,
-  type BaseBranchProps,
-  makeBranchProvider,
-} from "../Branch.ts";
+import { type BaseBranchAttributes, type BaseBranchProps, makeBranchProvider } from "../Branch.ts";
 import type { Providers } from "../Providers.ts";
 import type { PostgresClusterSize } from "./PostgresClusterSize.ts";
 import type { PostgresDatabase } from "./PostgresDatabase.ts";
-import {
-  runPostgresImports,
-  runPostgresMigrations,
-} from "./PostgresMigrations.ts";
+import { runPostgresImports, runPostgresMigrations } from "./PostgresMigrations.ts";
 
 /**
  * Properties for creating or updating a {@link PostgresBranch}.
@@ -89,9 +82,7 @@ export type PostgresBranch = Resource<
 >;
 
 /** @resource */
-export const PostgresBranch = Resource<PostgresBranch>(
-  "Planetscale.PostgresBranch",
-);
+export const PostgresBranch = Resource<PostgresBranch>("Planetscale.PostgresBranch");
 
 export const PostgresBranchProvider = () =>
   makeBranchProvider({

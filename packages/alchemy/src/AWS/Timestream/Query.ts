@@ -39,10 +39,7 @@ export interface Query extends Binding.Service<
   ) => Effect.Effect<
     (
       request: QueryRequest,
-    ) => Effect.Effect<
-      TSQ.QueryResponse,
-      TSQ.QueryError | TSQ.DescribeEndpointsError
-    >
+    ) => Effect.Effect<TSQ.QueryResponse, TSQ.QueryError | TSQ.DescribeEndpointsError>
   >
 > {}
 

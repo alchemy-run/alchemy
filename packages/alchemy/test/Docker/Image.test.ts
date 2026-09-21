@@ -1,10 +1,10 @@
-import * as Docker from "@/Docker";
-import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Docker from "@/Docker";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -19,10 +19,7 @@ describe("Docker.Image", { concurrent: false }, () => {
       const root = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-docker-context-plan-",
       });
-      yield* fs.writeFileString(
-        path.join(root, "Dockerfile"),
-        "FROM scratch\n",
-      );
+      yield* fs.writeFileString(path.join(root, "Dockerfile"), "FROM scratch\n");
 
       const base = Docker.Image("context-image", {
         tag: "latest",
@@ -43,29 +40,27 @@ describe("Docker.Image", { concurrent: false }, () => {
     }),
   );
 
-  test.provider(
-    "builds a tiny Dockerfile with an auto-generated name",
-    (stack) =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-image-",
-        });
-        yield* fs.writeFileString(
-          path.join(root, "Dockerfile"),
-          "FROM scratch\nLABEL alchemy.test=true\n",
-        );
-        // No explicit name: the engine auto-generates the physical name.
-        const image = yield* stack.deploy(
-          Docker.Image("tiny-image", {
-            tag: "latest",
-            build: { context: root },
-          }),
-        );
-        expect(image.imageRef.endsWith(":latest")).toBe(true);
-        expect(image.imageId.length).toBeGreaterThan(0);
-      }),
+  test.provider("builds a tiny Dockerfile with an auto-generated name", (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-image-",
+      });
+      yield* fs.writeFileString(
+        path.join(root, "Dockerfile"),
+        "FROM scratch\nLABEL alchemy.test=true\n",
+      );
+      // No explicit name: the engine auto-generates the physical name.
+      const image = yield* stack.deploy(
+        Docker.Image("tiny-image", {
+          tag: "latest",
+          build: { context: root },
+        }),
+      );
+      expect(image.imageRef.endsWith(":latest")).toBe(true);
+      expect(image.imageId.length).toBeGreaterThan(0);
+    }),
   );
 
   test.provider("updates when the build context changes", (stack) =>
@@ -75,10 +70,7 @@ describe("Docker.Image", { concurrent: false }, () => {
       const root = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-docker-canary-",
       });
-      yield* fs.writeFileString(
-        path.join(root, "Dockerfile"),
-        "FROM scratch\n",
-      );
+      yield* fs.writeFileString(path.join(root, "Dockerfile"), "FROM scratch\n");
       yield* fs.writeFileString(
         path.join(root, "Dockerfile"),
         "FROM scratch\nLABEL alchemy.test=1\n",

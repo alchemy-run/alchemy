@@ -9,9 +9,7 @@ import { diffTags } from "../../Tags.ts";
  * instance register/deregister, service update) terminates with `FAIL` or
  * fails to reach a terminal status within the polling budget.
  */
-export class CloudMapOperationFailed extends Data.TaggedError(
-  "CloudMapOperationFailed",
-)<{
+export class CloudMapOperationFailed extends Data.TaggedError("CloudMapOperationFailed")<{
   readonly operationId: string;
   readonly status: string | undefined;
   readonly errorCode: string | undefined;
@@ -35,8 +33,7 @@ const untilTerminalStatus = <E, R>(
     Effect.map(self, (response) => response.Operation),
     {
       schedule: Schedule.spaced("2 seconds"),
-      until: (operation) =>
-        operation?.Status === "SUCCESS" || operation?.Status === "FAIL",
+      until: (operation) => operation?.Status === "SUCCESS" || operation?.Status === "FAIL",
       times: 60,
     },
   );
@@ -47,24 +44,22 @@ const untilTerminalStatus = <E, R>(
  * that status is `SUCCESS`. Returns the terminal `Operation` (whose
  * `Targets` map carries the created NAMESPACE/SERVICE/INSTANCE ids).
  */
-export const awaitOperation = Effect.fn("AWS.CloudMap.awaitOperation")(
-  function* (operationId: string) {
-    const operation = yield* untilTerminalStatus(
-      sd.getOperation({ OperationId: operationId }),
+export const awaitOperation = Effect.fn("AWS.CloudMap.awaitOperation")(function* (
+  operationId: string,
+) {
+  const operation = yield* untilTerminalStatus(sd.getOperation({ OperationId: operationId }));
+  if (operation?.Status !== "SUCCESS") {
+    return yield* Effect.fail(
+      new CloudMapOperationFailed({
+        operationId,
+        status: operation?.Status,
+        errorCode: operation?.ErrorCode,
+        errorMessage: operation?.ErrorMessage,
+      }),
     );
-    if (operation?.Status !== "SUCCESS") {
-      return yield* Effect.fail(
-        new CloudMapOperationFailed({
-          operationId,
-          status: operation?.Status,
-          errorCode: operation?.ErrorCode,
-          errorMessage: operation?.ErrorMessage,
-        }),
-      );
-    }
-    return operation;
-  },
-);
+  }
+  return operation;
+});
 
 /**
  * Bounded retry through transient `ResourceInUse` dependency violations —
@@ -89,9 +84,9 @@ export const retryWhileResourceInUse = <A, E extends { _tag: string }, R>(
  * tolerated; `DeleteService`'s own `ResourceInUse` retry rides out the
  * remaining visibility window.
  */
-export const deregisterAllInstances = Effect.fn(
-  "AWS.CloudMap.deregisterAllInstances",
-)(function* (serviceId: string) {
+export const deregisterAllInstances = Effect.fn("AWS.CloudMap.deregisterAllInstances")(function* (
+  serviceId: string,
+) {
   const operationIds: string[] = [];
   let nextToken: string | undefined;
   do {
@@ -126,9 +121,10 @@ export const deregisterAllInstances = Effect.fn(
 export type NamespaceKind = "DNS_PRIVATE" | "DNS_PUBLIC" | "HTTP";
 
 /** Find a namespace of the given type by exact name via the list API. */
-export const findNamespaceByName = Effect.fn(
-  "AWS.CloudMap.findNamespaceByName",
-)(function* (type: NamespaceKind, name: string) {
+export const findNamespaceByName = Effect.fn("AWS.CloudMap.findNamespaceByName")(function* (
+  type: NamespaceKind,
+  name: string,
+) {
   const response = yield* sd.listNamespaces({
     Filters: [
       { Name: "TYPE", Values: [type], Condition: "EQ" },
@@ -142,33 +138,31 @@ export const findNamespaceByName = Effect.fn(
  * Observe a namespace: by cached id when we have one (tolerating out-of-band
  * deletion), falling back to an exact-name list lookup.
  */
-export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(
-  function* (
-    type: NamespaceKind,
-    name: string,
-    namespaceId: string | undefined,
-  ) {
-    if (namespaceId !== undefined) {
-      const byId = yield* sd.getNamespace({ Id: namespaceId }).pipe(
-        Effect.map((r) => r.Namespace),
-        Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
-      );
-      if (byId !== undefined) {
-        return byId;
-      }
-    }
-    const summary = yield* findNamespaceByName(type, name);
-    if (summary?.Id === undefined) {
-      return undefined;
-    }
-    // hydrate the summary into the full Namespace shape (keeps one return
-    // type; also tolerates a delete race between list and get)
-    return yield* sd.getNamespace({ Id: summary.Id }).pipe(
+export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(function* (
+  type: NamespaceKind,
+  name: string,
+  namespaceId: string | undefined,
+) {
+  if (namespaceId !== undefined) {
+    const byId = yield* sd.getNamespace({ Id: namespaceId }).pipe(
       Effect.map((r) => r.Namespace),
       Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
     );
-  },
-);
+    if (byId !== undefined) {
+      return byId;
+    }
+  }
+  const summary = yield* findNamespaceByName(type, name);
+  if (summary?.Id === undefined) {
+    return undefined;
+  }
+  // hydrate the summary into the full Namespace shape (keeps one return
+  // type; also tolerates a delete race between list and get)
+  return yield* sd.getNamespace({ Id: summary.Id }).pipe(
+    Effect.map((r) => r.Namespace),
+    Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
+  );
+});
 
 /**
  * Ensure a namespace exists: submit `create`, await its async operation, and
@@ -205,11 +199,7 @@ type CreateNamespaceError =
 export const ensureNamespace = <R>(
   type: NamespaceKind,
   name: string,
-  create: Effect.Effect<
-    { OperationId?: string | undefined },
-    CreateNamespaceError,
-    R
-  >,
+  create: Effect.Effect<{ OperationId?: string | undefined }, CreateNamespaceError, R>,
 ) =>
   retryWhileNamespaceNotVisible(
     Effect.gen(function* () {
@@ -254,17 +244,15 @@ export const ensureNamespace = <R>(
  * Fetch the observed Cloud Map tags for a resource ARN as a plain record,
  * tolerating a missing resource (race during create/delete) as `{}`.
  */
-export const fetchObservedTags = Effect.fn("AWS.CloudMap.fetchObservedTags")(
-  function* (resourceArn: string) {
-    const tags = yield* sd
-      .listTagsForResource({ ResourceARN: resourceArn })
-      .pipe(
-        Effect.map((response) => response.Tags ?? []),
-        Effect.catch(() => Effect.succeed([] as sd.Tag[])),
-      );
-    return Object.fromEntries(tags.map((tag) => [tag.Key, tag.Value]));
-  },
-);
+export const fetchObservedTags = Effect.fn("AWS.CloudMap.fetchObservedTags")(function* (
+  resourceArn: string,
+) {
+  const tags = yield* sd.listTagsForResource({ ResourceARN: resourceArn }).pipe(
+    Effect.map((response) => response.Tags ?? []),
+    Effect.catch(() => Effect.succeed([] as sd.Tag[])),
+  );
+  return Object.fromEntries(tags.map((tag) => [tag.Key, tag.Value]));
+});
 
 /**
  * Sync a Cloud Map resource's tags: diff the OBSERVED cloud tags against the

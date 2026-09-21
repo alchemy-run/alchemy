@@ -32,16 +32,10 @@ export class Authentication extends HttpApiMiddleware.Service<
         Effect.gen(function* () {
           const session = yield* auth.getSession().pipe(
             Effect.mapError(() => new AuthenticationUnavailable()),
-            Effect.catchDefect(() =>
-              Effect.fail(new AuthenticationUnavailable()),
-            ),
+            Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
           );
           if (session === null) return yield* new Unauthorized();
-          return yield* Effect.provideService(
-            httpEffect,
-            CurrentUser,
-            session.user,
-          );
+          return yield* Effect.provideService(httpEffect, CurrentUser, session.user);
         }).pipe(
           // HttpApi does not carry Alchemy's runtime marker; the Worker owns request scope.
           Effect.provide(RuntimeContext.phantom),

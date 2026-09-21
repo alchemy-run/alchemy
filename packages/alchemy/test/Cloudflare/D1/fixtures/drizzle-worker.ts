@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/index.ts";
-import * as SQL from "@/SQL/D1.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Drizzle from "@/Drizzle/index.ts";
+import * as SQL from "@/SQL/D1.ts";
 import { DrizzleDb } from "./drizzle-database.ts";
 import { Posts, relations, Users } from "./drizzle-schema.ts";
 
@@ -61,11 +61,7 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
         }
 
         // GET /users/:id — relational query (RQB v2) joining posts.
-        if (
-          request.method === "GET" &&
-          segments[0] === "users" &&
-          segments.length === 2
-        ) {
+        if (request.method === "GET" && segments[0] === "users" && segments.length === 2) {
           const id = Number(segments[1]);
           const user = yield* db.query.Users.findFirst({
             where: { id },
@@ -80,10 +76,7 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
           return yield* HttpServerResponse.json({ rows });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
           HttpServerResponse.json({ error: String(cause) }, { status: 500 }),

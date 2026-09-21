@@ -83,9 +83,7 @@ export const consumeSigningJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.signer"],
       "detail-type": ["Signer Job Status Change"],
-      ...(props.statuses !== undefined
-        ? { detail: { status: [...props.statuses] } }
-        : {}),
+      ...(props.statuses !== undefined ? { detail: { status: [...props.statuses] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

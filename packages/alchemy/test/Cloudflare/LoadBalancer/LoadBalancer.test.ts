@@ -1,23 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Load Balancing is a paid add-on subscription. The testing zone does not
 // have it: load balancer creation is rejected with "load balancing not
@@ -35,9 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -57,18 +51,13 @@ const getLoadBalancer = (zoneId: string, loadBalancerId: string) =>
 
 const expectGone = (zoneId: string, loadBalancerId: string) =>
   getLoadBalancer(zoneId, loadBalancerId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "LoadBalancerNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "LoadBalancerNotDeleted" } as const)),
     // A missing load balancer surfaces as the typed `LoadBalancerNotFound`
     // (Cloudflare error code 1001) — that's the success condition here.
     Effect.catchTag("LoadBalancerNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LoadBalancerNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -191,9 +180,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.LoadBalancer,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.LoadBalancer);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -242,14 +229,10 @@ test.provider.skipIf(!lbEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.LoadBalancer,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.LoadBalancer);
       const all = yield* provider.list();
 
-      const row = all.find(
-        (lb) => lb.loadBalancerId === deployed.lb.loadBalancerId,
-      );
+      const row = all.find((lb) => lb.loadBalancerId === deployed.lb.loadBalancerId);
       expect(row).toBeDefined();
       expect(row!.zoneId).toEqual(zoneId);
       expect(row!.name).toEqual(NAME_LIFECYCLE);

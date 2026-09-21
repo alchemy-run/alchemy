@@ -1,14 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { Counter, CounterLive } from "./object.ts";
 
 // Tag
-export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
-  "WorkerA",
-) {}
+export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()("WorkerA") {}
 
 // Layer
 export default WorkerA.make(

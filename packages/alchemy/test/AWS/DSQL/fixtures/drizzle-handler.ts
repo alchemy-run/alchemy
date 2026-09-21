@@ -1,12 +1,12 @@
-import * as DSQL from "@/AWS/DSQL";
-import * as Lambda from "@/AWS/Lambda";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { eq, sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DSQL from "@/AWS/DSQL";
+import * as Lambda from "@/AWS/Lambda";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { Db } from "./db.ts";
 import { Widgets } from "./schema.ts";
 
@@ -38,9 +38,7 @@ export default DsqlDrizzleFunction.make(
     // `proxyChain` defers the connect to the first query, so the pool (and
     // the IAM token backing it) is built inside the invocation, per
     // execution — a fresh token can never outlive its pool.
-    const db = yield* Drizzle.Postgres(
-      conn.pipe(Effect.map((info) => info.url)),
-    );
+    const db = yield* Drizzle.Postgres(conn.pipe(Effect.map((info) => info.url)));
 
     return {
       fetch: Effect.gen(function* () {

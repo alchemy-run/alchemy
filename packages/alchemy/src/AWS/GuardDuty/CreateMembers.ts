@@ -32,12 +32,7 @@ export interface CreateMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.CreateMembersRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.CreateMembersResponse,
-      guardduty.CreateMembersError
-    >
+    ) => Effect.Effect<guardduty.CreateMembersResponse, guardduty.CreateMembersError>
   >
 > {}
-export const CreateMembers = Binding.Service<CreateMembers>(
-  "AWS.GuardDuty.CreateMembers",
-);
+export const CreateMembers = Binding.Service<CreateMembers>("AWS.GuardDuty.CreateMembers");
