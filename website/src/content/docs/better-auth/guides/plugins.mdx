@@ -3,122 +3,131 @@ title: Plugins
 description: Add a Better Auth server plugin, pair its browser client, and preserve inferred types.
 ---
 
-The wrapper passes Better Auth plugins through and exposes their server endpoints as Effects. This example adds username sign-in to the Cloudflare + D1 tutorial from [Part 2](/better-auth/tutorial/part-2) and [Part 3](/better-auth/tutorial/part-3).
-
-## Add the server plugin
-
-Import the plugin in `src/auth.ts`:
+## Add the server plugin without losing inference
 
 ```typescript
+// worker.ts
+import {
+  BetterAuth,
+  type BetterAuthProps,
+  type Session,
+} from "@alchemy.run/better-auth";
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Cloudflare from "alchemy/Cloudflare";
 import { username } from "better-auth/plugins";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export const authOptions = {
+  basePath: "/api/auth",
+  emailAndPassword: { enabled: true },
+  plugins: [username()],
+} satisfies BetterAuthProps;
+
+export type AuthSession = Session<typeof authOptions>;
+
+const AuthDb = Cloudflare.D1.Database("AuthDb");
+
+export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
+  "AuthApi",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const auth = yield* BetterAuth(authOptions);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = request.url.split("?")[0];
+        if (path === "/api/auth" || path.startsWith("/api/auth/")) {
+          return yield* auth.fetch;
+        }
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(CloudflareD1(AuthDb))),
+) {}
 ```
 
-Add it to the existing `authOptions` object, keeping `satisfies BetterAuthProps`:
+The username plugin adds endpoints and user fields while preserving email/password sign-in. `satisfies BetterAuthProps` retains the specific plugin type; a broad `authOptions: BetterAuthProps` annotation would erase that inference.
 
-```diff lang="typescript"
- export const authOptions = {
-   basePath: "/api/auth",
-   emailAndPassword: { enabled: true },
-+  plugins: [username()],
- } satisfies BetterAuthProps;
+`AuthSession` derives the server session shape from these options. The wrapper's `auth.Infer` member is type-only metadata, not a runtime value to read.
+
+## Deploy the plugin schema
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import AuthApi from "./worker.ts";
+
+export default Alchemy.Stack(
+  "UsernameAuth",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* AuthApi;
+    return { url: api.url };
+  }),
+);
 ```
 
-Keep the existing email/password configuration, URL configuration, and `Auth` class. The inferred service now includes the plugin's endpoints and user fields.
-
-## Apply the schema change
-
-Deploy the same tutorial stack and stage:
+Use Bun, matching `alchemy` and `@alchemy.run/better-auth` releases, Better Auth 1.7.5, Effect 4, and `kysely`, with Cloudflare credentials configured. This stack supplies D1, automatic migrations, and a stable signing secret; keep its local state.
 
 ```sh
 bunx alchemy deploy
 ```
 
-With `CloudflareD1(AuthDb)` and automatic migrations enabled, the plugin's schema change updates the migration action. If automatic migrations are disabled, apply the schema before enabling the new client; see [migrations](/better-auth/guides/migrations).
-
-Existing users do not automatically receive usernames. The plugin fields are optional, so the UI must handle users who have not chosen one.
+The plugin changes the migration fingerprint, so its missing schema is applied before the updated Worker deploys. Existing users do not automatically receive usernames; when automatic migrations are disabled, apply the schema with your migration tooling before enabling the client.
 
 ## Pair the browser plugin
 
-Replace `src/client.ts` with:
-
 ```typescript
+// username.ts — browser only
 import { createAuthClient } from "better-auth/client";
 import { usernameClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
   plugins: [usernameClient()],
 });
-```
 
-The client still uses the page's origin. The server plugin implements behavior; the client plugin adds typed calls and session-field inference.
+type ClientSession = typeof authClient.$Infer.Session;
 
-## Choose a username
+export async function signUp(name: string, email: string, password: string) {
+  const { data, error } = await authClient.signUp.email({ name, email, password });
+  if (error) throw error;
+  return data;
+}
 
-Create `src/username.ts` beside the browser client:
-
-```typescript
-import { authClient } from "./client.ts";
+export async function signInWithEmail(email: string, password: string) {
+  const { data, error } = await authClient.signIn.email({ email, password });
+  if (error) throw error;
+  return data;
+}
 
 export async function setUsername(username: string) {
   const { error } = await authClient.updateUser({ username });
   if (error) throw error;
 }
-```
 
-Call this after signing in with the tutorial's email/password flow. The default plugin normalizes usernames to lowercase and validates their length, allowed characters, and uniqueness.
-
-## Sign in with the username
-
-Append to `src/username.ts`:
-
-```typescript
 export async function signInWithUsername(username: string, password: string) {
-  const { data, error } = await authClient.signIn.username({
-    username,
-    password,
-  });
+  const { data, error } = await authClient.signIn.username({ username, password });
   if (error) throw error;
   return data;
 }
-```
-
-This is another sign-in method for the existing user, not a second user or a replacement for their password.
-
-## Infer browser session fields
-
-Append to `src/username.ts`:
-
-```typescript
-type ClientSession = typeof authClient.$Infer.Session;
 
 export function sessionLabel(session: ClientSession) {
   return session.user.username ?? session.user.name;
 }
 ```
 
-Do not annotate `authOptions` as the broad `BetterAuthProps` type or erase the plugin array's type. Those changes lose the inference the wrapper preserves.
+Use this module in a frontend served on the API's origin; frontend hosting is separate from the API-only Worker above. Its inputs come from user forms, and failures remain errors rather than successful anonymous results.
 
-## Infer server session fields
+Sign up or sign in with email before calling `setUsername`. The default plugin normalizes usernames to lowercase and validates length, allowed characters, and uniqueness; users without a username still have their existing sign-in method.
 
-In a server-only module beside `src/auth.ts`:
+## Keep cookie-writing calls on auth routes
 
-```typescript
-import type { Session } from "@alchemy.run/better-auth";
-import type { authOptions } from "./auth.ts";
+The wrapper also exposes `auth.api.signInUsername` as an Effect, but returning its data does not deliver response cookies to a browser. The client calls the mounted `auth.fetch` route, which preserves status, redirects, and `Set-Cookie` headers.
 
-export type AuthSession = Session<typeof authOptions>;
-```
+A username is a display and sign-in field, not an authorization role. Enforce permissions on the server using the stable user ID and authoritative application data.
 
-This derives the session from the exported options without importing server configuration into the browser. The wrapper's `auth.Infer` member is type-only metadata, not a runtime value to read.
-
-## Keep cookie-writing calls on the auth routes
-
-The server wrapper exposes `auth.api.signInUsername(...)` as an Effect after adding this plugin. For browser sign-in, use `authClient.signIn.username()` so the mounted `auth.fetch` route forwards the response cookies.
-
-A server call that returns session data does not by itself deliver those cookies to the browser. See [HTTP API middleware](/better-auth/guides/http-api-middleware) for response-preserving integration.
-
-## Keep permissions server-side
-
-A username is a display and sign-in field, not an authorization role. Continue to use the `CurrentUser` service and server-side checks from [Part 4](/better-auth/tutorial/part-4) and [authorization](/better-auth/guides/authorization).
-
-Other plugins have different client, schema, mail-delivery, and storage requirements. Verify those requirements for the installed plugin before adding it; the wrapper does not supply those services automatically.
+Other plugins may need client plugins, schema changes, email delivery, or atomic storage. Those are external requirements of the selected plugin, not services supplied automatically by the wrapper.

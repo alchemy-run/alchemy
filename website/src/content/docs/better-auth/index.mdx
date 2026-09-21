@@ -8,6 +8,8 @@ Build sign-in and protected APIs with [Better Auth](https://better-auth.com), us
 ## Start the tutorial
 
 ```typescript
+import { BetterAuth } from "@alchemy.run/better-auth";
+
 const makeAuth = BetterAuth({
   basePath: "/api/auth",
   emailAndPassword: { enabled: true },

@@ -3,46 +3,40 @@ title: Troubleshooting
 description: Diagnose Better Auth configuration, session, migration, and provider failures without exposing credentials.
 ---
 
-Start with the failing HTTP status and literal error code. Do not treat a deployment failure, unavailable database, or failed session lookup as a signed-out user.
-
-## Check the public route
-
-For the local tutorial, leave `bunx alchemy dev` running and paste its printed origin into another shell, without a trailing slash:
+## Check the public auth route
 
 ```sh
 read -r BASE_URL
-```
-
-For a deployed application, use its actual origin instead, such as `https://auth.example.com` from [Part 6](/better-auth/tutorial/part-6). Check the same route in either environment:
-
-```sh
+BASE_URL=${BASE_URL%/}
 curl --silent --show-error --output /dev/null \
   --write-out '%{http_code}\n' \
-  "$BASE_URL/api/health"
+  "$BASE_URL/api/auth/get-session"
 ```
 
-A failed health request is not yet an authentication diagnosis. Check routing, deployment, and hostname configuration before changing auth options.
+Enter the origin of the existing application you are diagnosing, or the origin printed by its running `alchemy dev` process. These commands assume its Better Auth `basePath` is `/api/auth`; substitute the actual mount if yours differs.
 
-## Check the route mount
+An anonymous session lookup normally returns `200` with a `null` body, not an authentication denial. A `404` suggests a missing route or mismatched mount; a failed connection suggests routing, deployment, or hostname problems before authentication.
 
-The tutorial routes exactly `/api/auth` and its child paths to `auth.fetch`; other paths go to the Effect HTTP API. If `/api/health` works but `/api/auth/get-session` returns `404`, compare the mount with `authOptions.basePath` in [Part 2](/better-auth/tutorial/part-2).
+Keep Better Auth's sign-in and callback routes outside application authentication middleware. Mount `auth.fetch` on exactly the configured base path and its child paths, preserving its complete responses rather than rebuilding them from data.
 
-Do not put the application `Authentication` middleware in front of `/api/auth`. Sign-in and OAuth callbacks must work before a session exists.
-
-## Interpret session responses
-
-On `/api/auth/get-session`, a successful `null` response means there is no valid session. On the protected `/api/me` endpoint, the tutorial maps that result to typed `Unauthorized` with HTTP `401`.
-
-`AuthenticationUnavailable` with HTTP `503` means session resolution failed. Preserve that distinction using [HTTP API middleware](/better-auth/guides/http-api-middleware), including its defect-handling boundary where needed.
-
-## Inspect errors without dumping credentials
-
-The wrapper's `BetterAuthApiError.status` is a string such as `"UNAUTHORIZED"`; `statusCode` is the numeric HTTP code. Match the numeric status and literal `body.code`, not a guess based on the message alone.
-
-In the request Effect in `src/middleware.ts`, add this diagnostic to the session lookup. It logs only a fixed label, status, and code before preserving the tutorial's `503` mapping:
+## Log only safe diagnostic fields
 
 ```typescript
-const session = yield* auth.getSession().pipe(
+// session-diagnostics.ts
+import type {
+  BetterAuthInstance,
+  BetterAuthProps,
+} from "@alchemy.run/better-auth";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class AuthenticationUnavailable extends Schema.TaggedError<AuthenticationUnavailable>()(
+  "AuthenticationUnavailable", {}, { httpApiStatus: 503 },
+) {}
+
+export const getSessionWithDiagnostics = <O extends BetterAuthProps>(
+  auth: BetterAuthInstance<O>,
+) => auth.getSession().pipe(
   Effect.tapError((error) =>
     Effect.logWarning("Session lookup failed", {
       statusCode: error.statusCode,
@@ -54,92 +48,73 @@ const session = yield* auth.getSession().pipe(
 );
 ```
 
-The tutorial already imports `Effect` and declares `AuthenticationUnavailable` in that file. Do not log the whole error: its headers and cause may contain cookies or sensitive backend details.
+This complete helper takes the instance returned by `BetterAuth` as its argument and returns a request-scoped Effect requiring the ambient HTTP request and Alchemy runtime context. Call it within a host request, not during layer construction; it intentionally does not create a second auth instance or database.
 
-## Inspect the deployed logs
+The helper preserves `null` as anonymous and maps lookup failures to a typed `503` error. A native HTTP API must declare `AuthenticationUnavailable` in its endpoint or middleware error schema; map only a successful `null` lookup to the application's `401` response.
 
-For a deployment that uses the `prod` stage and `prod` profile:
+`BetterAuthApiError.status` is a string such as `"UNAUTHORIZED"`; `statusCode` is numeric. Inspect that number and the literal `body.code`, not message guesses or the entire error, whose headers and cause may contain credentials.
 
-```sh
-bunx alchemy logs --stage prod --profile prod --since 10m --limit 50
-```
+Keep the catch around session resolution, not the downstream application handler. Otherwise a database or business-logic defect unrelated to authentication could be mislabeled as an authentication outage.
 
-Use the same stage, profile, and stack config as the deployment you are investigating. Review logs locally and redact credentials, cookie headers, request bodies, and personal data before sharing excerpts.
-
-## Check the selected profile
+## Inspect the matching deployment
 
 ```sh
-bunx alchemy profile current
-bunx alchemy profile show --profile prod
+read -r STAGE
+read -r PROFILE
+bunx alchemy logs --stage "$STAGE" --profile "$PROFILE" --since 10m --limit 50
+bunx alchemy profile show --profile "$PROFILE"
 ```
 
-Profile output redacts credentials, but still contains account metadata. A profile named `prod` selects cloud authentication; it does not load production application settings or select the `prod` stage.
+Enter the existing deployment's stage and profile, and run from its stack directory with the same config selection. Review output locally: profile output redacts credentials but still contains account metadata, and application logs may contain personal data.
 
-## Check configuration binding
+A profile selects cloud authentication, not an application URL, stage, or env file. An explicit env file must be supplied again on subsequent deployments; it is not remembered merely because the previous command used it.
 
-Resolve an optional `AUTH_BASE_URL` override and any `Config.Redacted(...)` values while constructing the Auth layer. Resolving them only inside `fetch` does not register deploy-time bindings.
+## Check construction-time configuration
 
-If using an explicit env file, supply it again on subsequent deployments:
+Resolve `Config` values while constructing the Auth layer or Worker implementation, before returning `fetch`. Resolving provider credentials or an optional `AUTH_BASE_URL` only inside a request does not register deploy-time bindings.
 
-```sh
-bunx alchemy deploy --stage prod --profile prod --env-file .env.production
-```
+When `AUTH_BASE_URL` is absent, request-origin detection allows Alchemy to select an available local port. An explicit override must match the actual origin and must be updated if that local origin changes.
 
-An explicit `--env-file` takes precedence over process values for keys in that file; without it, process values take precedence over `.env`. See [configuration](/better-auth/guides/configuration) for the complete service example.
+`baseURL` does not provision DNS or attach a Worker domain. An explicit `--env-file` takes precedence over process values for keys in that file; without it, process values take precedence over `.env`.
 
 ## Resolve origin and callback errors
 
-For `INVALID_ORIGIN`, compare the incoming origin with `baseURL` and `trustedOrigins`. For `INVALID_CALLBACK_URL` or a provider redirect mismatch, compare the configured callback URLs exactly, including scheme, hostname, port, and path.
-
-Derive the GitHub callback from the actual origin rather than guessing a local URL. Paste the origin printed by Alchemy, or the deployed origin for production:
-
 ```sh
-read -r BASE_URL
 printf '%s/api/auth/callback/github\n' "$BASE_URL"
 ```
 
-Register that exact result with the matching OAuth application. If the local origin changes, update the callback and any explicit `AUTH_BASE_URL` override.
+For GitHub, register this result as the authorization callback in the OAuth App whose credentials the server uses. The `BASE_URL` read above must be that environment's actual origin, not a guessed local port.
 
-The post-login `callbackURL` is a different URL: it is where the user goes after authentication. Follow [GitHub sign-in](/better-auth/sign-in-providers/github) rather than disabling CSRF or origin validation.
+For `INVALID_ORIGIN`, compare the incoming origin with `baseURL` and `trustedOrigins`. For `INVALID_CALLBACK_URL` or a provider redirect mismatch, compare scheme, hostname, port, and path exactly.
 
-## Diagnose a missing session cookie
+The browser's post-login `callbackURL` is a separate destination after authentication. Use the intended exact origins and matching provider credentials rather than disabling CSRF or origin checks.
 
-Use the [cookie-jar test](/better-auth/guides/testing) to check sign-in, session lookup, and `/api/me` against the same origin. Keep the hostname consistent: `localhost` and `127.0.0.1` are different cookie hosts.
+## Diagnose missing or stale cookies
 
-For browser sign-in, call the client against the mounted `auth.fetch` route. Calling a server-side `auth.api.signInEmail()` and returning only its data does not forward `Set-Cookie` to the browser.
+Use a real cookie jar or browser against the mounted auth route, keeping the hostname consistent: `localhost` and `127.0.0.1` are different cookie hosts. Calling server-side `auth.api.signInEmail` and returning only its data does not forward `Set-Cookie` to the browser.
 
-## Diagnose sessions lost after deployment
+A valid cookie cache can outlive server-side revocation; bypass it on sensitive authorization paths or leave caching disabled. A cleared jar proves browser sign-out, not invalidation of copied credentials, especially because sign-out may still clear cookies after a deletion failure.
 
-For a new application, the wrapper's signing secret is automatic and stable across deployments of the same resource. Check for a changed stage, auth `id`, resource namespace, lost state, replaced database, or changed cookie configuration before rotating anything.
+If sessions disappear after deployment, check the stage, auth `id`, resource namespace, local state, database identity, and cookie configuration. The wrapper's generated signing secret is stable for the same resource; rotating it is not a fix for a database error.
 
-If importing an existing installation, preserve its signing secret and follow [migrations](/better-auth/guides/migrations). A new secret can invalidate cookies and affect encrypted data; it is not a routine fix for a database error.
-
-## Diagnose stale access after revocation
-
-A valid cookie cache can outlive server-side session revocation. Bypass it on sensitive server authorization paths or leave cookie caching disabled, as described in [sessions](/better-auth/guides/sessions).
-
-A cleared cookie jar proves browser sign-out, not that every previously copied credential has been invalidated. Better Auth's sign-out handler can still clear cookies when session deletion fails, so investigate storage errors separately.
+When moving an existing installation, preserve its signing identity and plan the database migration. A new secret can invalidate cookies and affect encrypted data even if the user rows were copied correctly.
 
 ## Resolve migration failures
 
-`BetterAuthMigrationError` reports a deploy-time migration failure; inspect its underlying cause locally to distinguish connection, permissions, and schema problems. Do not set `migrate: false` merely to hide the failure and deploy against a missing schema.
+`BetterAuthMigrationError` identifies a deploy-time failure; inspect its cause locally to distinguish connectivity, permissions, and unsafe schema changes. Do not set `migrate: false` merely to deploy against a missing schema or repeatedly force an unsafe change.
 
-An error saying the database layer does not support automatic migrations is literal: use a supported layer or manage the schema explicitly. Follow [migrations](/better-auth/guides/migrations) and the selected [database guide](/better-auth/databases); do not repeatedly retry an unsafe schema change.
+A layer without automatic migration support needs application-owned tooling or a supported database layer. Back up and rehearse existing-data changes, and remember that rolling back code does not undo schema changes.
 
-## Resolve plugin type or schema failures
+## Resolve plugin and account errors
 
-Keep `authOptions` declared with `satisfies BetterAuthProps`, and pair server plugins with their client plugins where required. If a new field is missing in the database, confirm that the plugin's schema change was applied to the database actually bound to this Worker.
+Use `satisfies BetterAuthProps` to preserve plugin inference, and pair server plugins with their browser plugins where required. A missing database field means checking whether the schema change reached the database actually bound to this host, not adding a type cast.
 
-Review the [plugin guide](/better-auth/guides/plugins) before adding casts or treating a missing endpoint as an authentication error.
+`SESSION_NOT_FRESH` requires signing in again; `FAILED_TO_UNLINK_LAST_ACCOUNT` protects the remaining sign-in method. For `LINKING_DIFFERENT_EMAILS_NOT_ALLOWED` or `email_does_not_match`, verify the identities rather than weakening verification or merging users by email.
 
-## Resolve linking and freshness errors
-
-`SESSION_NOT_FRESH` requires signing in again for the sensitive operation. `FAILED_TO_UNLINK_LAST_ACCOUNT` protects the user's remaining sign-in method; do not remove that protection just to make the request succeed.
-
-For `LINKING_DIFFERENT_EMAILS_NOT_ALLOWED` or the OAuth callback error `email_does_not_match`, verify the identities being linked. Follow [account linking](/better-auth/guides/account-linking), not an email-based user merge.
+In Better Auth 1.7.5, unlink using the linked account row's `id` as the request's `accountId`. Its provider-side account identifier is not interchangeable with that local ID.
 
 ## Resolve secondary-storage failures
 
-The error `Secondary-storage rate limiting requires SecondaryStorage.increment.` means the configured store lacks the required atomic operation. A non-atomic read/update/write implementation is not a fix.
+`Secondary-storage rate limiting requires SecondaryStorage.increment.` means the store lacks a required atomic operation. A non-atomic read/update/write sequence cannot fix it.
 
-Check all five operations, seconds-based TTLs, and construction-time layer provisioning in [secondary storage](/better-auth/guides/secondary-storage). Do not convert storage outages to missing keys.
+Verify all five operations: reads, expiring writes, idempotent deletion, atomic read-and-delete, and fixed-window increments. Supply the layer during Better Auth construction, use TTLs in seconds, and report outages as failures rather than missing keys.

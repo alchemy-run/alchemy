@@ -5,6 +5,17 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { Database, type DatabaseInput, type Provider } from "./Database.ts";
 
+type DrizzleDatabase = Parameters<typeof drizzleAdapter>[0];
+type DrizzleDatabaseEffect = Effect.Effect<
+  DrizzleDatabase,
+  never,
+  RuntimeContext | Scope.Scope
+>;
+
+const isDatabaseEffect = (
+  value: DrizzleDatabase | DrizzleDatabaseEffect,
+): value is DrizzleDatabaseEffect => Effect.isEffect(value);
+
 export interface DrizzleLayerConfig {
   /** The SQL dialect of the underlying drizzle database. */
   readonly provider: "pg" | "mysql" | "sqlite";
@@ -65,13 +76,7 @@ export interface DrizzleLayerConfig {
  * @product Drizzle
  */
 export const Drizzle = (
-  db:
-    | Record<string, unknown>
-    | Effect.Effect<
-        Record<string, unknown>,
-        never,
-        RuntimeContext | Scope.Scope
-      >,
+  db: DrizzleDatabase | DrizzleDatabaseEffect,
   config: DrizzleLayerConfig,
 ): Layer.Layer<Database> =>
   Layer.sync(Database, () => ({
@@ -79,7 +84,7 @@ export const Drizzle = (
       ? "postgres"
       : config.provider) as Provider,
     runtime: Effect.gen(function* () {
-      const database = Effect.isEffect(db) ? yield* db : db;
+      const database = isDatabaseEffect(db) ? yield* db : db;
       return drizzleAdapter(database, {
         provider: config.provider,
         ...(config.schema !== undefined ? { schema: config.schema } : {}),

@@ -70,6 +70,39 @@ describe("BetterAuth (drizzle)", () => {
       ),
   );
 
+  it.live("accepts a request-scoped Postgres client", () =>
+    Effect.gen(function* () {
+      const { drizzle } = yield* Effect.promise(
+        () => import("drizzle-orm/node-postgres"),
+      );
+      const { Pool } = yield* Effect.promise(() => import("pg"));
+      let acquired = 0;
+      let released = 0;
+      const database = Effect.gen(function* () {
+        const client = yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            acquired++;
+            return new Pool();
+          }),
+          (pool) =>
+            Effect.promise(() => pool.end()).pipe(
+              Effect.tap(() => Effect.sync(() => released++)),
+            ),
+        );
+        return yield* Effect.sync(() => drizzle({ client }));
+      });
+      const service = yield* Database.pipe(
+        Effect.provide(Drizzle(database, { provider: "pg" })),
+      );
+      expect(acquired).toBe(0);
+      expect(typeof (yield* service.runtime.pipe(Effect.scoped))).toBe(
+        "function",
+      );
+      expect(acquired).toBe(1);
+      expect(released).toBe(1);
+    }).pipe(Effect.provide(RuntimeContext.phantom)),
+  );
+
   it.live("wraps an existing drizzle db via the official adapter", () =>
     Effect.gen(function* () {
       const { drizzle } = yield* Effect.promise(
@@ -82,7 +115,7 @@ describe("BetterAuth (drizzle)", () => {
 
       const service = yield* Database.pipe(
         Effect.provide(
-          Drizzle(db as unknown as Record<string, unknown>, {
+          Drizzle(db, {
             provider: "sqlite",
           }),
         ),

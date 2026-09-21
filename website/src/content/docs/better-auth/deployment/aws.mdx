@@ -1,62 +1,39 @@
 ---
 title: Deploy to AWS
-description: Deploy the Better Auth service behind a Lambda Function URL with Neon or Aurora.
+description: Deploy a standalone Better Auth endpoint behind a Lambda Function URL with Neon.
 ---
 
-Reuse the `src/auth.ts` service from [Part 1](/better-auth/tutorial/part-1). This example replaces the Worker with a Lambda Function URL and supplies Neon as the database.
+Deploy an email/password authentication API on Lambda with a Neon database. The complete function and stack below run independently of the tutorial application.
 
-## Install the serverless driver
+## Create the project
 
 ```sh
+mkdir lambda-auth
+cd lambda-auth
+bun init -y
+mkdir src
 bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless
 ```
 
-Configure AWS and Neon through [Alchemy profiles](/environments/profiles). You supply the account credentials and Neon API key; the resources below do not generate them.
+Configure AWS and Neon using [Alchemy profiles](/environments/profiles). Supply your own AWS credentials and Neon API key; Alchemy does not create account credentials.
 
-## Declare the Neon project
+## Define the function
 
-Create `src/database.ts`:
-
-```typescript
-import * as Neon from "alchemy/Neon";
-
-export const AuthDb = Neon.Project("AuthDb");
-```
-
-The project creates the database and exposes `connectionUri`. To stay entirely on AWS, use the [Aurora Data API example](/better-auth/databases/aurora-data-api) instead.
-
-## Supply the database layer
-
-Create `src/auth-database.ts`:
-
-```typescript
+```typescript title="src/function.ts"
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { Auth } from "./auth.ts";
-import { AuthDb } from "./database.ts";
-
-const AuthDatabase = Layer.unwrap(
-  Effect.map(AuthDb, (db) => NeonDatabase(db.connectionUri)),
-);
-
-export const AuthLive = Auth.layer.pipe(Layer.provide(AuthDatabase));
-```
-
-The URL binds into the Lambda environment automatically. The Neon pool opens per invocation and closes when that invocation settles.
-
-## Serve the auth routes
-
-Create `src/function.ts` for an auth-only endpoint. The tutorial's browser assets and application API are not included in this minimal Lambda host.
-
-```typescript
 import * as AWS from "alchemy/AWS";
+import * as Neon from "alchemy/Neon";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Auth } from "./auth.ts";
-import { AuthLive } from "./auth-database.ts";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+
+const database = Neon.Project("AuthDb");
+const DatabaseLive = Layer.unwrap(
+  Effect.map(database, (project) => NeonDatabase(project.connectionUri)),
+);
 
 export default class AuthApi extends AWS.Lambda.Function<AuthApi>()(
   "AuthApi",
@@ -67,28 +44,22 @@ export default class AuthApi extends AWS.Lambda.Function<AuthApi>()(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const auth = yield* Auth;
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const pathname = new URL(request.url, "http://lambda").pathname;
-        if (pathname === "/api/auth" || pathname.startsWith("/api/auth/")) {
-          return yield* auth.fetch;
-        }
-        return HttpServerResponse.text("Not found", { status: 404 });
-      }),
-    };
-  }).pipe(Effect.provide(AuthLive)),
+    const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      baseURL: Option.getOrUndefined(baseURL),
+      emailAndPassword: { enabled: true },
+    });
+    return { fetch: auth.fetch };
+  }).pipe(Effect.provide(DatabaseLive)),
 ) {}
 ```
 
-`functionUrl: true` creates a public endpoint; Better Auth handles application authentication, not AWS IAM request signing. Parse the pathname because Lambda requests may contain absolute URLs.
+`functionUrl: true` creates a public endpoint; Better Auth handles application authentication instead of AWS IAM request signing. The database URI binds into Lambda automatically, and the Neon pool opens and closes per invocation.
 
-## Declare the stack
+## Define the stack
 
-Create `alchemy.run.ts`:
-
-```typescript
+```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Neon from "alchemy/Neon";
@@ -97,7 +68,7 @@ import * as Layer from "effect/Layer";
 import AuthApi from "./src/function.ts";
 
 export default Alchemy.Stack(
-  "BetterAuthLambda",
+  "LambdaAuth",
   {
     providers: Layer.mergeAll(AWS.providers(), Neon.providers()),
     state: Alchemy.localState(),
@@ -109,81 +80,75 @@ export default Alchemy.Stack(
 );
 ```
 
-The Lambda attribute is `functionUrl`, not the Worker's `url`. Preserve and protect the local state directory so future deployments retain resource identities and the generated signing secret.
+Preserve and protect `.alchemy`: this local state directory tracks resource identities and the generated signing secret. Keep the stack name and state backend stable across deployments.
 
-## Deploy the function
+## Exclude local files from Git
+
+Create `.gitignore`:
+
+```gitignore
+node_modules/
+.alchemy/
+.env
+.env.*
+!.env.example
+```
+
+## Deploy
 
 ```sh
 bunx alchemy deploy --stage prod
 ```
 
-The deploy-time migration applies the auth schema before updating the function. The Lambda receives the stable signing secret and database connection binding; Neon needs no `pg` installation in the artifact.
+Alchemy creates the Neon project, applies the auth schema, and deploys Lambda with a stable signing secret. Neon uses its serverless driver, so the function does not need `pg` or a VPC connection to the database.
 
-## Set the public auth origin
+## Set the production origin
 
-In `src/auth.ts`, use the returned Function URL origin or a custom domain already routed to it:
-
-```diff lang="typescript"
- export const authOptions = {
-+  baseURL: "https://auth.example.com",
-   basePath: "/api/auth",
-```
-
-This diff targets Part 1's `authOptions`; after [Part 6](/better-auth/tutorial/part-6), set `AUTH_BASE_URL` in the deploying environment instead. That tutorial's `makeAuth` reads the origin from configuration.
-
-Replace the example origin with your own and redeploy. Setting `baseURL` does not create DNS or an HTTPS proxy, and a proxy must preserve the `/api/auth` path.
-
-## Trust the frontend origin
-
-If the browser application uses a different origin, add it to `authOptions`:
-
-```diff lang="typescript"
-   basePath: "/api/auth",
-+  trustedOrigins: ["https://app.example.com"],
-```
-
-Configure credentialed CORS on the Function URL or your proxy as well, and use `credentials: "include"` on the browser client. Keep allowed origins explicit rather than using a wildcard with credentials.
-
-## Register OAuth callbacks
-
-Register the externally visible callback with your OAuth provider:
-
-```text
-https://auth.example.com/api/auth/callback/github
-```
-
-[Part 5](/better-auth/tutorial/part-5) supplies GitHub OAuth configuration without changing the Auth service's consumers. OAuth client IDs, client secrets, and email-provider credentials are external inputs, unlike Alchemy's generated signing secret.
-
-## Use Aurora instead
-
-Replace `src/database.ts` and `src/auth-database.ts` with the [Aurora Data API modules](/better-auth/databases/aurora-data-api), then install the optional peers:
+Paste the printed Function URL origin without a trailing slash, then redeploy:
 
 ```sh
-bun add kysely @distilled.cloud/aws
+read -r AUTH_BASE_URL
+export AUTH_BASE_URL
+bunx alchemy deploy --stage prod
 ```
 
-Remove the Neon provider from `alchemy.run.ts`:
+The function above reads this optional configuration during construction so Alchemy discovers the binding. If a custom domain already routes to the function, use its origin instead; this setting does not create DNS or a proxy.
 
-```diff lang="typescript"
--import * as Neon from "alchemy/Neon";
--import * as Layer from "effect/Layer";
+## Verify sessions
 
--    providers: Layer.mergeAll(AWS.providers(), Neon.providers()),
-+    providers: AWS.providers(),
-```
-
-The Aurora cluster requires its own network, but the Data API keeps the Lambda outside that VPC. A bare cluster also needs an explicit credentials-secret resource; the Aurora composite supplies it automatically.
-
-## Verify sessions after deployment
-
-Set `AUTH_ORIGIN` to your deployed origin:
+Paste the externally visible origin:
 
 ```sh
+read -r AUTH_ORIGIN
 curl -i "$AUTH_ORIGIN/api/auth/get-session"
 ```
 
-Use [Part 3](/better-auth/tutorial/part-3) for browser sign-in and [Part 4](/better-auth/tutorial/part-4) for protected API middleware. These need the application routes from [Part 2](/better-auth/tutorial/part-2), which the auth-only Lambda above does not include.
+An anonymous request returns `null`. Create a disposable account and retain its cookie:
 
-Add GitHub with [Part 5](/better-auth/tutorial/part-5), then follow the production-origin and verification steps in [Part 6](/better-auth/tutorial/part-6). Its Worker-specific domain and asset settings do not apply to Lambda.
+```sh
+curl --fail-with-body -c cookies.txt \
+  -H 'Content-Type: application/json' \
+  -H "Origin: $AUTH_ORIGIN" \
+  -d '{"name":"Auth Check","email":"auth-check@example.com","password":"local-check-password-123"}' \
+  "$AUTH_ORIGIN/api/auth/sign-up/email"
+curl --fail-with-body -b cookies.txt "$AUTH_ORIGIN/api/auth/get-session"
+```
 
-See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and [upgrading from 1.6](/better-auth/upgrades/from-1-6-to-1-7) before changing an existing deployment.
+The second response contains the new user and session. Sign out and confirm that the original cookie no longer authenticates:
+
+```sh
+curl --fail-with-body -b cookies.txt \
+  -H 'Content-Type: application/json' \
+  -H "Origin: $AUTH_ORIGIN" -d '{}' \
+  "$AUTH_ORIGIN/api/auth/sign-out"
+curl --fail-with-body -b cookies.txt "$AUTH_ORIGIN/api/auth/get-session"
+rm cookies.txt
+```
+
+Use a disposable stage for this check; sign-out leaves the account in its database. Treat the cookie file and session response as credentials.
+
+## Add application features
+
+For an AWS-only database, the [Aurora Data API guide](/better-auth/databases/aurora-data-api) provides a separate complete deployment. For browser authentication and protected routes, see [email/password](/better-auth/sign-in-providers/email-password) and [HTTP API middleware](/better-auth/guides/http-api-middleware).
+
+A frontend on another origin needs explicit [trusted origins and credentialed CORS](/better-auth/guides/configuration). Read [migrations](/better-auth/guides/migrations) and the [1.6 upgrade guide](/better-auth/upgrades/from-1-6-to-1-7) before changing an existing installation.

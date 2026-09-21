@@ -1,83 +1,48 @@
 ---
 title: Choose a database
-description: Choose a Better Auth database layer and supply it from your Worker or Lambda.
+description: Choose a Better Auth database layer with a complete, standalone integration example.
 sidebar:
   order: 0
 ---
 
-Keep authentication options in `src/auth.ts`; choose the database in the host. These pages reuse the `Auth` service from the [tutorial](/better-auth/tutorial/part-1).
+Each database page includes its own auth configuration, database wiring, and host setup. You can start with any page without copying files from the tutorial.
 
-## Choose a layer
+## Worker databases
 
-| Database | Host | Layer | Automatic schema migrations |
-| --- | --- | --- | --- |
-| [Cloudflare D1](/better-auth/databases/cloudflare-d1) | Worker | `CloudflareD1` | Yes, over the D1 API |
-| [Hyperdrive](/better-auth/databases/cloudflare-hyperdrive) | Worker | `CloudflareHyperdrive` | With an explicit origin URL |
-| [Neon](/better-auth/databases/neon) | Worker or Lambda | `Neon` | With a deploy-resolvable URL |
-| [Aurora PostgreSQL](/better-auth/databases/aurora-data-api) | Lambda | `AuroraDataApi` | Yes, over the Data API |
-| [Postgres](/better-auth/databases/postgres) | Host with TCP access | `Postgres` | With a deploy-resolvable URL |
-| [MySQL](/better-auth/databases/mysql) | Host with TCP access | `MySQL` | With a deploy-resolvable URL |
-| [Drizzle](/better-auth/databases/drizzle) | Depends on your driver | `Drizzle` | No; use your migration workflow |
-| [SQLite](/better-auth/databases/sqlite) | Bun process | `SQLite` | Against the same local file |
-| [Memory](/better-auth/databases/memory) | Disposable development or tests | `Memory` | Not needed |
+[Cloudflare D1](/better-auth/databases/cloudflare-d1) uses a native Worker binding and migrates through D1's API. It also supports local development, but not plugins requiring interactive transactions.
 
-## Install the integration
+[Hyperdrive](/better-auth/databases/cloudflare-hyperdrive) provides pooled access to an existing Postgres or MySQL origin. Auth connections must disable caching, and automatic migrations require a separate origin URL.
 
-```sh
-bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely
-```
+[Neon](/better-auth/databases/neon) connects over WebSockets from Workers or Lambda. Its example provisions the database and uses the same connection URI for automatic migrations.
 
-`kysely` is the optional SQL peer used by the D1 example below and the other direct SQL layers. Install the driver listed on your database's page; Drizzle and Memory use their own adapters instead.
+## Lambda and TCP databases
 
-## Supply the database from the host
+[Aurora Data API](/better-auth/databases/aurora-data-api) connects Lambda to Aurora PostgreSQL over HTTPS with IAM bindings. The example creates the database network and cluster without putting the Lambda in that VPC.
 
-Reuse the tutorial's `AuthDb` from `src/database.ts` and compose the service in `src/auth-database.ts`:
+[Postgres](/better-auth/databases/postgres) and [MySQL](/better-auth/databases/mysql) connect to existing databases through request-scoped driver pools. Both examples include a Lambda host, driver installation, and optional separate migration credentials.
 
-```typescript
-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Layer from "effect/Layer";
-import { Auth } from "./auth.ts";
-import { AuthDb } from "./database.ts";
+## Application-owned schemas
 
-export const AuthLive = Auth.layer.pipe(
-  Layer.provide(CloudflareD1(AuthDb)),
-);
-```
+[Drizzle](/better-auth/databases/drizzle) uses the Relations v2 adapter with a raw Drizzle database. The page includes CLI configuration, schema generation, migration commands, and a Lambda host; your application owns the migration history.
 
-## Replace the host pipeline
+## Local and disposable storage
 
-In the [Part 1 Worker](/better-auth/tutorial/part-1), replace the inline database wiring in `src/worker.ts`:
+[SQLite](/better-auth/databases/sqlite) uses Bun's built-in SQLite driver and a local file. It is not compatible with a Worker, including one running under `alchemy dev`, or a standard Node.js Lambda.
 
-```diff lang="typescript"
--import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
--import * as Layer from "effect/Layer";
--import { AuthDb } from "./database.ts";
-+import { AuthLive } from "./auth-database.ts";
+[Memory](/better-auth/databases/memory) needs no optional driver and retains records only within one process or isolate. Use it for tests and disposable development, not production authentication.
 
-   }).pipe(
--    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
-+    Effect.provide(AuthLive),
-   ),
-```
+## Provisioning and connections
 
-Changing this database layer leaves `Auth`, `auth.fetch`, and the `/api/auth` routes unchanged.
+`Cloudflare.D1.Database`, `Neon.Project`, and `AWS.RDS.Aurora` create infrastructure. Better Auth's database layers connect to it; providing an existing URL does not create the database, credentials, or network access.
 
-## Distinguish provisioning from connecting
+Each page shows its required peer installations. Resolve external credentials during host construction so Alchemy binds them into the host, rather than discovering them only inside a request.
 
-`Cloudflare.D1.Database`, `Neon.Project`, and `AWS.RDS.Aurora` create infrastructure. The Better Auth layers connect to that infrastructure; passing an existing Postgres or MySQL URL does not create a database or credentials.
+## Runtime lifetime
 
-Resource connection-string Outputs are bound into the host environment. Resolve external credentials during host construction using [Effect configuration](/environments/secrets), not only inside the request handler.
+Hosts construct their layers once, while Better Auth acquires its database on the first auth operation in each request or invocation. Disposable pools close when that execution settles; do not open Worker sockets or pools at module scope.
 
-## Keep connections request-scoped
+## Secrets and schema changes
 
-The host builds the service layer once, but Better Auth acquires its database on the first auth operation in each request or invocation. Connection pools close when that execution settles; never create a Worker socket or pool at module scope or during layer construction.
+In an Alchemy host, omitting `secret` provisions and binds a stable signing secret automatically. Preserve it when migrating an existing application, and protect the stack state that stores it.
 
-## Keep the signing secret stable
-
-Omitting `secret` provisions a stable `Alchemy.Random` signing secret and binds it to the host. Preserve the secret when migrating an existing application; see [configuration](/better-auth/guides/configuration).
-
-## Apply the schema
-
-Supported layers run additive migrations during deployment, before the new host is deployed; they do not move records between databases. Read [migrations](/better-auth/guides/migrations) before changing schema or opting out with `migrate: false`.
-
-For existing users, follow [the 1.6 to 1.7 upgrade guide](/better-auth/upgrades/from-1-6-to-1-7). Full layer signatures are in the [generated Better Auth reference](/providers/betterauth/cloudflared1).
+Supported layers run additive migrations during deployment, before updating the host; they do not move records between databases. See [migrations](/better-auth/guides/migrations), [configuration](/better-auth/guides/configuration), and the [1.6 to 1.7 upgrade guide](/better-auth/upgrades/from-1-6-to-1-7) before changing an existing application.

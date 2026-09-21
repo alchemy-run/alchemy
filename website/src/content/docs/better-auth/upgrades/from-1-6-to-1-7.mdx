@@ -52,7 +52,9 @@ For [SQL layers with automatic migrations](/better-auth/guides/migrations#per-la
 the wrapper stays unchanged:
 
 ```typescript
-const auth = yield* BetterAuth({
+import { BetterAuth } from "@alchemy.run/better-auth";
+
+export const makeAuth = BetterAuth({
   emailAndPassword: { enabled: true },
 });
 ```
@@ -97,6 +99,10 @@ With automatic migrations disabled, apply your schema before deploying too.
 Generic OAuth now uses the social APIs:
 
 ```typescript
+import { createAuthClient } from "better-auth/client";
+import { genericOAuthClient } from "better-auth/client/plugins";
+
+const authClient = createAuthClient({ plugins: [genericOAuthClient()] });
 authClient.signIn.social({ provider: "my-provider" });
 authClient.linkSocial({ provider: "my-provider" });
 ```

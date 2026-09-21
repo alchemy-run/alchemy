@@ -1,164 +1,281 @@
 ---
 title: Microsoft sign-in
-description: Register an Entra web application, select its tenant boundary, and configure Microsoft sign-in.
+description: Register an Entra web application and run Microsoft sign-in on a standalone Worker with D1.
 ---
 
-Use the [shared Auth service and browser client](/better-auth/sign-in-providers).
-The built-in Better Auth 1.7.5 provider key is `microsoft`, including for Microsoft Entra ID.
-
-## Register the application
-
-Open the [Microsoft Entra admin center](https://entra.microsoft.com/) in the intended
-directory, then select **Entra ID → App registrations → New registration**.
-
-Enter a name and choose **Supported account types** deliberately.
-For a company-only application, select the single-tenant option and record the directory's tenant ID.
-
-For a multitenant product, choose organizational accounts, organizational plus personal
-accounts, or personal accounts according to the users you intend to admit.
-
-Register the app, then copy **Application (client) ID** and **Directory (tenant) ID**
-from **Overview**; follow Microsoft's [app registration guide](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
-
-## Register Web callbacks
-
-Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
-setup below; Alchemy allocates an available port and prints the URL.
-
-Open **Authentication → Add a platform → Web**.
-In another terminal, run `read` and paste the printed local origin without a trailing slash or path:
+## Create the project
 
 ```sh
-read -r AUTH_BASE_URL
-printf '%s/api/auth/callback/microsoft\n' "$AUTH_BASE_URL"
+mkdir microsoft-auth
+cd microsoft-auth
+bun init -y
+bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
+mkdir -p src public
 ```
 
-Register the resulting redirect URI; for production, register the callback on your real domain:
+Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). The complete application below uses Better Auth 1.7.5's built-in `microsoft` provider, including for Microsoft Entra ID.
 
-```text
-https://auth.example.com/api/auth/callback/microsoft
-```
-
-Use **Web**, not **Single-page application**: Better Auth exchanges the code on the
-server with a client secret, even when your frontend is a SPA.
-
-Replace both origins with your actual dev URL and production domain.
-Use separate app registrations for production isolation, and do not enable implicit grants for this authorization-code flow.
-
-## Create the secret
-
-Under **Certificates & secrets → Client secrets → New client secret**, choose an
-expiry and copy the secret **Value**, not its **Secret ID**.
-
-Store `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` as server configuration,
-and schedule rotation before expiry; see [Configuration](/better-auth/guides/configuration).
-
-Save the captured local origin as server Config value `AUTH_BASE_URL` through that guide.
-For production, use your real origin, such as `https://auth.example.com`, without `/api/auth`.
-
-## Choose the tenant boundary
-
-Set `MICROSOFT_TENANT_ID` to your directory's GUID for a single-tenant application.
-The code below requires an explicit value instead of silently using Better Auth's `common` default.
-
-For a matching multitenant registration, `organizations` admits work/school accounts,
-`consumers` admits personal accounts, and `common` admits both classes.
-
-A multitenant endpoint is not an allowlist of customer organizations.
-Enforce application membership and tenant authorization on the server; email domains and login hints are not proof of tenant membership.
-
-## Import Config support
-
-Add these imports to `src/auth.ts`, keeping its existing imports, `authOptions`,
-and `Auth` class.
+## Define the Auth service and Worker
 
 ```typescript
+// src/worker.ts
+import { BetterAuth } from "@alchemy.run/better-auth";
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-```
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-## Configure Microsoft
-
-Replace the existing `makeAuth` declaration:
-
-```typescript
+const AuthDb = Cloudflare.D1.Database("AuthDb");
 const makeAuth = Effect.gen(function* () {
-  const baseURL = yield* Config.String("AUTH_BASE_URL");
-  const clientId = yield* Config.String("MICROSOFT_CLIENT_ID");
-  const clientSecret = yield* Config.Redacted("MICROSOFT_CLIENT_SECRET");
-  const tenantId = yield* Config.String("MICROSOFT_TENANT_ID");
-
-  return yield* BetterAuth({
-    ...authOptions,
-    baseURL,
-    socialProviders: {
-      microsoft: {
-        clientId,
-        clientSecret: Redacted.value(clientSecret),
-        tenantId,
+  const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
+  const enabled = yield* Config.Boolean("MICROSOFT_ENABLED").pipe(
+    Config.withDefault(false),
+  );
+  const microsoft = enabled
+    ? {
+        clientId: yield* Config.String("MICROSOFT_CLIENT_ID"),
+        clientSecret: Redacted.value(
+          yield* Config.Redacted("MICROSOFT_CLIENT_SECRET"),
+        ),
+        tenantId: yield* Config.String("MICROSOFT_TENANT_ID"),
         disableProfilePhoto: true,
         disableDefaultScope: true,
         scope: ["openid", "profile", "email"],
-      },
-    },
+      }
+    : undefined;
+
+  return yield* BetterAuth({
+    basePath: "/api/auth",
+    baseURL: Option.getOrUndefined(baseURL),
+    socialProviders: microsoft ? { microsoft } : {},
+    account: { accountLinking: { disableImplicitLinking: true } },
   });
 });
+
+export class Auth extends Context.Service<
+  Auth,
+  Effect.Success<typeof makeAuth>
+>()("app/Auth") {
+  static readonly layer = Layer.effect(Auth, makeAuth);
+}
+
+export default class AuthWorker extends Cloudflare.Worker<AuthWorker>()(
+  "AuthWorker",
+  {
+    main: import.meta.url,
+    compatibility: { flags: ["nodejs_compat"] },
+    assets: { directory: "./public", runWorkerFirst: ["/api/*"] },
+  },
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = request.url.split("?")[0];
+        if (path === "/api/auth" || path.startsWith("/api/auth/")) {
+          return yield* auth.fetch;
+        }
+        if (path === "/api/me") {
+          return yield* auth.getSession().pipe(
+            Effect.match({
+              onFailure: () => HttpServerResponse.text("Session lookup failed", {
+                status: 503, headers: { "Cache-Control": "no-store" },
+              }),
+              onSuccess: (session) => HttpServerResponse.text(
+                session ? `Signed in as ${session.user.name}` : "Sign in required",
+                { status: session ? 200 : 401, headers: { "Cache-Control": "no-store" } },
+              ),
+            }),
+          );
+        }
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb))))),
+) {}
 ```
 
-This sign-in-only configuration omits Graph photos and offline access.
-The built-in defaults also request `User.Read` and `offline_access`; request them only if you need those features and configure the corresponding delegated permissions and consent.
+Alchemy provisions the stable signing secret and supported D1 migrations automatically. The service reads Config during construction, and Microsoft stays disabled until credentials and an explicit tenant are supplied.
 
-`Auth.layer` reads Config during construction; only the actual Better Auth options
-receive the unwrapped secret, and the Worker continues to own database and runtime provision.
+This sign-in-only configuration omits Graph photos and offline access. The defaults also request `User.Read` and `offline_access`; enable those features only with the corresponding delegated permissions and consent.
 
-## Start sign-in in the browser
-
-Call this function from a Microsoft button and display any returned message as text.
-The same-origin `authClient` comes from `src/client.ts`.
+## Define the stack
 
 ```typescript
-import { authClient } from "./client.ts";
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import AuthWorker from "./src/worker.ts";
 
-export async function signInWithMicrosoft() {
-  try {
-    const { data, error } = await authClient.signIn.social({
-      provider: "microsoft",
-      callbackURL: "/account",
-      disableRedirect: true,
-    });
-    if (error) return "Could not start Microsoft sign-in. Try again.";
-    if (!data?.url) return "No authorization URL was returned.";
-    window.location.assign(data.url);
-  } catch {
-    return "Could not reach the server. Try again.";
-  }
-}
+export default Alchemy.Stack(
+  "MicrosoftAuth",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const worker = yield* AuthWorker;
+    return { url: worker.url };
+  }),
+);
 ```
 
-Better Auth displays callback failures on its built-in error page.
-After a successful return to `/account`, check the session using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+Preserve the local state directory so later deployments retain resource identities and the signing secret.
+
+## Define the browser actions
+
+```typescript
+// src/client.ts
+import { createAuthClient } from "better-auth/client";
+
+const authClient = createAuthClient();
+const status = document.createElement("p");
+status.setAttribute("role", "status");
+document.body.append(status);
+
+async function readAccount(): Promise<string> {
+  const { data, error } = await authClient.getSession();
+  if (error) return "Could not check your session. Try again.";
+  if (!data) return "Sign in to continue.";
+  const accounts = await authClient.listAccounts();
+  if (accounts.error) return "Signed in, but linked accounts could not be checked.";
+  return `Signed in as ${data.user.name}. Linked providers: ${
+    accounts.data?.map((account) => account.providerId).join(", ") ?? "none"
+  }.`;
+}
+
+async function startOAuth(link: boolean): Promise<string> {
+  if (link) {
+    const session = await authClient.getSession();
+    if (session.error || !session.data) return "Sign in with your existing account first.";
+  }
+  const options = { provider: "microsoft" as const, callbackURL: "/", disableRedirect: true };
+  const { data, error } = link
+    ? await authClient.linkSocial(options)
+    : await authClient.signIn.social(options);
+  if (error) return "Could not start Microsoft authorization. Check your account and retry.";
+  if (!data?.url) return "No authorization URL was returned.";
+  window.location.assign(data.url);
+  return "Redirecting to Microsoft…";
+}
+
+async function run(action: () => Promise<string>) {
+  try {
+    status.textContent = await action();
+  } catch {
+    status.textContent = "Could not reach the server. Try again.";
+  }
+}
+
+function button(label: string, action: () => Promise<string>) {
+  const element = document.createElement("button");
+  element.textContent = label;
+  element.addEventListener("click", () => void run(action));
+  document.body.append(element);
+}
+
+button("Sign in with Microsoft", () => startOAuth(false));
+button("Link Microsoft to this account", () => startOAuth(true));
+button("Check session and linked accounts", readAccount);
+button("Sign out", async () => {
+  const { error } = await authClient.signOut();
+  return error ? "Could not sign out. Try again." : "Signed out.";
+});
+void run(readAccount);
+```
+
+The same-origin client creates its own buttons and displays results as text. A successful callback returns to `/`, where the module checks the session and linked accounts.
+
+```html
+<!-- public/index.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Microsoft sign-in</title>
+  </head>
+  <body>
+    <h1>Microsoft sign-in</h1>
+    <p><a href="/api/me">Check the protected server endpoint</a></p>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>
+```
+
+No server Auth module or credentials enter the browser bundle. The Worker separately checks the session for `/api/me`, and reports lookup failures separately from anonymous requests.
+
+## Discover the local origin
+
+```sh
+bun build ./src/client.ts --target browser --outdir ./public
+bunx alchemy dev --stage microsoft-guide
+```
+
+Alchemy allocates an available port and prints the URL; use that actual origin for registration. Rebuild the browser module after editing it, and wait to start sign-in until Microsoft is configured.
+
+## Register the Entra application
+
+Open the [Microsoft Entra admin center](https://entra.microsoft.com/) in the intended directory and select **Entra ID → App registrations → New registration**. Choose a name and supported account types deliberately, then record **Application (client) ID** and **Directory (tenant) ID** from **Overview**.
+
+For a company-only app, choose the single-tenant option and use the directory's tenant GUID. For a multitenant product, choose organizational accounts, organizational plus personal accounts, or personal accounts to match the intended audience.
+
+Microsoft's [app registration guide](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) describes the registration process. A multitenant endpoint is not an allowlist of customer organizations: enforce tenant authorization and application membership on the server.
+
+## Register Web callbacks
+
+```text
+/api/auth/callback/microsoft
+```
+
+Append this path to the printed local origin and register it under **Authentication → Add a platform → Web**. Use **Web**, not **Single-page application**, because Better Auth exchanges the code on the server with a client secret.
+
+Do not enable implicit grants for this authorization-code flow. Register exact callbacks rather than wildcards and use a separate application registration for production isolation.
+
+## Supply server configuration
+
+```dotenv
+# .env.local
+MICROSOFT_ENABLED=true
+MICROSOFT_CLIENT_ID=replace-with-application-client-id
+MICROSOFT_CLIENT_SECRET=replace-with-secret-value
+MICROSOFT_TENANT_ID=replace-with-directory-tenant-guid
+```
+
+Under **Certificates & secrets → Client secrets → New client secret**, copy the secret **Value**, not its **Secret ID**, into this gitignored file. Choose an expiry and arrange rotation before it expires.
+
+For a matching multitenant registration, `organizations` admits work/school accounts, `consumers` admits personal accounts, and `common` admits both classes. The code requires an explicit `MICROSOFT_TENANT_ID` rather than silently using `common`.
+
+```sh
+bunx alchemy dev --stage microsoft-guide --env-file .env.local
+```
+
+Stop the first dev process before restarting with configuration, and update the registered callback if the printed origin changes. Without `AUTH_BASE_URL`, the request origin is used; an override must match the actual origin without a trailing slash or `/api/auth`.
+
+For production, use separate credentials and set `AUTH_BASE_URL` to the actual HTTPS Worker origin. A Worker at `https://auth.example.com` requires `https://auth.example.com/api/auth/callback/microsoft`; `baseURL` does not attach a Worker domain.
+
+Keep credentials server-only, outside `VITE_*`, browser bundles, source control, and logs. Email domains and login hints are not proof of tenant membership.
 
 ## Preserve identity and linking safety
 
-The 1.7.5 built-in provider derives its account subject from Microsoft's `oid`.
-Do not substitute mutable email addresses or `preferred_username`, or assume the same person has the same identity in every tenant.
+The built-in 1.7.5 provider derives the account subject from Microsoft's `oid`. Do not substitute mutable email addresses or `preferred_username`, or assume one person has the same identity in every tenant.
 
-Microsoft does not always supply an email or a trustworthy email-verification signal.
-Do not map every Microsoft email to `emailVerified: true` or add Microsoft to `trustedProviders` just to bypass a linking failure.
+Microsoft does not always supply an email or a trustworthy verification signal. Do not fabricate an address, map all emails to `emailVerified: true`, or add Microsoft to `trustedProviders` to bypass a failure.
 
-Keep `disableImplicitLinking: true`; an existing user signs in first, then uses
-`authClient.linkSocial` with `provider: "microsoft"` and the [shared linking result handling](/better-auth/sign-in-providers#link-accounts-deliberately).
+The Link button requires an existing session and confirms linked providers after returning. When adding another sign-in method, have an existing user authenticate with it first, then link Microsoft deliberately.
 
-Explicit linking still enforces provider-email trust and the same-email rule.
-If those checks cannot be satisfied, use an audited ownership-verification flow rather than merging rows by email.
+Keep `disableImplicitLinking: true`, provider-email verification, and the same-email restriction. If linking checks cannot be satisfied, use an audited ownership-verification flow rather than enabling different-email linking or merging rows by email.
 
-## Diagnose a failed return
+Keep a working sign-in method before unlinking an account. Session presence alone also does not authorize access to a particular tenant's data.
 
-For `AADSTS50011`, compare the Web redirect registration with the exact origin and
-`/api/auth/callback/microsoft` path; for client failures, check the secret value and expiry.
+## Diagnose failures
 
-For tenant or consent errors, check supported account types, `MICROSOFT_TENANT_ID`,
-user assignment, and administrator consent requirements before widening the tenant boundary.
+Better Auth handles callback failures on its built-in `/api/auth/error` page. Keep state, PKCE, origin, and CSRF protections enabled rather than introducing custom error query flags or bypasses.
 
-A missing-email failure requires reviewing the claims supplied by your tenant;
-never fabricate an address from a username, and never log tokens or full callback URLs.
+For `AADSTS50011`, compare the exact Web callback registration with the origin and `/api/auth/callback/microsoft`. For client failures, check the secret value, matching client ID, and expiry.
+
+For tenant or consent errors, check supported account types, tenant configuration, user assignment, and administrator consent before widening access. For missing email, inspect your tenant's claim configuration without logging tokens or full callback URLs.

@@ -1,135 +1,262 @@
 ---
 title: GitHub sign-in
-description: Register a GitHub OAuth App and add GitHub sign-in to the Auth layer.
+description: Register a GitHub OAuth App and run a standalone Worker with D1-backed sign-in.
 ---
 
-Use the [shared Auth service and browser client](/better-auth/sign-in-providers)
-from the Cloudflare + D1 tutorial; [part 5](/better-auth/tutorial/part-5) introduces this integration.
-
-## Create the OAuth App
-
-Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
-setup below; Alchemy allocates an available port and prints the URL.
-
-Open GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**.
-Enter an application name and set **Homepage URL** to the printed local origin.
-
-In another terminal, run `read`, paste that origin without a trailing slash or path,
-then use the printed result as **Authorization callback URL**:
+## Create the project
 
 ```sh
-read -r AUTH_BASE_URL
-printf '%s/api/auth/callback/github\n' "$AUTH_BASE_URL"
+mkdir github-auth
+cd github-auth
+bun init -y
+bun add alchemy @alchemy.run/better-auth better-auth@1.7.5 "effect@4.0.0-rc.115" kysely
+mkdir -p src public
 ```
 
-Register a separate production OAuth App with homepage `https://auth.example.com`
-and this callback:
+Use [Bun](https://bun.sh), matching Alchemy integration releases, and a [configured Cloudflare profile](/cloudflare/setup). This page defines the entire application; no tutorial files are required.
 
-```text
-https://auth.example.com/api/auth/callback/github
-```
-
-GitHub also supports multiple callbacks, but separate apps keep production credentials isolated.
-Use your actual dev URL and production domain; the registered callback must match the URL Better Auth sends.
-
-Leave device flow disabled for this browser redirect flow.
-See GitHub's [OAuth App registration instructions](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
-
-## Store the credentials
-
-On each app's settings page, copy **Client ID**, then **Generate a new client secret**.
-Store the matching pair as server-side `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` using [Configuration](/better-auth/guides/configuration).
-
-Save the captured local origin as server Config value `AUTH_BASE_URL` through that guide.
-For production, use your real origin, such as `https://auth.example.com`, without the callback path.
-
-## Import Config support
-
-Add these imports to `src/auth.ts`; keep its existing `BetterAuth`, `Context`, `Effect`,
-and `Layer` imports and exported `authOptions`.
+## Define the Auth service and Worker
 
 ```typescript
+// src/worker.ts
+import { BetterAuth } from "@alchemy.run/better-auth";
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-```
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-## Configure GitHub
-
-Replace `const makeAuth = BetterAuth(authOptions)` with:
-
-```typescript
+const AuthDb = Cloudflare.D1.Database("AuthDb");
 const makeAuth = Effect.gen(function* () {
-  const baseURL = yield* Config.String("AUTH_BASE_URL");
-  const clientId = yield* Config.String("GITHUB_CLIENT_ID");
-  const clientSecret = yield* Config.Redacted("GITHUB_CLIENT_SECRET");
+  const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
+  const enabled = yield* Config.Boolean("GITHUB_ENABLED").pipe(
+    Config.withDefault(false),
+  );
+  const github = enabled
+    ? {
+        clientId: yield* Config.String("GITHUB_CLIENT_ID"),
+        clientSecret: Redacted.value(
+          yield* Config.Redacted("GITHUB_CLIENT_SECRET"),
+        ),
+      }
+    : undefined;
 
   return yield* BetterAuth({
-    ...authOptions,
-    baseURL,
-    socialProviders: {
-      github: {
-        clientId,
-        clientSecret: Redacted.value(clientSecret),
-      },
-    },
+    basePath: "/api/auth",
+    baseURL: Option.getOrUndefined(baseURL),
+    socialProviders: github ? { github } : {},
+    account: { accountLinking: { disableImplicitLinking: true } },
   });
 });
+
+export class Auth extends Context.Service<
+  Auth,
+  Effect.Success<typeof makeAuth>
+>()("app/Auth") {
+  static readonly layer = Layer.effect(Auth, makeAuth);
+}
+
+export default class AuthWorker extends Cloudflare.Worker<AuthWorker>()(
+  "AuthWorker",
+  {
+    main: import.meta.url,
+    compatibility: { flags: ["nodejs_compat"] },
+    assets: { directory: "./public", runWorkerFirst: ["/api/*"] },
+  },
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = request.url.split("?")[0];
+        if (path === "/api/auth" || path.startsWith("/api/auth/")) {
+          return yield* auth.fetch;
+        }
+        if (path === "/api/me") {
+          return yield* auth.getSession().pipe(
+            Effect.match({
+              onFailure: () => HttpServerResponse.text("Session lookup failed", {
+                status: 503, headers: { "Cache-Control": "no-store" },
+              }),
+              onSuccess: (session) => HttpServerResponse.text(
+                session ? `Signed in as ${session.user.name}` : "Sign in required",
+                { status: session ? 200 : 401, headers: { "Cache-Control": "no-store" } },
+              ),
+            }),
+          );
+        }
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb))))),
+) {}
 ```
 
-`Auth.layer` evaluates Config during construction, not at module import time.
-Keep the existing `Auth` class; the host still owns the database and runtime layers, signing secret, and migrations.
+The host supplies D1, and Alchemy provisions the stable signing secret and supported schema migrations automatically. Config is read during service construction, with the client secret unwrapped only for Better Auth.
 
-Better Auth 1.7.5 requests `read:user` and `user:email` by default; keep those
-minimal sign-in scopes rather than adding `repo`, `workflow`, or organization administration access.
+GitHub starts disabled so you can discover the local URL before registering a callback. Without `AUTH_BASE_URL`, Better Auth derives its origin from the request.
 
-`user:email` lets Better Auth retrieve a private email and its verification status.
-GitHub sign-in does not need repository access or a personal access token.
-
-## Start sign-in in the browser
-
-Call this function from a button and render its returned message as text.
-It uses `authClient` exported by `src/client.ts`, never server credentials.
+## Define the stack
 
 ```typescript
-import { authClient } from "./client.ts";
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import AuthWorker from "./src/worker.ts";
 
-export async function signInWithGitHub() {
-  try {
-    const { data, error } = await authClient.signIn.social({
-      provider: "github",
-      callbackURL: "/account",
-      disableRedirect: true,
-    });
-    if (error) return "Could not start GitHub sign-in. Try again.";
-    if (!data?.url) return "No authorization URL was returned.";
-    window.location.assign(data.url);
-  } catch {
-    return "Could not reach the server. Try again.";
-  }
-}
+export default Alchemy.Stack(
+  "GitHubAuth",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const worker = yield* AuthWorker;
+    return { url: worker.url };
+  }),
+);
 ```
 
-Better Auth displays callback failures on its built-in error page.
-After a successful return to `/account`, check `getSession()` using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+Preserve the local state directory so resource identities and the signing secret survive subsequent deployments.
 
-## Link an existing account safely
+## Define the browser actions
 
-Keep `authOptions.account.accountLinking.disableImplicitLinking: true` from the starter.
-An existing email/password user should sign in first, then call `authClient.linkSocial` with `provider: "github"` from account settings.
+```typescript
+// src/client.ts
+import { createAuthClient } from "better-auth/client";
 
-Keep the same-email and verified-email checks; do not trust arbitrary GitHub email
-claims or manually merge users after a collision.
+const authClient = createAuthClient();
+const status = document.createElement("p");
+status.setAttribute("role", "status");
+document.body.append(status);
 
-If GitHub reports an unverified or missing email, resolve that on the GitHub account
-instead of bypassing verification; see the [explicit linking example](/better-auth/sign-in-providers#link-accounts-deliberately).
+async function readAccount(): Promise<string> {
+  const { data, error } = await authClient.getSession();
+  if (error) return "Could not check your session. Try again.";
+  if (!data) return "Sign in to continue.";
+  const accounts = await authClient.listAccounts();
+  if (accounts.error) return "Signed in, but linked accounts could not be checked.";
+  return `Signed in as ${data.user.name}. Linked providers: ${
+    accounts.data?.map((account) => account.providerId).join(", ") ?? "none"
+  }.`;
+}
 
-## Diagnose a failed return
+async function startOAuth(link: boolean): Promise<string> {
+  if (link) {
+    const session = await authClient.getSession();
+    if (session.error || !session.data) return "Sign in with your existing account first.";
+  }
+  const options = { provider: "github" as const, callbackURL: "/", disableRedirect: true };
+  const { data, error } = link
+    ? await authClient.linkSocial(options)
+    : await authClient.signIn.social(options);
+  if (error) return "Could not start GitHub authorization. Check your account and retry.";
+  if (!data?.url) return "No authorization URL was returned.";
+  window.location.assign(data.url);
+  return "Redirecting to GitHub…";
+}
 
-For a callback mismatch, compare the scheme, hostname, port, and `/api/auth/callback/github`
-path with the app registration and `AUTH_BASE_URL`.
+async function run(action: () => Promise<string>) {
+  try {
+    status.textContent = await action();
+  } catch {
+    status.textContent = "Could not reach the server. Try again.";
+  }
+}
 
-For a client error, check that the ID and secret belong to the same OAuth App;
-organization OAuth restrictions can also require administrator approval.
+function button(label: string, action: () => Promise<string>) {
+  const element = document.createElement("button");
+  element.textContent = label;
+  element.addEventListener("click", () => void run(action));
+  document.body.append(element);
+}
 
-Restart sign-in after correcting settings instead of replaying an authorization code.
-Never log the full callback URL, provider token, or client secret.
+button("Sign in with GitHub", () => startOAuth(false));
+button("Link GitHub to this account", () => startOAuth(true));
+button("Check session and linked accounts", readAccount);
+button("Sign out", async () => {
+  const { error } = await authClient.signOut();
+  return error ? "Could not sign out. Try again." : "Signed out.";
+});
+void run(readAccount);
+```
+
+This same-origin client calls `/api/auth`; it imports no server configuration. Successful OAuth returns to `/`, where the module checks the session and lists linked providers instead of assuming that a redirect proves authentication.
+
+```html
+<!-- public/index.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GitHub sign-in</title>
+  </head>
+  <body>
+    <h1>GitHub sign-in</h1>
+    <p><a href="/api/me">Check the protected server endpoint</a></p>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>
+```
+
+The browser module creates its own buttons and status text. The Worker checks the session independently before returning private data from `/api/me`.
+
+## Discover the local origin
+
+```sh
+bun build ./src/client.ts --target browser --outdir ./public
+bunx alchemy dev --stage github-guide
+```
+
+Alchemy allocates an available port and prints the URL; open that URL, but do not start sign-in until GitHub is configured. Rebuild the browser module after editing it.
+
+## Register the OAuth App
+
+```text
+/api/auth/callback/github
+```
+
+Append this path to the printed origin for GitHub's **Authorization callback URL**. In GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**, enter a name and use the same origin for **Homepage URL**.
+
+Leave device flow disabled for this browser authorization-code flow. Follow GitHub's [OAuth App registration instructions](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app), then copy **Client ID** and generate a **Client secret**.
+
+## Supply server configuration
+
+```dotenv
+# .env.local
+GITHUB_ENABLED=true
+GITHUB_CLIENT_ID=replace-with-your-client-id
+GITHUB_CLIENT_SECRET=replace-with-your-client-secret
+```
+
+Keep this file gitignored and replace both values with the matching OAuth App credentials. Stop the first dev process and restart with these server-side values:
+
+```sh
+bunx alchemy dev --stage github-guide --env-file .env.local
+```
+
+If the printed origin changes, update the OAuth App's homepage and callback before signing in. An optional `AUTH_BASE_URL` must match that exact origin, without a trailing slash or `/api/auth`.
+
+For production, use separate OAuth credentials and set `AUTH_BASE_URL` to the actual HTTPS Worker origin. For example, a Worker served at `https://auth.example.com` needs `https://auth.example.com/api/auth/callback/github`; setting `baseURL` does not attach a domain to the Worker.
+
+Never expose the secret through `VITE_*`, browser bundles, source control, or logs. Better Auth requests `read:user` and `user:email` by default, including private email verification status; ordinary sign-in needs neither repository scopes nor a personal access token.
+
+## Keep account linking explicit
+
+The Link button calls `linkSocial` only after finding a session, and the callback returns to the same account view. When adding other methods to this Auth service, have existing users authenticate with their original method before linking GitHub.
+
+Keep `disableImplicitLinking: true`, verified-email checks, and the same-email restriction. Do not add `trustedProviders`, enable `allowDifferentEmails`, or merge database rows to suppress an account collision.
+
+Resolve missing or unverified email on the GitHub account instead of bypassing verification. Keep a working sign-in method before unlinking an account.
+
+## Diagnose failures
+
+Better Auth handles callback failures on its built-in `/api/auth/error` page; no custom query flag or error route is needed. Keep state, PKCE, origin, and CSRF checks enabled.
+
+For a callback mismatch, compare the exact scheme, hostname, port, and callback path with the app registration and any `AUTH_BASE_URL` override. For a client error, check the credential pair and whether organization OAuth restrictions require approval.
+
+Restart sign-in after correcting settings instead of replaying an authorization code. Never log full callback URLs, provider tokens, or client secrets.

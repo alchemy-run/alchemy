@@ -1,143 +1,139 @@
 ---
 title: Authorization
-description: Authorize protected API operations using the CurrentUser supplied by authentication middleware.
+description: Authorize an operation using a request-scoped current user and server-side ownership checks.
 ---
 
-Continue from [Part 4](/better-auth/tutorial/part-4). Authentication identifies the caller; authorization decides whether that caller may perform an operation.
-
-## Keep identity request-scoped
-
-The tutorial declares this service in `src/current-user.ts`:
+## Check the caller before returning a profile
 
 ```typescript
+// worker.ts
+import { BetterAuth } from "@alchemy.run/better-auth";
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Context from "effect/Context";
-import * as Schema from "effect/Schema";
-
-export const User = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  email: Schema.String,
-});
-
-export class CurrentUser extends Context.Service<
-  CurrentUser,
-  typeof User.Type
->()("app/CurrentUser") {}
-```
-
-`Authentication` in `src/middleware.ts` provides this service after checking the incoming session. Do not supply a user from a request body or a process-wide `Layer.succeed`.
-
-## Distinguish denied access
-
-Create `src/authorization.ts`:
-
-```typescript
-import * as Schema from "effect/Schema";
-
-export class Forbidden extends Schema.TaggedError<Forbidden>()(
-  "Forbidden",
-  {},
-  { httpApiStatus: 403 },
-) {}
-```
-
-`401` means there is no authenticated caller; `403` means the authenticated caller lacks permission. Session-service failures remain `503`, not either of those outcomes.
-
-## Compare the owner to the caller
-
-Add these imports to `src/authorization.ts`:
-
-```typescript
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { CurrentUser } from "./current-user.ts";
-```
+import * as Result from "effect/Result";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-Append the check:
+class CurrentUser extends Context.Service<
+  CurrentUser,
+  { readonly id: string; readonly name: string; readonly email: string }
+>()("app/CurrentUser") {}
 
-```typescript
-export const requireOwner = Effect.fn(function* (ownerId: string) {
+class Forbidden extends Data.TaggedError("Forbidden") {}
+class AuthenticationUnavailable extends Data.TaggedError("AuthenticationUnavailable") {}
+
+const requireOwner = Effect.fn(function* (ownerId: string) {
   const user = yield* CurrentUser;
   if (user.id !== ownerId) return yield* Effect.fail(new Forbidden());
   return user;
 });
+
+const AuthDb = Cloudflare.D1.Database("AuthDb");
+
+export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
+  "AuthApi",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      session: { cookieCache: { enabled: false } },
+    });
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = request.url.split("?")[0];
+        if (path === "/api/auth" || path.startsWith("/api/auth/")) {
+          return yield* auth.fetch;
+        }
+        if (!path.startsWith("/api/users/")) {
+          return HttpServerResponse.text("Not found", { status: 404 });
+        }
+        if (request.method !== "GET") {
+          return HttpServerResponse.text("Method not allowed", { status: 405 });
+        }
+        const session = yield* auth.getSession().pipe(
+          Effect.mapError(() => new AuthenticationUnavailable()),
+          Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
+          Effect.result,
+        );
+        if (Result.isFailure(session)) {
+          return yield* HttpServerResponse.json(
+            { _tag: "AuthenticationUnavailable" }, { status: 503 },
+          );
+        }
+        if (session.success === null) {
+          return yield* HttpServerResponse.json(
+            { _tag: "Unauthorized" }, { status: 401 },
+          );
+        }
+        const user = session.success.user;
+        return yield* requireOwner(path.slice("/api/users/".length)).pipe(
+          Effect.provideService(CurrentUser, {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+          }),
+          Effect.flatMap((profile) => HttpServerResponse.json(profile)),
+          Effect.catchTag("Forbidden", () =>
+            HttpServerResponse.json({ _tag: "Forbidden" }, { status: 403 }),
+          ),
+        );
+      }),
+    };
+  }).pipe(Effect.provide(CloudflareD1(AuthDb))),
+) {}
 ```
 
-The helper requires `CurrentUser` in its Effect environment. It cannot silently fall back to an anonymous user.
+`GET /api/users/:userId` returns only the caller's own profile. The path chooses the requested profile, but the identity being compared comes from a verified server session, never a client-supplied owner claim.
 
-## Declare a protected profile route
+`CurrentUser` is supplied within the request after session resolution succeeds. The reusable `requireOwner` helper requires that service and cannot silently fall back to an anonymous user.
 
-Import the error in the tutorial's `src/api.ts`:
+An absent session returns `401`, an authenticated wrong-owner request returns `403`, and a session-service failure returns `503`. The failure boundary surrounds only the lookup, leaving downstream application defects distinct.
 
-```typescript
-import { Forbidden } from "./authorization.ts";
-```
+Cookie caching is disabled here, so authorization consults server-side session state. Better Auth's routes remain public and forward their own response cookies through `auth.fetch`.
 
-Replace only `PrivateApi` with this definition, retaining the existing imports of `Schema`, `HttpApiGroup`, `HttpApiEndpoint`, `User`, and `Authentication`:
+## Run this example independently
 
 ```typescript
-export class PrivateApi extends HttpApiGroup.make("private")
-  .add(HttpApiEndpoint.get("me", "/api/me", { success: User }))
-  .add(
-    HttpApiEndpoint.get("profile", "/api/users/:userId", {
-      params: { userId: Schema.String },
-      success: User,
-      error: Forbidden,
-    }),
-  )
-  .middleware(Authentication) {}
-```
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import AuthApi from "./worker.ts";
 
-Both endpoints require authentication. The new route additionally declares its authorization failure in the API contract.
-
-## Check access in the handler
-
-Import the helper in `src/http.ts`:
-
-```typescript
-import { requireOwner } from "./authorization.ts";
-```
-
-Replace the existing `PrivateLive` definition:
-
-```typescript
-const PrivateLive = HttpApiBuilder.group(AppApi, "private", (handlers) =>
-  handlers
-    .handle("me", () => CurrentUser)
-    .handle("profile", ({ params }) => requireOwner(params.userId)),
+export default Alchemy.Stack(
+  "AuthAuthorization",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* AuthApi;
+    return { url: api.url };
+  }),
 );
 ```
 
-The route returns only the current user's profile, and only when the requested ID matches that user. Keep the tutorial's existing `Authentication.layer` and host-provided `Auth.layer` composition.
+Use Bun, matching `alchemy` and `@alchemy.run/better-auth` releases, Better Auth 1.7.5, Effect 4, and `kysely`, with Cloudflare credentials configured. The stack owns its D1 database, migrations, and stable signing secret; retain the local state directory.
 
-## Use stored ownership for application records
-
-For a project, document, or order, load its owner from your database and pass that stored ID to `requireOwner` before reading or changing protected data. A client-supplied `ownerId` is a claim, not evidence of ownership.
-
-Use the stable user ID as the relationship key. Names and email addresses can change and are not role assignments.
-
-## Keep lookup failures separate
-
-Inside the request Effect in `src/middleware.ts`, the session lookup can explicitly map both typed API errors and unexpected defects:
-
-```typescript
-const session = yield* auth.getSession().pipe(
-  Effect.mapError(() => new AuthenticationUnavailable()),
-  Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
-);
+```sh
+bunx alchemy dev
 ```
 
-Keep the existing `session === null` branch returning `Unauthorized`, then provide `CurrentUser` only for a successful session. This catch belongs around session resolution, not around the downstream handler, where it would hide unrelated application defects.
+In another shell, enter the printed origin without a trailing slash after `read`. This anonymous call must return `401`, not a permission denial or a successful profile:
 
-The middleware's error declaration must include both `Unauthorized` with HTTP `401` and `AuthenticationUnavailable` with HTTP `503`. Their complete definitions and response handling are in [HTTP API middleware](/better-auth/guides/http-api-middleware).
+```sh
+read -r BASE_URL
+curl -i "$BASE_URL/api/users/not-the-current-user"
+```
 
-## Recheck changing permissions
+With a valid session cookie, requesting its user's ID returns the profile and requesting another ID returns `403`. Sign up and sign in through `/api/auth/sign-up/email` and `/api/auth/sign-in/email`; the API accepts standard Better Auth JSON requests and sets browser cookies.
 
-Do not trust a browser-side role check to enforce access. Query authoritative membership or permission data on the server when the operation needs current access rights.
+## Authorize application records using stored ownership
 
-If cookie caching is enabled, user/session data can be stale after revocation or a role change. Use the authoritative lookup described in [sessions](/better-auth/guides/sessions) for sensitive operations.
+For a project, document, or order, first load its owner ID from your application database, then pass that stored ID to `requireOwner` before reading or changing protected data. Unlike this self-profile endpoint, accepting an `ownerId` from the request would not establish ownership of a separate record.
 
-## Keep sign-in public
+Use stable user IDs as relationship keys; names and email addresses are not roles. Query authoritative membership or permission data when an operation needs current access rights, and make the check and mutation transactional when concurrent ownership changes matter.
 
-Leave `/api/auth` routed to `auth.fetch` before the application router, as in [Part 2](/better-auth/tutorial/part-2). Applying `Authentication` to those routes would prevent a signed-out user from signing in.
-
-The public `/api/health` route stays outside `PrivateApi`. Verify anonymous, authenticated, wrong-owner, and service-failure cases with the [testing guide](/better-auth/guides/testing).
+For a native Effect HTTP API, the same request-scoped service can be provided by authentication middleware. The [middleware guide](/better-auth/guides/http-api-middleware) shows that alternative integration in full; it is not needed to run this Worker.
