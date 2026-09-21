@@ -31,40 +31,25 @@ Install the driver — both are optional peers of alchemy:
 
 ## Connect
 
-The `url` may be a plain `Redacted` string or an Effect of one —
-Hyperdrive's `connectionString` and `Fly.ConnectPostgres`'s
-`connectionString` both resolve at runtime, so either slots
-straight in:
-
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Hyperdrive } from "./db.ts";
+import type * as Redacted from "effect/Redacted";
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  { main: import.meta.url },
+export const makeQueries = <E, R>(
+  connectionString:
+    | Redacted.Redacted<string>
+    | Effect.Effect<Redacted.Redacted<string>, E, R>,
+) =>
   Effect.gen(function* () {
-    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const sql = yield* SQL.Postgres({ url: hd.connectionString });
-
+    const sql = yield* SQL.Postgres({ url: connectionString });
     return {
-      fetch: Effect.gen(function* () {
-        const users = yield* sql`SELECT * FROM users`;
-        return yield* HttpServerResponse.json({ users });
-      }),
+      listUsers: () => sql`SELECT * FROM users`,
     };
-  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
-) {}
+  });
 ```
 
-Everything else in `@effect/sql-pg`'s pool config passes through —
-`maxConnections`, `idleTimeout`, `types`, and friends. The pool is
-built lazily on the first query of an execution and closed when the
-event settles — see
-[Connection lifecycle](/sql/effect-sql/lifecycle).
+`url` accepts a redacted URL or an Effect resolving one, including runtime bindings such as Hyperdrive or `Fly.ConnectPostgres`; the remaining `@effect/sql-pg` pool options pass through. Call queries within a request or an explicit `Effect.scoped` block: the pool opens lazily and closes with that [scope](/sql/effect-sql/lifecycle).
 
 ## Queries
 
@@ -131,26 +116,16 @@ const makeUsers = Effect.gen(function* () {
 });
 
 const users = yield* makeUsers.pipe(
-  Effect.provide(SQL.PostgresLayer({ url: hd.connectionString })),
+  Effect.provide(SQL.PostgresLayer({ url: connectionString })),
 );
 ```
 
-The layer provides two tags from one per-execution pool: the generic
-`SqlClient.SqlClient`, and `@effect/sql-pg`'s `PgClient` for code
-that needs Postgres-specific capabilities — including drizzle's
-`effect-postgres` driver. Swapping `SQL.PostgresLayer` for
-[`SQL.D1Layer`](/sql/effect-sql/d1#provide-as-a-service) moves the
-same service graph to D1 unchanged.
+The layer provides `SqlClient.SqlClient` and `@effect/sql-pg`'s `PgClient` from one per-execution pool. Other drivers can satisfy the generic service, but changing engines still requires compatible SQL and transaction semantics.
+
+## Provider setup
+
+Choose a database and deployment guide in [SQL databases](/sql/databases); the client above only needs a connection URL.
 
 ## Where next
 
-- [Migrations](/sql/effect-sql/migrations) — apply `.sql` files as
-  part of deploy.
-- [Connection lifecycle](/sql/effect-sql/lifecycle) — when the pool
-  is built and torn down.
-- [Drizzle on Postgres](/sql/drizzle/postgres) — the same driver
-  behind a typed schema.
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring
-  with Neon / PlanetScale via Hyperdrive.
-- [Fly Postgres](/fly/data/postgres) — the same client on a Fly
-  Service via `ConnectPostgres`.
+Read [Migrations](/sql/effect-sql/migrations) to apply committed SQL files, or [Drizzle on Postgres](/sql/drizzle/postgres) for typed schemas over the same driver. [Connection lifecycle](/sql/effect-sql/lifecycle) covers per-request cleanup.

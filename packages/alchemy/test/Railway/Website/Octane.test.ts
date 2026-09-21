@@ -65,16 +65,8 @@ test.provider(
       const pathMod = yield* Path.Path;
       const configPath = pathMod.join(rootDir, "octane.config.ts");
       const raw = yield* fs.readFileString(configPath);
-      yield* fs.writeFileString(
-        configPath,
-        raw
-          .replaceAll(
-            "@alchemy.run/frontend-frameworks/octane/aws-adapter",
-            "@alchemy.run/frontend-frameworks/octane/node-adapter",
-          )
-          .replaceAll("{ aws }", "{ node }")
-          .replaceAll("adapter: aws()", "adapter: node()"),
-      );
+      expect(raw).not.toContain("adapter:");
+      expect(raw).not.toContain("@alchemy.run/frontend-frameworks");
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
@@ -98,6 +90,7 @@ test.provider(
         }),
       );
 
+      expect(yield* fs.readFileString(configPath)).toBe(raw);
       const url = deployed.site.url;
       expect(url).toBeDefined();
       expect(url).toMatch(/^https:\/\//);

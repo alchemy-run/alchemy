@@ -17,7 +17,7 @@ This guide ties four pieces into one deployable app:
   `AWS.Website.TanStackStart`.
 - **[Effect RPC](/aws/apis/effect-rpc)** — a typed backend served by a separate
   `AWS.Lambda.Function`.
-- **[Drizzle + Aurora DSQL](/sql/drizzle/postgres)** — reached through the
+- **[Drizzle + Aurora DSQL](/aws/data/drizzle-dsql)** — reached through the
   `AWS.DSQL.Connect` binding, which mints an IAM auth token per invocation.
 - **Atom RPC** — Effect 4's native `effect/unstable/reactivity/AtomRpc`, plus
   the React bindings from `@effect/atom-react`, for reactive queries and
@@ -130,9 +130,9 @@ export const Database = AWS.DSQL.Cluster("Database", {});
 
 ## 3. The table
 
-DSQL drops two Postgres features this schema would otherwise reach for: there
-are no sequences (so no `serial`) and no foreign keys. A `uuid` primary key
-generated in the handler stays well inside the supported surface:
+This example uses a `uuid` primary key generated in the handler. See the
+[DSQL guide](/aws/data/drizzle-dsql#define-the-table) for current PostgreSQL
+compatibility restrictions before extending the schema:
 
 ```typescript
 // src/backend/schema.ts
@@ -150,11 +150,9 @@ export const relations = defineRelations({ Todos }, () => ({}));
 ```
 
 :::note
-`Drizzle.Schema` generates migration SQL that a database resource applies on
-deploy, but that `migrations` wiring exists on `Neon.Branch`, `Fly.Postgres`,
-`Planetscale.PostgresBranch`, and `Cloudflare.D1.Database` — not on DSQL. So
-this app creates its one table with an idempotent `CREATE TABLE IF NOT EXISTS`
-from a `/setup` route on the backend (step 4), run once after the first deploy.
+DSQL has no `migrations` resource property, so this demo initializes its one
+table through a `/setup` route (step 4). For reviewed, committed SQL and a
+separate application step, follow the [DSQL migration guide](/aws/data/drizzle-dsql).
 :::
 
 ## 4. The backend RPC Lambda
