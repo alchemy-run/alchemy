@@ -1,29 +1,91 @@
+import {
+  environmentServiceInstances,
+  waitUntilDeleted,
+  projectServices,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { randomBytes } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
-import type {
-  EnvironmentResponseVolumeInstancesEdgesItemNode,
-  ProjectResponseServicesEdgesItemNode,
-  ServiceCreateResponse,
-  ServiceInstanceResponse,
-  ServiceResponse,
-  ServiceUpdateResponse,
-  TcpProxiesResultItem,
-  TcpProxyCreateResponse,
-  VolumeInstanceResponse,
-  VolumeState,
-} from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type VolumeState = railway.Scalars["VolumeState"];
+
+const serviceSelection = {
+  id: true,
+  name: true,
+  deletedAt: true,
+} as const satisfies railway.Selection<"Service">;
+const attributeInstanceSelection = {
+  source: { image: true },
+  region: true,
+  latestDeployment: { id: true, status: true },
+} as const satisfies railway.Selection<"ServiceInstance">;
+const instanceSelection = {
+  ...attributeInstanceSelection,
+  deletedAt: true,
+  sleepApplication: true,
+  startCommand: true,
+} as const satisfies railway.Selection<"ServiceInstance">;
+const volumeSelection = {
+  id: true,
+  volumeId: true,
+  environmentId: true,
+  serviceId: true,
+  deletedAt: true,
+  isPendingDeletion: true,
+  state: true,
+  mountPath: true,
+  volume: { id: true, name: true },
+} as const satisfies railway.Selection<"VolumeInstance">;
+const proxySelection = {
+  id: true,
+  applicationPort: true,
+  deletedAt: true,
+  syncStatus: true,
+  domain: true,
+  proxyPort: true,
+} as const satisfies railway.Selection<"TCPProxy">;
+type ServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
+type CreateServiceResponse = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type UpdateServiceResponse = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type ProjectResponseServicesEdgesItemNode = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type ServiceInstanceResponse = railway.Result<
+  "ServiceInstance!",
+  typeof instanceSelection
+>;
+type EnvironmentResponseVolumeInstancesEdgesItemNode = railway.Result<
+  "VolumeInstance!",
+  typeof volumeSelection
+>;
+type VolumeInstanceResponse = railway.Result<
+  "VolumeInstance!",
+  typeof volumeSelection
+>;
+type TcpProxiesResultItem = railway.Result<"TCPProxy!", typeof proxySelection>;
+type CreateTcpProxyResponse = railway.Result<
+  "TCPProxy!",
+  typeof proxySelection
+>;
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -225,7 +287,7 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme", build: { install: ["mongodb"] } },
+ *   { project: Site, main: import.meta.url, build: { install: ["mongodb"] } },
  *   Effect.gen(function* () {
  *     const conn = yield* Railway.ConnectMongo(Db);
  *     return {
@@ -346,15 +408,15 @@ class VolumePending extends Data.TaggedError("Railway.MongoVolumePending")<{
 
 type CloudService =
   | ServiceResponse
-  | ServiceCreateResponse
-  | ServiceUpdateResponse
+  | CreateServiceResponse
+  | UpdateServiceResponse
   | ProjectResponseServicesEdgesItemNode;
 
 type CloudInstance =
   | EnvironmentResponseVolumeInstancesEdgesItemNode
   | VolumeInstanceResponse;
 
-type CloudProxy = TcpProxiesResultItem | TcpProxyCreateResponse;
+type CloudProxy = TcpProxiesResultItem | CreateTcpProxyResponse;
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -408,9 +470,6 @@ const isGoneProxy = (proxy: CloudProxy | undefined) =>
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
-
 const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed == null || observed.length === 0) return false;
   if (observed === desired) return true;
@@ -432,12 +491,6 @@ const deployReady = (status: string | undefined) => status === "SUCCESS";
 
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
-
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
-};
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -485,7 +538,9 @@ const desiredVariables = (input: {
 
 const toAttrs = (input: {
   service: CloudService;
-  instance: ServiceInstanceResponse | undefined;
+  instance:
+    | railway.Result<"ServiceInstance!", typeof attributeInstanceSelection>
+    | undefined;
   volume: CloudInstance | undefined;
   proxy: CloudProxy | undefined;
   projectId: string;
@@ -540,29 +595,21 @@ const toAttrs = (input: {
 };
 
 const getById = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
+  railway.service({ id: serviceId }, serviceSelection).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
-  railway.serviceInstance({ environmentId, serviceId }).pipe(
+  railway.serviceInstance({ environmentId, serviceId }, instanceSelection).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.services.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGoneService(node)),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+  projectServices(projectId, serviceSelection).pipe(
+    Effect.map((services) => services.filter((node) => !isGoneService(node))),
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -573,21 +620,15 @@ const findByName = (projectId: string, name: string) =>
   );
 
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
+  railway.volumeInstance({ id: volumeInstanceId }, volumeSelection).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }).pipe(
-    Effect.map((env) =>
-      env.volumeInstances.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGoneVolume(node)),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+  environmentVolumes(environmentId, projectId, volumeSelection).pipe(
+    Effect.map((instances) => instances.filter((node) => !isGoneVolume(node))),
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
     ),
   );
@@ -602,9 +643,9 @@ const findVolume = (
   );
 
 const listProxies = (environmentId: string, serviceId: string) =>
-  railway.tcpProxies({ environmentId, serviceId }).pipe(
+  railway.tcpProxies({ environmentId, serviceId }, proxySelection).pipe(
     Effect.map((items) => items.filter((proxy) => !isGoneProxy(proxy))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed([] as TcpProxiesResultItem[]),
     ),
   );
@@ -618,6 +659,22 @@ const findProxy = (
     Effect.map((items) =>
       items.find((proxy) => proxy.applicationPort === applicationPort),
     ),
+  );
+
+/**
+ * Delete a TCP proxy, riding out Railway's per-environment mutation lock: a
+ * delete racing an in-flight deploy fails with "Cannot delete TCP proxy: an
+ * operation is already in progress". Already-gone proxies are a no-op.
+ */
+const deleteProxy = (id: string) =>
+  railway.deleteTcpProxy({ id }).pipe(
+    Effect.retry({
+      while: (e) => railway.isErrorTag(e, "RailwayOperationInProgress"),
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
+    railway.catchTags(["RailwayNotFound"], () => Effect.void),
+    Effect.asVoid,
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -647,7 +704,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      railway.catchTags(["RailwayNotFound"], () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -659,18 +716,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.upsertVariable({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const syncEnv = Effect.fn(function* (input: {
   projectId: string;
@@ -709,8 +764,10 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.MongoPending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // serviceCreate fans the instance out to each environment
+      // asynchronously; wait a bounded interval for it to appear.
+      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.MongoPending", () =>
       getInstance(environmentId, serviceId),
@@ -746,12 +803,17 @@ const waitForVolume = (
   environmentId: string,
   projectId: string,
   volumeId: string,
-) =>
-  findVolume(
-    environmentId,
-    projectId,
-    (instance) => instance.volumeId === volumeId,
-  ).pipe(
+  volumeInstanceId?: string,
+) => {
+  const observe =
+    volumeInstanceId !== undefined && volumeInstanceId.length > 0
+      ? getVolumeByInstanceId(volumeInstanceId)
+      : findVolume(
+          environmentId,
+          projectId,
+          (instance) => instance.volumeId === volumeId,
+        );
+  return observe.pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined || transientVolumeState(instance.state)) {
         return Effect.fail(
@@ -765,23 +827,21 @@ const waitForVolume = (
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.MongoVolumePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.MongoVolumePending", () =>
-      findVolume(
-        environmentId,
-        projectId,
-        (instance) => instance.volumeId === volumeId,
-      ),
-    ),
+    Effect.catchTag("Railway.MongoVolumePending", () => observe),
   );
+};
 
 const stampVolumeName = (volumeId: string, name: string) =>
-  railway.volumeUpdate({
-    volumeId,
-    input: { name },
-  });
+  railway.updateVolume(
+    {
+      volumeId,
+      input: { name },
+    },
+    { id: true },
+  );
 
 /**
  * Ping a MongoDB deployment. Used from tests over the public TCP proxy
@@ -902,54 +962,71 @@ export const MongoProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectServices(project.projectId).pipe(
-            Effect.flatMap((services) =>
-              Effect.forEach(
-                services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  Effect.gen(function* () {
-                    const instance = yield* getInstance(
-                      project.environmentId,
-                      service.id,
-                    );
-                    if (!isMongoImage(instance?.source?.image)) {
-                      return [] as Mongo["Attributes"][];
-                    }
-                    const volume = yield* findVolume(
-                      project.environmentId,
-                      project.projectId,
-                      (row) => (row.serviceId ?? undefined) === service.id,
-                    );
-                    const proxy = yield* findProxy(
-                      project.environmentId,
-                      service.id,
-                      MONGO_PORT,
-                    );
-                    return [
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const services = new Map(
+            (yield* listProjectServices(project.projectId))
+              .filter((service) => matchesAlchemyPhysicalName(service.name))
+              .map((service) => [service.id, service]),
+          );
+          if (services.size === 0) return [];
+          const envIds = yield* railway.environments
+            .items(
+              { projectId: project.projectId, first: 50 },
+              { id: true, deletedAt: true },
+            )
+            .pipe(
+              Stream.filter((env) => env.deletedAt == null),
+              Stream.map((env) => env.id),
+              Stream.runCollect,
+              railway.catchTags("RailwayNotFound", () => Effect.succeed([])),
+            );
+          const items = yield* Effect.forEach(envIds, (environmentId) =>
+            Effect.gen(function* () {
+              const instances = (yield* environmentServiceInstances(
+                environmentId,
+                project.projectId,
+                {
+                  ...attributeInstanceSelection,
+                  serviceId: true,
+                  deletedAt: true,
+                },
+              )).filter(
+                (instance) =>
+                  instance.deletedAt == null &&
+                  services.has(instance.serviceId) &&
+                  isMongoImage(instance.source?.image),
+              );
+              if (instances.length === 0) return [];
+              const volumes = yield* listVolumeInstances(
+                environmentId,
+                project.projectId,
+              );
+              return instances.flatMap((instance) => {
+                const service = services.get(instance.serviceId);
+                return service === undefined
+                  ? []
+                  : [
                       toAttrs({
                         service,
                         instance,
-                        volume,
-                        proxy,
                         projectId: project.projectId,
-                        environmentId: project.environmentId,
+                        environmentId,
+                        volume: volumes.find(
+                          (row) => row.serviceId === service.id,
+                        ),
+                        proxy: undefined,
                         user: DEFAULT_MONGO_USER,
                         password: "",
                         database: DEFAULT_MONGO_DATABASE,
                       }),
                     ];
-                  }),
-                { concurrency: 8 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+              });
+            }),
+          );
+          return items.flat();
+        }),
       );
       return rows.flat();
     }),
@@ -1007,24 +1084,22 @@ export const MongoProvider = () =>
 
       if (current === undefined) {
         const created = yield* railway
-          .serviceCreate({
-            input: {
-              projectId,
-              environmentId,
-              name,
-              source: { image: sourceImage },
-              variables,
+          .createService(
+            {
+              input: {
+                projectId,
+                environmentId,
+                name,
+                source: { image: sourceImage },
+                variables,
+              },
             },
-          })
+            serviceSelection,
+          )
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
-            Effect.catchTag("RailwayValidationError", (e) =>
-              alreadyExists(e.message)
-                ? Effect.succeed(undefined)
-                : Effect.fail(e),
+            railway.catchTags("RailwayValidationError", () =>
+              Effect.succeed(undefined),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = created ?? (yield* findByName(projectId, name));
       }
@@ -1034,10 +1109,13 @@ export const MongoProvider = () =>
       }
 
       if (current.name !== name) {
-        current = yield* railway.serviceUpdate({
-          id: current.id,
-          input: { name },
-        });
+        current = yield* railway.updateService(
+          {
+            id: current.id,
+            input: { name },
+          },
+          serviceSelection,
+        );
       }
 
       let instance = yield* waitForInstance(environmentId, current.id);
@@ -1054,18 +1132,16 @@ export const MongoProvider = () =>
         normalizeStart(instance?.startCommand) !==
         normalizeStart(MONGO_START_COMMAND);
       if (imageChanged || regionChanged || sleepOn || startChanged) {
-        yield* railway
-          .serviceInstanceUpdate({
-            environmentId,
-            serviceId: current.id,
-            input: {
-              ...(imageChanged ? { source: { image: sourceImage } } : {}),
-              ...(regionChanged ? { region: props.region } : {}),
-              ...(sleepOn ? { sleepApplication: false } : {}),
-              ...(startChanged ? { startCommand: MONGO_START_COMMAND } : {}),
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        yield* railway.updateServiceInstance({
+          environmentId,
+          serviceId: current.id,
+          input: {
+            ...(imageChanged ? { source: { image: sourceImage } } : {}),
+            ...(regionChanged ? { region: props.region } : {}),
+            ...(sleepOn ? { sleepApplication: false } : {}),
+            ...(startChanged ? { startCommand: MONGO_START_COMMAND } : {}),
+          },
+        });
         needsDeploy = true;
         instance = (yield* getInstance(environmentId, current.id)) ?? instance;
       }
@@ -1100,8 +1176,8 @@ export const MongoProvider = () =>
         );
       }
       if (volume === undefined) {
-        const created = yield* railway
-          .volumeCreate({
+        const created = yield* railway.createVolume(
+          {
             input: {
               projectId,
               environmentId,
@@ -1109,20 +1185,13 @@ export const MongoProvider = () =>
               serviceId: current.id,
               ...(props.region !== undefined ? { region: props.region } : {}),
             },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-          );
+          },
+          { id: true, name: true },
+        );
         if (created.name !== volumeName) {
           yield* stampVolumeName(created.id, volumeName);
         }
         volume = yield* waitForVolume(environmentId, projectId, created.id);
-        needsDeploy = true;
       }
       if (volume === undefined || isGoneVolume(volume)) {
         return yield* new MongoVolumeNotCreated({
@@ -1138,7 +1207,7 @@ export const MongoProvider = () =>
       const mountChanged = observedMount !== MONGO_MOUNT_PATH;
       const attached = observedServiceId === current.id;
       if (mountChanged || !attached) {
-        yield* railway.volumeInstanceUpdate({
+        yield* railway.updateVolumeInstance({
           volumeId: volume.volumeId,
           environmentId,
           input: {
@@ -1155,21 +1224,18 @@ export const MongoProvider = () =>
       let proxy = yield* findProxy(environmentId, current.id, MONGO_PORT);
       if (wantPublic && proxy === undefined) {
         const created = yield* railway
-          .tcpProxyCreate({
-            input: {
-              applicationPort: MONGO_PORT,
-              environmentId,
-              serviceId: current.id,
+          .createTcpProxy(
+            {
+              input: {
+                applicationPort: MONGO_PORT,
+                environmentId,
+                serviceId: current.id,
+              },
             },
-          })
+            proxySelection,
+          )
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-            Effect.catchTag("RailwayValidationError", () =>
+            railway.catchTags("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),
           );
@@ -1179,11 +1245,7 @@ export const MongoProvider = () =>
             : yield* findProxy(environmentId, current.id, MONGO_PORT);
       }
       if (!wantPublic && proxy !== undefined) {
-        yield* railway
-          .tcpProxyDelete({ id: proxy.id })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+        yield* deleteProxy(proxy.id);
         proxy = undefined;
       }
 
@@ -1193,17 +1255,31 @@ export const MongoProvider = () =>
             environmentId,
             serviceId: current.id,
           })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
-            Effect.catchTag("RailwayValidationError", () => Effect.void),
-          );
+          .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
       }
 
       instance =
         (yield* waitForDeployment(environmentId, current.id)) ?? instance;
-      const finalStatus = instance?.latestDeployment?.status;
-      if (deployFailed(finalStatus)) {
+      let finalStatus = instance?.latestDeployment?.status;
+      // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
+      // container may serve, but Railway keeps its per-environment operation
+      // lock and the TCP proxy's routing is not committed. Converge: cancel
+      // the wedged deployment, redeploy once, and insist on SUCCESS.
+      if (!deployFailed(finalStatus) && !deployReady(finalStatus)) {
+        const wedged = instance?.latestDeployment?.id;
+        if (wedged != null && wedged.length > 0) {
+          yield* railway
+            .cancelDeployment({ id: wedged })
+            .pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+        }
+        yield* railway
+          .serviceInstanceDeployV2({ environmentId, serviceId: current.id })
+          .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
+        instance =
+          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+        finalStatus = instance?.latestDeployment?.status;
+      }
+      if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
         return yield* new MongoDeployFailed({
           serviceId: current.id,
           status: finalStatus ?? "failed",
@@ -1226,67 +1302,76 @@ export const MongoProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const serviceId = output.serviceId;
-      if (output.tcpProxyId !== undefined && output.tcpProxyId.length > 0) {
-        yield* railway
-          .tcpProxyDelete({ id: output.tcpProxyId })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
-      } else if (output.environmentId.length > 0 && serviceId.length > 0) {
-        const proxies = yield* listProxies(output.environmentId, serviceId);
-        yield* Effect.forEach(
-          proxies,
-          (proxy) =>
-            railway
-              .tcpProxyDelete({ id: proxy.id })
-              .pipe(
-                Effect.catchTag(
-                  ["RailwayNotFound", "NotFound"],
-                  () => Effect.void,
-                ),
-              ),
-          { concurrency: 4 },
-        );
+      const environmentId = output.environmentId;
+      // Cancel a still-running deployment first: it holds Railway's
+      // per-environment operation lock ("Cannot delete TCP proxy: an
+      // operation is already in progress") and can stall the service
+      // teardown indefinitely. A finished deployment makes this a no-op.
+      if (environmentId.length > 0 && serviceId.length > 0) {
+        const instance = yield* getInstance(environmentId, serviceId);
+        const latest = instance?.latestDeployment;
+        if (
+          latest?.id != null &&
+          latest.id.length > 0 &&
+          !deployReady(latest.status) &&
+          !deployFailed(latest.status)
+        ) {
+          yield* railway
+            .cancelDeployment({ id: latest.id })
+            .pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+        }
       }
+      // Delete the SERVICE next — its teardown cascades onto the proxies.
       if (serviceId.length > 0) {
         yield* railway
-          .serviceDelete({
-            id: serviceId,
-            ...(output.environmentId.length > 0
-              ? { environmentId: output.environmentId }
-              : {}),
-          })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
-        yield* getById(serviceId).pipe(
-          Effect.map((service) => service === undefined),
+          .deleteService({ id: serviceId })
+          .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+        yield* waitUntilDeleted(
+          "Service",
+          serviceId,
+          getById(serviceId).pipe(
+            Effect.map((service) => service === undefined),
+          ),
+        );
+      }
+      // Proxies usually disappear with the service; wait for the cascade
+      // instead of fighting the teardown's lock, then force-delete any
+      // survivor (which no-ops on NotFound).
+      if (environmentId.length > 0 && serviceId.length > 0) {
+        const leftover = yield* listProxies(environmentId, serviceId).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (gone) => gone,
-            times: 8,
+            schedule: Schedule.spaced("3 seconds"),
+            until: (rows) => rows.length === 0,
+            times: 10,
           }),
         );
+        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), {
+          concurrency: 4,
+        });
+        yield* waitUntilDeleted(
+          "TcpProxy",
+          serviceId,
+          listProxies(environmentId, serviceId).pipe(
+            Effect.map((proxies) => proxies.length === 0),
+          ),
+        );
+      } else if (
+        output.tcpProxyId !== undefined &&
+        output.tcpProxyId.length > 0
+      ) {
+        yield* deleteProxy(output.tcpProxyId);
       }
       if (output.volumeId.length > 0) {
         yield* railway
-          .volumeDelete({ volumeId: output.volumeId })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+          .deleteVolume({ volumeId: output.volumeId })
+          .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
         const check =
           output.volumeInstanceId.length > 0
             ? getVolumeByInstanceId(output.volumeInstanceId).pipe(
                 Effect.map((instance) => instance === undefined),
               )
             : Effect.succeed(true);
-        yield* check.pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (gone) => gone,
-            times: 8,
-          }),
-        );
+        yield* waitUntilDeleted("Volume", output.volumeId, check);
       }
     }),
   });

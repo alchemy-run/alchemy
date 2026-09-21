@@ -4,6 +4,7 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -85,15 +86,15 @@ const scopeFromResource = (bucket: Bucket) =>
   });
 
 const scopeFromEnv = Effect.gen(function* () {
-  const bucketName = yield* Config.string("BUCKET_NAME").pipe(
-    Config.orElse(() => Config.string("AWS_S3_BUCKET_NAME")),
+  const bucketName = yield* Config.String("BUCKET_NAME").pipe(
+    Config.orElse(() => Config.String("AWS_S3_BUCKET_NAME")),
   );
-  const accessKeyId = yield* Config.string("AWS_ACCESS_KEY_ID");
-  const secretAccessKey = yield* Config.redacted("AWS_SECRET_ACCESS_KEY");
-  const endpoint = yield* Config.string("AWS_ENDPOINT_URL_S3").pipe(
-    Config.orElse(() => Config.string("AWS_ENDPOINT_URL")),
+  const accessKeyId = yield* Config.String("AWS_ACCESS_KEY_ID");
+  const secretAccessKey = yield* Config.Redacted("AWS_SECRET_ACCESS_KEY");
+  const endpoint = yield* Config.String("AWS_ENDPOINT_URL_S3").pipe(
+    Config.orElse(() => Config.String("AWS_ENDPOINT_URL")),
   );
-  const region = yield* Config.string("AWS_REGION").pipe(
+  const region = yield* Config.String("AWS_REGION").pipe(
     Config.withDefault("auto"),
   );
   return {
@@ -111,16 +112,18 @@ const authorizeS3 = <A, E>(
 ): Effect.Effect<A, E, RuntimeContext> =>
   operation.pipe(
     Effect.provide(
-      fromCredentials(
-        {
-          accessKeyId: scope.accessKeyId,
-          secretAccessKey: scope.secretAccessKey,
-        },
-        scope.region,
+      Layer.mergeAll(
+        fromCredentials(
+          {
+            accessKeyId: scope.accessKeyId,
+            secretAccessKey: scope.secretAccessKey,
+          },
+          scope.region,
+        ),
+        AwsEndpoint.of(scope.endpoint),
+        FetchHttpClient.layer,
       ),
     ),
-    Effect.provide(AwsEndpoint.of(scope.endpoint)),
-    Effect.provide(FetchHttpClient.layer),
   ) as Effect.Effect<A, E, RuntimeContext>;
 
 export const makeRailwayS3Binding = <

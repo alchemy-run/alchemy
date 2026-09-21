@@ -1,383 +1,178 @@
-import { AlchemyContext } from "@/AlchemyContext";
-import { InstanceId } from "@/InstanceId";
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 import {
-  Database as PrismaDatabase,
-  DatabaseProvider,
-} from "@/Prisma/Database";
-import type { Database as ApiDatabase } from "@/Prisma/Types";
-import { Stack } from "@/Stack";
-import { Stage } from "@/Stage";
-import { describe, expect, it } from "alchemy-test";
+  getBranch,
+  getDatabase,
+  getProject,
+  getProjectBranches,
+  updateDatabase,
+} from "@distilled.cloud/prisma/management";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 
-const createdAt = "2026-01-01T00:00:00.000Z";
-const instanceId = "00000000000000000000000000000000";
+const { test } = Test.make({ providers: Prisma.providers() });
 
-const branch = (id: string, isDefault = true) => ({
-  id,
-  type: "branch" as const,
-  url: `https://api.prisma.test/v1/branches/${id}`,
-  gitName: "main",
-  isDefault,
-  role: "production" as const,
-  createdAt,
-  updatedAt: createdAt,
-  project: {
-    id: "project-1",
-    url: "https://api.prisma.test/v1/projects/project-1",
-    name: "app",
-  },
+const expectDatabase = Effect.fn(function* (
+  database: Prisma.Database["Attributes"],
+  branchId: string,
+) {
+  const observed = yield* getDatabase({ databaseId: database.databaseId });
+  expect(observed.data.id).toBe(database.databaseId);
+  expect(observed.data.project.id).toBe(database.projectId);
+  expect(observed.data.name).toBe(database.databaseName);
+  expect(observed.data.branchId).toBe(branchId);
+  expect(database.branchId).toBe(branchId);
 });
 
-const connection = (databaseId: string) => ({
-  id: `connection-${databaseId}`,
-  type: "connection" as const,
-  url: `https://api.prisma.test/v1/connections/connection-${databaseId}`,
-  name: "default",
-  createdAt,
-  kind: "postgres" as const,
-  endpoints: {
-    direct: {
-      host: "db.prisma.test",
-      port: 5432,
-      connectionString: `postgres://direct-${databaseId}`,
-    },
-    pooled: {
-      host: "pool.prisma.test",
-      port: 5432,
-      connectionString: `postgres://pooled-${databaseId}`,
-    },
-  },
-  database: {
-    id: databaseId,
-    url: `https://api.prisma.test/v1/databases/${databaseId}`,
-    name: "db",
-  },
-});
-
-const database = (
-  id: string,
-  branchId: string | null,
-  overrides: Partial<ApiDatabase> = {},
-): ApiDatabase => ({
-  id,
-  type: "database",
-  url: `https://api.prisma.test/v1/databases/${id}`,
-  name: "db",
-  status: "ready",
-  createdAt,
-  isDefault: false,
-  defaultConnectionId: `connection-${id}`,
-  connections: [connection(id)],
-  project: {
-    id: "project-1",
-    url: "https://api.prisma.test/v1/projects/project-1",
-    name: "app",
-  },
-  region: { id: "us-east-1", name: "US East" },
-  source: { type: "empty" },
-  branchId,
-  ...overrides,
-});
-
-const attrs = (
-  databaseId: string,
-  branchId: string | null,
-): PrismaDatabase["Attributes"] => ({
-  databaseId,
-  databaseName: "db",
-  projectId: "project-1",
-  status: "ready",
-  region: "us-east-1",
-  isDefault: false,
-  branchId,
-  defaultConnectionId: `connection-${databaseId}`,
-  createdAt,
-  directConnectionString: undefined,
-  pooledConnectionString: undefined,
-  accelerateConnectionString: undefined,
-  host: undefined,
-  user: undefined,
-  password: undefined,
-});
-
-const liveProviderContext = Layer.succeed(AlchemyContext, {
-  dotAlchemy: ".alchemy-test",
-  dev: false,
-  adopt: false,
-});
-
-const provide =
-  (client: PrismaManagementClient) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provide(DatabaseProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
-      Effect.provide(liveProviderContext),
-      Effect.provideService(Stack, {
-        name: "prisma-database-test",
-        stage: "test",
-        resources: {},
-        bindings: {},
-        actions: {},
-      }),
-      Effect.provideService(Stage, "test"),
-      Effect.provideService(InstanceId, instanceId),
-    );
-
-const reconcileInput = (news: unknown, output?: unknown, olds?: unknown) =>
-  ({
-    id: "Database",
-    fqn: "Database",
-    instanceId,
-    news,
-    olds,
-    output,
-    session: undefined as never,
-    bindings: [],
-  }) as never;
-
-const diffInput = (olds: unknown, news: unknown, output?: unknown) =>
-  ({
-    id: "Database",
-    fqn: "Database",
-    instanceId,
-    olds,
-    news,
-    output,
-    oldBindings: [],
-    newBindings: [],
-  }) as never;
-
-describe("Prisma Database", () => {
-  it.effect(
-    "attaches a generated-name create to the project's default branch",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listBranches: () => Effect.succeed([branch("branch-main")]),
-        listProjectDatabases: () => Effect.succeed([]),
-        createDatabase: (input: { name?: string; branchId?: string }) =>
-          Effect.sync(() => {
-            calls.push(["createDatabase", input]);
-            return database("database-1", input.branchId ?? null, {
-              name: input.name,
-            });
-          }),
-        updateDatabase: () =>
-          Effect.die("a create born attached must not be patched"),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDatabase.Provider;
-        const output = yield* provider.reconcile(
-          reconcileInput({ project: "project-1" }),
-        );
-
-        expect(output.branchId).toBe("branch-main");
-        expect(calls.map(([name]) => name)).toEqual(["createDatabase"]);
-        expect(calls[0]?.[1]).toMatchObject({ branchId: "branch-main" });
-      }).pipe(provide(client));
-    },
+const expectGone = <E, R>(read: Effect.Effect<boolean, E, R>) =>
+  read.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (gone) => gone,
+    }),
+    Effect.tap((gone) => Effect.sync(() => expect(gone).toBe(true))),
   );
 
-  it.effect(
-    "never detaches a database already attached to the default branch",
-    () => {
-      const client = {
-        getDatabase: () =>
-          Effect.succeed(database("database-1", "branch-main")),
-        listBranches: () => Effect.succeed([branch("branch-main")]),
-        updateDatabase: () =>
-          Effect.die("omitted branch props must not detach the database"),
-      } as unknown as PrismaManagementClient;
-      const props = { project: "project-1", name: "db" };
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDatabase.Provider;
-        const output = yield* provider.reconcile(
-          reconcileInput(props, attrs("database-1", "branch-main"), props),
-        );
-        expect(output.databaseId).toBe("database-1");
-        expect(output.branchId).toBe("branch-main");
-
-        const clean = yield* provider.diff!(
-          diffInput(props, props, attrs("database-1", "branch-main")),
-        );
-        expect(clean).toBeUndefined();
-      }).pipe(provide(client));
-    },
+const expectDatabaseGone = (databaseId: string) =>
+  expectGone(
+    getDatabase({ databaseId }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
   );
 
-  it.effect(
-    "converges a pre-existing unassigned database onto the default branch in place",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      let observed = database("database-1", null);
-      const client = {
-        getDatabase: () => Effect.sync(() => observed),
-        listBranches: () => Effect.succeed([branch("branch-main")]),
-        updateDatabase: (id: string, input: { branchId?: string | null }) =>
-          Effect.sync(() => {
-            calls.push(["updateDatabase", { id, input }]);
-            observed = database(id, input.branchId ?? null);
-            return observed;
-          }),
-      } as unknown as PrismaManagementClient;
-      const props = { project: "project-1", name: "db" };
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDatabase.Provider;
-        const plan = yield* provider.diff!(
-          diffInput(props, props, attrs("database-1", null)),
-        );
-        expect(plan).toEqual({ action: "update" });
-
-        const output = yield* provider.reconcile(
-          reconcileInput(props, attrs("database-1", null), props),
-        );
-        expect(output.databaseId).toBe("database-1");
-        expect(output.branchId).toBe("branch-main");
-        expect(calls).toEqual([
-          [
-            "updateDatabase",
-            {
-              id: "database-1",
-              input: {
-                name: "db",
-                branchId: "branch-main",
-                branchGitName: undefined,
-              },
-            },
-          ],
-        ]);
-      }).pipe(provide(client));
-    },
+const expectBranchGone = (branchId: string) =>
+  expectGone(
+    getBranch({ branchId }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
   );
 
-  it.effect("keeps an explicit branchId attachment authoritative", () => {
-    const calls: Array<[string, unknown?]> = [];
-    const client = {
-      getDatabase: () => Effect.succeed(database("database-1", "branch-main")),
-      updateDatabase: (id: string, input: { branchId?: string | null }) =>
-        Effect.sync(() => {
-          calls.push(["updateDatabase", { id, input }]);
-          return database(id, input.branchId ?? null);
-        }),
-    } as unknown as PrismaManagementClient;
-    const props = {
-      project: "project-1",
-      name: "db",
-      branchId: "branch-feature",
-    };
+const expectProjectGone = (id: string) =>
+  expectGone(
+    getProject({ id }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
 
-    return Effect.gen(function* () {
-      const provider = yield* PrismaDatabase.Provider;
-      const output = yield* provider.reconcile(
-        reconcileInput(props, attrs("database-1", "branch-main"), props),
-      );
-      expect(output.branchId).toBe("branch-feature");
-      expect(calls).toEqual([
-        [
-          "updateDatabase",
-          {
-            id: "database-1",
-            input: {
-              name: "db",
-              branchId: "branch-feature",
-              branchGitName: undefined,
-            },
-          },
-        ],
-      ]);
-    }).pipe(provide(client));
-  });
+test.provider(
+  "attaches named and generated databases to the default branch and preserves it on updates",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
 
-  it.effect("rejects explicit null branch props as unrepresentable", () => {
-    const client = {} as unknown as PrismaManagementClient;
-
-    return Effect.gen(function* () {
-      const provider = yield* PrismaDatabase.Provider;
-      const reconcileError = yield* provider
-        .reconcile(
-          reconcileInput({
-            project: "project-1",
-            name: "db",
-            branchGitName: null,
-          }),
-        )
-        .pipe(Effect.flip);
-      expect(String(reconcileError)).toContain("requires an attached branch");
-
-      const diffError = yield* provider.diff!(
-        diffInput(
-          { project: "project-1", name: "db" },
-          { project: "project-1", name: "db", branchId: null },
-          attrs("database-1", "branch-main"),
-        ),
-      ).pipe(Effect.flip);
-      expect(String(diffError)).toContain("requires an attached branch");
-    }).pipe(provide(client));
-  });
-
-  it.effect("fails loudly when the project has no default branch", () => {
-    const client = {
-      listBranches: () => Effect.succeed([branch("branch-preview", false)]),
-      listProjectDatabases: () => Effect.succeed([]),
-      createDatabase: () =>
-        Effect.die("must not create a database it cannot attach"),
-    } as unknown as PrismaManagementClient;
-
-    return Effect.gen(function* () {
-      const provider = yield* PrismaDatabase.Provider;
-      const error = yield* provider
-        .reconcile(reconcileInput({ project: "project-1" }))
-        .pipe(Effect.flip);
-      expect(String(error)).toContain(
-        "has no default branch to attach database",
-      );
-      expect(String(error)).toContain("Create or promote a default branch");
-    }).pipe(provide(client));
-  });
-
-  it.effect(
-    "converges an explicitly named create onto the default branch in the same reconcile",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listBranches: () => Effect.succeed([branch("branch-main")]),
-        createDatabase: (input: { name?: string; branchId?: string }) =>
-          Effect.sync(() => {
-            calls.push(["createDatabase", input]);
-            return database("database-1", input.branchId ?? null, {
-              name: input.name,
-            });
-          }),
-        updateDatabase: (id: string, input: { branchId?: string | null }) =>
-          Effect.sync(() => {
-            calls.push(["updateDatabase", { id, input }]);
-            return database(id, input.branchId ?? null);
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDatabase.Provider;
-        const output = yield* provider.reconcile(
-          reconcileInput({ project: "project-1", name: "db" }),
-        );
-
-        expect(output.branchId).toBe("branch-main");
-        expect(calls.map(([name]) => name)).toEqual([
-          "createDatabase",
-          "updateDatabase",
-        ]);
-        expect(calls[0]?.[1]).toMatchObject({ branchId: undefined });
-        expect(calls[1]?.[1]).toMatchObject({
-          input: { branchId: "branch-main" },
+    const resources = (updated = false) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", {
+          createDatabase: false,
         });
-      }).pipe(provide(client));
-    },
-  );
-});
+        const generated = yield* Prisma.Database("Generated", {
+          project,
+          name: updated ? "generated-updated" : undefined,
+        });
+        const named = yield* Prisma.Database("Named", {
+          project,
+          name: updated ? "named-updated" : "named-database",
+        });
+        return { project, generated, named };
+      });
+
+    const initial = yield* stack.deploy(resources());
+    const branches = yield* getProjectBranches({
+      projectId: initial.project.projectId,
+    });
+    const defaults = branches.data.filter((branch) => branch.isDefault);
+    expect(defaults).toHaveLength(1);
+    const defaultBranch = defaults[0]!;
+    yield* expectDatabase(initial.generated, defaultBranch.id);
+    yield* expectDatabase(initial.named, defaultBranch.id);
+
+    const updated = yield* stack.deploy(resources(true));
+    expect(updated.generated.databaseId).toBe(initial.generated.databaseId);
+    expect(updated.named.databaseId).toBe(initial.named.databaseId);
+    yield* expectDatabase(updated.generated, defaultBranch.id);
+    yield* expectDatabase(updated.named, defaultBranch.id);
+
+    const repeated = yield* stack.deploy(resources(true));
+    expect(repeated.generated.databaseId).toBe(initial.generated.databaseId);
+    expect(repeated.named.databaseId).toBe(initial.named.databaseId);
+    yield* expectDatabase(repeated.generated, defaultBranch.id);
+    yield* expectDatabase(repeated.named, defaultBranch.id);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.generated.databaseId);
+    yield* expectDatabaseGone(initial.named.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "preserves a non-default branch when explicit branch props are removed or the attachment changes out of band",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (
+      attachment: "id" | "gitName" | "omitted",
+      name?: string,
+    ) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", {
+          createDatabase: false,
+        });
+        const first = yield* Prisma.Branch("First", {
+          project,
+          gitName: "feature/first",
+        });
+        const second = yield* Prisma.Branch("Second", {
+          project,
+          gitName: "feature/second",
+        });
+        const database = yield* Prisma.Database("Database", {
+          project,
+          name,
+          ...(attachment === "id"
+            ? { branchId: first.branchId }
+            : attachment === "gitName"
+              ? { branchGitName: second.gitName }
+              : {}),
+        });
+        return { project, first, second, database };
+      });
+
+    const initial = yield* stack.deploy(resources("id"));
+    expect(initial.first.isDefault).toBe(false);
+    expect(initial.second.isDefault).toBe(false);
+    yield* expectDatabase(initial.database, initial.first.branchId);
+
+    const byName = yield* stack.deploy(resources("gitName"));
+    expect(byName.database.databaseId).toBe(initial.database.databaseId);
+    yield* expectDatabase(byName.database, initial.second.branchId);
+
+    const omitted = yield* stack.deploy(resources("omitted", "renamed"));
+    expect(omitted.database.databaseId).toBe(initial.database.databaseId);
+    yield* expectDatabase(omitted.database, initial.second.branchId);
+
+    yield* updateDatabase({
+      databaseId: initial.database.databaseId,
+      branchId: initial.first.branchId,
+    });
+    const drifted = yield* stack.deploy(resources("omitted", "renamed-again"));
+    expect(drifted.database.databaseId).toBe(initial.database.databaseId);
+    yield* expectDatabase(drifted.database, initial.first.branchId);
+
+    const explicit = yield* stack.deploy(resources("gitName", "renamed-again"));
+    expect(explicit.database.databaseId).toBe(initial.database.databaseId);
+    yield* expectDatabase(explicit.database, initial.second.branchId);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectBranchGone(initial.first.branchId);
+    yield* expectBranchGone(initial.second.branchId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { timeout: 120_000 },
+);

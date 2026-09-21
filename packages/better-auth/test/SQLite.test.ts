@@ -1,4 +1,4 @@
-import { RuntimeContext } from "alchemy";
+import { AlchemyContext, RuntimeContext } from "alchemy";
 import { describe, expect, it } from "alchemy-test";
 import { organization } from "better-auth/plugins/organization";
 import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
@@ -29,6 +29,29 @@ const tempSqlitePath = Effect.gen(function* () {
 });
 
 describe("BetterAuth (bun:sqlite)", () => {
+  it.live(
+    "uses the configured runtime directory unless a filename is supplied",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped();
+        yield* Effect.gen(function* () {
+          for (const filename of [undefined, `${root}/explicit.sqlite`]) {
+            const expected = filename ?? `${root}/better-auth.sqlite`;
+            const db = yield* Database.pipe(Effect.provide(SQLite(filename)));
+            yield* applyMigrations(db.migrate!, baseOptions);
+            expect(yield* fs.exists(expected)).toBe(true);
+          }
+        }).pipe(
+          Effect.provideService(AlchemyContext, {
+            dotAlchemy: root,
+            dev: false,
+            adopt: false,
+          }),
+        );
+      }).pipe(Effect.scoped, provideTestEnv),
+  );
+
   it.live("applies schema migrations idempotently", () =>
     Effect.gen(function* () {
       const path = yield* tempSqlitePath;

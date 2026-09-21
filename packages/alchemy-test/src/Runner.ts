@@ -46,6 +46,14 @@ export interface RunOptions {
    */
   readonly paths: ReadonlyArray<string>;
   /**
+   * Exclusion filters (`--exclude`). Existing files/directories exclude by
+   * path prefix; anything else is a case-insensitive substring exclusion on
+   * test file paths. A positional root explicitly given inside an excluded
+   * path overrides the exclusion (so `alchemy-test test/Railway` still works
+   * when the package script bakes in `--exclude test/Railway`).
+   */
+  readonly exclude?: ReadonlyArray<string> | undefined;
+  /**
    * `-t` test-name filter, applied to the full title
    * (`file > describe chain > name`).
    */
@@ -200,9 +208,37 @@ export const discover = Effect.fn(function* (options: RunOptions) {
       nameFilters.push(p.toLowerCase());
     }
   }
+  // Roots the user asked for explicitly (before defaulting to `test`) are
+  // exempt from `--exclude` — a baked-in package-script exclusion must not
+  // make `alchemy-test test/Railway/Foo.test.ts` silently run nothing.
+  const explicitRoots = [...roots];
   if (roots.length === 0) {
     roots.push(path.resolve(options.root, "test"));
   }
+
+  // Excludes mirror positional semantics: existing paths exclude by prefix,
+  // anything else is a case-insensitive substring exclusion.
+  const excludePrefixes: Array<string> = [];
+  const excludeSubstrings: Array<string> = [];
+  for (const e of options.exclude ?? []) {
+    const abs = path.isAbsolute(e) ? e : path.resolve(options.root, e);
+    const exists = yield* fs
+      .exists(abs)
+      .pipe(Effect.orElseSucceed(() => false));
+    if (exists) {
+      excludePrefixes.push(abs);
+    } else {
+      excludeSubstrings.push(e.toLowerCase());
+    }
+  }
+  const isWithin = (file: string, dir: string): boolean =>
+    file === dir || file.startsWith(dir + path.sep);
+  const isExcluded = (file: string): boolean => {
+    if (excludePrefixes.some((prefix) => isWithin(file, prefix))) return true;
+    const rel = path.relative(options.root, file).toLowerCase();
+    return excludeSubstrings.some((substring) => rel.includes(substring));
+  };
+  const exemptRoots = explicitRoots.filter(isExcluded);
 
   for (const abs of roots) {
     const stat = yield* fs
@@ -225,6 +261,12 @@ export const discover = Effect.fn(function* (options: RunOptions) {
       const rel = path.relative(options.root, file).toLowerCase();
       return nameFilters.some((filter) => rel.includes(filter));
     });
+  }
+  if (excludePrefixes.length > 0 || excludeSubstrings.length > 0) {
+    unique = unique.filter(
+      (file) =>
+        exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
+    );
   }
   return unique.sort();
 });
@@ -276,6 +318,9 @@ const collectFile = (
  * other test in the run.
  */
 const EXCLUSIVE_PERMITS = 100_000;
+
+const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
+  hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
 
 interface ExecContext {
   readonly options: RunOptions;
@@ -644,10 +689,14 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
     // so the TUI can show "setting up" instead of an unexplained queue.
     if (suite.beforeAll.length > 0) {
       yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
-      const exit = yield* runHooks(suite.beforeAll, ctx.options.timeout).pipe(
-        withCapture(ctx.fileLogs),
-        Effect.exit,
-      );
+      // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
+      // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
+      // slot so unrelated files can still run concurrently.
+      const exit = yield* ctx.lock
+        .withPermits(hookPermits(suite.beforeAll))(
+          runHooks(suite.beforeAll, ctx.options.timeout),
+        )
+        .pipe(withCapture(ctx.fileLogs), Effect.exit);
       yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
       if (Exit.isFailure(exit)) {
         yield* failSubtree(suite, ctx, prettyCause(exit.cause));
@@ -676,12 +725,15 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   // Test.make's fallback hook that closes the shared scope and local
   // provider sidecar, which registers last and would otherwise leak the
   // sidecar for the rest of the process. Failures aggregate.
-  const exits = yield* Effect.forEach(suite.afterAll, (hook) =>
+  const afterAllRun = Effect.forEach(suite.afterAll, (hook) =>
     Effect.suspend(hook.body).pipe(
       Effect.timeout(Duration.millis(hook.timeout ?? ctx.options.timeout)),
       Effect.exit,
     ),
-  ).pipe(withCapture(ctx.fileLogs));
+  );
+  const exits = yield* ctx.lock
+    .withPermits(hookPermits(suite.afterAll))(afterAllRun)
+    .pipe(withCapture(ctx.fileLogs));
   yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
   const failures = exits.filter(Exit.isFailure);
   if (failures.length > 0) {

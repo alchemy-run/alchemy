@@ -45,7 +45,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Astro build AND creates a CloudFront
@@ -83,7 +82,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `process.env` in the page frontmatter — proves the Lambda
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Astro on AWS!");
     expect(html).toContain("server-rendered in an AWS Lambda");
   }),
   { timeout: 180_000 },

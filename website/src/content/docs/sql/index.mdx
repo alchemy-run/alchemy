@@ -1,87 +1,74 @@
 ---
 title: SQL
-description: One home for SQL in alchemy — low-level effect-sql clients, Drizzle ORM, schema migrations in the deploy graph, and the per-execution connection lifecycle.
+description: Choose a database, connect with Effect SQL, Drizzle, or Prisma ORM, and deploy committed migrations.
 ---
 
-An alchemy app talks SQL at whichever level fits: a raw
-tagged-template client, an ORM, or both against the same connection.
-The schema rides the same deploy graph as the infrastructure, so
-`alchemy deploy` regenerates and applies pending migrations alongside
-everything else.
+Use Effect SQL for SQL queries, Drizzle for typed schema queries, or Prisma ORM for contract-based queries. Start with your provider, then follow the shared client guide.
 
-## Databases
+<span id="databases" />
 
-- [D1](/cloudflare/data/d1) — Cloudflare's serverless SQLite, bound
-  natively into a Worker.
-- [Hyperdrive](/cloudflare/data/hyperdrive) — edge connection pooling
-  for any Postgres or MySQL: [Neon](/neon),
-  [PlanetScale](/planetscale), RDS, or a database you already run.
-- [Fly Postgres](/fly/data/postgres) — billed Managed Postgres.
-  Bind `ConnectPostgres` on a Service; `migrations` is the same
-  surface as Neon.
-- AWS-side connections — DSQL, RDS, and Redshift bindings in the
-  [API reference](/providers).
+## Choose a database
 
-## Clients
+See [Databases](/sql/databases) to compare engines and connection paths, with links directly to each database's setup guide.
 
-`alchemy/SQL/*` is the low-level home: tagged-template queries with
-typed errors, no ORM — one subpath per backend (`alchemy/SQL/D1`,
-`alchemy/SQL/Postgres`, `alchemy/SQL/MySQL`), so you only load the
-driver you use.
-`alchemy/Drizzle` is the ORM sibling: a typed schema and relational
-queries. `Drizzle.Schema`, `Drizzle.providers()`, and `Drizzle.D1`
-come from the `alchemy/Drizzle` entry; the Postgres and MySQL
-clients live on their own subpaths (`alchemy/Drizzle/Postgres`,
-`alchemy/Drizzle/MySQL`) so their drivers only load when you use
-them, and the Durable Object client lives at
-`alchemy/Drizzle/Cloudflare`. Both wrap the same
-[`@effect/sql`](https://effect.website) drivers and share one
-lifecycle.
+<span id="clients" />
+<span id="what-are-you-building" />
+
+## Effect SQL
+
+A provider binding supplies the connection string; the query stays ordinary SQL:
 
 ```typescript
-import * as SQL from "alchemy/SQL/D1";
-import * as Drizzle from "alchemy/Drizzle";
+import * as SQL from "alchemy/SQL/Postgres";
 
-// Raw effect-sql — tagged-template queries, typed errors
-const sql = yield* SQL.D1(d1);
-const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
-
-// Drizzle — typed schema, relational queries
-const db = yield* Drizzle.D1(d1, { relations });
-const user = yield* db.query.Users.findFirst({ with: { posts: true } });
+const sql = yield* SQL.Postgres({ url: connectionString });
+const rows = yield* sql`SELECT id, name FROM users WHERE id = ${userId}`;
 ```
 
-Every client builds lazily on the first query of an execution, is
-reused for every query in that execution, and tears down when the
-event settles — [Connection lifecycle](/sql/effect-sql/lifecycle)
-explains why.
+[Postgres](/sql/effect-sql/postgres), [MySQL](/sql/effect-sql/mysql), and [D1](/sql/effect-sql/d1) document their client setup.
 
-## What are you building?
+## Drizzle
 
-| Goal | Reach for |
-| --- | --- |
-| Raw SQL on Postgres | [Effect SQL: Postgres](/sql/effect-sql/postgres) |
-| Raw SQL on MySQL | [Effect SQL: MySQL](/sql/effect-sql/mysql) |
-| Raw SQL on D1 | [Effect SQL: D1](/sql/effect-sql/d1) |
-| Typed schema + queries on Postgres | [Drizzle: Postgres](/sql/drizzle/postgres) |
-| Typed schema + queries on MySQL | [Drizzle: MySQL](/sql/drizzle/mysql) |
-| Typed schema + queries on D1 | [Drizzle: D1](/sql/drizzle/d1) |
-| Schema changes applied on deploy | [Drizzle migrations](/sql/drizzle/migrations) |
-| Hand-written `.sql` migrations | [Effect SQL migrations](/sql/effect-sql/migrations) |
-| A service that runs on any database | `SqlClient` + Layers — see [Provide as a service](/sql/effect-sql/postgres#provide-as-a-service) |
+Use the same connection with your schema:
 
-## Where next
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import { users } from "./schema.ts";
 
-- [Effect SQL: Postgres](/sql/effect-sql/postgres) /
-  [MySQL](/sql/effect-sql/mysql) / [D1](/sql/effect-sql/d1) — the
-  raw clients.
-- [Drizzle: Postgres](/sql/drizzle/postgres) /
-  [MySQL](/sql/drizzle/mysql) / [D1](/sql/drizzle/d1) — schema to
-  queries, end to end.
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring on
-  Postgres via Hyperdrive.
-- [Fly Postgres](/fly/data/postgres) — Managed Postgres on a Fly
-  Service with `ConnectPostgres`.
-- [Drizzle on D1](/cloudflare/data/d1-drizzle) — full Worker wiring
-  on D1.
-- [API reference](/providers) — every SQL and Drizzle export.
+const db = yield* Drizzle.Postgres(connectionString);
+const rows = yield* db.select().from(users);
+```
+
+See [Postgres](/sql/drizzle/postgres), [MySQL](/sql/drizzle/mysql), or [D1](/sql/drizzle/d1).
+
+## Prisma ORM
+
+Prisma ORM v8 supports TypeScript or PSL contracts and requires PostgreSQL 17+. It is separate from the [Prisma hosting provider](/prisma).
+
+[Contracts](/sql/prisma/contracts) · [Postgres queries](/sql/prisma/postgres) · [Migrations](/sql/prisma/migrations)
+
+## Commit migrations before deployment
+
+Generate and review SQL when the schema changes, then commit it with the schema:
+
+```sh
+pnpm exec drizzle-kit generate
+git diff -- drizzle
+git add src/schema.ts drizzle
+git commit -m "Add schema migration"
+```
+
+Follow the provider's guide to apply the committed SQL and deploy the application. Use the [Drizzle migration guide](/sql/drizzle/migrations) for generated SQL, [Effect SQL migrations](/sql/effect-sql/migrations) for handwritten files, or the [Prisma migration workflow](/sql/prisma/migrations) for contracts.
+
+<span id="where-next" />
+
+## Connection lifecycle
+
+```typescript
+fetch: Effect.gen(function* () {
+  const rows = yield* db.select().from(users);
+  return yield* HttpServerResponse.json(rows);
+});
+```
+
+Connections are acquired lazily for an execution and closed with its scope. See [Connection lifecycle](/sql/effect-sql/lifecycle) for handlers, workflows, and scoped queries.

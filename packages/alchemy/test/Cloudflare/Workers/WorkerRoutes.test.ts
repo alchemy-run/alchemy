@@ -369,7 +369,9 @@ test.provider(
         // The pattern still routes to its original owner.
         const live = yield* findRoute(zoneId, T3_PATTERN);
         expect(live?.script).toEqual(owner.workerName);
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)));
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+      );
     }).pipe(logLevel),
   { timeout: 300_000 },
 );

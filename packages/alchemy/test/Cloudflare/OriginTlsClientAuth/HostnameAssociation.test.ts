@@ -179,7 +179,10 @@ describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
       expect(all).toEqual([]);
 
       yield* stack.destroy();
-    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+    }).pipe(
+      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+      logLevel,
+    ),
   );
 
   test.provider(
@@ -250,7 +253,10 @@ describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
           Effect.map(() => true),
         );
         expect(gone).toEqual(true);
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     // Two sequential deploys, each uploading two hostname client-certificates
     // plus the association, on Cloudflare's per-zone-serialized client-cert
     // API. Under a full concurrent `./test/Cloudflare` run this zone's cert
@@ -340,7 +346,10 @@ describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
           Effect.map(() => true),
         );
         expect(newGone).toEqual(true);
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     // Same per-zone-serialized client-cert contention as the lifecycle case
     // above, plus two spaced void polls — give real headroom under load.
     { timeout: 300_000 },

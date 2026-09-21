@@ -33,6 +33,7 @@ const BOOTSTRAP_MODULES = [
   "Fly",
   "Hetzner",
   "Prisma",
+  "Railway",
 ] as const;
 
 layer(NodeServices.layer)("generated entry bootstraps", (it) => {

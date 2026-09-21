@@ -2,6 +2,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -14,15 +15,24 @@ const Website = Cloudflare.Website.StaticSite(
     const previewParent = stack.stage.startsWith("pr-")
       ? yield* Cloudflare.Worker.ref("Website", { stage: "preview-base" })
       : undefined;
+    const name =
+      stack.stage === "preview-base"
+        ? "alchemy-website-preview"
+        : stack.stage === "main"
+          ? "alchemy-website-main"
+          : stack.stage === "prod"
+            ? "alchemy-website-prod"
+            : undefined;
 
     return {
+      name,
       command: "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",
-      version: previewParent
+      preview: previewParent
         ? {
-            parent: previewParent,
-            alias: stack.stage,
+            of: previewParent,
+            name: stack.stage,
             message: process.env.PULL_REQUEST
               ? `PR #${process.env.PULL_REQUEST}`
               : undefined,
@@ -31,7 +41,11 @@ const Website = Cloudflare.Website.StaticSite(
       workersDev: stack.stage === "prod" ? false : undefined,
       domain:
         stack.stage === "prod"
-          ? { name: "alchemy.run", redirects: ["v2.alchemy.run"] }
+          ? {
+              name: "alchemy.run",
+              redirects: ["v2.alchemy.run"],
+              previews: true,
+            }
           : stack.stage === "main"
             ? { name: "main.alchemy.run" }
             : undefined,
@@ -55,6 +69,10 @@ const Website = Cloudflare.Website.StaticSite(
       },
     } satisfies Cloudflare.Website.StaticSiteProps<{}>;
   }),
+).pipe(
+  RemovalPolicy.retain(
+    Alchemy.Stack.pipe(Effect.map(({ stage }) => !stage.startsWith("pr-"))),
+  ),
 );
 
 export default Alchemy.Stack(

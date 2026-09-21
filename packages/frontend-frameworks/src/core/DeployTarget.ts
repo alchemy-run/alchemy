@@ -102,7 +102,13 @@ export interface DeployTargetContext {
   readonly framework?: string | undefined;
 }
 
-export interface DeployTargetBuildContext extends DeployTargetContext {}
+export interface DeployTargetBuildContext extends DeployTargetContext {
+  /**
+   * Process environment for a wholesale `build` child. Applied only in
+   * that process — never on the engine.
+   */
+  readonly env?: Record<string, string> | undefined;
+}
 
 export interface DeployTargetFinishContext extends DeployTargetContext {
   /**

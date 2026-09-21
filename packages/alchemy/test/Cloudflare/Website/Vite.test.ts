@@ -1173,7 +1173,10 @@ if (el) {
           ],
           { concurrency: "unbounded" },
         );
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     { timeout: 120_000 },
   );
 
@@ -1227,7 +1230,10 @@ if (el) {
           timeout: "30 seconds",
           label: "spa dev module asset",
         });
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     { timeout: 180_000 },
   );
 

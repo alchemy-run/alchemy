@@ -30,7 +30,8 @@ const web = yield* Fly.Machine("Web", {
 });
 ```
 
-`region` replaces on change. `image` updates in place. Guest
+`region` replaces on change. `image` updates in place by default; the
+opt-in blue/green strategy prepares replacement Machines instead. Guest
 defaults to shared-cpu 1× / 256 MB. Port 443 with `tls` is what
 makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 `[]`) for a worker that should not be reachable from the internet.
@@ -40,9 +41,10 @@ makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 
 ## Scale up
 
-Each Machine resource is one VM. Yield another Machine to add
-capacity. Fly's proxy load-balances published `services` across
-them.
+A Machine resource runs one VM by default. Set `count` to manage
+several replicas together, or declare separate resources for Machines
+with different configuration. Fly's proxy load-balances published
+`services` across them.
 
 ```typescript
 const web1 = yield* Fly.Machine("Web1", {
@@ -78,9 +80,17 @@ const web2 = yield* Fly.Machine("Web2", {
 });
 ```
 
-A [`Service`](/fly/compute/services) still scales with `count`. That
-is one program, many Machines. `Fly.Machine` is one resource, one
-VM.
+Both `Fly.Machine` and [`Service`](/fly/compute/services) support
+`count`. With the default rolling strategy, replicas within one resource
+update sequentially; separate resources do not share that ordering.
+Blue/green prepares the desired replacement topology before old retirement.
+
+`count` is provisioned capacity, not always-running capacity. With
+`autostop: "stop"` or `"suspend"`, replicas may be idle. `autostart` allows
+requests to wake them, and `minMachinesRunning` controls Fly's running floor.
+Blue/green checks a running representative plus the required floor without
+permanently waking all idle replicas. A replacement does not inherit suspended
+RAM. See [idle-capacity semantics](/fly/compute/deployments#keep-idle-capacity-with-stop-or-suspend).
 
 ## Scale down
 
@@ -115,8 +125,12 @@ const worker = yield* Fly.Machine("Worker", {
 Alchemy stamps `alchemy.stack` / `alchemy.stage` / `alchemy.id` /
 `alchemy.type` onto `config.metadata` so `list()` can find owned
 Machines. Fly injects App [secrets](/fly/data/secrets) as env vars
-on the Machine. `minSecretsVersion` waits until the Machine has
-seen at least that secrets version.
+on the Machine. `minSecretsVersion` requires at least that secret version;
+it is a floor, not an immutable snapshot. Machine leases do not serialize
+standalone `Fly.Secret`, other Services, or runtime vault writers. A later
+writer can advance the shared App vault. Set an explicit deployment input
+or version floor when an out-of-band rotation requires a new rollout;
+secret changes are not automatically watched.
 
 ## Mounts
 
@@ -137,12 +151,41 @@ path is part of the binding graph.
 
 ## Lifecycle
 
-Reconcile waits until the Machine is `started` (`waitMachine`,
-bounded). `skipLaunch: true` creates or updates the config without
-starting it. Delete force-destroys and waits until gone. `Conflict`
-on create/update/delete is treated as a race and retried.
-`autoDestroy: true` tears the Machine down when its main process
-exits.
+For replicas required to run, reconcile waits until the Machine is
+`started` (`waitMachine`, bounded). It then waits for configured readiness
+checks. With default rolling updates, this happens before the next replica.
+The default readiness budget is 60 seconds; set `deploy.healthTimeout`
+for a longer bounded wait. A failed wait stops the rollout with
+`Fly.ReplicaChecksNotPassing` and
+the last observed check names, statuses, and output. Later replicas
+remain unchanged; earlier updates are not automatically rolled back.
+The default rolling strategy updates in place, so a single replica can be
+unavailable while it updates. Set `deploy: { strategy: "bluegreen" }` to
+[prepare checked replacement Machines before retirement](/fly/compute/deployments).
+
+For rolling, `skipLaunch: true` creates or updates config without starting
+or checking it. By default, delete force-destroys and waits until gone.
+Setting `shutdown` or enabling blue/green instead cordons reachable
+predecessors, signals each with its own persisted shutdown policy, waits
+for it to stop, and verifies deletion. A new generation's shorter timeout
+must not shorten the old process's grace window.
+
+A raw image must handle signals, stop accepting work, and drain requests or jobs.
+These props do not install the Effect runtime in it. A genuinely unreachable
+host may require force-deleting an owned stateless predecessor once its
+replacement is ready. This cannot prove the old work drained. See the
+[deployment and recovery limits](/fly/compute/deployments).
+
+Alchemy uses native Machine leases. It reports contention rather than stealing
+a lease. These leases do not lock the whole App or serialize every first
+deployment. Serialize CI deployments to the same resource. LocalState is not
+a cross-process lock, and App deletion has no Machine-lease precondition.
+
+`autoDestroy: true` removes a Machine when its process exits. Blue/green requires
+a persistent process and rejects this option, explicit `skipLaunch`, attached
+volumes, and missing readiness checks. It reports unsupported settings rather
+than silently switching to rolling. Stop and suspend are supported through the
+[idle-capacity rules](/fly/compute/deployments#keep-idle-capacity-with-stop-or-suspend).
 
 ## Service or Sprite
 
@@ -165,6 +208,8 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 ## Where next
+
+- [Blue/green deployments](/fly/compute/deployments) — readiness, graceful shutdown, and recovery.
 
 - [Services](/fly/compute/services) — bundle an Effect program into
   a Machine.

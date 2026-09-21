@@ -45,7 +45,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Next.js + OpenNext build AND creates a
@@ -92,7 +91,7 @@ test.skipIf(lambdaRoutesBroken)(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `process.env` in the force-dynamic page — proves the Lambda
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Next.js on AWS!");
   }),
   { timeout: 180_000 },
 );

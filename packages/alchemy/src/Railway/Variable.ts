@@ -1,17 +1,20 @@
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -378,7 +381,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      railway.catchTags(["RailwayNotFound"], () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -400,49 +403,43 @@ const upsertVariable = (input: {
   value: string;
   serviceId?: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-        ...(input.serviceId !== undefined
-          ? { serviceId: input.serviceId }
-          : {}),
-      },
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: (e) => e._tag === "RailwayRateLimited",
-        schedule: Schedule.spaced("30 seconds"),
-        times: 1,
-      }),
-    );
+  railway.upsertVariable({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+      ...(input.serviceId !== undefined ? { serviceId: input.serviceId } : {}),
+    },
+  });
 
 const listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>
-  railway.environments.items({ projectId: project.projectId, first: 50 }).pipe(
-    Stream.filter((env) => env.deletedAt == null),
-    Stream.map((env) => env.id),
-    Stream.runCollect,
-    Effect.map((ids) => {
-      const set = new Set(Array.from(ids));
-      if (project.environmentId.length > 0) {
-        set.add(project.environmentId);
-      }
-      return Array.from(set);
-    }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(
-        project.environmentId.length > 0 ? [project.environmentId] : [],
+  railway.environments
+    .items(
+      { projectId: project.projectId, first: 50 },
+      { id: true, deletedAt: true },
+    )
+    .pipe(
+      Stream.filter((env) => env.deletedAt == null),
+      Stream.map((env) => env.id),
+      Stream.runCollect,
+      Effect.map((ids) => {
+        const set = new Set(Array.from(ids));
+        if (project.environmentId.length > 0) {
+          set.add(project.environmentId);
+        }
+        return Array.from(set);
+      }),
+      railway.catchTags(["RailwayNotFound"], () =>
+        Effect.succeed(
+          project.environmentId.length > 0 ? [project.environmentId] : [],
+        ),
       ),
-    ),
-  );
+    );
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
@@ -512,42 +509,35 @@ export const VariableProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listVariableMap(project.projectId, environmentId).pipe(
-                    Effect.flatMap((vars) =>
-                      Effect.forEach(
-                        Object.keys(vars).filter((name) =>
-                          matchesAlchemyPhysicalName(name),
-                        ),
-                        (name) =>
-                          digestOf(vars[name]!).pipe(
-                            Effect.map((digest) =>
-                              toAttrs({
-                                projectId: project.projectId,
-                                environmentId,
-                                serviceId: undefined,
-                                name,
-                                digest,
-                              }),
-                            ),
-                          ),
-                        { concurrency: 8 },
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listVariableMap(project.projectId, environmentId).pipe(
+              Effect.flatMap((vars) =>
+                Effect.forEach(
+                  Object.keys(vars).filter((name) =>
+                    matchesAlchemyPhysicalName(name),
+                  ),
+                  (name) =>
+                    digestOf(vars[name]!).pipe(
+                      Effect.map((digest) =>
+                        toAttrs({
+                          projectId: project.projectId,
+                          environmentId,
+                          serviceId: undefined,
+                          name,
+                          digest,
+                        }),
                       ),
                     ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+                ),
+              ),
             ),
-          ),
-        { concurrency: 8 },
+          );
+          return nested.flat();
+        }),
       );
       return rows.flat();
     }),
@@ -650,7 +640,7 @@ export const VariableProvider = () =>
         return;
       }
       yield* railway
-        .variableDelete({
+        .deleteVariable({
           input: {
             projectId: output.projectId,
             environmentId: output.environmentId,
@@ -660,21 +650,16 @@ export const VariableProvider = () =>
               : {}),
           },
         })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
-      yield* getValue(
-        output.projectId,
-        output.environmentId,
-        output.name,
-        output.serviceId,
-      ).pipe(
-        Effect.map((value) => value === undefined),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (gone) => gone,
-          times: 8,
-        }),
+        .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+      yield* waitUntilDeleted(
+        "Variable",
+        `${output.environmentId}/${output.serviceId ?? "shared"}/${output.name}`,
+        getValue(
+          output.projectId,
+          output.environmentId,
+          output.name,
+          output.serviceId,
+        ).pipe(Effect.map((value) => value === undefined)),
       );
     }),
   });
