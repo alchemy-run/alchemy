@@ -84,6 +84,38 @@ export class MigrationHistoryConflictError extends Data.TaggedError(
   message: string;
 }> {}
 
+/**
+ * Already-applied migration files were edited or removed. History is
+ * forward-only: add a new migration instead of rewriting files that have
+ * already run. PlanetScale development branches replace rather than
+ * raising this; production branches (and in-place apply on any target)
+ * fail with it.
+ */
+export class RewrittenMigrationHistoryError extends Data.TaggedError(
+  "RewrittenMigrationHistoryError",
+)<{
+  changed: ReadonlyArray<string>;
+  removed: ReadonlyArray<string>;
+  message: string;
+}> {}
+
+/** Human-readable `changed X; removed Y` fragment for rewritten-history errors. */
+export const describeRewrittenHistory = (options: {
+  changed: ReadonlyArray<string>;
+  removed: ReadonlyArray<string>;
+}): string =>
+  [
+    options.changed.length > 0
+      ? `changed ${options.changed.join(", ")}`
+      : undefined,
+    options.removed.length > 0
+      ? `removed ${options.removed.join(", ")}`
+      : undefined,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join("; ");
+
 export type MigrationApplyError =
   | MigrationError
-  | MigrationHistoryConflictError;
+  | MigrationHistoryConflictError
+  | RewrittenMigrationHistoryError;

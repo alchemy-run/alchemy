@@ -1,10 +1,14 @@
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
 import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
@@ -82,6 +86,207 @@ test.provider("diff tracks Postgres branch replica intent", () =>
       stables: ["organization", "database", "name"],
     });
   }),
+);
+
+const writeMigrationDir = (files: Record<string, string>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-ps-branch-mig-",
+    });
+    for (const [name, sql] of Object.entries(files)) {
+      yield* fs.writeFileString(path.join(dir, name), sql);
+    }
+    const hashes = yield* hashMigrations(dir);
+    return { dir, hashes };
+  });
+
+const postgresProps = (
+  migrations: string,
+): Planetscale.PostgresBranchProps => ({
+  database: "database",
+  parentBranch: "main",
+  migrations,
+});
+
+const mysqlProps = (
+  migrations: string,
+  isProduction: boolean,
+): Planetscale.MySQLBranchProps => ({
+  database: "database",
+  parentBranch: "main",
+  isProduction,
+  migrations,
+});
+
+const diffArgs = <P, A>(news: P, olds: P, output: A) => ({
+  id: "Branch",
+  fqn: "Branch",
+  instanceId: "instance",
+  olds,
+  news,
+  oldBindings: [] as never[],
+  newBindings: [] as never[],
+  output,
+});
+
+// #1389: Branch.diff treated every migrationsHashes change as an in-place
+// update. The runner then skipped already-applied names without checking
+// hashes and persisted the rewritten hashes, silently accepting history
+// rewrites.
+test.provider(
+  "diff replaces a non-production branch when a prior migration is rewritten",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dir, hashes } = yield* writeMigrationDir({
+        "0001_init.sql": "CREATE TABLE users (id int);",
+      });
+      const provider = yield* Provider.findProvider(Planetscale.PostgresBranch);
+      const props = postgresProps(dir);
+      const output = branchOutput({
+        production: false,
+        migrationsDir: dir,
+        migrationsTable: "__alchemy_migrations",
+        migrationsHashes: hashes,
+      });
+
+      yield* fs.writeFileString(
+        path.join(dir, "0001_init.sql"),
+        "CREATE TABLE users (id int, name text);",
+      );
+
+      const diff = yield* provider.diff!(diffArgs(props, props, output));
+      expect(diff).toEqual({ action: "replace" });
+    }),
+);
+
+test.provider(
+  "diff replaces a non-production branch when a prior migration is removed",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dir, hashes } = yield* writeMigrationDir({
+        "0001_init.sql": "CREATE TABLE users (id int);",
+        "0002_posts.sql": "CREATE TABLE posts (id int);",
+      });
+      const provider = yield* Provider.findProvider(Planetscale.PostgresBranch);
+      const props = postgresProps(dir);
+      const output = branchOutput({
+        production: false,
+        migrationsDir: dir,
+        migrationsTable: "__alchemy_migrations",
+        migrationsHashes: hashes,
+      });
+
+      yield* fs.remove(path.join(dir, "0001_init.sql"));
+
+      const diff = yield* provider.diff!(diffArgs(props, props, output));
+      expect(diff).toEqual({ action: "replace" });
+    }),
+);
+
+test.provider("diff still updates when a new forward migration is added", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { dir, hashes } = yield* writeMigrationDir({
+      "0001_init.sql": "CREATE TABLE users (id int);",
+    });
+    const provider = yield* Provider.findProvider(Planetscale.PostgresBranch);
+    const props = postgresProps(dir);
+    const output = branchOutput({
+      production: false,
+      migrationsDir: dir,
+      migrationsTable: "__alchemy_migrations",
+      migrationsHashes: hashes,
+    });
+
+    yield* fs.writeFileString(
+      path.join(dir, "0002_posts.sql"),
+      "CREATE TABLE posts (id int);",
+    );
+
+    const diff = yield* provider.diff!(diffArgs(props, props, output));
+    expect(diff).toEqual({
+      action: "update",
+      stables: ["organization", "database", "name"],
+    });
+  }),
+);
+
+test.provider(
+  "diff fails when a production branch's prior migration is rewritten",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dir, hashes } = yield* writeMigrationDir({
+        "0001_init.sql": "CREATE TABLE users (id int);",
+      });
+      const provider = yield* Provider.findProvider(Planetscale.PostgresBranch);
+      const props = postgresProps(dir);
+      const output = branchOutput({
+        production: true,
+        migrationsDir: dir,
+        migrationsTable: "__alchemy_migrations",
+        migrationsHashes: hashes,
+      });
+
+      yield* fs.writeFileString(
+        path.join(dir, "0001_init.sql"),
+        "CREATE TABLE users (id int, name text);",
+      );
+
+      const result = yield* Effect.result(
+        provider.diff!(diffArgs(props, props, output)),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
+        expect(result.failure.message).toContain("forward migration");
+        expect(result.failure.message).toContain("0001_init.sql");
+      }
+    }),
+);
+
+test.provider(
+  "diff fails when a desired production MySQL branch's prior migration is rewritten",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dir, hashes } = yield* writeMigrationDir({
+        "0001_init.sql": "CREATE TABLE users (id int);",
+      });
+      const provider = yield* Provider.findProvider(Planetscale.MySQLBranch);
+      const props = mysqlProps(dir, true);
+      const output: Planetscale.MySQLBranchAttributes = branchOutput({
+        production: false,
+        migrationsDir: dir,
+        migrationsTable: "__alchemy_migrations",
+        migrationsHashes: hashes,
+      });
+
+      yield* fs.writeFileString(
+        path.join(dir, "0001_init.sql"),
+        "CREATE TABLE users (id int, name text);",
+      );
+
+      const result = yield* Effect.result(
+        provider.diff!(diffArgs(props, props, output)),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
+        expect(result.failure.message).toContain(
+          "production PlanetScale branch",
+        );
+      }
+    }),
 );
 
 describe.skipIf(!process.env.PLANETSCALE_TEST)("Branch", () => {
