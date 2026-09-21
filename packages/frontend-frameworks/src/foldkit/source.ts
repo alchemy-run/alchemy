@@ -3,10 +3,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import {
-  SourcePolicyError,
-  type SourceHost,
+  makeViteSource,
+  SourceProviderError,
   type ViteSourceOptions,
-} from "../core/SourceHost.ts";
+} from "../vite/source.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
 
@@ -97,18 +97,16 @@ export const foldkitAssetsFromManifest = (
     ? { notFoundHandling: "single-page-application" }
     : undefined;
 
-/** Foldkit deployment policy composed with the host's ordinary Vite pipeline. */
-export const makeFoldkitSource = <Source>(
-  options: ViteSourceOptions,
-  host: SourceHost<Source>,
-): Source =>
-  host.vite(options, {
+/** Foldkit deployment policy composed with the shared Vite pipeline. */
+export const makeFoldkitSource = (options: ViteSourceOptions = {}) =>
+  makeViteSource(options, {
+    provider: PROVIDER,
     assetDefaults: ({ serverDirectory }) =>
       Effect.gen(function* () {
         const manifest = yield* readFoldkitBuildManifest(serverDirectory);
         if (manifest !== undefined && options.main !== undefined) {
           return yield* Effect.fail(
-            new SourcePolicyError({
+            new SourceProviderError({
               provider: PROVIDER,
               message:
                 "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
@@ -117,12 +115,9 @@ export const makeFoldkitSource = <Source>(
         }
         return foldkitAssetsFromManifest(manifest);
       }),
-    devAssetsBinding: "ASSETS",
   });
 
 export default {
-  make: <Source>(options: unknown, host: SourceHost<Source>) =>
-    Effect.succeed(
-      makeFoldkitSource((options ?? {}) as ViteSourceOptions, host),
-    ),
+  make: (options: unknown) =>
+    Effect.succeed(makeFoldkitSource((options ?? {}) as ViteSourceOptions)),
 };

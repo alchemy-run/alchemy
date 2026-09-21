@@ -73,6 +73,7 @@ export default defineConfig([
       "vinext/cache/s3": "src/vinext/cache/s3.ts",
       "vinext/cache/s3-runtime": "src/vinext/cache/s3-runtime.ts",
       "vite/index": "src/vite/index.ts",
+      "vite/source": "src/vite/source.ts",
       "vite/aws": "src/vite/aws.ts",
       "vite/node": "src/vite/node.ts",
       "sveltekit/aws": "src/sveltekit/aws.ts",

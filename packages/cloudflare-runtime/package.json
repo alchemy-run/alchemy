@@ -782,6 +782,24 @@
       "worker": "./src/vite/plugin.ts",
       "import": "./dist/vite/node/plugin.mjs"
     },
+    "./vite/assets": {
+      "types": "./dist/vite/node/Assets.d.mts",
+      "bun": "./src/vite/Assets.ts",
+      "worker": "./src/vite/Assets.ts",
+      "import": "./dist/vite/node/Assets.mjs"
+    },
+    "./vite/build": {
+      "types": "./dist/vite/node/Build.d.mts",
+      "bun": "./src/vite/Build.ts",
+      "worker": "./src/vite/Build.ts",
+      "import": "./dist/vite/node/Build.mjs"
+    },
+    "./vite/build-output": {
+      "types": "./dist/vite/node/BuildOutput.d.mts",
+      "bun": "./src/vite/BuildOutput.ts",
+      "worker": "./src/vite/BuildOutput.ts",
+      "import": "./dist/vite/node/BuildOutput.mjs"
+    },
     "./package.json": "./package.json"
   },
   "inlinedDependencies": {

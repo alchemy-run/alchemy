@@ -38,6 +38,10 @@ export interface BuildOutput {
   /** Root output directory of the build (e.g. `<root>/dist`). */
   distDirectory?: string | undefined;
   clientDirectory: string | undefined;
+  /** Resolved server output directory, when supplied by the builder. */
+  serverDirectory?: string | undefined;
+  /** Resolved public asset URL base, when supplied by the builder. */
+  base?: string | undefined;
   serverModules: Array<OutputFile> | undefined;
   externalWorkspaces: Set<string>;
   /** Portable handler and asset configuration, independent of a listening Node server. */

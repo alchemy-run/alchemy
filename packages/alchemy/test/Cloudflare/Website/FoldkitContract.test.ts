@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import {
+import foldkitSourceModule, {
   foldkitAssetsFromManifest,
   makeFoldkitSource,
   readFoldkitBuildManifest,
@@ -9,7 +9,10 @@ import {
   createArtifactStore,
   makeScopedArtifacts,
 } from "@/Artifacts.ts";
-import { makeSourceContext, sourceHost } from "@/Cloudflare/Workers/Source.ts";
+import {
+  makeSourceContext,
+  type WorkerSourceModule,
+} from "@/Cloudflare/Workers/Source.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import {
   makeViteSource,
@@ -23,6 +26,9 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { cloneFixture } from "../Utils/Fixture.ts";
+
+// Checked by the normal PR typecheck: no host extension is required.
+const sourceModule = foldkitSourceModule satisfies WorkerSourceModule;
 
 const fixture = (name: string) =>
   Effect.gen(function* () {
@@ -137,8 +143,9 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
               "prerender: false",
             ),
           );
+          const source = yield* sourceModule.make({ rootDir: root, main });
           const result = yield* Effect.result(
-            makeFoldkitSource({ rootDir: root, main }, sourceHost)
+            source
               .build(
                 makeSourceContext({
                   id: "Conflict",
@@ -240,7 +247,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             },
           };
           const source = framework
-            ? makeFoldkitSource(vite, sourceHost)
+            ? makeFoldkitSource(vite)
             : makeViteSource(vite);
           const output = yield* source
             .build(

@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/node-utils": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",
@@ -474,6 +475,12 @@
       "bun": "./dist/vite/node.js",
       "worker": "./dist/vite/node.js",
       "import": "./dist/vite/node.js"
+    },
+    "./vite/source": {
+      "types": "./dist/vite/source.d.ts",
+      "bun": "./dist/vite/source.js",
+      "worker": "./dist/vite/source.js",
+      "import": "./dist/vite/source.js"
     },
     "./waku": {
       "types": "./dist/waku/index.d.ts",

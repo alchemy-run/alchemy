@@ -118,6 +118,17 @@ describe("build output persistence", () => {
     expect(parsed.serverModules![0]!.hash).toBe("legacy-hash");
   });
 
+  it("preserves resolved Vite directories and base across the build-child boundary", () => {
+    const output = {
+      clientDirectory: "/app/output/browser",
+      serverDirectory: "/app/output/worker",
+      base: "/docs/",
+      serverModules: undefined,
+      externalWorkspaces: new Set<string>(),
+    };
+    expect(parseBuildOutput(stringifyBuildOutput(output))).toEqual(output);
+  });
+
   it("serializes Sets as sorted arrays", () => {
     const json = stringifyBuildOutput({
       clientDirectory: undefined,

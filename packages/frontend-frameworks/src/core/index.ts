@@ -84,9 +84,3 @@ export {
   resolveInstalledPackageVersion,
   resolveProjectPackageDirectory,
 } from "./Loader.ts";
-
-export type {
-  SourceHost,
-  ViteSourceOptions,
-  ViteSourcePolicy,
-} from "./SourceHost.ts";
