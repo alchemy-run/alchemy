@@ -9,6 +9,9 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+const entitledTest = test.provider.skipIf(
+  process.env.CLOUDFLARE_TEST_MCP !== "1",
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -20,7 +23,8 @@ const logLevel = Effect.provideService(
 // so each MUST use a distinct server id.
 const SERVER_ID = "alchemy-test-mcp-server";
 const RECREATE_SERVER_ID = "alchemy-test-mcp-server-recreate";
-const LIST_SERVER_ID = "alchemy-test-mcp-server-list";
+const REPLACE_SERVER_ID = "alchemy-test-mcp-server-replace";
+const REPLACE_SERVER_ID_V2 = "alchemy-test-mcp-replaced";
 const SYNC_SERVER_ID = "alchemy-test-mcp-server-sync";
 const PROBE_SERVER_ID = "alchemy-test-mcp-server-probe";
 
@@ -37,18 +41,6 @@ const getLiveServer = (accountId: string, id: string) =>
     .readAccessAiControlMcpServer({ accountId, id })
     .pipe(
       Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)),
-    );
-
-// Delete the server occupying a deterministic id regardless of state
-// tracking. A per-stack `destroy()` only removes the server tracked under
-// this stack's logical id, so an orphan left by a previously crashed run
-// would otherwise make the next create fail. Sweeping by id makes the suite
-// self-healing and leaves no dangling resources behind.
-const cleanupServer = (accountId: string, id: string) =>
-  zeroTrust
-    .deleteAccessAiControlMcpServer({ accountId, id })
-    .pipe(
-      Effect.catchTag(["McpServerNotFound", "Forbidden"], () => Effect.void),
     );
 
 // MCP servers are entitlement-gated (AI Controls beta). Either the account
@@ -91,14 +83,41 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+entitledTest(
+  "overlong server IDs surface the typed validation error and remain cleanable",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const error = yield* zeroTrust
+        .readAccessAiControlMcpServer({
+          accountId,
+          id: "alchemy-test-mcp-server-id-is-too-long",
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("McpServerInvalidId");
+      const deployError = yield* stack
+        .deploy(
+          Cloudflare.Access.McpServer("InvalidId", {
+            serverId: "alchemy-test-mcp-server-id-is-too-long",
+            hostname: HOSTNAME,
+            authType: "unauthenticated",
+            sync: false,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(deployError._tag).toEqual("McpServerInvalidId");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+entitledTest(
   "create, update in place, and destroy an MCP server",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      yield* cleanupServer(accountId, SERVER_ID);
 
       const server = yield* stack.deploy(
         Effect.gen(function* () {
@@ -196,14 +215,13 @@ test.provider(
 
 // `hostname` and `authType` are create-only on the API. Changing either must
 // converge by recreating the server under the same id rather than failing.
-test.provider(
+entitledTest(
   "changing the upstream hostname or auth type recreates the server under the same id",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      yield* cleanupServer(accountId, RECREATE_SERVER_ID);
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
@@ -217,6 +235,20 @@ test.provider(
       );
       expect(initial.serverId).toEqual(RECREATE_SERVER_ID);
       expect(initial.authType).toEqual("unauthenticated");
+
+      const rehosted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Access.McpServer("Recreated", {
+            serverId: RECREATE_SERVER_ID,
+            hostname: HOSTNAME_V2,
+            authType: "unauthenticated",
+            sync: false,
+          });
+        }),
+      );
+      expect(rehosted.serverId).toEqual(RECREATE_SERVER_ID);
+      expect(rehosted.hostname).toEqual(HOSTNAME_V2);
+      expect(rehosted.authType).toEqual("unauthenticated");
 
       const recreated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -248,25 +280,27 @@ test.provider(
 // Canonical `list()` test (account collection): deploy a server, then resolve
 // the provider via the typed helper and assert the deployed server appears in
 // the exhaustively-paginated result.
-test.provider(
-  "list enumerates the deployed MCP server",
+entitledTest(
+  "generates a valid server ID and lists the deployed MCP server",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      yield* cleanupServer(accountId, LIST_SERVER_ID);
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.McpServer("ListServer", {
-            serverId: LIST_SERVER_ID,
-            hostname: HOSTNAME,
-            authType: "unauthenticated",
-            sync: false,
-          });
+          return yield* Cloudflare.Access.McpServer(
+            "ServerWithALongLogicalNameForGeneratedIdCoverage",
+            {
+              hostname: HOSTNAME,
+              authType: "unauthenticated",
+              sync: false,
+            },
+          );
         }),
       );
+      expect(deployed.serverId.length).toBeLessThanOrEqual(32);
 
       const provider = yield* Provider.findProvider(
         Cloudflare.Access.McpServer,
@@ -277,22 +311,60 @@ test.provider(
 
       yield* stack.destroy();
 
-      const afterDestroy = yield* getLiveServer(accountId, LIST_SERVER_ID);
+      const afterDestroy = yield* getLiveServer(accountId, deployed.serverId);
       expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+entitledTest(
+  "changing the server ID replaces the server and removes the old ID",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const deploy = (serverId: string) =>
+        stack.deploy(
+          Cloudflare.Access.McpServer("Replaced", {
+            serverId,
+            hostname: HOSTNAME,
+            authType: "unauthenticated",
+            sync: false,
+          }),
+        );
+
+      const initial = yield* deploy(REPLACE_SERVER_ID);
+      expect(initial.serverId).toEqual(REPLACE_SERVER_ID);
+
+      const replaced = yield* deploy(REPLACE_SERVER_ID_V2);
+      expect(replaced.serverId).toEqual(REPLACE_SERVER_ID_V2);
+      expect(
+        yield* getLiveServer(accountId, REPLACE_SERVER_ID),
+      ).toBeUndefined();
+      expect(
+        (yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2))?.id,
+      ).toEqual(REPLACE_SERVER_ID_V2);
+
+      yield* stack.destroy();
+      expect(
+        yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2),
+      ).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
 
 // The default deploy runs a capability sync against the upstream. Against a
 // real public server the discovered tools come back on the attributes.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(
+  process.env.CLOUDFLARE_TEST_MCP !== "1" || !!process.env.FAST,
+)(
   "sync discovers the capabilities of a public MCP server",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      yield* cleanupServer(accountId, SYNC_SERVER_ID);
 
       const server = yield* stack.deploy(
         Effect.gen(function* () {

@@ -69,8 +69,9 @@ export interface McpServerProps {
   /**
    * The client-supplied server identifier. Immutable — changing it
    * triggers a replacement. If omitted, a deterministic id is generated
-   * from the app, stage, and logical ID.
-   * @default ${app}-${stage}-${id}
+   * from the stack, stage, logical ID, and resource instance, capped at
+   * the API's 32-character limit.
+   * @default a generated ID of at most 32 characters
    */
   serverId?: string;
   /**
@@ -327,7 +328,13 @@ export const McpServerProvider = () =>
       // the logical id), so a direct read covers the cold case too.
       const serverId =
         output?.serverId ?? (yield* createServerId(id, olds?.serverId));
-      const observed = yield* observeServer(acct, serverId);
+      const observed = yield* observeServer(acct, serverId).pipe(
+        // A failed create can leave props with an invalid ID but no output.
+        // That generation cannot exist; let destroy recover the saved state.
+        Effect.catchTag("McpServerInvalidId", (error) =>
+          output === undefined ? Effect.succeed(undefined) : Effect.fail(error),
+        ),
+      );
       return observed ? toAttributes(observed, acct) : undefined;
     }),
 
@@ -475,7 +482,10 @@ const observeServer = (accountId: string, id: string) =>
 
 const createServerId = (id: string, serverId: string | undefined) =>
   Effect.gen(function* () {
-    return serverId ?? (yield* createPhysicalName({ id, lowercase: true }));
+    return (
+      serverId ??
+      (yield* createPhysicalName({ id, lowercase: true, maxLength: 32 }))
+    );
   });
 
 /**
