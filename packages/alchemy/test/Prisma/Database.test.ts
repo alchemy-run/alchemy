@@ -93,6 +93,8 @@ test.provider(
     const updated = yield* stack.deploy(resources(true));
     expect(updated.generated.databaseId).toBe(initial.generated.databaseId);
     expect(updated.named.databaseId).toBe(initial.named.databaseId);
+    expect(updated.generated.databaseName).toBe("generated-updated");
+    expect(updated.named.databaseName).toBe("named-updated");
     yield* expectDatabase(updated.generated, defaultBranch.id);
     yield* expectDatabase(updated.named, defaultBranch.id);
 
@@ -154,6 +156,7 @@ test.provider(
 
     const omitted = yield* stack.deploy(resources("omitted", "renamed"));
     expect(omitted.database.databaseId).toBe(initial.database.databaseId);
+    expect(omitted.database.databaseName).toBe("renamed");
     yield* expectDatabase(omitted.database, initial.second.branchId);
 
     yield* updateDatabase({
@@ -162,6 +165,7 @@ test.provider(
     });
     const drifted = yield* stack.deploy(resources("omitted", "renamed-again"));
     expect(drifted.database.databaseId).toBe(initial.database.databaseId);
+    expect(drifted.database.databaseName).toBe("renamed-again");
     yield* expectDatabase(drifted.database, initial.first.branchId);
 
     const explicit = yield* stack.deploy(resources("gitName", "renamed-again"));
