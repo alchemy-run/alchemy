@@ -1,5 +1,6 @@
 import { viteBuildOutputPlugin } from "@/Bundle/Vite";
-import { describe, expect, it } from "alchemy-test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 /** The subset of a Vite build environment the output plugin reads. */
@@ -36,8 +37,8 @@ const writeBundle = (
     );
   });
 
-describe("viteBuildOutputPlugin", () => {
-  it("deploys the entry environment's bundle as the Worker", () =>
+layer(NodeServices.layer)("viteBuildOutputPlugin", (it) => {
+  it.effect("deploys the entry environment's bundle as the Worker", () =>
     Effect.gen(function* () {
       const output = yield* viteBuildOutputPlugin({ entryEnvironment: "ssr" });
 
@@ -59,12 +60,13 @@ describe("viteBuildOutputPlugin", () => {
 
       expect(result.clientDirectory).toBe("/project/dist/client");
       expect(bundle?.files[0]?.path).toBe("dist/ssr/worker.js");
-    }));
+    }),
+  );
 
   // A framework can leave a description of its build beside the server
   // bundle (Foldkit's `foldkit.build.json`), so whoever deploys it needs to
   // know where that is — the entry environment's own output directory.
-  it("reports the entry environment's output directory", () =>
+  it.effect("reports the entry environment's output directory", () =>
     Effect.gen(function* () {
       const output = yield* viteBuildOutputPlugin({ entryEnvironment: "ssr" });
 
@@ -84,9 +86,10 @@ describe("viteBuildOutputPlugin", () => {
       const result = yield* output.output;
 
       expect(result.serverDirectory).toBe("/project/dist/server");
-    }));
+    }),
+  );
 
-  it("reports no server directory for a client-only build", () =>
+  it.effect("reports no server directory for a client-only build", () =>
     Effect.gen(function* () {
       const output = yield* viteBuildOutputPlugin({ entryEnvironment: "ssr" });
 
@@ -102,5 +105,6 @@ describe("viteBuildOutputPlugin", () => {
 
       expect(result.serverDirectory).toBeUndefined();
       expect(yield* result.serverBundle).toBeUndefined();
-    }));
+    }),
+  );
 });

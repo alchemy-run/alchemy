@@ -4,7 +4,8 @@ import {
   readFoldkitBuildManifest,
   type FoldkitBuildManifest,
 } from "@/Cloudflare/Website/FoldkitBuild";
-import { describe, expect, it } from "alchemy-test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -39,7 +40,7 @@ describe("foldkitAssetsFromManifest", () => {
   });
 });
 
-describe("readFoldkitBuildManifest", () => {
+layer(NodeServices.layer)("readFoldkitBuildManifest", (it) => {
   const withServerDirectory = <A, E, R>(
     contents: string | undefined,
     use: (directory: string) => Effect.Effect<A, E, R>,
@@ -59,19 +60,21 @@ describe("readFoldkitBuildManifest", () => {
       return yield* use(directory);
     }).pipe(Effect.scoped);
 
-  it("resolves to nothing without a server directory", () =>
+  it.effect("resolves to nothing without a server directory", () =>
     Effect.gen(function* () {
       expect(yield* readFoldkitBuildManifest(undefined)).toBeUndefined();
-    }));
+    }),
+  );
 
-  it("resolves to nothing when the build wrote no manifest", () =>
+  it.effect("resolves to nothing when the build wrote no manifest", () =>
     withServerDirectory(undefined, (directory) =>
       Effect.gen(function* () {
         expect(yield* readFoldkitBuildManifest(directory)).toBeUndefined();
       }),
-    ));
+    ),
+  );
 
-  it("reads what the Foldkit plugin writes", () =>
+  it.effect("reads what the Foldkit plugin writes", () =>
     withServerDirectory(
       JSON.stringify(manifest(["/", "/about"])),
       (directory) =>
@@ -80,9 +83,10 @@ describe("readFoldkitBuildManifest", () => {
           expect(read?.prerendered).toEqual(["/", "/about"]);
           expect(read?.serverEntry).toBe("fetch.js");
         }),
-    ));
+    ),
+  );
 
-  it("refuses a manifest shape it does not know", () =>
+  it.effect("refuses a manifest shape it does not know", () =>
     withServerDirectory(
       JSON.stringify({ ...manifest([]), schemaVersion: 2 }),
       (directory) =>
@@ -90,5 +94,15 @@ describe("readFoldkitBuildManifest", () => {
           const exit = yield* Effect.exit(readFoldkitBuildManifest(directory));
           expect(exit._tag).toBe("Failure");
         }),
-    ));
+    ),
+  );
+
+  it.effect("refuses a manifest that is not JSON", () =>
+    withServerDirectory("{", (directory) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(readFoldkitBuildManifest(directory));
+        expect(exit._tag).toBe("Failure");
+      }),
+    ),
+  );
 });
