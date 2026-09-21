@@ -33,8 +33,8 @@ export interface FoldkitProps extends ViteProps {}
  * serve `index.html` with a `200` and the Foldkit runtime resolves the
  * route once the app boots.
  *
- * During `alchemy dev` the site is Vite's own dev server — Foldkit's HMR
- * and devtools wiring work unchanged — and no AWS resources are created.
+ * During `alchemy dev` the site is Vite's own dev server — Foldkit's live
+ * reload and devtools wiring work unchanged — and no AWS resources are created.
  * `Alchemy.remote()` opts back into the full deployment.
  *
  * ### Creating Foldkit Sites
@@ -100,7 +100,7 @@ export interface FoldkitProps extends ViteProps {}
  * **Example:** Foldkit's Vite Dev Server Under `alchemy dev`
  * ```typescript
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
- * // dev server (Foldkit HMR included); no bucket or distribution is
+ * // dev server (Foldkit live reload included); no bucket or distribution is
  * // created.
  * const site = yield* AWS.Website.Foldkit("Web");
  * ```

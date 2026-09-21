@@ -105,6 +105,9 @@ const program = Effect.scoped(
               entry: { kind: "external" },
               stack: config.stack,
               env: config.env,
+              // Dev hands `env` to the source unresolved; the Worker's own
+              // URL is only substituted into a build's inlined env on deploy.
+              selfUrl: undefined,
               extraOptions: undefined,
               assets: source.assets,
               worker: {

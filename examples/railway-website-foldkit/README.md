@@ -36,7 +36,7 @@ input files are content-hashed (scoped by `memo.include`).
 bun run dev
 ```
 
-`alchemy dev` runs the framework's own dev server (HMR included) and
+`alchemy dev` runs the framework's own dev server (Foldkit's live reload included) and
 no cloud resources are created.
 
 ## Destroy

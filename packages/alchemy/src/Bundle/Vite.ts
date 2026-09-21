@@ -18,6 +18,13 @@ import {
 export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;
   /**
+   * The entry environment's resolved output directory — where a framework
+   * writes anything it leaves beside the server bundle for whoever deploys
+   * it (Foldkit's `foldkit.build.json`, for one). `undefined` when the
+   * build emitted no server output.
+   */
+  readonly serverDirectory: string | undefined;
+  /**
    * The client environment's resolved Vite `base`. The build rewrites
    * every emitted asset URL with it, so the uploaded asset manifest must
    * be keyed with the same prefix to agree with the HTML.
@@ -63,6 +70,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let clientDirectory: string | undefined;
+  let serverDirectory: string | undefined;
   let base: string | undefined;
   let serverEntry: string | undefined;
   const serverChunks = new Map<
@@ -138,6 +146,10 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       }
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
+        serverDirectory = path.resolve(
+          root,
+          this.environment.config.build.outDir,
+        );
         const entryChunk = files.find(
           (file) => file.type === "chunk" && file.isEntry,
         );
@@ -271,6 +283,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     // Only safe to await *after* `builder.buildApp()` has resolved.
     output: Effect.sync((): ViteBuildOutput => ({
       clientDirectory,
+      serverDirectory,
       base,
       serverBundle: makeServerBundle(),
       externalWorkspaces: collectExternalWorkspaces(),

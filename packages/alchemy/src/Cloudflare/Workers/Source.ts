@@ -104,6 +104,12 @@ export interface SourceContext {
    * as the vite arm always has.
    */
   readonly env: Record<string, unknown> | undefined;
+  /**
+   * This Worker's own URL, when it has one and an env entry refers to
+   * it (`Worker.URL`). Only the WorkerProvider knows it — a source that
+   * resolves `env` substitutes it for that entry.
+   */
+  readonly selfUrl: string | undefined;
   /** `props.build` passthrough for rolldown-based sources. */
   readonly extraOptions: Bundle.BundleExtraOptions | undefined;
   /**
@@ -395,6 +401,7 @@ export const makeSourceContext = (params: {
   props: WorkerProps;
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
+  selfUrl?: string;
 }): SourceContext => ({
   dotAlchemy: params.dotAlchemy,
   id: params.id,
@@ -409,6 +416,7 @@ export const makeSourceContext = (params: {
     : { kind: "effect", exports: params.props.exports ?? {} },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
+  selfUrl: params.selfUrl,
   extraOptions: params.props.build,
   assets: params.props.assets,
 });

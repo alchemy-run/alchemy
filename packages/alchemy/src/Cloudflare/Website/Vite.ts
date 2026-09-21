@@ -123,10 +123,12 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * **Example:** Foldkit
- * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
- * single call deploys them — the Foldkit Vite plugin in the app's own
- * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
- * `single-page-application` not-found handling so deep links boot the app:
+ * [Foldkit](https://foldkit.dev) apps are Vite projects, so a single call
+ * deploys them — the Foldkit Vite plugin in the app's own `vite.config.ts`
+ * composes with the injected Cloudflare plugin, and with `ssr.build` set
+ * there its `fetch` handler is the server bundle this resource deploys,
+ * exactly as TanStack Start's is. A client-only Foldkit app wants
+ * `single-page-application` not-found handling so deep links boot it:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Foldkit", {
  *   assets: {
@@ -134,8 +136,10 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
- * default already applied.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
+ * additionally reads the build's own `foldkit.build.json` to settle asset
+ * routing for a server-rendered or prerendered app, and wires the rebuild
+ * scope for you.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
@@ -258,7 +262,9 @@ export const Vite: {
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff)
+            ? (propsEff as Effect.Effect<any, never, any>)
+            : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             main: undefined!,

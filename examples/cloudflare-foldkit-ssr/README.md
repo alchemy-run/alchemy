@@ -7,36 +7,18 @@ The sibling [`cloudflare-foldkit`](../cloudflare-foldkit) example is the client-
 ## What makes it server-rendered
 
 - `src/entry.server.ts` exposes `renderPage(Request)`. It derives Flags from the request, renders through the same `view` the browser uses, and returns the markup plus the document's title.
-- `src/worker.ts` reads the built shell from the `ASSETS` binding, places the render into it with `Server.toResponse`, and answers asset misses and refused methods itself.
+- `vite.config.ts` sets `ssr: { serverEntry, build: true }`, so the one `vite build` Alchemy runs emits `dist/server/fetch.js` next to the browser bundle — a Web `fetch` handler with the built shell embedded. Alchemy deploys it as the Worker, the same way it deploys a TanStack Start server bundle.
 - `src/entry.ts` calls `Runtime.hydrate` rather than `Runtime.run`, so the client adopts the served DOM instead of rebuilding it.
-- `alchemy.run.ts` turns the asset layer's page handling off so page requests actually reach the Worker.
 
 Load `/?count=7` and view source: the count is in the HTML before any JavaScript runs.
 
-## The two settings that matter
+## Nothing to configure
 
-```typescript
-assets: {
-  htmlHandling: "none",
-  notFoundHandling: "none",
-}
-```
-
-Both are load-bearing, and getting either wrong fails quietly — the site serves 200s carrying an empty document.
-
-`notFoundHandling: "none"` lets a request matching no file fall through to the Worker. Left at `"single-page-application"`, the asset layer answers every deep link with the unrendered template and the Worker is never reached.
-
-`htmlHandling: "none"` stops the asset layer resolving `/` to `/index.html` by itself, which would serve the template for the front page alone even after the first setting is right.
-
-Files are still served straight from the asset layer — only page requests reach the Worker.
+`alchemy.run.ts` declares the site and nothing else. The build writes `dist/server/foldkit.build.json` recording what it prerendered — nothing, here — and Alchemy derives the asset routing from it: the unrendered `index.html` is left out of the upload, files are served straight from the asset layer, and everything else reaches the handler, which answers asset misses with a 404 and renders pages.
 
 ## The build id
 
-`renderToString` and `Runtime.hydrate` both require a build id, and hydration refuses a page whose id is not the running build's. `vite.config.ts` takes it from `FOLDKIT_BUILD_ID` and falls back to a fresh value, so a local build always has one. A real deployment should pass a value it already has, such as a commit or release tag, and give the client and server builds the same one. It is published in the page, so it must not be a secret.
-
-## A note on `alchemy dev`
-
-The Foldkit Vite plugin has an `ssr: { serverEntry }` option that serves rendered pages from the Vite dev server. This example deliberately does not set it: it loads the entry through `ssrLoadModule`, which needs a runnable `ssr` environment, and under `alchemy dev` that environment belongs to workerd. It is redundant here in any case — requests reach `src/worker.ts`, which renders through the same entry.
+`renderToString` and `Runtime.hydrate` both require a build id, and hydration refuses a page whose id is not the running build's. `vite.config.ts` takes it from `FOLDKIT_BUILD_ID` and stores a generated fallback back into the environment, so a local build always has one and every config read within a build resolves the same id. A real deployment should pass a value it already has, such as a commit or release tag, and give the client and server builds the same one. It is published in the page, so it must not be a secret.
 
 ## Commands
 

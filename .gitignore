@@ -53,6 +53,9 @@ packages/cloudflare-runtime/src/rolldown/out/
 !packages/cloudflare-*/src/**/*.d.ts
 !packages/frontend-frameworks/fixtures/**/*.d.ts
 !packages/frontend-frameworks/fixtures/**/*.js
+# The Foldkit SSR fixture types `import.meta.env.FOLDKIT_BUILD_ID` the way a
+# Foldkit app does, through a checked-in env declaration.
+!packages/alchemy/test/Cloudflare/Website/foldkit-ssr-fixture/src/vite-env.d.ts
 
 .attest
 .cache
