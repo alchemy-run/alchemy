@@ -6084,12 +6084,18 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/doppler':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/doppler
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
+      '@distilled.cloud/infisical':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/infisical
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
