@@ -12,7 +12,9 @@ import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { remote } from "@/ProviderMode.ts";
-import { Stack } from "@/Stack";
+import * as Plan from "@/Plan";
+import { Stage } from "@/Stage";
+import { Stack, make as makeStack } from "@/Stack";
 import {
   type CreatingResourceState,
   type ReplacedResourceState,
@@ -205,6 +207,534 @@ const failOnMultiple = (
         : Effect.succeed(undefined),
   };
 };
+
+describe("Action output convergence", () => {
+  for (const consumer of ["prop", "binding"] as const) {
+    test.provider(
+      `unchanged Action ${consumer} consumers stop reconciling after the first deploy`,
+      (stack) =>
+        Effect.gen(function* () {
+          let runs = 0;
+          const reconciled: string[] = [];
+          const Compute = Action("Compute", (_: {}) =>
+            Effect.sync(() => {
+              runs++;
+              return { value: "v1" };
+            }),
+          );
+          const program = Effect.gen(function* () {
+            const result = yield* Compute({});
+            if (consumer === "prop") {
+              const host = yield* TestResource("Host", {
+                string: result.value,
+              });
+              return host.string;
+            }
+            const host = yield* BindingTarget("Host", {});
+            yield* host.bind("Result", { env: { RESULT: result.value } });
+            return host.env.RESULT;
+          });
+          yield* Effect.gen(function* () {
+            for (const _ of [1, 2, 3]) {
+              expect(yield* stack.deploy(program)).toBe("v1");
+            }
+            expect(runs).toBe(1);
+            expect(reconciled).toEqual(["create"]);
+            const plan = yield* stack.plan(program);
+            expect(actionOfPlan(plan, "Host")).toBe("noop");
+          }).pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: () =>
+                Effect.sync(() => {
+                  reconciled.push("create");
+                }),
+              update: () =>
+                Effect.sync(() => {
+                  reconciled.push("update");
+                }),
+            }),
+          );
+        }),
+    );
+  }
+
+  for (const sameOutput of [false, true]) {
+    test.provider(
+      `changed Action input ${sameOutput ? "with the same output" : "with a fresh output"} converges after the rerun`,
+      (stack) =>
+        Effect.gen(function* () {
+          let runs = 0;
+          const reconciled: (string | undefined)[] = [];
+          const Compute = Action("Compute", (input: { revision: string }) =>
+            Effect.sync(() => {
+              runs++;
+              return { value: sameOutput ? "constant" : input.revision };
+            }),
+          );
+          const program = (revision: string) =>
+            Effect.gen(function* () {
+              const result = yield* Compute({ revision });
+              const host = yield* TestResource("Host", {
+                string: result.value,
+              });
+              return host.string;
+            });
+          const record = (_: string, props: TestResourceProps) =>
+            Effect.sync(() => {
+              reconciled.push(props.string);
+            });
+          yield* Effect.gen(function* () {
+            expect(yield* stack.deploy(program("v1"))).toBe(
+              sameOutput ? "constant" : "v1",
+            );
+            expect(yield* stack.deploy(program("v2"))).toBe(
+              sameOutput ? "constant" : "v2",
+            );
+            expect(runs).toBe(2);
+            if (sameOutput) {
+              expect([1, 2]).toContain(reconciled.length);
+              expect(reconciled.every((value) => value === "constant")).toBe(
+                true,
+              );
+            } else {
+              expect(reconciled).toEqual(["v1", "v2"]);
+            }
+            const settledCount = reconciled.length;
+            expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+              "noop",
+            );
+            yield* stack.deploy(program("v2"));
+            expect(runs).toBe(2);
+            expect(reconciled).toHaveLength(settledCount);
+          }).pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: record,
+              update: record,
+            }),
+          );
+        }),
+    );
+  }
+
+  test.provider(
+    "changed Action binding data reaches the host before subsequent deploys converge",
+    (stack) =>
+      Effect.gen(function* () {
+        let runs = 0;
+        let reconciles = 0;
+        const Compute = Action("Compute", (input: { value: string }) =>
+          Effect.sync(() => {
+            runs++;
+            return input;
+          }),
+        );
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            const result = yield* Compute({ value });
+            const host = yield* BindingTarget("Host", {});
+            yield* host.bind("Result", { env: { RESULT: result.value } });
+            return host.env.RESULT;
+          });
+        const record = () =>
+          Effect.sync(() => {
+            reconciles++;
+          });
+        yield* Effect.gen(function* () {
+          expect(yield* stack.deploy(program("v1"))).toBe("v1");
+          expect(yield* stack.deploy(program("v2"))).toBe("v2");
+          expect(runs).toBe(2);
+          expect(reconciles).toBe(2);
+          expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+            "noop",
+          );
+          expect(yield* stack.deploy(program("v2"))).toBe("v2");
+          expect(runs).toBe(2);
+          expect(reconciles).toBe(2);
+        }).pipe(
+          Effect.provideService(TestResourceHooks, {
+            create: record,
+            update: record,
+          }),
+        );
+      }),
+  );
+
+  test.provider(
+    "Action chains propagate fresh outputs and stop rerunning once unchanged",
+    (stack) =>
+      Effect.gen(function* () {
+        const runs: string[] = [];
+        const Compute = Action("Compute", (input: { value: string }) =>
+          Effect.sync(() => {
+            runs.push(input.value);
+            return { value: `${input.value}!` };
+          }),
+        );
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            const first = yield* Compute("First", { value });
+            const second = yield* Compute("Second", { value: first.value });
+            const host = yield* Function("Host", {
+              env: { RESULT: second.value },
+            });
+            return host.env.RESULT;
+          });
+        expect(yield* stack.deploy(program("v1"))).toBe("v1!!");
+        expect(yield* stack.deploy(program("v2"))).toBe("v2!!");
+        expect(yield* stack.deploy(program("v2"))).toBe("v2!!");
+        expect(runs).toEqual(["v1", "v1!", "v2", "v2!"]);
+        expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+          "noop",
+        );
+      }),
+  );
+
+  test.provider(
+    "binding-only changes to an upstream resource invalidate Action inputs and consumer outputs",
+    (stack) =>
+      Effect.gen(function* () {
+        const seen: string[] = [];
+        const Compute = Action("Compute", (input: { value: string }) =>
+          Effect.sync(() => {
+            seen.push(input.value);
+            return input;
+          }),
+        );
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            const source = yield* BindingTarget("Source", {});
+            yield* source.bind("Value", { env: { RESULT: value } });
+            const result = yield* Compute({ value: source.env.RESULT });
+            const host = yield* Function("Host", {
+              env: { RESULT: result.value },
+            });
+            return host.env.RESULT;
+          });
+        expect(yield* stack.deploy(program("v1"))).toBe("v1");
+        const changed = yield* stack.plan(program("v2"));
+        expect(changed.resources.Source.action).toBe("update");
+        expect(changed.actions.Compute.action).toBe("run");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("v2"))).toBe("v2");
+        expect(yield* stack.deploy(program("v2"))).toBe("v2");
+        expect(seen).toEqual(["v1", "v2"]);
+        expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+          "noop",
+        );
+      }),
+  );
+
+  test.provider(
+    "an Action planned to run skips its body when upstream resolves to the same input",
+    (stack) =>
+      Effect.gen(function* () {
+        let firstRuns = 0;
+        let secondRuns = 0;
+        const First = Action("First", (_: { revision: string }) =>
+          Effect.sync(() => {
+            firstRuns++;
+            return { value: "constant" };
+          }),
+        );
+        const Second = Action("Second", (input: { value: string }) =>
+          Effect.sync(() => {
+            secondRuns++;
+            return { value: `${input.value}!` };
+          }),
+        );
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const first = yield* First({ revision });
+            const second = yield* Second({ value: first.value });
+            const host = yield* Function("Host", {
+              env: { RESULT: second.value },
+            });
+            return host.env.RESULT;
+          });
+        expect(yield* stack.deploy(program("v1"))).toBe("constant!");
+        const changed = yield* stack.plan(program("v2"));
+        expect(changed.actions.First.action).toBe("run");
+        expect(changed.actions.Second.action).toBe("run");
+        expect(yield* stack.deploy(program("v2"))).toBe("constant!");
+        expect(firstRuns).toBe(2);
+        expect(secondRuns).toBe(1);
+        const forced = yield* program("v2").pipe(
+          makeStack({
+            name: stack.name,
+            providers: TestLayers(),
+            state: stack.state,
+          }),
+          Effect.flatMap((spec) =>
+            Plan.make(spec, { force: true }).pipe(
+              Effect.flatMap(apply),
+              Effect.provide(spec.services),
+            ),
+          ),
+          Effect.provideService(Stage, stack.stage),
+        );
+        expect(forced).toBe("constant!");
+        expect(firstRuns).toBe(3);
+        expect(secondRuns).toBe(2);
+        expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+          "noop",
+        );
+      }),
+  );
+
+  test.provider(
+    "changed Action output replaces the whole environment without retaining removed keys",
+    (stack) =>
+      Effect.gen(function* () {
+        const Compute = Action("Compute", (input: { revision: number }) =>
+          Effect.succeed<Record<string, string>>(
+            input.revision === 1
+              ? { KEEP: "old", REMOVE: "old" }
+              : { KEEP: "new" },
+          ),
+        );
+        const program = (revision: number) =>
+          Effect.gen(function* () {
+            const env = yield* Compute({ revision });
+            const host = yield* Function("Host", { env });
+            return host.env;
+          });
+        expect(yield* stack.deploy(program(1))).toEqual({
+          KEEP: "old",
+          REMOVE: "old",
+        });
+        expect(yield* stack.deploy(program(2))).toEqual({ KEEP: "new" });
+        expect(actionOfPlan(yield* stack.plan(program(2)), "Host")).toBe(
+          "noop",
+        );
+      }),
+  );
+
+  test.provider(
+    "a failed Action rerun blocks its value consumer and recovery uses the new output",
+    (stack) =>
+      Effect.gen(function* () {
+        let fail = false;
+        const reconciled: (string | undefined)[] = [];
+        const Compute = Action("Compute", (input: { revision: string }) =>
+          Effect.gen(function* () {
+            if (fail) return yield* Effect.fail(new ResourceFailure());
+            return { value: input.revision };
+          }),
+        );
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const result = yield* Compute({ revision });
+            const host = yield* TestResource("Host", { string: result.value });
+            return host.string;
+          });
+        const record = (_: string, props: TestResourceProps) =>
+          Effect.sync(() => {
+            reconciled.push(props.string);
+          });
+        yield* Effect.gen(function* () {
+          expect(yield* stack.deploy(program("v1"))).toBe("v1");
+          fail = true;
+          const failed = yield* Effect.exit(stack.deploy(program("v2")));
+          assert(Exit.isFailure(failed));
+          expect(
+            failed.cause.reasons.find(Cause.isFailReason)?.error,
+          ).toBeInstanceOf(ResourceFailure);
+          expect(reconciled).toEqual(["v1"]);
+          fail = false;
+          expect(yield* stack.deploy(program("v2"))).toBe("v2");
+          expect(reconciled).toEqual(["v1", "v2"]);
+        }).pipe(
+          Effect.provideService(TestResourceHooks, {
+            create: record,
+            update: record,
+          }),
+        );
+      }),
+  );
+
+  for (const value of [undefined, null, false, 0, ""] as const) {
+    test.provider(
+      `persisted ${String(value)} Action output remains reusable after apply`,
+      (stack) =>
+        Effect.gen(function* () {
+          let runs = 0;
+          const Compute = Action("Compute", (_: {}) =>
+            Effect.sync(() => {
+              runs++;
+              return value;
+            }),
+          );
+          const program = Effect.gen(function* () {
+            const result = yield* Compute({});
+            const host = yield* Function("Host", {
+              env: { RESULT: Output.map(result, String) },
+            });
+            return host.env.RESULT;
+          });
+          expect(yield* stack.deploy(program)).toBe(String(value));
+          expect(yield* stack.deploy(program)).toBe(String(value));
+          expect(runs).toBe(1);
+          expect(actionOfPlan(yield* stack.plan(program), "Host")).toBe("noop");
+        }),
+    );
+  }
+
+  test.provider(
+    "a forced Action rerun publishes fresh output instead of its persisted result",
+    (stack) =>
+      Effect.gen(function* () {
+        let runs = 0;
+        const Compute = Action("Compute", (_: {}) =>
+          Effect.sync(() => ({ value: String(++runs) })),
+        );
+        const program = Effect.gen(function* () {
+          const result = yield* Compute({});
+          const host = yield* Function("Host", {
+            env: { RESULT: result.value },
+          });
+          return host.env.RESULT;
+        });
+        expect(yield* stack.deploy(program)).toBe("1");
+        const forced = yield* program.pipe(
+          makeStack({
+            name: stack.name,
+            providers: TestLayers(),
+            state: stack.state,
+          }),
+          Effect.flatMap((spec) =>
+            Plan.make(spec, { force: true }).pipe(
+              Effect.flatMap(apply),
+              Effect.provide(spec.services),
+            ),
+          ),
+          Effect.provideService(Stage, stack.stage),
+        );
+        expect(forced).toBe("2");
+        expect(yield* stack.deploy(program)).toBe("2");
+        expect(runs).toBe(2);
+      }),
+  );
+
+  test.provider(
+    "an Action migration marker in the environment converges without removing its dependency",
+    (stack) =>
+      Effect.gen(function* () {
+        let runs = 0;
+        const Compute = Action("Compute", (_: {}) =>
+          Effect.sync(() => {
+            runs++;
+            return { migrated: true };
+          }),
+        );
+        const program = Effect.gen(function* () {
+          const result = yield* Compute({});
+          const host = yield* Function("Host", {
+            name: "host",
+            env: { MIGRATION: Output.map(result, JSON.stringify) },
+          });
+          return host.name;
+        });
+        expect(yield* stack.deploy(program)).toBe("host");
+        expect(yield* stack.deploy(program)).toBe("host");
+        expect(runs).toBe(1);
+        const plan = yield* stack.plan(program);
+        expect(plan.actions.Compute.action).toBe("noop");
+        expect(actionOfPlan(plan, "Host")).toBe("noop");
+      }),
+  );
+
+  for (const operation of ["create", "update", "replace"] as const) {
+    test.provider(
+      `Action completion precedes bound host ${operation}`,
+      (stack) =>
+        Effect.gen(function* () {
+          const events: string[] = [];
+          const Compute = Action("Compute", (_: { revision: string }) =>
+            Effect.gen(function* () {
+              yield* Effect.yieldNow;
+              events.push("action completed");
+              return { migrated: true };
+            }),
+          );
+          const program = (revision: string) =>
+            Effect.gen(function* () {
+              const result = yield* Compute({ revision });
+              const host = yield* BindingTarget("Host", {
+                string: revision,
+                replaceString: operation === "replace" ? revision : "fixed",
+              });
+              yield* host.bind("Migration", {
+                env: { MIGRATION: Output.map(result, JSON.stringify) },
+              });
+              return host.string;
+            });
+          const record = () =>
+            Effect.sync(() => {
+              events.push("host reconciled");
+            });
+          yield* Effect.gen(function* () {
+            if (operation !== "create") yield* stack.deploy(program("v1"));
+            events.length = 0;
+            expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+              operation,
+            );
+            expect(yield* stack.deploy(program("v2"))).toBe("v2");
+            expect(events).toEqual(["action completed", "host reconciled"]);
+          }).pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: record,
+              update: record,
+            }),
+          );
+        }),
+    );
+
+    test.provider(`Action failure prevents bound host ${operation}`, (stack) =>
+      Effect.gen(function* () {
+        let fail = false;
+        const reconciled: string[] = [];
+        const Compute = Action("Compute", (_: { revision: string }) =>
+          fail ? Effect.fail(new ResourceFailure()) : Effect.succeed("done"),
+        );
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const result = yield* Compute({ revision });
+            const host = yield* BindingTarget("Host", {
+              string: revision,
+              replaceString: operation === "replace" ? revision : "fixed",
+            });
+            yield* host.bind("Migration", {
+              env: { MIGRATION: Output.map(result, JSON.stringify) },
+            });
+            return host.string;
+          });
+        const record = (id: string) =>
+          Effect.sync(() => {
+            reconciled.push(id);
+          });
+        yield* Effect.gen(function* () {
+          if (operation !== "create") yield* stack.deploy(program("v1"));
+          reconciled.length = 0;
+          fail = true;
+          expect(actionOfPlan(yield* stack.plan(program("v2")), "Host")).toBe(
+            operation,
+          );
+          const failed = yield* Effect.exit(stack.deploy(program("v2")));
+          assert(Exit.isFailure(failed));
+          expect(
+            failed.cause.reasons.find(Cause.isFailReason)?.error,
+          ).toBeInstanceOf(ResourceFailure);
+          expect(reconciled).toEqual([]);
+        }).pipe(
+          Effect.provideService(TestResourceHooks, {
+            create: record,
+            update: record,
+          }),
+        );
+      }),
+    );
+  }
+});
 
 describe("basic operations", () => {
   test.provider("should create, update, and delete resources", (stack) =>

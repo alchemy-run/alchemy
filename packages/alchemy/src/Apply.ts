@@ -1524,23 +1524,27 @@ const executeActionNode = (
     const signalReady = Deferred.succeed(ready[fqn], void 0);
     const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
-    if (node.action === "noop") {
-      tracker[fqn] = {
-        output: node.state.output,
-        props: { __input: node.state.input },
-        bindings: [],
-        instanceId: fqn,
-      };
-      yield* signalReady;
-      yield* signalReadyStable;
-      terminalStatuses.set(fqn, {
-        fqn,
-        id: logicalId,
-        type: task.Type,
-        status: "skipped",
+    const skip = (state: RanActionState) =>
+      Effect.gen(function* () {
+        tracker[fqn] = {
+          output: state.output,
+          props: { __input: state.input },
+          bindings: [],
+          instanceId: fqn,
+        };
+        yield* signalReady;
+        yield* signalReadyStable;
+        terminalStatuses.set(fqn, {
+          fqn,
+          id: logicalId,
+          type: task.Type,
+          status: "skipped",
+        });
+        yield* report("skipped");
       });
-      yield* report("skipped");
-      return;
+
+    if (node.action === "noop") {
+      return yield* skip(node.state);
     }
 
     // ── run ──
@@ -1561,6 +1565,15 @@ const executeActionNode = (
     const outputs = getOutputs();
     const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
     const inputHashValue = yield* hashInput(resolvedInput);
+
+    // Inputs unknown during planning may resolve to the last successful input.
+    if (
+      !node.forced &&
+      node.state?.status === "ran" &&
+      node.state.inputHash === inputHashValue
+    ) {
+      return yield* skip(node.state);
+    }
 
     yield* commit<RunningActionState>({
       kind: "action",
