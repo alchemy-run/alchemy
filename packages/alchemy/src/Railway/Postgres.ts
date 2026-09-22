@@ -338,6 +338,7 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * ```
  *
  * @resource
+ * @product Postgres
  */
 export const Postgres: typeof PostgresResource = Object.assign(
   (

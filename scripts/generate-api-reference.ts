@@ -758,15 +758,33 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
 }
 
 /** Change this grouping to experiment with larger or smaller reference pages. */
-function referenceLocation(outputRelative: string) {
+function referenceLocation(outputRelative: string, product: string) {
   const parts = normalizeSlashes(outputRelative)
     .replace(/\.md$/, "")
     .split("/");
-  const group = parts.length > 2 ? parts.slice(0, 2) : [parts[0], "reference"];
+  // Flat providers declare service-sized pages with @product instead of folders.
+  const group =
+    parts.length > 2
+      ? parts.slice(0, 2)
+      : product
+        ? [
+            parts[0],
+            "reference",
+            product
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, ""),
+          ]
+        : [parts[0], "reference"];
   const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
   return {
     outputRelative: `${group.join("/")}.md`,
-    title: parts.length > 2 ? group.join(".") : parts[0],
+    title:
+      parts.length > 2
+        ? group.join(".")
+        : product
+          ? `${parts[0]}.${product}`
+          : parts[0],
     resourceTitle: title,
     link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
   };
@@ -836,7 +854,7 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   return pages
     .map((page) => ({
-      label: page.service ? page.product || page.service : page.provider,
+      label: page.product || page.service || page.provider,
       link: page.link,
     }))
     .sort(byLabel);
@@ -907,7 +925,8 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
-  const pending: { outputRelative: string; doc: PageDoc }[] = [];
+  const pending: { outputRelative: string; product: string; doc: PageDoc }[] =
+    [];
   let written = 0;
   const redirects: Record<string, string> = {};
   const anchors = new Set<string>();
@@ -968,12 +987,12 @@ async function main() {
         provides: primary.doc.provides,
         peers: primary.doc.peers,
       };
-      pending.push({ outputRelative, doc });
+      pending.push({ outputRelative, product: primary.product, doc });
 
       const exportNames = exportedNames(sourceFile);
 
       const segments = normalizeSlashes(outputRelative).split("/");
-      const location = referenceLocation(outputRelative);
+      const location = referenceLocation(outputRelative, primary.product);
       const oldLink = `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`;
       if (anchors.has(location.link)) {
         throw new Error(`Duplicate reference anchor: ${location.link}`);
@@ -998,7 +1017,7 @@ async function main() {
   const resolverFor = makeLinkResolverFactory(pageEntries);
   const groups = new Map<string, { title: string; sections: string[] }>();
   for (const page of pending) {
-    const location = referenceLocation(page.outputRelative);
+    const location = referenceLocation(page.outputRelative, page.product);
     const resolve = resolverFor(
       normalizeSlashes(path.dirname(page.outputRelative)),
     );

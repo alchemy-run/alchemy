@@ -753,6 +753,7 @@ export type Machine = Resource<
  * See the [deployment guide](/fly/compute/deployments) for recovery and limits.
  *
  * @resource
+ * @product Machine
  */
 export const Machine = Resource<Machine>("Fly.Machine");
 

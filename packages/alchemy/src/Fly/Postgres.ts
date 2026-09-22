@@ -291,6 +291,7 @@ export type Postgres = Resource<
  * ```
  *
  * @resource
+ * @product Postgres
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 

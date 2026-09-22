@@ -114,6 +114,7 @@ export type VolumeAttachment = Resource<
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const VolumeAttachment = Resource<VolumeAttachment>(
   "Hetzner.VolumeAttachment",

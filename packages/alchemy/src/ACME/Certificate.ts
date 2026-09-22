@@ -147,7 +147,7 @@ export interface Certificate extends Resource<
  * ```
  *
  * @resource
- * @product ACME
+ * @product Certificate
  * @category Certificates
  */
 export const Certificate = Resource<Certificate>("ACME.Certificate");

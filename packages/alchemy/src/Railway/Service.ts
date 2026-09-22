@@ -562,6 +562,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ```
  *
  * @resource
+ * @product Service
  */
 export const Service: Platform<
   Service,

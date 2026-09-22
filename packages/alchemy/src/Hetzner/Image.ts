@@ -197,6 +197,7 @@ export type Image = Resource<
  * ```
  *
  * @resource
+ * @product Server
  */
 export const Image = Resource<Image>("Hetzner.Image");
 

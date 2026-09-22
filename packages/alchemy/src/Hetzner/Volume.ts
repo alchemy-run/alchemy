@@ -174,6 +174,7 @@ export type Volume = Resource<
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const Volume = Resource<Volume>("Hetzner.Volume");
 

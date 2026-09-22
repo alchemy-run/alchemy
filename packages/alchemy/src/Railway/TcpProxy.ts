@@ -183,6 +183,7 @@ export type TcpProxy = Resource<
  * ```
  *
  * @resource
+ * @product Networking
  */
 export const TcpProxy = Resource<TcpProxy>("Railway.TcpProxy");
 

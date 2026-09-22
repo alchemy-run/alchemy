@@ -217,6 +217,7 @@ export type RecordSet = Resource<
  * ```
  *
  * @resource
+ * @product DNS
  */
 export const RecordSet = Resource<RecordSet>("Hetzner.RecordSet");
 

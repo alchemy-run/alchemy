@@ -175,6 +175,7 @@ export type PrimaryIp = Resource<
  * ```
  *
  * @resource
+ * @product IP Address
  */
 export const PrimaryIp = Resource<PrimaryIp>("Hetzner.PrimaryIp");
 

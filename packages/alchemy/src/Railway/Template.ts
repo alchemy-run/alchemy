@@ -270,6 +270,7 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Template: typeof TemplateResource = Object.assign(
   (
