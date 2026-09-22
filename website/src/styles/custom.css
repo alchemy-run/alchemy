@@ -1004,7 +1004,7 @@ header.header {
 /* ── Docs sidebar: elide long entries with an ellipsis instead of wrapping
    onto a second line (the generated provider pages have long names like
    GitHubRepositoryEventSourcePolicy). ── */
-.sidebar-content a {
+.sidebar-content .top-level a {
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -1043,24 +1043,19 @@ header.header {
 }
 
 /* Entries: tighter and smaller, with a reserved rail for the accent bar. */
-#starlight__sidebar .sidebar-content a {
+#starlight__sidebar .sidebar-content .top-level a {
   font-size: 13px;
   padding-block: 0.22rem;
   border-inline-start: 3px solid transparent;
   border-radius: 0;
 }
-#starlight__sidebar .sidebar-content a.large {
+#starlight__sidebar .sidebar-content .top-level a.large {
   font-size: 13px;
   font-weight: 400;
   color: var(--sl-color-gray-2);
 }
-#starlight__sidebar .sidebar-content a:hover {
+#starlight__sidebar .sidebar-content .top-level a:hover {
   color: var(--alc-accent-deep);
-}
-
-#starlight__sidebar .sidebar-content summary a.reference-group-link {
-  padding: 0;
-  border: 0;
 }
 
 /* Nested group labels (Resources categories/services, the Reference tree)
@@ -1076,9 +1071,7 @@ header.header {
 }
 
 /* Active page: left accent bar + tint, mockup-style. */
-#starlight__sidebar
-  .sidebar-content
-  a:is([aria-current="page"], [aria-current="location"]) {
+#starlight__sidebar .sidebar-content .top-level a[aria-current="page"] {
   background: var(--alc-accent-12);
   color: var(--alc-accent-deep);
   border-inline-start-color: var(--alc-accent-deep);

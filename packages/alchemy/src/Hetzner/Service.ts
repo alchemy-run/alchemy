@@ -148,6 +148,7 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ```
  *
  * @resource
+ * @product Service
  */
 export const Service: Platform<
   Service,

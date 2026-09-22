@@ -61,6 +61,7 @@ export interface Credential extends Resource<
  * ```
  *
  * @resource
+ * @product Credential
  */
 export const Credential = Resource<Credential>("Neon.Credential");
 

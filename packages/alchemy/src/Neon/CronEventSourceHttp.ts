@@ -32,6 +32,7 @@ import {
  * ```
  *
  * @layer
+ * @product Function
  * @provides Neon.CronEventSource
  */
 export const CronEventSourceHttp = Layer.effect(

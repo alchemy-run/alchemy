@@ -29,6 +29,7 @@ export interface ConnectAuthClient {
  * ```
  *
  * @binding
+ * @product Auth
  */
 export interface ConnectAuth extends Binding.Service<
   ConnectAuth,

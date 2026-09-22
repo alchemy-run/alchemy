@@ -161,6 +161,7 @@ export type FloatingIp = Resource<
  * ```
  *
  * @resource
+ * @product IP Address
  */
 export const FloatingIp = Resource<FloatingIp>("Hetzner.FloatingIp");
 

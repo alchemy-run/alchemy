@@ -172,6 +172,7 @@ const workspaceOf = (workspaceId: string | undefined) =>
  * ```
  *
  * @resource
+ * @product Workspace
  */
 export const AuditLog = Effect.fn(function* (options?: ListAuditLogsOptions) {
   const workspaceId = yield* workspaceOf(options?.workspaceId);

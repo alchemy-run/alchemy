@@ -204,6 +204,7 @@ export interface Firewall extends Resource<
  * ```
  *
  * @resource
+ * @product Firewall
  */
 export const Firewall = Resource<Firewall>("Hetzner.Firewall");
 

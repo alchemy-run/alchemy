@@ -335,6 +335,7 @@ export type Server = Resource<
  * only — changing it replaces the Server.
  *
  * @resource
+ * @product Server
  */
 export const Server = Resource<Server>("Hetzner.Server");
 
