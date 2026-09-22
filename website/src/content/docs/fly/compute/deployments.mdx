@@ -57,6 +57,12 @@ may start before HTTP promotion, so their jobs need overlap-safe ownership or
 drain behavior. Attached volumes, including `MountVolume` bindings, remain
 incompatible with blue/green; use rolling updates for a local database.
 
+Reordering containers or their startup dependencies does not create a new
+generation. Changing a dependency condition, image, command or environment does.
+The shutdown budget applies to the Machine. Each container must handle the
+configured signal and finish its own in-flight work; setting `shutdown` does not
+install a signal handler in your images.
+
 ## Put the Service in your stack
 
 Allocate a public IP and return the Service URL for your clients:
@@ -307,6 +313,12 @@ alchemy deploy
 ```
 
 Alchemy can keep an already-promoted replacement and finish removing its predecessor. Keep the existing logical IDs and ownership metadata so it can find both versions; renaming the resource starts a different lifecycle.
+
+If recovery reports contradictory deployment metadata, inspect the reported
+Machine before retrying. Removing or downgrading protocol metadata is not a
+rollback: Alchemy preserves ambiguous capacity instead of treating it as a
+completed deployment. Roll back application images using the same provider
+version and logical resource IDs.
 
 If you want to remove the application instead, use normal stack cleanup:
 
