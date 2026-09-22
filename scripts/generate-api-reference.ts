@@ -836,7 +836,7 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   return pages
     .map((page) => ({
-      label: page.product || page.service || "Reference",
+      label: page.service ? page.product || page.service : page.provider,
       link: page.link,
     }))
     .sort(byLabel);
@@ -860,7 +860,6 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
     const pages = [...byPage].map(([link, resources]) => ({
       ...resources[0],
       link,
-      category: resources.find((resource) => resource.category)?.category ?? "",
       product: resources.every(
         (resource) => resource.product === resources[0].product,
       )
@@ -868,29 +867,7 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
         : "",
     }));
 
-    const categorized = new Map<string, PageEntry[]>();
-    const uncategorized: PageEntry[] = [];
-    for (const p of pages) {
-      const category = p.category;
-      if (category) {
-        if (!categorized.has(category)) categorized.set(category, []);
-        categorized.get(category)!.push(p);
-      } else {
-        uncategorized.push(p);
-      }
-    }
-
-    const items: SidebarItem[] = [];
-    for (const cat of [...categorized.keys()].sort((a, b) =>
-      a.localeCompare(b),
-    )) {
-      items.push({
-        label: cat,
-        collapsed: true,
-        items: buildServiceItems(categorized.get(cat)!),
-      });
-    }
-    items.push(...buildServiceItems(uncategorized));
+    const items = buildServiceItems(pages);
 
     providers.push({ label: provider, collapsed: true, items });
   }

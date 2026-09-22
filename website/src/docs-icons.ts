@@ -84,7 +84,6 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Networking: l("globe"),
   Guides: l("map"),
   Resources: l("boxes"),
-  "API Reference": l("book-open"),
   Concepts: l("book-text"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),

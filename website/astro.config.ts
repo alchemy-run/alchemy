@@ -46,8 +46,7 @@ function providersSidebarEntry() {
 
 /**
  * A cloud hub's "API Reference" section: that provider's slice of the generated
- * reference tree below Guides, expanded one level (categories/services show,
- * everything inside them stays collapsed) so each hub is self-sufficient.
+ * alphabetical list of reference pages below Guides.
  * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
  * them all and gets one merged API Reference group.
  *
