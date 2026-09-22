@@ -148,16 +148,28 @@ it.effect(
         undefined,
       );
       const checks = { ready: { type: "http", port: 80, path: "/" } };
+      const apiDigest = `example/api@sha256:${"a".repeat(64)}`;
+      const workerDigest = `example/worker@sha256:${"b".repeat(64)}`;
+      const validContainers = [
+        { name: "api", image: apiDigest },
+        { name: "worker", image: workerDigest },
+      ];
       const cases: Array<[FlyMachineConfig, boolean, boolean]> = [
         [{}, false, false],
         [
           {
-            containers: [{ name: "api", image: "example/api@sha256:abc" }],
+            containers: [
+              { name: "api", image: apiDigest },
+              { name: "worker", image: "example/worker:latest" },
+            ],
             checks,
           },
           false,
           false,
         ],
+        [{ checks, containers: validContainers }, true, false],
+        [{ checks, containers: validContainers }, false, true],
+        [{ containers: validContainers }, false, false],
         [{ checks }, true, false],
         [{ checks }, false, true],
         [{ checks, auto_destroy: true }, false, false],
@@ -173,6 +185,16 @@ it.effect(
         ).pipe(Effect.flip);
         expect(error._tag).toBe("Fly.InvalidDeployment");
       }
+      yield* validateDeployment(
+        policy,
+        { containers: validContainers, checks },
+        false,
+      );
+      yield* validateDeployment(
+        policy,
+        { containers: [...validContainers].reverse(), checks },
+        false,
+      );
       const signal = yield* deploymentPolicy(
         undefined,
         { signal: "SIGQUIT" },

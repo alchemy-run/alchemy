@@ -55,7 +55,9 @@ const preview = yield* Fly.Machine("Preview", {
 });
 ```
 
-`count` duplicates the entire group. A rolling change to one container can restart the whole group; attached volumes stay with their Machine. Machine `env` and bindings remain shared, while container `env` is passed to Fly as a per-container override. Configure Machine or service readiness checks for every critical component before treating a deploy as ready: Pilot container checks and dependencies control startup, not Alchemy's rollout readiness. Multi-container Machines currently support rolling deployment only.
+`count` duplicates the entire group. A rolling change to one container can restart the whole group; attached volumes stay with their Machine. Machine `env` and bindings remain shared, while container `env` is passed to Fly as a per-container override. Configure Machine or service readiness checks for every critical component before treating a deploy as ready: Pilot container checks and dependencies control startup, not Alchemy's rollout readiness. Blue/green also supports named containers when every image is an immutable
+`repository@sha256:` digest and no volumes are attached. It replaces the
+whole group and can overlap old and new workers during promotion.
 
 If a rolling update is interrupted, Fly may have accepted the update even
 though the CLI reported a failure. Wait for the in-progress Machine update to

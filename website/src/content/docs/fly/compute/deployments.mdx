@@ -27,6 +27,36 @@ export default class Api extends Fly.Service<Api>()(
 
 You still declare one Service. Alchemy creates the temporary replacement Machines during each rollout.
 
+## Deploy named containers as a group
+
+`Fly.Machine` also accepts named containers for a blue/green deployment. Pin
+**every** image to a full `repository@sha256:<digest>` reference and configure
+Machine or service readiness checks that cover every critical component.
+Container health checks and `dependsOn` govern startup; they do not replace
+Alchemy's deployment readiness checks.
+
+```typescript
+const preview = yield* Fly.Machine("Preview", {
+  app,
+  deploy: { strategy: "bluegreen" },
+  containers: [
+    { name: "api", image: apiDigest, healthChecks: [{ http: { port: 3000, path: "/health" } }] },
+    { name: "worker", image: workerDigest, dependsOn: [{ name: "api", condition: "healthy" }],
+      healthChecks: [{ http: { port: 3001, path: "/health" } }] },
+  ],
+  checks: {
+    apiReady: { type: "http", port: 3000, path: "/health" },
+    workerReady: { type: "http", port: 3001, path: "/health" },
+  },
+});
+```
+
+The worker image in this example exposes `/health` on port 3001. Alchemy
+replaces the full group, even if only one image changes. New workers
+may start before HTTP promotion, so their jobs need overlap-safe ownership or
+drain behavior. Attached volumes, including `MountVolume` bindings, remain
+incompatible with blue/green; use rolling updates for a local database.
+
 ## Put the Service in your stack
 
 Allocate a public IP and return the Service URL for your clients:
