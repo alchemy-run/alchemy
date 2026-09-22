@@ -127,6 +127,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "images · containers · networks",
   },
   {
+    label: "Kubernetes",
+    href: "/kubernetes",
+    prefixes: ["/kubernetes", "/providers/kubernetes"],
+    slot: "more",
+    category: "Containers",
+    hint: "deployments · jobs · manifests · helm",
+  },
+  {
     label: "SQL",
     href: "/sql",
     prefixes: ["/sql", "/drizzle", "/providers/drizzle", "/providers/sql"],

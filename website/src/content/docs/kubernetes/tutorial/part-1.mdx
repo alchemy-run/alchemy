@@ -1,0 +1,267 @@
+---
+title: "Part 1: Your First Deployment"
+description: Create a Stack that targets a local kind cluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
+sidebar:
+  order: 1
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../../versions";
+
+export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+In this first part you'll create a Stack, point it at a local
+Kubernetes cluster, and deploy a replicated HTTP service — without
+writing a line of YAML.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- [Docker](https://docs.docker.com/get-started/get-docker/),
+  [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation),
+  and [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
+
+:::note[Costs]
+Parts 1–4 run entirely on your machine and cost nothing. Part 5
+moves the program onto Amazon EKS, which is billed by the hour.
+:::
+
+## Create a cluster
+
+Create a single-node cluster named `alchemy`:
+
+```sh
+kind create cluster --name alchemy
+```
+
+kind adds a context named `kind-alchemy` to `~/.kube/config`. That
+context name is how your program will find the cluster.
+
+## Create a project
+
+Start with an empty directory and initialize a `package.json`:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-cluster && cd my-cluster && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-cluster && cd my-cluster && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-cluster && cd my-cluster && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-cluster && cd my-cluster && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Install dependencies
+
+Install <code>alchemy@latest</code> and <code>effect@{effectVersion}</code>:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Create the Stack
+
+Every Alchemy program starts with a `Stack` — a collection of
+Resources, the providers that manage them, and a state store that
+remembers what was deployed. Create `alchemy.run.ts`:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyCluster",
+  {
+    providers: Kubernetes.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here
+  }),
+);
+```
+
+`Kubernetes.providers()` teaches Alchemy how to create, update, and
+delete Kubernetes resources. `Alchemy.localState()` keeps state in a
+`.alchemy/` directory next to your code.
+
+## Describe the cluster
+
+Declare which cluster the resources run on:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
++const cluster = Kubernetes.KubeConfig({ context: "kind-alchemy" });
+
+export default Alchemy.Stack(
+```
+
+`Kubernetes.KubeConfig` is a plain value, not a resource: it tells
+Alchemy to authenticate with the `kind-alchemy` context from your
+kubeconfig. Nothing is created and it never appears in a plan.
+
+## Add a Deployment
+
+Declare a replicated HTTP server. This one runs
+[podinfo](https://github.com/stefanprodan/podinfo), a small demo
+service that answers with JSON:
+
+```diff lang="typescript"
+Effect.gen(function* () {
+-  // resources go here
++  const web = yield* Kubernetes.Deployment("Web", {
++    cluster,
++    name: "web",
++    image: "ghcr.io/stefanprodan/podinfo:6.15.0",
++    port: 9898,
++    replicas: 2,
++    serviceType: "ClusterIP",
++  });
+}),
+```
+
+`"Web"` is the resource's logical ID in your program. `name: "web"`
+is the name of the objects in the cluster; without it Alchemy
+generates one from the stack, stage, and logical ID (like
+`mycluster-web-dev-you-…`). Set it before the first deploy — a
+Deployment keeps the name it was created with.
+
+`image` is a registry reference the cluster pulls as written, and
+`port` is both the container port and the Service port.
+
+## Keep the Service internal
+
+`serviceType` defaults to `LoadBalancer`, which asks the cluster for
+an external load balancer and waits up to about three minutes for
+one to be assigned. A kind cluster has no load balancer controller,
+so the example sets `serviceType: "ClusterIP"`: the Service gets a
+cluster-internal address only, and you'll reach it through
+`kubectl port-forward`.
+
+## Return Stack outputs
+
+Return the names you'll need from the command line:
+
+```diff lang="typescript"
+  const web = yield* Kubernetes.Deployment("Web", {
+    cluster,
+    name: "web",
+    image: "ghcr.io/stefanprodan/podinfo:6.15.0",
+    port: 9898,
+    replicas: 2,
+    serviceType: "ClusterIP",
+  });
+
++  return {
++    namespace: web.namespace,
++    service: web.serviceName,
++  };
+}),
+```
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Web[/b] [d](Kubernetes.Deployment)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Web[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+{
+[s2]namespace: "default",
+[s2]service: "web",
+}`} />
+
+Alchemy applied three objects to the cluster: a `ServiceAccount`, a
+`Deployment` with two replicas, and a `Service` in front of them.
+The deploy finishes as soon as the API server accepts the objects;
+Kubernetes pulls the image and starts the pods in the background.
+
+## Verify it worked
+
+Wait for the rollout, then forward a local port to the Service:
+
+```sh
+kubectl rollout status deployment/web
+kubectl port-forward service/web 9898:9898
+```
+
+In a second terminal:
+
+```sh
+curl localhost:9898
+```
+
+```json
+{
+  "hostname": "web-857dfd7659-tm6c7",
+  "version": "6.15.0",
+  "message": "greetings from podinfo v6.15.0",
+  ...
+}
+```
+
+Run `alchemy deploy` again. Nothing changed, so the plan is empty:
+
+<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+
+{
+[s2]namespace: "default",
+[s2]service: "web",
+}`} />
+
+This is the core loop: declare resources in code, deploy, and
+Alchemy works out what changed.
+
+## Recap
+
+You now have:
+
+- An `alchemy.run.ts` whose resources target the `kind-alchemy`
+  context
+- A two-replica podinfo Deployment behind a `ClusterIP` Service,
+  created with no YAML
+- Stack outputs naming the Service and its namespace
+
+In [Part 2](/kubernetes/tutorial/part-2), you'll give the app its own
+namespace and configure it with environment variables and resource
+limits.

@@ -1,0 +1,364 @@
+---
+title: "Part 5: Effect Servers on EKS"
+description: Move the program onto an Amazon EKS Auto Mode cluster, expose Services through load balancers, and deploy an Effect HTTP server whose DynamoDB binding is authorized by EKS Pod Identity.
+sidebar:
+  order: 5
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+In Parts 1–4 every workload ran a pre-built image, because a kind
+cluster has no registry Alchemy can push to and no cloud identity to
+hand out. An `AWS.EKS.Cluster` has both. In this part you'll declare
+an EKS cluster in the same Stack, move the app onto it, and deploy an
+Effect HTTP server that writes to DynamoDB — built, pushed, and
+authorized by Alchemy.
+
+## Prerequisites
+
+- An AWS account and credentials — see [AWS setup](/aws/setup)
+- Docker running locally (Alchemy builds the server's image)
+
+:::caution[Costs]
+An EKS cluster costs about $0.10 per hour for the control plane,
+plus the Auto Mode nodes and one Network Load Balancer per
+`LoadBalancer` Service. Creating the control plane takes about ten
+minutes. Run `alchemy destroy` when you're done.
+:::
+
+## Compose the AWS providers
+
+The EKS cluster, the DynamoDB table, and the EKS authentication
+adapter all come from `AWS.providers()`. Merge it with
+`Kubernetes.providers()`:
+
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
++import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyCluster",
+  {
+-    providers: Kubernetes.providers(),
++    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+```
+
+## Declare the cluster in a module
+
+The server you'll write lives in its own file and needs the same
+cluster, so declare shared resources at module scope. A resource
+declared this way is an Effect you can `yield*` from anywhere; every
+`yield*` resolves to the same resource. Create `src/infra.ts`:
+
+```typescript
+// src/infra.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export const Network = AWS.EC2.Network("Network", {
+  cidrBlock: "10.71.0.0/16",
+  availabilityZones: 2,
+});
+
+export const Cluster = Effect.gen(function* () {
+  const network = yield* Network;
+  return yield* AWS.EKS.Cluster("Cluster", {
+    compute: "auto",
+    resourcesVpcConfig: {
+      subnetIds: network.publicSubnetIds,
+      endpointPublicAccess: true,
+      endpointPrivateAccess: true,
+    },
+  });
+});
+```
+
+`compute: "auto"` turns on EKS Auto Mode: AWS manages the nodes,
+storage, and load balancer integration, and Alchemy creates the
+cluster and node IAM roles. The nodes launch in the Network's public
+subnets so they can pull images. See [EKS](/aws/compute/eks) for the
+cluster's full surface.
+
+## Move the Namespace into the module
+
+Add the Namespace from Part 2 to `src/infra.ts`, targeting the new
+cluster:
+
+```typescript
+// src/infra.ts
+import * as Kubernetes from "alchemy/Kubernetes";
+
+export const Namespace = Effect.gen(function* () {
+  const cluster = yield* Cluster;
+  return yield* Kubernetes.Manifest("Namespace", {
+    cluster,
+    manifest: {
+      apiVersion: "v1",
+      kind: "Namespace",
+      metadata: { name: "my-app" },
+    },
+  });
+});
+```
+
+The only change is `cluster`: an `AWS.EKS.Cluster` exposes a
+`connection` attribute, so the whole resource is passed where
+`Kubernetes.KubeConfig(...)` used to be. Alchemy authenticates with
+your AWS credentials; there is no kubeconfig step.
+
+## Point the Stack at EKS
+
+In `alchemy.run.ts`, replace the kubeconfig connection and the
+inline Namespace with the shared resources:
+
+```diff lang="typescript"
++import { Cluster, Namespace } from "./src/infra.ts";
+
+-const cluster = Kubernetes.KubeConfig({ context: "kind-alchemy" });
+
+export default Alchemy.Stack(
+  "MyCluster",
+  {
+    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+-    const namespace = yield* Kubernetes.Manifest("Namespace", {
+-      cluster,
+-      manifest: {
+-        apiVersion: "v1",
+-        kind: "Namespace",
+-        metadata: { name: "my-app" },
+-      },
+-    });
++    const cluster = yield* Cluster;
++    const namespace = yield* Namespace;
+```
+
+The Deployment, Jobs, and CronJob from Parts 1–3 keep working
+unchanged against the new `cluster`. Remove the metrics-server chart
+from Part 4 — on EKS, install metrics-server as an
+[`AWS.EKS.Addon`](/providers/aws/eks/addon) instead.
+
+## Give the web Service a public URL
+
+EKS Auto Mode runs a load balancer controller, so a `LoadBalancer`
+Service gets an internet-facing Network Load Balancer:
+
+```diff lang="typescript"
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  name: "web",
+  namespace: namespace.name,
+  image: "ghcr.io/stefanprodan/podinfo:6.15.0",
+  port: 9898,
+  replicas: 2,
+-  serviceType: "ClusterIP",
++  serviceType: "LoadBalancer",
+```
+
+When the Service is a `LoadBalancer`, the deploy waits (up to about
+three minutes) for the load balancer's hostname and exposes it as
+`web.url`. On EKS the `image` is also mirrored into an ECR repository
+Alchemy creates for this workload, so pods pull from your own
+account.
+
+## Add a table
+
+Declare a DynamoDB table in `src/infra.ts` for the server to write
+to:
+
+```typescript
+// src/infra.ts
+export const Visits = AWS.DynamoDB.Table("Visits", {
+  partitionKey: "pk",
+  attributes: { pk: "S" },
+});
+```
+
+## Write an Effect server
+
+Create `src/Api.ts`. Its default export is a `Kubernetes.Deployment`
+with two Effects: the first returns its props, the second is the
+server:
+
+```typescript
+// src/Api.ts
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Cluster, Namespace, Visits } from "./infra.ts";
+
+export default Kubernetes.Deployment(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    const namespace = yield* Namespace;
+    return {
+      cluster,
+      main: import.meta.url,
+      name: "api",
+      namespace: namespace.name,
+      port: 3000,
+      replicas: 2,
+      serviceType: "LoadBalancer" as const,
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ ok: true });
+      }),
+    };
+  }),
+);
+```
+
+`main: import.meta.url` tells Alchemy to bundle this module into a
+generated image and push it to ECR. Inside the pod, the returned
+`fetch` handler serves HTTP on `port`. This is the source a kind
+cluster can't use: building `main` needs a registry, which the EKS
+adapter provides.
+
+## Bind the table
+
+Record a visit on every request. `AWS.DynamoDB.PutItem(visits)` is a
+**binding**: it returns a typed client and, at deploy time, grants the
+workload `dynamodb:PutItem` on that table:
+
+```diff lang="typescript"
+  Effect.gen(function* () {
++    const visits = yield* Visits;
++    const putItem = yield* AWS.DynamoDB.PutItem(visits);
++
+    return {
+      fetch: Effect.gen(function* () {
+-        return yield* HttpServerResponse.json({ ok: true });
+-      }),
++        const id = yield* Effect.sync(() => crypto.randomUUID());
++        yield* putItem({ Item: { pk: { S: id } } });
++        return yield* HttpServerResponse.json({ visit: id });
++      }).pipe(Effect.orDie),
+    };
+-  }),
++  }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+);
+```
+
+On EKS, the grant becomes an IAM policy on a role Alchemy creates for
+the Deployment's ServiceAccount and associates through
+[EKS Pod Identity](/providers/aws/eks/podidentityassociation). The
+pods get credentials for exactly that permission, with no access keys
+in the image or the environment. The table name reaches the pod as an
+environment variable.
+
+## Deploy the server from the Stack
+
+Yield the Api from `alchemy.run.ts` and return the URLs:
+
+```diff lang="typescript"
++import Api from "./src/Api.ts";
+```
+
+```diff lang="typescript"
++const api = yield* Api;
+
+return {
++  clusterName: cluster.clusterName,
++  webUrl: web.url,
++  apiUrl: api.url,
+  // ...
+};
+```
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+The first deploy creates the network and the control plane, then the
+Namespace, the table, the ECR repositories, the Pod Identity role,
+and the workloads. Expect around fifteen minutes, most of it spent
+creating the EKS control plane.
+
+## Verify it worked
+
+`apiUrl` includes the Service port (`http://<hostname>:3000`). Call
+the server:
+
+```sh
+curl <apiUrl>
+```
+
+```json
+{ "visit": "5f0c6d0e-8f1c-4a57-9d0f-2b8b3c1a7e44" }
+```
+
+The load balancer can take a minute or two to pass health checks
+after the deploy finishes. To use `kubectl` against the cluster, add
+it to your kubeconfig with the AWS CLI:
+
+```sh
+aws eks update-kubeconfig --name <clusterName>
+kubectl -n my-app get deployments
+```
+
+## Tear it down
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+Alchemy deletes the workloads and their in-cluster objects, the ECR
+repositories and Pod Identity roles, then the cluster and network.
+
+## Recap
+
+You moved the program from a laptop cluster to EKS by changing what
+`cluster` points at, then used what EKS adds:
+
+- An `AWS.EKS.Cluster` passed directly as the `cluster` of every
+  Kubernetes resource
+- `LoadBalancer` Services with public URLs
+- An Effect HTTP server bundled from `main`, pushed to ECR, and
+  authorized to write to DynamoDB through Pod Identity
+
+## Where next
+
+- [Deployments](/kubernetes/workloads/deployments) — Service types,
+  labels, the pod template escape hatch, and the tagged class form.
+- [Configuration & bindings](/kubernetes/workloads/bindings) — how
+  `env` and bindings reach the container on each platform.
+- [Managed clusters](/kubernetes/clusters/managed) — everything the
+  EKS adapter provisions and cleans up.
+- [EKS](/aws/compute/eks) — access entries, add-ons, and HyperPod.

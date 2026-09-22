@@ -1,0 +1,143 @@
+---
+title: Jobs & CronJobs
+description: Run containers to completion with Kubernetes.Job — migrations, seeds, smoke tests — and on a schedule as a CronJob. How Job names, re-runs, retries, and cleanup work.
+---
+
+[`Kubernetes.Job`](/providers/kubernetes/job) runs a container until
+it exits: the Kubernetes counterpart of
+[`AWS.ECS.Task`](/aws/compute/ecs). It applies a **ServiceAccount**
+and a Kubernetes **Job** — or a **CronJob** when you set `schedule`.
+It takes the same image, environment, resource, and pod template
+props as a [Deployment](/kubernetes/workloads/deployments), without
+the port and Service.
+
+```typescript
+const migrate = yield* Kubernetes.Job("Migrate", {
+  cluster,
+  name: "migrate",
+  namespace: "apps",
+  image: "ghcr.io/acme/migrator:v3",
+  args: ["up"],
+  env: { DATABASE_URL: db.connectionString },
+  backoffLimit: 2,
+});
+```
+
+## When a Job runs
+
+Kubernetes starts a Job as soon as it's created. Alchemy creates a
+new Job whenever the Job's spec changes, so a Job runs:
+
+- on the first deploy,
+- on every deploy that changes its spec — the image, `args`, `env`
+  values (including Outputs that resolved to new values), resources,
+  or pod template,
+
+and not on deploys that leave it unchanged. The deploy doesn't wait
+for the Job to finish. Follow it with
+`kubectl wait --for=condition=complete job/<jobName>` and
+`kubectl logs job/<jobName>`.
+
+## Job names
+
+A Job's pod template can't change after the Job is created, so
+Alchemy names each one-shot Job after its spec: `jobName` is the base
+name plus the first eight characters of a hash, for example
+`migrate-5133e709`. A changed spec produces a new name; Alchemy
+applies the new Job and deletes the previous one along with its pods.
+
+Kubernetes caps Job names at 63 characters, so the base name is
+truncated to fit. Read the current name from the `jobName`
+attribute rather than predicting it.
+
+## Retries, restarts, and cleanup
+
+| Prop                      | Effect                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| `backoffLimit`            | Failed pods Kubernetes retries before marking the Job failed                               |
+| `restartPolicy`           | `"Never"` (default) starts a new pod after a failure; `"OnFailure"` restarts the container in place |
+| `ttlSecondsAfterFinished` | Kubernetes deletes the finished Job this many seconds after it completes or fails          |
+
+With `ttlSecondsAfterFinished`, Kubernetes removes the Job object on
+its own. Alchemy tracks the Job through its ServiceAccount, so a
+garbage-collected Job is not treated as missing and does not run
+again until its spec changes.
+
+## Run on a schedule
+
+Set `schedule` to a standard five-field cron expression and Alchemy
+applies a `CronJob` instead:
+
+```typescript
+const nightly = yield* Kubernetes.Job("NightlyReport", {
+  cluster,
+  name: "nightly-report",
+  image: "ghcr.io/acme/reports:v2",
+  schedule: "0 3 * * *",
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 86_400,
+});
+```
+
+`backoffLimit`, `restartPolicy`, and `ttlSecondsAfterFinished` apply
+to each Job the CronJob starts. A CronJob can be updated in place, so
+it keeps a stable name — the base name, truncated to 52 characters so
+Kubernetes can append its own suffix to each Job it starts.
+
+Schedules are evaluated in the time zone of the cluster's controller
+manager, which is UTC on most managed clusters. The CronJob
+`timeZone` field isn't exposed as a prop; if you need it, write the
+CronJob as a [Manifest](/kubernetes/objects/manifests).
+
+Adding or removing `schedule` switches between a one-shot Job and a
+CronJob: Alchemy applies the new object and deletes the old one.
+
+## Effect programs
+
+With `main`, a Job runs an Effect program. The implementation returns
+`{ run }`, and the process exits when `run` completes:
+
+```typescript
+const seed = yield* Kubernetes.Job(
+  "SeedData",
+  { cluster, main: import.meta.url, backoffLimit: 2 },
+  Effect.gen(function* () {
+    const putItem = yield* AWS.DynamoDB.PutItem(table);
+    return {
+      run: Effect.gen(function* () {
+        yield* putItem({ Item: { id: { S: "seed" } } });
+        yield* Effect.log("seeded");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+);
+```
+
+Like `Deployment`, `main` needs a cluster with a registry —
+[EKS](/kubernetes/clusters/managed) today — and the tagged class
+form (`class Backfill extends Kubernetes.Job<Backfill>()("Backfill") {}`
+plus `Backfill.make(props, impl)`) works the same way. A failure in
+`run` exits the process with a non-zero status, which Kubernetes
+counts against `backoffLimit`.
+
+## Attributes
+
+| Attribute            | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `jobName`            | Name of the Job or CronJob object                        |
+| `kind`               | `"Job"` or `"CronJob"`                                   |
+| `schedule`           | The cron schedule, or `undefined` for a one-shot Job     |
+| `serviceAccountName` | ServiceAccount the pods run as                           |
+| `namespace`          | Namespace of the objects                                 |
+| `imageUri`           | The image the pods run (the ECR copy on EKS)             |
+| `connection`         | The cluster connection                                   |
+| `kubernetesObjects`  | References to the applied objects                        |
+
+## Where next
+
+- [Tutorial part 3](/kubernetes/tutorial/part-3) — a smoke-test Job
+  and a CronJob against a live Deployment.
+- [Configuration & bindings](/kubernetes/workloads/bindings) — pass
+  connection strings and credentials to a Job.
+- [`Job` reference](/providers/kubernetes/job) — every prop and
+  attribute.

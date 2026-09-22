@@ -37,6 +37,7 @@ function providersSidebarEntry() {
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
+      { label: "Kubernetes", link: "/kubernetes" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -1460,6 +1461,75 @@ export default defineConfig({
             { label: "Run local services", link: "/docker/local-services" },
             { label: "Build & push images", link: "/docker/build-and-push" },
             providerResourcesEntry("Docker"),
+          ],
+        },
+        {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "kubernetes/tutorial" } }],
+            },
+            {
+              label: "Clusters",
+              items: [
+                {
+                  label: "Connecting to clusters",
+                  link: "/kubernetes/clusters/connecting",
+                },
+                {
+                  label: "Managed clusters",
+                  link: "/kubernetes/clusters/managed",
+                },
+              ],
+            },
+            {
+              label: "Workloads",
+              items: [
+                {
+                  label: "Deployments",
+                  link: "/kubernetes/workloads/deployments",
+                },
+                {
+                  label: "Jobs & CronJobs",
+                  link: "/kubernetes/workloads/jobs",
+                },
+                {
+                  label: "Container images",
+                  link: "/kubernetes/workloads/images",
+                },
+                {
+                  label: "Configuration & bindings",
+                  link: "/kubernetes/workloads/bindings",
+                },
+              ],
+            },
+            {
+              label: "Objects",
+              items: [
+                { label: "Manifests", link: "/kubernetes/objects/manifests" },
+                {
+                  label: "Helm charts",
+                  link: "/kubernetes/objects/helm-charts",
+                },
+              ],
+            },
+            {
+              label: "Concepts",
+              items: [
+                {
+                  label: "How objects are managed",
+                  link: "/kubernetes/concepts/object-lifecycle",
+                },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/concepts/cluster-adapters",
+                },
+              ],
+            },
+            providerApiReferenceEntry("Kubernetes"),
           ],
         },
         {

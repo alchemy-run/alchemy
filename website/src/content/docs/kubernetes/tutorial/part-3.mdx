@@ -1,0 +1,213 @@
+---
+title: "Part 3: Jobs & CronJobs"
+description: Run a smoke test against the Deployment with Kubernetes.Job, see how a changed Job runs again, and turn it into a scheduled CronJob.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+In [Part 2](/kubernetes/tutorial/part-2) you configured the app in its
+own namespace. Now you'll add work that runs to completion: a smoke
+test that checks the service after every change, and a health check
+that runs on a schedule.
+
+## Build the service URL
+
+Inside the cluster, a Service is reachable at
+`<service>.<namespace>.svc.cluster.local`. Build that URL from the
+Deployment's attributes:
+
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+```
+
+```diff lang="typescript"
+const web = yield* Kubernetes.Deployment("Web", {
+  // ...
+});
+
++const webUrl = Output.interpolate`http://${web.serviceName}.${web.namespace}.svc.cluster.local:${web.port}`;
+```
+
+`Output.interpolate` builds a string from Outputs. Anything that uses
+`webUrl` depends on the Deployment.
+
+## Add a smoke test Job
+
+A [`Kubernetes.Job`](/kubernetes/workloads/jobs) runs a container
+until it exits. This one uses the `curl` image to request the
+service and fails if it doesn't answer:
+
+```diff lang="typescript"
+const webUrl = Output.interpolate`http://${web.serviceName}.${web.namespace}.svc.cluster.local:${web.port}`;
+
++const smokeTest = yield* Kubernetes.Job("SmokeTest", {
++  cluster,
++  name: "smoke-test",
++  namespace: namespace.name,
++  image: "curlimages/curl:8.16.0",
++  args: ["--fail", "--silent", "--retry", "5", "--retry-all-errors", webUrl],
++  backoffLimit: 2,
++});
+```
+
+`args` are the container's arguments (the image's entrypoint is
+`curl`). `backoffLimit` is how many times Kubernetes retries a failed
+pod before marking the Job failed.
+
+## Clean up finished Jobs
+
+A finished Job stays in the cluster until something deletes it. Let
+Kubernetes garbage-collect it ten minutes after it completes:
+
+```diff lang="typescript"
+  backoffLimit: 2,
++  ttlSecondsAfterFinished: 600,
+});
+```
+
+Alchemy tracks the Job through its ServiceAccount, so a
+garbage-collected Job doesn't look deleted and isn't re-run on the
+next deploy.
+
+## Return the Job name
+
+```diff lang="typescript"
+return {
++  smokeTest: smokeTest.jobName,
+  namespace: web.namespace,
+  service: web.serviceName,
+};
+```
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]SmokeTest[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]SmokeTest[/b] [d](Kubernetes.Job)[/d] [g]created[/g]
+{
+[s2]smokeTest: "smoke-test-5133e709",
+[s2]namespace: "my-app",
+[s2]service: "web",
+}`} />
+
+Kubernetes starts a Job as soon as it's created. The deploy doesn't
+wait for the Job to finish — check it with `kubectl`:
+
+```sh
+kubectl -n my-app wait --for=condition=complete job/smoke-test-5133e709
+kubectl -n my-app logs job/smoke-test-5133e709
+```
+
+The logs show podinfo's JSON response, including your message from
+Part 2.
+
+## Why the name has a suffix
+
+The Job is named `smoke-test-5133e709`, not `smoke-test`. Kubernetes
+doesn't allow a Job's pod template to change after the Job is
+created, so Alchemy names each Job after a hash of its spec. Change
+the spec and you get a new Job; leave it alone and nothing re-runs.
+
+Add `--show-error` to the arguments and deploy:
+
+```diff lang="typescript"
+-    args: ["--fail", "--silent", "--retry", "5", "--retry-all-errors", webUrl],
++    args: ["--fail", "--silent", "--show-error", "--retry", "5", "--retry-all-errors", webUrl],
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]SmokeTest[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]SmokeTest[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]
+{
+[s2]smokeTest: "smoke-test-80469dd3",
+[s2]namespace: "my-app",
+[s2]service: "web",
+}`} />
+
+Alchemy applied `smoke-test-80469dd3`, which runs, and deleted
+`smoke-test-5133e709`:
+
+```sh
+kubectl -n my-app get jobs
+```
+
+```text
+NAME                  STATUS    COMPLETIONS   DURATION   AGE
+smoke-test-80469dd3   Running   0/1           1s         1s
+```
+
+## Run it on a schedule
+
+Add a second Job that checks podinfo's health endpoint every five
+minutes:
+
+```diff lang="typescript"
++  const ping = yield* Kubernetes.Job("Ping", {
++    cluster,
++    name: "ping",
++    namespace: namespace.name,
++    image: "curlimages/curl:8.16.0",
++    args: ["--fail", "--silent", Output.interpolate`${webUrl}/healthz`],
++    schedule: "*/5 * * * *",
++  });
+```
+
+Setting `schedule` (a standard five-field cron expression) makes
+Alchemy create a Kubernetes `CronJob` instead of a `Job`. A CronJob's
+spec can change in place, so it keeps the plain name `ping`.
+
+Deploy, then list both:
+
+```sh
+kubectl -n my-app get jobs,cronjobs
+```
+
+```text
+NAME                            STATUS     COMPLETIONS   DURATION   AGE
+job.batch/smoke-test-80469dd3   Complete   1/1           4s         2m
+
+NAME                 SCHEDULE      TIMEZONE   SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+cronjob.batch/ping   */5 * * * *   <none>     False     0        <none>          5s
+```
+
+## Recap
+
+You now have:
+
+- A smoke-test Job that runs whenever its spec changes, built from
+  the Deployment's attributes
+- A content-addressed Job name, so changes re-run and no-op deploys
+  don't
+- A CronJob hitting the health endpoint every five minutes
+
+In [Part 4](/kubernetes/tutorial/part-4), you'll install a cluster
+add-on from a Helm chart.

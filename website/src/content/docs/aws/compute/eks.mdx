@@ -266,8 +266,9 @@ const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
 `chart` also accepts `oci://` references and local chart directories,
 and `values` is a literal object — the same shape as a `values.yaml`
 file. Because the objects are applied (not `helm install`ed), Alchemy
-owns their lifecycle: drift is corrected on every deploy, objects
-that drop out of the render are pruned, and destroy deletes them —
+owns their lifecycle: the full render is re-applied whenever the
+chart's inputs change, objects that drop out of the render are
+pruned, and destroy deletes them —
 there is no in-cluster Helm release record. Charts that rely on
 install/upgrade hooks for correctness should be installed with Helm
 directly.
@@ -333,6 +334,9 @@ surface.
 
 ## Where next
 
+- [Kubernetes](/kubernetes) — the full guide to `Kubernetes.*`
+  workloads, manifests, and Helm charts on EKS and any other
+  cluster.
 - [VPC & networking](/aws/networking) — what the `Network` helper
   builds under the cluster.
 - [HyperPod](/aws/compute/hyperpod) — run training fleets on this

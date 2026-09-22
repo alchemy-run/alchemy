@@ -1,0 +1,219 @@
+---
+title: Connecting to clusters
+description: Point Kubernetes resources at any cluster with Kubernetes.KubeConfig, a raw Kubernetes.Connection (bearer token, client certificate, or exec plugin), or a managed cluster resource.
+---
+
+Every Kubernetes resource — [`Deployment`](/kubernetes/workloads/deployments),
+[`Job`](/kubernetes/workloads/jobs),
+[`Manifest`](/kubernetes/objects/manifests), and
+[`HelmChart`](/kubernetes/objects/helm-charts) — takes a `cluster`
+prop. It accepts three shapes:
+
+| `cluster` value                     | Use it for                                                        |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `Kubernetes.KubeConfig({ ... })`    | Any cluster in a kubeconfig file: kind, k3s, on-prem, GKE, AKS, EKS |
+| A `Kubernetes.Connection` object    | An API endpoint plus a bearer token, client certificate, or exec plugin |
+| A managed cluster resource          | An `AWS.EKS.Cluster` from the same Stack (see [Managed clusters](/kubernetes/clusters/managed)) |
+
+A connection is plain, serializable data. Nothing is provisioned for
+it and it never appears in a plan. Alchemy stores it on each
+resource's state so `alchemy destroy` can reach the cluster later,
+even after you delete the code that declared it.
+
+## Use a kubeconfig context
+
+`Kubernetes.KubeConfig` authenticates exactly like `kubectl`:
+
+```typescript
+import * as Kubernetes from "alchemy/Kubernetes";
+
+const cluster = Kubernetes.KubeConfig({ context: "prod-east" });
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+});
+```
+
+Both options are optional:
+
+- **`path`** — the kubeconfig file. Defaults to the first entry of
+  `$KUBECONFIG`, then `~/.kube/config`. A leading `~` is expanded.
+- **`context`** — the context to use. Defaults to the file's
+  `current-context`.
+
+Name the context explicitly for anything beyond a scratch cluster.
+The current context changes whenever someone runs
+`kubectl config use-context`, and a deploy would follow it to a
+different cluster.
+
+The file is read at deploy time, on the machine running
+`alchemy deploy`. The API endpoint, certificate authority, and
+credentials all come from the selected context. Static tokens,
+client certificates, and `exec` credential plugins are supported.
+
+## Cloud CLI contexts
+
+The cloud CLIs write contexts that mint short-lived tokens through
+an `exec` credential plugin. Alchemy runs the plugin before each
+request, so tokens never go stale mid-deploy:
+
+| Cluster | Create the context with                                    | Plugin the context runs         |
+| ------- | ---------------------------------------------------------- | ------------------------------- |
+| EKS     | `aws eks update-kubeconfig --name <cluster>`               | `aws eks get-token`             |
+| GKE     | `gcloud container clusters get-credentials <cluster>`      | `gke-gcloud-auth-plugin`        |
+| AKS     | `az aks get-credentials --name <cluster> --resource-group <group>` | `kubelogin` (Entra ID clusters) |
+
+The plugin must be installed and logged in wherever you deploy from,
+including CI runners.
+
+## Keep the kubeconfig next to the code
+
+Point `path` at a file you control to decouple deploys from your
+personal `~/.kube/config`:
+
+```typescript
+const cluster = Kubernetes.KubeConfig({
+  path: "./kubeconfig.yaml",
+  context: "staging",
+});
+```
+
+A relative path is resolved from the directory you run
+`alchemy deploy` in. In CI, write the file from a secret before the
+deploy step, or set `KUBECONFIG` to its location and omit `path`.
+
+## Connect with a bearer token
+
+A raw `Kubernetes.Connection` names the API endpoint and an `auth`
+descriptor. For a ServiceAccount token or another static bearer
+token:
+
+```typescript
+import * as Config from "effect/Config";
+
+const token = yield* Config.String("K8S_TOKEN");
+
+const cluster: Kubernetes.Connection = {
+  endpoint: "https://10.0.0.10:6443",
+  certificateAuthorityData: "LS0tLS1CRUdJTi…", // base64-encoded PEM
+  auth: { kind: "token", token },
+};
+```
+
+`certificateAuthorityData` is the same base64-encoded PEM bundle a
+kubeconfig carries as `certificate-authority-data`. For self-signed
+local clusters you can set `insecureSkipTlsVerify: true` instead.
+
+## Connect with a client certificate
+
+For mutual TLS, pass the PEM certificate and key:
+
+```typescript
+const cluster: Kubernetes.Connection = {
+  endpoint: "https://k8s.internal:6443",
+  certificateAuthorityData: caData,
+  auth: { kind: "client-cert", certificate: certPem, key: keyPem },
+};
+```
+
+## Connect with an exec plugin
+
+Run any command that speaks the Kubernetes
+[ExecCredential protocol](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins)
+without a kubeconfig file:
+
+```typescript
+const cluster: Kubernetes.Connection = {
+  endpoint: "https://ABCD1234.gr7.us-west-2.eks.amazonaws.com",
+  certificateAuthorityData: caData,
+  auth: {
+    kind: "exec",
+    command: "aws",
+    args: ["eks", "get-token", "--cluster-name", "prod"],
+    env: { AWS_PROFILE: "prod" },
+  },
+};
+```
+
+The plugin is re-run for every request, and a client certificate it
+returns is used for mutual TLS.
+
+`token`, `client-cert`, and `exec` connections need an explicit
+`endpoint`. Only kubeconfig connections and managed cluster
+resources can discover it.
+
+## Credentials in state
+
+Alchemy persists each resource's connection in state. A kubeconfig
+connection stores only the path and context name, and an exec
+connection stores the command. A `token` or `client-cert`
+connection stores the credential itself. Prefer kubeconfig or exec
+connections for stacks whose state is shared, and use a remote
+[state store](/state-store) with restricted access either way.
+
+## Deploy to several clusters
+
+`cluster` is per resource, so one Stack can span clusters:
+
+```typescript
+const east = Kubernetes.KubeConfig({ context: "prod-east" });
+const west = Kubernetes.KubeConfig({ context: "prod-west" });
+
+for (const [region, cluster] of [
+  ["East", east],
+  ["West", west],
+] as const) {
+  yield* Kubernetes.Deployment(`Api${region}`, {
+    cluster,
+    name: "api",
+    image: "ghcr.io/acme/api:v3",
+    port: 8080,
+  });
+}
+```
+
+## Move a resource to another cluster
+
+Alchemy identifies the target cluster by the connection's `auth`
+descriptor — the kubeconfig path and context, the token or
+certificate, the exec command, or the managed cluster's name.
+Changing it replaces the resource: Alchemy creates it on the new
+cluster, then deletes it from the old one. The `endpoint` and
+certificate authority are not part of that identity, so a managed
+cluster can rotate them without replacing its workloads.
+
+:::caution[Changing how you reach the same cluster]
+A replacement assumes the old and new connections are different
+clusters. If they reach the **same** cluster — you renamed the
+kubeconfig context, moved the file, rotated a `token` or client
+certificate, or switched from a kubeconfig to a raw connection — the
+new objects have the same names as the old ones, and deleting the
+old generation removes them. The deploy succeeds but the objects are
+gone. Run `alchemy deploy --force` right after such a change to
+apply them again, and prefer kubeconfig or exec connections, whose
+identity doesn't change when credentials rotate.
+:::
+
+## When no adapter is registered
+
+Each `auth.kind` is served by a [cluster adapter](/kubernetes/concepts/cluster-adapters).
+`Kubernetes.providers()` registers `kubeconfig`, `token`,
+`client-cert`, and `exec`. The `aws-eks` kind used by
+`AWS.EKS.Cluster` comes from `AWS.providers()`. If a deploy fails
+with *No Kubernetes cluster adapter is registered for auth kind …*,
+add the provider layer that contributes it:
+
+```typescript
+providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+```
+
+## Where next
+
+- [Managed clusters](/kubernetes/clusters/managed) — what an
+  `AWS.EKS.Cluster` adds beyond authentication.
+- [How objects are managed](/kubernetes/concepts/object-lifecycle) —
+  what happens when a cluster is unreachable or gone.
+- [`Deployment` reference](/providers/kubernetes/deployment) — the
+  `cluster` prop and every other prop.

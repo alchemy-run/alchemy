@@ -1,0 +1,173 @@
+---
+title: Setup
+description: Install Alchemy, create a local Kubernetes cluster with kind (or use one you already have), and connect Alchemy to it through your kubeconfig.
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+
+export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+Everything you need before deploying to Kubernetes: the alchemy
+package, a cluster, and a kubeconfig context Alchemy can use.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- A Kubernetes cluster — this page creates a local one with
+  [kind](https://kind.sigs.k8s.io), which needs
+  [Docker](https://docs.docker.com/get-started/get-docker/)
+- [`kubectl`](https://kubernetes.io/docs/tasks/tools/) to inspect
+  what Alchemy deploys (Alchemy itself talks to the Kubernetes API
+  directly and never runs `kubectl`)
+- [`helm`](https://helm.sh/docs/intro/install/) — only if you use
+  [`Kubernetes.HelmChart`](/kubernetes/objects/helm-charts)
+
+## Create a local cluster
+
+If you already have a cluster in your kubeconfig, skip ahead to
+[Pick a context](#pick-a-context). Otherwise create a single-node
+cluster with kind:
+
+```sh
+kind create cluster --name alchemy
+```
+
+kind runs the cluster inside a Docker container, writes a context
+named `kind-alchemy` to `~/.kube/config`, and makes it the current
+context. Check that it's reachable:
+
+```sh
+kubectl cluster-info --context kind-alchemy
+```
+
+## Pick a context
+
+Alchemy reads the same kubeconfig file `kubectl` does. List the
+contexts it can use:
+
+```sh
+kubectl config get-contexts
+```
+
+You'll pass one of these names to `Kubernetes.KubeConfig(...)` in
+your Stack. Naming the context explicitly is safer than relying on
+the file's `current-context`, which changes whenever you run
+`kubectl config use-context`.
+
+## Create a project directory
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-cluster && cd my-cluster && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-cluster && cd my-cluster && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-cluster && cd my-cluster && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-cluster && cd my-cluster && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Connect alchemy to the cluster
+
+There is no credentials prompt and no `alchemy profile` step for
+Kubernetes. Each resource's `cluster` prop carries the connection,
+and `Kubernetes.KubeConfig(...)` resolves it from your kubeconfig
+at deploy time:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+const cluster = Kubernetes.KubeConfig({ context: "kind-alchemy" });
+
+export default Alchemy.Stack(
+  "MyCluster",
+  {
+    providers: Kubernetes.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // Kubernetes.Deployment("Web", { cluster, ... })
+  }),
+);
+```
+
+`Kubernetes.KubeConfig` reads the file at `path` when you pass one,
+otherwise the first entry of `$KUBECONFIG`, otherwise
+`~/.kube/config`. It honors static tokens, client certificates, and
+`exec` credential plugins declared in the file, so contexts created
+by `aws eks update-kubeconfig`, `gcloud container clusters
+get-credentials`, or `az aks get-credentials` work as they are — as
+long as the plugin they call is installed on the machine running
+`alchemy deploy`. See [Connecting to clusters](/kubernetes/clusters/connecting)
+for bearer tokens, client certificates, and the other connection
+forms.
+
+`Kubernetes.providers()` registers the four resource providers
+(`Deployment`, `Job`, `Manifest`, `HelmChart`) plus the built-in
+authentication adapters. To target an EKS cluster, compose it with
+`AWS.providers()`, which contributes the EKS adapter:
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Layer from "effect/Layer";
+
+providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+```
+
+## Install helm (for charts)
+
+[`Kubernetes.HelmChart`](/kubernetes/objects/helm-charts) renders
+charts with the `helm` CLI on the deploying machine, the same way
+Docker image builds use the local `docker` CLI. Install it with your
+package manager (for example `brew install helm`), or set `HELM_BIN`
+to the path of a specific binary. Stacks without charts don't need
+it.
+
+## State storage
+
+Kubernetes has no state backend of its own, so pick one of:
+
+- **`Alchemy.localState()`** — state on disk under `.alchemy/` next
+  to your code. Zero setup; right for a local cluster and for trying
+  things out.
+- **A cloud state store** — if you also use Cloudflare or AWS, pass
+  `Cloudflare.state()` or `AWS.state()` so state is shared with your
+  team and CI. See [State Store](/state-store).
+
+Each resource persists its cluster connection in state so
+`alchemy destroy` can reconnect without the original program. A
+kubeconfig connection stores only the file path and context name,
+but a `token` or `client-cert` connection stores the credential
+itself — prefer kubeconfig or `exec` connections for shared stacks.
+
+## Next steps
+
+- [Tutorial part 1](/kubernetes/tutorial/part-1) — deploy your first
+  Deployment to the kind cluster.
+- [Kubernetes overview](/kubernetes) — the map of resources and
+  guides.

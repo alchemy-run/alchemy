@@ -511,6 +511,32 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Kubernetes",
+    intro:
+      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs, raw manifests, and Helm charts — on any cluster reachable through a kubeconfig, token, client certificate, or exec plugin, with ECR images and Pod Identity on EKS.",
+    pages: {
+      slugs: [
+        "kubernetes/index",
+        "kubernetes/setup",
+        "kubernetes/tutorial/part-1",
+        "kubernetes/tutorial/part-2",
+        "kubernetes/tutorial/part-3",
+        "kubernetes/tutorial/part-4",
+        "kubernetes/tutorial/part-5",
+        "kubernetes/clusters/connecting",
+        "kubernetes/clusters/managed",
+        "kubernetes/workloads/deployments",
+        "kubernetes/workloads/jobs",
+        "kubernetes/workloads/images",
+        "kubernetes/workloads/bindings",
+        "kubernetes/objects/manifests",
+        "kubernetes/objects/helm-charts",
+        "kubernetes/concepts/object-lifecycle",
+        "kubernetes/concepts/cluster-adapters",
+      ],
+    },
+  },
+  {
     heading: "SQL",
     intro:
       "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",

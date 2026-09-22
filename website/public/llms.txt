@@ -554,6 +554,28 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 - [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 - [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 
+## Kubernetes
+
+Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs, raw manifests, and Helm charts — on any cluster reachable through a kubeconfig, token, client certificate, or exec plugin, with ECR images and Pod Identity on EKS.
+
+- [Kubernetes](https://alchemy.run/kubernetes) — Run containers on any Kubernetes cluster with Alchemy — Deployments, Jobs, raw manifests, and Helm charts declared in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
+- [Setup](https://alchemy.run/kubernetes/setup) — Install Alchemy, create a local Kubernetes cluster with kind (or use one you already have), and connect Alchemy to it through your kubeconfig.
+- [Part 1: Your First Deployment](https://alchemy.run/kubernetes/tutorial/part-1) — Create a Stack that targets a local kind cluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
+- [Part 2: Namespaces & Configuration](https://alchemy.run/kubernetes/tutorial/part-2) — Create a Namespace with Kubernetes.Manifest, move the Deployment into it, and configure the app with environment variables and resource limits.
+- [Part 3: Jobs & CronJobs](https://alchemy.run/kubernetes/tutorial/part-3) — Run a smoke test against the Deployment with Kubernetes.Job, see how a changed Job runs again, and turn it into a scheduled CronJob.
+- [Part 4: Install a Helm Chart](https://alchemy.run/kubernetes/tutorial/part-4) — Install metrics-server from its Helm chart with Kubernetes.HelmChart, check pod metrics with kubectl top, and tear the stack down.
+- [Part 5: Effect Servers on EKS](https://alchemy.run/kubernetes/tutorial/part-5) — Move the program onto an Amazon EKS Auto Mode cluster, expose Services through load balancers, and deploy an Effect HTTP server whose DynamoDB binding is authorized by EKS Pod Identity.
+- [Connecting to clusters](https://alchemy.run/kubernetes/clusters/connecting) — Point Kubernetes resources at any cluster with Kubernetes.KubeConfig, a raw Kubernetes.Connection (bearer token, client certificate, or exec plugin), or a managed cluster resource.
+- [Managed clusters](https://alchemy.run/kubernetes/clusters/managed) — Pass an AWS.EKS.Cluster straight to Kubernetes resources and get SigV4 authentication, ECR image builds, EKS Pod Identity for bindings, and internet-facing load balancers — plus how to target GKE, AKS, and existing EKS clusters.
+- [Deployments](https://alchemy.run/kubernetes/workloads/deployments) — Run a replicated server on any Kubernetes cluster with Kubernetes.Deployment — names, namespaces, Service types and URLs, replicas, resources, labels, the pod template escape hatch, and Effect servers.
+- [Jobs & CronJobs](https://alchemy.run/kubernetes/workloads/jobs) — Run containers to completion with Kubernetes.Job — migrations, seeds, smoke tests — and on a schedule as a CronJob. How Job names, re-runs, retries, and cleanup work.
+- [Container images](https://alchemy.run/kubernetes/workloads/images) — Choose where a Deployment or Job's container image comes from — a registry reference, your own Dockerfile, or a bundled Effect program — and what each cluster supports.
+- [Configuration & bindings](https://alchemy.run/kubernetes/workloads/bindings) — Pass configuration into Kubernetes workloads with env and Outputs, understand the variables Alchemy sets, and use bindings — environment on any cluster, IAM through EKS Pod Identity.
+- [Manifests](https://alchemy.run/kubernetes/objects/manifests) — Apply any single Kubernetes object with Kubernetes.Manifest — Namespaces, ConfigMaps, Secrets, StatefulSets, Ingresses, CRDs and custom resources — and order objects with Output references.
+- [Helm charts](https://alchemy.run/kubernetes/objects/helm-charts) — Install Helm charts with Kubernetes.HelmChart — repository, OCI, and local charts, values, release names, namespaces, CRDs, hooks, and how Alchemy owns the rendered objects instead of a Helm release.
+- [How objects are managed](https://alchemy.run/kubernetes/concepts/object-lifecycle) — How Alchemy applies, orders, prunes, and deletes Kubernetes objects — server-side apply and field ownership, drift, replacement, unreachable clusters, and adoption.
+- [Cluster adapters](https://alchemy.run/kubernetes/concepts/cluster-adapters) — The extension point between Alchemy's cluster-agnostic Kubernetes resources and the platform a cluster runs on — authentication, image registries, workload identity, and load balancer defaults — and how to write your own.
+
 ## SQL
 
 Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
@@ -585,4 +607,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~131 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~991 KB) — only fetch it when you need to locate a specific resource's reference page.
