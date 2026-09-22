@@ -19,11 +19,14 @@ import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
-import { Records as Route53Records } from "../Route53/Records.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
-import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
+import {
+  certificateDnsPropsOf,
+  normalizeWebsiteDomain,
+  websiteDnsOf,
+  type RouterProps,
+} from "./shared.ts";
 
 /**
  * Shared CloudFront front door with KV-based dynamic routing.
@@ -42,6 +45,16 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   domain: { name: "example.com", hostedZoneId },
+ * });
+ * ```
+ *
+ * **Example:** Router On A Cloudflare Domain
+ * ```typescript
+ * // The certificate, the Router's own CNAMEs, and hostnames bound by
+ * // attached sites all go through the Cloudflare zone. Requires
+ * // `Cloudflare.providers()` in the stack.
+ * const router = yield* Router("WebsiteRouter", {
+ *   domain: { name: "example.com", dns: Cloudflare.DNS.Adapter() },
  * });
  * ```
  *
@@ -107,7 +120,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
               ...(domain.aliases ?? []),
               ...(domain.redirects ?? []),
             ],
-            hostedZoneId: domain.hostedZoneId,
+            ...certificateDnsPropsOf(domain),
             tags: props.tags,
           })
         : undefined;
@@ -324,8 +337,13 @@ export const Router = Effect.fn("AWS.Website.Router")(
       });
     });
 
+    const dns = websiteDnsOf(domain);
+    const aliasTarget = {
+      hostedZoneId: distribution.hostedZoneId,
+      dnsName: distribution.domainName,
+    };
     const records =
-      domain && domain.dns !== false
+      domain && dns
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -333,16 +351,12 @@ export const Router = Effect.fn("AWS.Website.Router")(
               ...(domain.redirects ?? []),
             ],
             (name, index) =>
-              Route53Record(`AliasRecord${index + 1}`, {
-                // Optional — the Record provider infers the most specific
-                // public zone containing `name` when omitted.
-                hostedZoneId: domain.hostedZoneId,
+              // Route 53 infers the most specific public zone containing
+              // `name` when no `hostedZoneId` is set; Cloudflare infers the
+              // zone.
+              dns.alias(`AliasRecord${index + 1}`, {
                 name,
-                type: "A",
-                aliasTarget: {
-                  hostedZoneId: distribution.hostedZoneId,
-                  dnsName: distribution.domainName,
-                },
+                target: aliasTarget,
               }),
             { concurrency: "unbounded" },
           )
@@ -350,20 +364,12 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
     // Bind target for attached-site hostnames: a record set (initially
     // empty) that same-stack sites bind their concrete hostnames onto, each
-    // becoming an A-alias record pointing at this distribution (see
-    // `WebsiteRouterBindTargets`).
+    // becoming a record pointing at this distribution (see
+    // `WebsiteRouterBindTargets`). The set infers its zone from the first
+    // bound hostname when none is pinned.
     const siteRecords =
-      domain && domain.dns !== false
-        ? yield* Route53Records("SiteAliasRecords", {
-            // Optional — the Records provider infers the zone from the
-            // first bound hostname when omitted.
-            hostedZoneId: domain.hostedZoneId,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: distribution.hostedZoneId,
-              dnsName: distribution.domainName,
-            },
-          })
+      domain && dns
+        ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget })
         : undefined;
 
     const invalidation =

@@ -1,13 +1,13 @@
 ---
 title: Custom domains with Route53 + ACM
-description: Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 alias records, and the domain prop on Website resources.
+description: Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 or Cloudflare DNS records, and the domain prop on Website resources.
 sidebar:
   order: 6
 ---
 
 A custom domain on AWS is three moving parts: a TLS certificate (ACM), DNS
-records (Route 53), and wiring both into whatever serves traffic (CloudFront
-or API Gateway). For websites, Alchemy collapses all three into a single
+records (Route 53, or Cloudflare when the domain lives there), and wiring both
+into whatever serves traffic (CloudFront, a load balancer, or API Gateway). For websites, Alchemy collapses all three into a single
 `domain` prop; for APIs and anything bespoke, the same primitives —
 `AWS.ACM.Certificate` and `AWS.Route53.Record` — are available directly.
 
@@ -54,9 +54,40 @@ DNS records are still managed for you — only the certificate step is
 replaced. The certificate must cover the domain name and every alias you
 list.
 
+## Use a domain on Cloudflare DNS
+
+If the domain's DNS lives in Cloudflare — for example, a domain registered
+with Cloudflare Registrar — pass `Cloudflare.DNS.Adapter()` as `dns`:
+
+```typescript
+const site = yield* AWS.Website.StaticSite("Site", {
+  path: "./dist",
+  domain: {
+    name: "app.example.com",
+    aliases: ["www.app.example.com"],
+    dns: Cloudflare.DNS.Adapter(),
+  },
+});
+```
+
+The certificate is still issued by ACM, but its validation `CNAME`s are
+written to the Cloudflare zone (always DNS-only), and each hostname gets a
+`CNAME` to the CloudFront distribution — Cloudflare flattens it at the zone
+apex. The zone is inferred from each hostname; pin it with
+`Cloudflare.DNS.Adapter({ zone: "example.com" })`. The same `dns` option works
+on `AWS.Website.Router` (including hostnames bound by attached sites),
+`AWS.Website.SsrSite`, and the `domain` of an `AWS.ECS.Service` load balancer.
+Include `Cloudflare.providers()` alongside `AWS.providers()` in the stack.
+
+Records are DNS-only by default. `Cloudflare.DNS.Adapter({ proxied: true })`
+puts Cloudflare's CDN in front of CloudFront — set the zone's SSL/TLS mode to
+Full (strict) if you do. Validation records are left in the zone when a
+certificate is deleted: ACM reuses the same `CNAME` for every certificate on
+a name.
+
 ## Manage DNS elsewhere
 
-Set `dns: false` to skip Route 53 entirely:
+Set `dns: false` to skip DNS entirely:
 
 ```typescript
 domain: {
@@ -67,7 +98,7 @@ domain: {
 ```
 
 No records are created, so you point your DNS provider at the distribution's
-domain name yourself. `dns: false` requires `cert` — without Route 53 access
+domain name yourself. `dns: false` requires `cert` — without DNS access
 Alchemy can't complete DNS validation for a new certificate, so you must
 bring one.
 
@@ -105,7 +136,9 @@ const cert = yield* AWS.ACM.Certificate("WebsiteCertificate", {
 The provider upserts the DNS validation records ACM asks for into the zone,
 waits for Route 53 to propagate them, and blocks until the certificate
 reaches `ISSUED` — so `cert.certificateArn` is ready to attach the moment
-the effect resolves. Certificates are requested in `us-east-1`, the region
+the effect resolves. For a domain on Cloudflare DNS, pass
+`dnsValidation: Cloudflare.DNS.AcmValidator()` instead of `hostedZoneId` and
+the validation records are written to the Cloudflare zone. Certificates are requested in `us-east-1`, the region
 CloudFront requires for viewer certificates. ACM certificates are immutable:
 changing the domain name, SANs, or validation settings replaces the
 certificate with a new one.
@@ -191,4 +224,5 @@ for regional endpoint configurations.
 - Reference: [Certificate](/providers/aws/acm/certificate),
   [Record](/providers/aws/route53/record),
   [HostedZone](/providers/aws/route53/hostedzone),
-  [DomainName](/providers/aws/apigateway/domainname)
+  [DomainName](/providers/aws/apigateway/domainname),
+  [Cloudflare DNS Records](/providers/cloudflare/dns/records)

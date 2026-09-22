@@ -2,7 +2,21 @@ export {
   AccountConfiguration,
   AccountConfigurationProvider,
 } from "./AccountConfiguration.ts";
-export { Certificate, CertificateProvider } from "./Certificate.ts";
+export {
+  Certificate,
+  CertificateCaaError,
+  CertificateProvider,
+} from "./Certificate.ts";
+export {
+  DnsValidatorError,
+  DnsValidatorNotRegistered,
+  dnsValidatorLayer,
+  resolveDnsValidator,
+  type DnsValidationRecord,
+  type DnsValidator,
+  type DnsValidatorDescriptor,
+  type DnsValidatorFactory,
+} from "./DnsValidator.ts";
 export * from "./DescribeCertificate.ts";
 export * from "./DescribeCertificateHttp.ts";
 export * from "./ExpiryEventSource.ts";

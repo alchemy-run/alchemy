@@ -1,3 +1,4 @@
+export { Adapter } from "./Adapter.ts";
 export {
   ChangeResourceRecordSets,
   type ChangeResourceRecordSetsRequest,

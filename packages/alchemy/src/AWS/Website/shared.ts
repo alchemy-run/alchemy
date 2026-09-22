@@ -1,7 +1,8 @@
 import type { Input } from "../../Input.ts";
 import type { Certificate } from "../ACM/Certificate.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
-import type { Records } from "../Route53/Records.ts";
+import type { DnsAdapter, DnsAliasSet } from "../DnsAdapter.ts";
+import { Adapter as Route53Adapter } from "../Route53/Adapter.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 
@@ -29,12 +30,14 @@ export interface WebsiteRouterBindTargets {
    */
   certificate?: Certificate;
   /**
-   * The Router's Route 53 alias record set — bound hostnames get A-alias
-   * records pointing at the distribution. Absent when the Router's domain
-   * sets `dns: false`. Without an explicit `hostedZoneId`, the set infers
-   * its zone from the first bound hostname.
+   * The Router's alias record set (`AWS.Route53.Records`, or
+   * `Cloudflare.DNS.Records` when the Router's domain uses
+   * `Cloudflare.DNS.Adapter()`) — bound hostnames get records pointing at
+   * the distribution. Absent when the Router's domain sets `dns: false`.
+   * Without an explicit zone, the set infers it from the first bound
+   * hostname.
    */
-  records?: Records;
+  records?: DnsAliasSet;
 }
 
 /**
@@ -74,7 +77,8 @@ export interface WebsiteStandaloneDomainProps {
    * the most specific PUBLIC hosted zone in the account containing each
    * hostname is inferred by walking its parent domains; the deploy fails
    * actionably when no zone matches. Pass an explicit id to pin the zone
-   * (e.g. when several zones could match).
+   * (e.g. when several zones could match). Ignored when {@link dns} is a
+   * non-Route 53 adapter such as `Cloudflare.DNS.Adapter()`.
    */
   hostedZoneId?: string;
   /**
@@ -98,9 +102,13 @@ export interface WebsiteStandaloneDomainProps {
    */
   cert?: Input<string>;
   /**
-   * Disable Route 53 automation. When set, no DNS records are created.
+   * DNS provider for the certificate validation and alias records.
+   * Omitted: Route 53 (see {@link hostedZoneId}). Pass
+   * `Cloudflare.DNS.Adapter()` for a domain whose DNS lives in Cloudflare
+   * (e.g. registered with Cloudflare Registrar), or `false` to create no
+   * DNS records at all (requires {@link cert}).
    */
-  dns?: false;
+  dns?: false | DnsAdapter;
   /**
    * Never set on a standalone domain — attach to a Router by setting
    * {@link WebsiteRouterDomainProps.router}.
@@ -172,6 +180,37 @@ export interface WebsiteRouterDomainProps {
 export type WebsiteDomainProps =
   | WebsiteStandaloneDomainProps
   | WebsiteRouterDomainProps;
+
+/**
+ * The DNS adapter a standalone domain uses: the explicit `dns` adapter, or
+ * Route 53 (with the domain's `hostedZoneId`) when omitted. `undefined` when
+ * DNS automation is disabled (`dns: false`).
+ * @internal
+ */
+export const websiteDnsOf = (
+  domain: { dns?: false | DnsAdapter; hostedZoneId?: string } | undefined,
+): DnsAdapter | undefined =>
+  domain === undefined || domain.dns === false
+    ? undefined
+    : (domain.dns ?? Route53Adapter({ hostedZoneId: domain.hostedZoneId }));
+
+/**
+ * DNS-related `ACM.Certificate` props for a standalone domain: the Route 53
+ * hosted zone (kept even with `dns: false`, where only the alias records are
+ * skipped) and, for a non-Route 53 adapter, its `dnsValidation` validator.
+ * @internal
+ */
+export const certificateDnsPropsOf = (domain: {
+  dns?: false | DnsAdapter;
+  hostedZoneId?: string;
+}) => {
+  const dns = websiteDnsOf(domain);
+  const validation = dns?.validation;
+  return {
+    hostedZoneId: dns?.hostedZoneId ?? domain.hostedZoneId,
+    ...(validation === undefined ? {} : { dnsValidation: validation }),
+  };
+};
 
 /**
  * Accepted `domain` prop shape: a bare hostname string (shorthand for
@@ -380,8 +419,9 @@ export type RouterRoute = string | RouterUrlRouteProps | RouterBucketRouteProps;
 
 export interface RouterProps {
   /**
-   * Optional custom domain managed through Route 53. A string is shorthand
-   * for `{ name }`; `null` explicitly clears a previously set domain.
+   * Optional custom domain (Route 53 by default; see `dns`). A string is
+   * shorthand for `{ name }`; `null` explicitly clears a previously set
+   * domain.
    */
   domain?: string | WebsiteStandaloneDomainProps | null;
   /**

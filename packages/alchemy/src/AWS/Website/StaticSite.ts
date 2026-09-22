@@ -25,13 +25,14 @@ import {
 } from "../CloudFront/ManagedPolicies.ts";
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
+  certificateDnsPropsOf,
   normalizeWebsiteDomain,
+  websiteDnsOf,
   type StaticSiteBuildProps,
   type WebsiteAssetsConfig,
   type WebsiteDomainProps,
@@ -219,6 +220,20 @@ export interface StaticSiteProps {
  *     hostedZoneId: zone.hostedZoneId,
  *   },
  *   errorPage: "404.html",
+ * });
+ * ```
+ *
+ * **Example:** Site With A Cloudflare Domain
+ * ```typescript
+ * // DNS lives in Cloudflare (e.g. a Cloudflare Registrar domain): the
+ * // certificate is validated and the hostname CNAMEd to CloudFront through
+ * // the Cloudflare zone. Requires `Cloudflare.providers()` in the stack.
+ * const site = yield* StaticSite("Web", {
+ *   path: "./site",
+ *   domain: {
+ *     name: "www.example.com",
+ *     dns: Cloudflare.DNS.Adapter(),
+ *   },
  * });
  * ```
  *
@@ -577,7 +592,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
               ...(domain.aliases ?? []),
               ...(domain.redirects ?? []),
             ],
-            hostedZoneId: domain.hostedZoneId,
+            ...certificateDnsPropsOf(domain),
             tags: props.tags,
           });
 
@@ -738,17 +753,16 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    if (domain && domain.dns !== false) {
+    const dns = websiteDnsOf(domain);
+    if (domain && dns) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
-          Route53Record(`AliasRecord${index + 1}`, {
-            // Optional — the Record provider infers the most specific
-            // public zone containing `name` when omitted.
-            hostedZoneId: domain.hostedZoneId,
+          // Route 53 infers the most specific public zone containing `name`
+          // when no `hostedZoneId` is set; Cloudflare infers the zone.
+          dns.alias(`AliasRecord${index + 1}`, {
             name,
-            type: "A",
-            aliasTarget: {
+            target: {
               hostedZoneId: dist.hostedZoneId,
               dnsName: dist.domainName,
             },

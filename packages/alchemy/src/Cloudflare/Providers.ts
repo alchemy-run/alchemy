@@ -222,6 +222,7 @@ export const providers = () =>
       Dns.Dnssec,
       Dns.Firewall,
       Dns.Record,
+      Dns.Records,
       Dns.View,
       Dns.ZoneDnsSettings,
       Dns.ZoneTransferAcl,
@@ -477,6 +478,7 @@ export const providers = () =>
           Dns.DnssecProvider(),
           Dns.FirewallProvider(),
           Dns.RecordProvider(),
+          Dns.RecordsProvider(),
           Dns.ViewProvider(),
           Dns.ZoneDnsSettingsProvider(),
           Dns.ZoneTransferAclProvider(),
@@ -652,6 +654,8 @@ export const providers = () =>
         RandomProvider(),
         // DNS-01 solver for `ACME.Certificate` over this account's zones.
         Dns.AcmeDnsSolverLive,
+        // DNS validator for `AWS.ACM.Certificate` over this account's zones.
+        Dns.AcmDnsValidatorLive,
       ),
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).

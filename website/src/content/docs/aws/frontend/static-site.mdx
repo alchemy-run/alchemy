@@ -117,7 +117,8 @@ distribution:
 
 ```typescript
 const router = yield* AWS.Website.Router("WebsiteRouter", {
-  // hosted zone inferred from the hostname; pass hostedZoneId to pin it
+  // hosted zone inferred from the hostname; pass hostedZoneId to pin it, or
+  // dns: Cloudflare.DNS.Adapter() for a domain on Cloudflare DNS
   domain: { name: "example.com" },
 });
 
