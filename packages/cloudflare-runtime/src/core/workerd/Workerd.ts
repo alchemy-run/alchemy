@@ -71,6 +71,25 @@ interface ProcessHandle {
   readonly kill: () => void;
 }
 
+/**
+ * Environment variable holding extra V8 flags for every workerd process this
+ * package spawns, separated by whitespace. workerd runs V8 with its default
+ * heap limit (about 1.4 GB), which a large application's dev module graph
+ * can exhaust after a few hours of edits. `ALCHEMY_WORKERD_V8_FLAGS=--max-old-space-size=4096`
+ * raises that limit. Flags from the config come last, so they win when V8
+ * sees the same flag twice.
+ */
+export const V8_FLAGS_ENV = "ALCHEMY_WORKERD_V8_FLAGS";
+
+/** Splits the value of {@link V8_FLAGS_ENV} into individual flags. */
+export const parseV8Flags = (value: string | undefined): Array<string> =>
+  (value ?? "").split(/\s+/).filter((flag) => flag.length > 0);
+
+const withV8Flags = (config: Config, flags: Array<string>): Config =>
+  flags.length === 0
+    ? config
+    : { ...config, v8Flags: [...flags, ...(config.v8Flags ?? [])] };
+
 const make = (
   spawn: (
     command: string,
@@ -82,7 +101,11 @@ const make = (
   Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
-      function* (config, args, options) {
+      function* (serveConfig, args, options) {
+        const config = withV8Flags(
+          serveConfig,
+          parseV8Flags(process.env[V8_FLAGS_ENV]),
+        );
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
         const dumpDir = process.env.WORKERD_DUMP_CONFIG;
