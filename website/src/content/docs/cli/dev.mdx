@@ -21,7 +21,9 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 
 One supervisor owns each **canonical stack entrypoint path and resolved stage** in your local Alchemy home (`~/.alchemy`, or `$ALCHEMY_HOME`). Relative paths and symlinks to the same entrypoint share ownership. Different entrypoints or stages remain independent, even if their stack declarations use the same name.
 
-Running the same invocation again prints the owner's PID and exits successfully without starting another exec process or sidecar. The session may still be starting; this message does not assert that its resources are healthy. The original terminal retains control: stop it with Ctrl+C before starting a replacement.
+Running the same invocation again reports the owner's PID and exits with status **1**. The original session keeps running, and its terminal retains control. Use that terminal, or stop the session there with Ctrl+C before starting a replacement.
+
+The ownership check happens before another exec process or sidecar starts. It detects a live supervisor, which may still be starting its resources.
 
 A repeated invocation with a different working directory, profile selection, environment-file selection, `--force`, or include/exclude filters fails with a conflict message. Profile selection records whether `--profile` was explicit and, when inherited, the shell's `$ALCHEMY_PROFILE`. Explicit overrides have their own precedence with stack secret providers. Explicit `--env-file .env` also counts as a different selection because it gives dotenv values precedence over process environment variables.
 

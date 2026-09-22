@@ -64,16 +64,14 @@ const serverFixture = Effect.fn(function* () {
   );
   return {
     directory,
-    ready: fs
-      .exists(file)
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("25 millis"),
-          until: Boolean,
-          times: 300,
-        }),
-        Effect.andThen(read),
-      ),
+    ready: fs.exists(file).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("25 millis"),
+        until: Boolean,
+        times: 300,
+      }),
+      Effect.andThen(read),
+    ),
     closed: fs.exists(path.join(directory, "server.closed")),
   };
 });
@@ -203,11 +201,13 @@ for (const runtime of ["bun", "node"] as const) {
         );
         expect(
           yield* duplicate.child.exitCode.pipe(Effect.timeout("10 seconds")),
-        ).toBe(0);
+        ).toBe(1);
         expect(duplicate.output()).toContain(
           `owner PID ${JSON.parse(record).pid}`,
         );
         expect(duplicate.output()).toContain("already running or starting");
+        expect(duplicate.output()).toContain("Use its original terminal");
+        expect(duplicate.output()).not.toContain("at Effect.fn");
         expect(yield* fs.readFileString(recordFile)).toBe(record);
         expect(yield* first.ready).toEqual(pids);
 
@@ -251,7 +251,7 @@ for (const runtime of ["bun", "node"] as const) {
         const afterReload = yield* launch(first.directory);
         expect(
           yield* afterReload.child.exitCode.pipe(Effect.timeout("10 seconds")),
-        ).toBe(0);
+        ).toBe(1);
         expect(yield* fs.readFileString(recordFile)).toBe(record);
         expect(yield* first.ready).toEqual(pids);
 

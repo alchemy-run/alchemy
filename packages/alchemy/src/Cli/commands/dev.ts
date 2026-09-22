@@ -1,6 +1,5 @@
 import * as Floci from "@alchemy.run/floci";
 import * as Effect from "effect/Effect";
-import * as Console from "effect/Console";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -11,7 +10,7 @@ import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
-import { acquireDevSession } from "../DevSession.ts";
+import { acquireDevSession, DevSessionError } from "../DevSession.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {
   configPath,
@@ -62,10 +61,9 @@ export const devCommand = Command.make(
     yield* resolveStackEntrypoint(options.main);
     const owner = yield* acquireDevSession(options);
     if (!owner.owned) {
-      yield* Console.log(
-        `Dev session already running or starting (owner PID ${owner.pid}). The original terminal retains control.`,
-      );
-      return;
+      return yield* new DevSessionError({
+        message: `Dev session already running or starting for '${options.main}' (stage '${options.stage}', owner PID ${owner.pid}). Use its original terminal, or stop it there before starting a new session.`,
+      });
     }
     yield* Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
