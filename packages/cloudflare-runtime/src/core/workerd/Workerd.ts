@@ -20,6 +20,14 @@ export interface WorkerdPorts {
  */
 export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
 
+/** How a workerd process ended after it had finished starting. */
+export interface WorkerdExit {
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  /** The last output workerd wrote to stderr before it exited. */
+  readonly stderr: string;
+}
+
 export interface ServeOptions {
   /**
    * Capture the workerd process's output instead of piping it to the parent
@@ -28,7 +36,26 @@ export interface ServeOptions {
    * instead.
    */
   readonly onOutput?: OutputSink;
+  /**
+   * Called once when the process exits after it finished starting, for
+   * example when V8 aborts on heap exhaustion. Not called when the scope
+   * closes and the process is killed on purpose.
+   */
+  readonly onExit?: (exit: WorkerdExit) => void;
 }
+
+/** How much trailing stderr output is kept for {@link WorkerdExit}. */
+const STDERR_TAIL_BYTES = 4096;
+
+const makeTail = () => {
+  let text = "";
+  return {
+    push: (chunk: string) => {
+      text = (text + chunk).slice(-STDERR_TAIL_BYTES);
+    },
+    read: () => text.trim(),
+  };
+};
 
 export class Workerd extends Context.Service<
   Workerd,
@@ -62,6 +89,8 @@ interface ProcessHandle {
   ) => Effect.Effect<Array<ControlMessage>, SystemError>;
   /** Resumes with an error if the process fails to start. */
   readonly error: () => Effect.Effect<never, ConfigError | SystemError>;
+  /** Resolves once the process has exited, with the tail of its stderr. */
+  readonly exited: () => Effect.Effect<WorkerdExit>;
   /**
    * Pipes the process's stdout/stderr to the console, or to `sink` when one
    * is provided. Called after initialization is complete.
@@ -153,8 +182,10 @@ const make = (
           Buffer.from(serializeConfig(config)),
           configuredAddresses,
         );
+        let killed = false;
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
+            killed = true;
             handle.kill();
           }),
         );
@@ -170,6 +201,18 @@ const make = (
           handle.error(),
         ]);
         yield* handle.pipe(options?.onOutput);
+        const onExit = options?.onExit;
+        if (onExit) {
+          // The scope's finalizers run in reverse order, so this fiber is
+          // interrupted before the kill finalizer above runs; `killed` also
+          // covers an exit that lands while the scope is closing.
+          yield* handle.exited().pipe(
+            Effect.map((exit) => {
+              if (!killed) onExit(exit);
+            }),
+            Effect.forkScoped,
+          );
+        }
         const ports: WorkerdPorts = {};
         for (const message of control) {
           if (message.event === "listen") {
@@ -203,6 +246,7 @@ const makeStreamPump = (
   sink: (chunk: string) => void,
 ) => {
   const chunks: Array<string> = [];
+  const tail = makeTail();
   let target = sink;
   let forwarded = 0;
   let forwarding = false;
@@ -210,6 +254,7 @@ const makeStreamPump = (
     try {
       for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
         chunks.push(chunk);
+        tail.push(chunk);
         if (forwarding) {
           target(chunk);
           forwarded = chunks.length;
@@ -222,6 +267,8 @@ const makeStreamPump = (
   })();
   return {
     done,
+    /** The most recent output, for reporting an unexpected exit. */
+    tail: tail.read,
     /** Start forwarding, optionally redirecting to a capture sink. */
     forward: (override?: (chunk: string) => void) => {
       if (override) target = override;
@@ -310,6 +357,21 @@ const makeBun = () =>
               stdout.forward(sink && ((chunk) => sink(chunk, "stdout")));
               stderr.forward(sink && ((chunk) => sink(chunk, "stderr")));
             }),
+          exited: () =>
+            Effect.promise(async () => {
+              await child.exited.catch(() => null);
+              // The pipes close right after the process does; give the last
+              // stderr chunk (the fatal message) a moment to land in the tail.
+              await Promise.race([
+                stderr.done,
+                new Promise((resolve) => setTimeout(resolve, 500)),
+              ]);
+              return {
+                exitCode: child.exitCode,
+                signal: child.signalCode,
+                stderr: stderr.tail(),
+              };
+            }),
           kill: () => child.kill("SIGKILL"),
         };
       }),
@@ -317,8 +379,9 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args, config, configuredAddresses) =>
-    Effect.try({
+  make((command, args, config, configuredAddresses) => {
+    const stderrTail = makeTail();
+    return Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
           env: externalEnv(),
@@ -354,6 +417,13 @@ const makeNode = () =>
             child.kill("SIGKILL");
             child.off("spawn", onSpawn);
             child.off("error", onError);
+          });
+        }),
+      ),
+      Effect.tap((child) =>
+        Effect.sync(() => {
+          child.stderr.on("data", (chunk: Buffer) => {
+            stderrTail.push(chunk.toString());
           });
         }),
       ),
@@ -468,10 +538,29 @@ const makeNode = () =>
               }),
           );
         },
+        exited: () =>
+          Effect.callback<WorkerdExit>((resume) => {
+            const onClose = (
+              exitCode: number | null,
+              signal: NodeJS.Signals | null,
+            ) => {
+              resume(
+                Effect.succeed({
+                  exitCode,
+                  signal,
+                  stderr: stderrTail.read(),
+                }),
+              );
+            };
+            child.once("close", onClose);
+            return Effect.sync(() => {
+              child.off("close", onClose);
+            });
+          }),
         kill: () => child.kill("SIGKILL"),
       })),
-    ),
-  );
+    );
+  });
 
 // On Windows, `Bun.spawn` cannot surface extra stdio pipes: `child.stdio[3]`
 // is a numeric fd that neither `Bun.file(fd)` (EMFILE dup) nor `node:fs`
