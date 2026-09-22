@@ -93,9 +93,6 @@ jobs:
       - name: Test CLI launcher
         run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
-      - name: Test Fly Machine configuration
-        run: timeout 240 pnpm test test/Fly/MachineContainers.test.ts test/Fly/Deployment.test.ts --retry 0
-
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc
 

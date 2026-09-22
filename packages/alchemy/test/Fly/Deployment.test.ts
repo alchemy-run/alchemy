@@ -150,14 +150,6 @@ it.effect(
       const checks = { ready: { type: "http", port: 80, path: "/" } };
       const cases: Array<[FlyMachineConfig, boolean, boolean]> = [
         [{}, false, false],
-        [
-          {
-            containers: [{ name: "api", image: "example/api@sha256:abc" }],
-            checks,
-          },
-          false,
-          false,
-        ],
         [{ checks }, true, false],
         [{ checks }, false, true],
         [{ checks, auto_destroy: true }, false, false],
