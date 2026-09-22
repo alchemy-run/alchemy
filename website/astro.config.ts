@@ -1531,6 +1531,11 @@ export default defineConfig({
   ],
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      // Dev-only: allow sharing the dev server through cloudflared quick
+      // tunnels (random *.trycloudflare.com hostnames).
+      allowedHosts: [".trycloudflare.com"],
+    },
     ssr: {
       // Sätteri (Astro 7's markdown processor) loads a platform-native
       // binding via CJS require. Bundling its JS loader into the prerender

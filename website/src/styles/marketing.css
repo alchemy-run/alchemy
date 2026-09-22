@@ -1969,7 +1969,9 @@ body.alc-root,
 .pr-lc__step--active .pr-lc__step-num {
   background: var(--alc-accent-bright);
   border-color: var(--alc-accent-bright);
-  color: var(--alc-bg-code);
+  /* Near-black instead of --alc-bg-code: the light theme's accent-bright
+     is too dark for #2a2620 to reach AAA 7:1. */
+  color: #0d1407;
   box-shadow: 0 0 0 4px rgba(184, 138, 74, 0.15);
 }
 
@@ -2014,13 +2016,21 @@ body.alc-root,
     background 280ms ease,
     color 280ms ease;
 }
+/* Status colors meet AAA 7:1 against the pill tint composited onto the
+   card background in each theme. */
 .pr-lc__pr-pill--open {
   background: rgba(95, 174, 110, 0.16);
-  color: #3d8b58;
+  color: #174928;
+}
+[data-theme="dark"] .pr-lc__pr-pill--open {
+  color: #8fd49e;
 }
 .pr-lc__pr-pill--merged {
   background: rgba(149, 100, 200, 0.16);
-  color: #7b50b8;
+  color: #532e83;
+}
+[data-theme="dark"] .pr-lc__pr-pill--merged {
+  color: #c9aef1;
 }
 .pr-lc__pr-num {
   font-family: var(--alc-font-mono);
@@ -3203,12 +3213,15 @@ body.alc-root,
     border-color 120ms var(--alc-ease, cubic-bezier(0.2, 0, 0, 1)),
     color 120ms var(--alc-ease, cubic-bezier(0.2, 0, 0, 1));
 }
+/* Deep forest instead of var(--alc-accent): mid-green moss cannot reach
+   the AAA 7:1 ratio with any text color; #3f5a2a gives 7.2:1 against
+   --alc-fg-on-accent in both themes. */
 .alc-btn--primary {
-  background: var(--alc-accent);
+  background: #3f5a2a;
   color: var(--alc-fg-on-accent);
 }
 .alc-btn--primary:hover {
-  background: var(--alc-accent-deep);
+  background: #324a1e;
 }
 .alc-btn--secondary {
   background: transparent;
@@ -3238,9 +3251,9 @@ body.alc-root,
 
 .hero-cta {
   display: grid;
-  grid-template-columns: minmax(160px, 0.7fr) 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  max-width: 520px;
+  max-width: 560px;
   margin: 6px auto 0;
   text-align: left;
 }
@@ -3272,16 +3285,18 @@ body.alc-root,
 .hero-cta__card:hover {
   transform: translateY(-1px);
 }
+/* The card heading is the primary line; the content under it is
+   supporting detail. */
 .hero-cta__eyebrow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--alc-fg-3);
+  color: var(--alc-fg-1);
 }
 .hero-cta__icon {
   display: inline-flex;
@@ -3292,9 +3307,9 @@ body.alc-root,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--alc-fg-1);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--alc-fg-3);
 }
 .hero-cta__card--human {
   background: var(--alc-accent-soft);

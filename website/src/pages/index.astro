@@ -1,0 +1,883 @@
+---
+import Marketing from "../layouts/Marketing.astro";
+import CodeBlock from "../components/marketing/CodeBlock.astro";
+import Button from "../components/marketing/Button.astro";
+import ProviderMark from "../components/marketing/ProviderMark.astro";
+import HeroBgGraph from "../components/marketing/HeroBgGraph.astro";
+import Yantra from "../brand/Yantra.astro";
+import { icons as simpleIcons } from "@iconify-json/simple-icons";
+import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
+import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
+import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
+import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
+import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
+
+const STACK_SRC = `export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const Photos = yield* Cloudflare.R2.Bucket("Photos");
+    const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
+    const api = yield* Cloudflare.Worker("Api", {
+      main: "./src/worker.ts",
+      env: { Photos, Sessions },
+    });
+    return { url: api.url };
+  }),
+);`;
+
+const TEST_SRC = `// each suite deploys its own isolated stack
+const stack = beforeAll(deploy(Stack));   // real R2, real DynamoDB
+afterAll(destroy(Stack));                 // torn down at the end
+
+test("PUT + GET round-trips through R2", Effect.gen(function* () {
+  const { url } = yield* stack;
+  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
+  expect(yield* res.text).toBe("hi!");
+}));`;
+
+const OTEL_SRC = `// Effect emits OpenTelemetry. The exporter is a Layer.
+const requestsTotal = Metric.counter("requests_total");
+
+export default Cloudflare.Worker(
+  "Api",
+  Effect.gen(function* () {
+    yield* Effect.logInfo("request received");
+    yield* Metric.increment(requestsTotal);
+    return { fetch: handler };
+  }).pipe(Effect.provide(Otel)),     // ← Axiom, Datadog, OTLP …
+);`;
+
+const DASH_SRC = `// dashboards and alarms, next to the workers they watch
+export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
+  widgets: [
+    Widget.line({ title: "p99 latency", metric: api.metrics.p99 }),
+    Widget.line({ title: "requests/s", metric: api.metrics.rps }),
+    Widget.number({ title: "5xx", metric: api.metrics.errorRate }),
+  ],
+});
+
+export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
+  metric: api.metrics.p99,
+  threshold: 500,
+  alarmActions: [pagerDuty, slackWebhook],
+});`;
+
+// Coding-agent brand marks for the hero pill.
+const AGENT_ICONS = ["claude", "openai", "cursor", "googlegemini"]
+  .map((n) => simpleIcons.icons[n]?.body)
+  .filter((b): b is string => !!b);
+
+const VITE_SRC = `// add Alchemy to an existing Vite app
+export default Alchemy.Stack(
+  "my-app",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const site = yield* Cloudflare.Website.Vite("Website");
+    return { url: site.url };
+  }),
+);`;
+
+// Marks render monochrome (inheriting the label color) and take on the
+// official brand hue only on hover. `color` values are verified against
+// svgl.app's SVGs; Prisma swaps to its multi-color mark instead.
+const PROVIDERS = [
+  { label: "Cloudflare", icon: "Cloudflare", href: "/cloudflare", color: "#f4811f" },
+  { label: "AWS", icon: "AWS", href: "/aws", color: "#ff9900" },
+  { label: "Hetzner", icon: "Hetzner", href: "/hetzner", color: "#d50c2d" },
+  { label: "Fly", icon: "Fly", href: "/fly", color: "#996bec" },
+  { label: "Railway", icon: "Railway", href: "/railway" },
+  { label: "Neon", icon: "Neon", href: "/neon", color: "#37c38f" },
+  { label: "PlanetScale", icon: "PlanetScale", href: "/planetscale" },
+  { label: "Prisma", icon: "Prisma", iconHover: "PrismaColor", href: "/prisma" },
+  { label: "Docker", icon: "Docker", href: "/docker", color: "#008fe2" },
+  { label: "Stripe", icon: "Stripe", href: "/stripe", color: "#533afd" },
+  { label: "GitHub", icon: "GitHub", href: "/github" },
+  { label: "Axiom", icon: "Axiom", href: "/axiom" },
+];
+
+const STAGES = [
+  { n: "01", label: "Dev" },
+  { n: "02", label: "Test" },
+  { n: "03", label: "Review" },
+  { n: "04", label: "Deploy" },
+  { n: "05", label: "Observe" },
+];
+---
+
+<Marketing
+  title="Alchemy — the fastest and safest way to build and ship production cloud apps."
+  description="Alchemy is Infrastructure-as-Code that is actually TypeScript: your app and its infrastructure are one typed program that you — or your coding agent — can build, test, ship, and operate."
+>
+  <!-- ───────────────── HERO ───────────────── -->
+  <section class="alc-hero" style="padding:64px 32px 48px;">
+    <HeroBgGraph />
+    <div style="position:relative;z-index:1;text-align:center;margin-bottom:28px;">
+      <a class="v2-agent-pill" href="#agent-prompt">
+        <span class="v2-agent-pill__logos" aria-hidden="true">
+          {
+            AGENT_ICONS.map((body) => (
+              <svg width="15" height="15" viewBox="0 0 24 24" set:html={body} />
+            ))
+          }
+        </span>
+        Ship with your favorite agent
+        <span aria-hidden="true">&rarr;</span>
+      </a>
+    </div>
+    <div class="alc-hero__inner">
+      <Yantra class="alc-hero__mark" size={42} />
+      <h1
+        class="alc-hero__title"
+        id="hero-h1"
+        style="font-size:clamp(38px,6.4vw,60px);"
+      >
+        The fastest, safest way{" "}<br class="v2-hero-br" />to ship cloud apps.
+      </h1>
+      <h2
+        class="alc-hero__subtitle"
+        id="hero-sub"
+        style="font-size:clamp(17px,2.6vw,22px);"
+      >
+        Alchemy is Infrastructure-as-Code in pure TypeScript, built on{" "}
+        <a href="https://effect.website" style="color:inherit;">Effect</a> —<br
+          class="v2-hero-br"
+        /> one typed program for your app and its cloud.
+      </h2>
+      <div class="alc-hero__cta">
+        <Button variant="primary" icon="arrow" href="/getting-started">
+          Get started
+        </Button>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEMP: hero-copy variant switcher for internal iteration. Remove once
+       a headline is chosen. Cycles the h1/subtitle pair and persists the
+       selection in localStorage so the variant survives reloads. -->
+  <div class="v2-copy-toggle" data-nosnippet="">
+    <button type="button" data-dir="-1" aria-label="Previous headline">‹</button>
+    <span class="v2-copy-toggle__label" id="copy-toggle-label"></span>
+    <button type="button" data-dir="1" aria-label="Next headline">›</button>
+  </div>
+
+  <script>
+    // TEMP hero-copy variants (see the switcher above).
+    const EFFECT = `<a href="https://effect.website" style="color:inherit;">Effect</a>`;
+    const BR = `<br class="v2-hero-br" />`;
+    const VARIANTS: { name: string; h1: string; sub: string }[] = [
+      // ── the three keepers from round 1 ──
+      {
+        name: "snap together",
+        h1: `Snap your cloud together.`,
+        sub: `Typed building blocks for infrastructure and runtime code, built on ${EFFECT} —${BR} proven components you and your agent glue into production, on any cloud.`,
+      },
+      {
+        name: "building blocks",
+        h1: `Building blocks ${BR}for the cloud.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} — typed${BR} blocks for infra and runtime code that you, or your agent, snap into production.`,
+      },
+      {
+        name: "zero → production",
+        h1: `Zero &rarr; production.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} one typed program for your app and its cloud.`,
+      },
+      // ── round 2: agents in the headline ──
+      {
+        name: "agents snap → prod",
+        h1: `Building blocks agents ${BR}snap into production.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed infra and runtime blocks the compiler checks, on any cloud.`,
+      },
+      {
+        name: "agents snap together",
+        h1: `Infrastructure agents ${BR}snap together.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for your app and its cloud, checked by the compiler.`,
+      },
+      {
+        name: "you + your agents",
+        h1: `Building blocks for you ${BR}and your agents.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} snap infra and runtime code into production the compiler guarantees.`,
+      },
+      {
+        name: "zero → prod, agent speed",
+        h1: `Zero &rarr; production, ${BR}at agent speed.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for your app and its cloud.`,
+      },
+      {
+        name: "or let your agent",
+        h1: `Snap your cloud together — ${BR}or let your agent.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for infra and runtime code, on any cloud.`,
+      },
+      {
+        name: "safe blocks, fast agents",
+        h1: `Safe building blocks ${BR}for fast agents.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} least privilege and correct configuration, enforced by the type system.`,
+      },
+      {
+        name: "blocks agents build with",
+        h1: `The building blocks ${BR}agents build with.`,
+        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed, composable, documented — everything an agent needs to ship correctly.`,
+      },
+    ];
+
+    const KEY = "alc-hero-copy-variant";
+    const h1 = document.getElementById("hero-h1")!;
+    const sub = document.getElementById("hero-sub")!;
+    const label = document.getElementById("copy-toggle-label")!;
+    let index = Number(localStorage.getItem(KEY) ?? "0") % VARIANTS.length;
+    if (Number.isNaN(index) || index < 0) index = 0;
+
+    const apply = () => {
+      const v = VARIANTS[index]!;
+      h1.innerHTML = v.h1;
+      sub.innerHTML = v.sub;
+      label.textContent = `${index + 1}/${VARIANTS.length} · ${v.name}`;
+      localStorage.setItem(KEY, String(index));
+    };
+    for (const btn of document.querySelectorAll<HTMLButtonElement>(
+      ".v2-copy-toggle button",
+    )) {
+      btn.addEventListener("click", () => {
+        index =
+          (index + Number(btn.dataset.dir) + VARIANTS.length) %
+          VARIANTS.length;
+        apply();
+      });
+    }
+    apply();
+
+    // TEMP: the whole page is editable while we iterate on copy — click any
+    // text and type. The switcher opts out so its buttons stay clickable.
+    document.body.setAttribute("contenteditable", "plaintext-only");
+    if (!document.body.isContentEditable)
+      document.body.setAttribute("contenteditable", "true");
+    document.body.spellcheck = false;
+    document
+      .querySelector(".v2-copy-toggle")
+      ?.setAttribute("contenteditable", "false");
+  </script>
+
+  <!-- ───────────────── PROVIDER MARQUEE ───────────────── -->
+  <div class="v2-marquee" aria-label="Supported cloud providers">
+    <div class="v2-marquee__track">
+      {
+        /* Four copies so the -50% loop shift always lands on an identical
+           frame with content still covering viewports up to ~2 copies wide.
+           Two copies leave a blank tail on screens wider than one copy. */
+        [0, 1, 2, 3].map((dup) => (
+          <ul class="v2-marquee__group" aria-hidden={dup > 0}>
+            {PROVIDERS.map((p) => (
+              <li>
+                <a
+                  class="v2-marquee__item"
+                  href={p.href}
+                  tabindex={dup > 0 ? -1 : undefined}
+                  style={"color" in p ? `--brand:${p.color}` : undefined}
+                >
+                  <span
+                    class:list={[
+                      "v2-marquee__mark",
+                      "iconHover" in p && "v2-marquee__mark--swap",
+                    ]}
+                  >
+                    <ProviderMark name={p.icon} size={17} />
+                  </span>
+                  {"iconHover" in p && (
+                    <span class="v2-marquee__mark v2-marquee__mark--hover">
+                      <ProviderMark name={p.iconHover} size={17} />
+                    </span>
+                  )}
+                  {p.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ))
+      }
+    </div>
+  </div>
+
+  <!-- ───────────────── THE WORKFLOW ───────────────── -->
+  <section class="v2-section v2-workflow-intro">
+    <div class="v2-container">
+      <h2 class="v2-h2">One program. The whole workflow.</h2>
+      <p class="v2-lede">
+        Zero &rarr; production is one program and five commands. Everything —
+        resources, tests, CI, dashboards — is TypeScript in your repo: you can
+        read it, your agent can run it, and the type-checker keeps both of you
+        honest. There is no console in the loop.
+      </p>
+      <div class="v2-stagenav" aria-hidden="true">
+        {
+          STAGES.map((s, i) => (
+            <>
+              <span class="v2-stagenav__item">
+                <span class="v2-stagenav__n">{s.n}</span> {s.label}
+              </span>
+              {i < STAGES.length - 1 && (
+                <span class="v2-stagenav__sep">&rarr;</span>
+              )}
+            </>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 01 · BUILD -->
+  <section class="v2-stage">
+    <div class="v2-container v2-stage__grid">
+      <div class="v2-stage__rail">
+        <span class="v2-stage__badge">01</span>
+        <span class="v2-stage__line"></span>
+      </div>
+      <div class="v2-stage__body">
+        <span class="v2-stage__kicker">Dev</span>
+        <h3 class="v2-h3">Infrastructure appears as you type.</h3>
+        <p class="v2-lede">
+          Already have a Vite app? One resource in{" "}
+          <code class="alc-code-inline">alchemy.run.ts</code> is the whole
+          integration. <code class="alc-code-inline">alchemy dev</code> runs
+          Vite and your infrastructure in one watcher — edit code or declare a
+          bucket, and both hot-reload in milliseconds.
+        </p>
+        <div class="v2-split">
+          <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
+          <DevTuiTerminal client:visible />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 · TEST -->
+  <section class="v2-stage">
+    <div class="v2-container v2-stage__grid">
+      <div class="v2-stage__rail">
+        <span class="v2-stage__badge">02</span>
+        <span class="v2-stage__line"></span>
+      </div>
+      <div class="v2-stage__body">
+        <span class="v2-stage__kicker">Test</span>
+        <h3 class="v2-h3">Prove it works — against real infrastructure.</h3>
+        <p class="v2-lede">
+          <code class="alc-code-inline">alchemy test</code> deploys an
+          ephemeral stack, runs assertions through the front door, and destroys
+          it. No mocks to drift out of sync — and the loop an agent uses to
+          verify its own work instead of declaring victory.
+        </p>
+        <div class="v2-split">
+          <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+          <TestTerminal client:visible />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 · REVIEW -->
+  <section class="v2-stage">
+    <div class="v2-container v2-stage__grid">
+      <div class="v2-stage__rail">
+        <span class="v2-stage__badge">03</span>
+        <span class="v2-stage__line"></span>
+      </div>
+      <div class="v2-stage__body">
+        <span class="v2-stage__kicker">Review</span>
+        <h3 class="v2-h3">Preview every PR with an ephemeral stack.</h3>
+        <p class="v2-lede">
+          An Alchemy program is just TypeScript, so CI runs it too: each pull
+          request deploys a full preview stack for review, and merge or close
+          tears it down.
+        </p>
+        <PRLifecycle client:visible />
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 · SHIP -->
+  <section class="v2-stage">
+    <div class="v2-container v2-stage__grid">
+      <div class="v2-stage__rail">
+        <span class="v2-stage__badge">04</span>
+        <span class="v2-stage__line"></span>
+      </div>
+      <div class="v2-stage__body">
+        <span class="v2-stage__kicker">Deploy</span>
+        <h3 class="v2-h3">Deploy is a diff you can read.</h3>
+        <p class="v2-lede">
+          <code class="alc-code-inline">plan</code> prints exactly what will
+          change. <code class="alc-code-inline">deploy</code> converges the
+          cloud to the program. <code class="alc-code-inline">destroy</code>
+          unwinds it. Predictable enough to let an agent run it — reviewable
+          enough that you will.
+        </p>
+        <div class="v2-split">
+          <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} compact />
+          <DeployTerminal client:visible />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 · OPERATE -->
+  <section class="v2-stage v2-stage--last">
+    <div class="v2-container v2-stage__grid">
+      <div class="v2-stage__rail">
+        <span class="v2-stage__badge">05</span>
+      </div>
+      <div class="v2-stage__body">
+        <span class="v2-stage__kicker">Observe</span>
+        <h3 class="v2-h3">Observability ships with the resources.</h3>
+        <p class="v2-lede">
+          Effect emits logs, spans, and metrics by default — the exporter is a
+          Layer, so Axiom, Datadog, or any OTLP endpoint is a one-line swap.
+          Dashboards and alarms are declared next to the workers they watch,
+          and deploy and destroy with them.
+        </p>
+        <div class="v2-split">
+          <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
+          <CodeBlock filename="alchemy.run.ts" code={DASH_SRC} compact />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── GET STARTED ───────────────── -->
+  <section class="v2-section v2-section--last">
+    <div class="v2-container">
+      <h2 class="v2-h2">Get started.</h2>
+      <ol class="v2-steps">
+        <li>
+          <span class="v2-steps__label">Install</span>
+          <code class="v2-steps__code">bun add alchemy@latest effect</code>
+        </li>
+        <li id="agent-prompt">
+          <span class="v2-steps__label">Paste this into your coding agent</span>
+          <CopyForAgent client:load />
+        </li>
+        <li>
+          <span class="v2-steps__label">Ship</span>
+          <code class="v2-steps__code">bun alchemy deploy</code>
+        </li>
+      </ol>
+      <div class="v2-cta-buttons">
+        <Button variant="secondary" icon="arrow" href="/getting-started">
+          Read the tutorial
+        </Button>
+        <Button
+          variant="ghost"
+          icon="github"
+          href="https://github.com/alchemy-run/alchemy"
+        >
+          GitHub
+        </Button>
+      </div>
+    </div>
+  </section>
+</Marketing>
+
+<style>
+  .v2-container {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  /* ---------- hero ---------- */
+  @media (max-width: 720px) {
+    .v2-hero-br {
+      display: none;
+    }
+  }
+  /* TEMP: hero-copy variant switcher (remove with the widget). */
+  .v2-copy-toggle {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 999px;
+    background: var(--alc-bg-elev-1);
+    box-shadow: var(--alc-shadow-sm);
+    font-family: var(--alc-font-mono);
+    font-size: 11.5px;
+    color: var(--alc-fg-2);
+  }
+  .v2-copy-toggle button {
+    all: unset;
+    cursor: pointer;
+    padding: 0 6px;
+    font-size: 15px;
+    color: var(--alc-fg-1);
+  }
+  .v2-copy-toggle button:hover {
+    color: var(--alc-accent-deep);
+  }
+  .v2-copy-toggle__label {
+    min-width: 150px;
+    text-align: center;
+  }
+
+  .v2-agent-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 999px;
+    background: var(--alc-bg-elev-1);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--alc-fg-2);
+    text-decoration: none;
+    transition:
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+  .v2-agent-pill:hover {
+    color: var(--alc-fg-1);
+    border-color: var(--alc-accent);
+  }
+  .v2-agent-pill__logos {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding-right: 10px;
+    border-right: 1px solid var(--alc-hairline-3);
+    color: var(--alc-fg-2);
+  }
+  .v2-agent-pill__logos svg {
+    display: block;
+    fill: currentColor;
+    opacity: 0.85;
+  }
+  @media (max-width: 480px) {
+    .v2-agent-pill {
+      font-size: 12.5px;
+      padding: 7px 13px;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .v2-agent-pill__logos {
+      display: none;
+    }
+  }
+  :global(html) {
+    scroll-behavior: smooth;
+  }
+  #agent-prompt {
+    scroll-margin-top: 96px;
+  }
+
+  /* ---------- provider marquee ---------- */
+  .v2-marquee {
+    overflow: hidden;
+    border-top: 1px solid var(--alc-hairline);
+    padding: 14px 0;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 8%,
+      #000 92%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 8%,
+      #000 92%,
+      transparent
+    );
+  }
+  .v2-marquee__track {
+    display: flex;
+    width: max-content;
+    animation: v2-marquee-scroll 72s linear infinite;
+  }
+  .v2-marquee:hover .v2-marquee__track {
+    animation-play-state: paused;
+  }
+  .v2-marquee__group {
+    display: flex;
+    align-items: center;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .v2-marquee__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 26px;
+    font-family: var(--alc-font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--alc-fg-2);
+    text-decoration: none;
+    transition: color 120ms ease;
+  }
+  .v2-marquee__item:hover {
+    color: var(--alc-fg-1);
+  }
+  .v2-marquee__mark {
+    display: inline-flex;
+    align-items: center;
+    /* Optical correction: the labels are uppercase-only, so their visual
+       mass sits above the flex-centered midline; drop the mark to match. */
+    transform: translateY(0.5px);
+  }
+  /* Monochrome at rest; brand color only under the cursor. Prisma swaps
+     between its mono and multi-color marks instead of tinting. */
+  .v2-marquee__item:hover .v2-marquee__mark {
+    color: var(--brand, currentColor);
+  }
+  .v2-marquee__mark--hover {
+    display: none;
+  }
+  .v2-marquee__item:hover .v2-marquee__mark--hover {
+    display: inline-flex;
+  }
+  .v2-marquee__item:hover .v2-marquee__mark--swap {
+    display: none;
+  }
+  .v2-marquee__item :global(svg) {
+    display: block;
+    flex: none;
+    opacity: 0.9;
+  }
+  @keyframes v2-marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .v2-marquee__track {
+      animation: none;
+    }
+    .v2-marquee {
+      overflow-x: auto;
+    }
+  }
+
+  /* ---------- sections ---------- */
+  .v2-section {
+    padding: 80px 32px;
+    border-top: 1px solid var(--alc-hairline);
+  }
+  .v2-section--last {
+    padding-bottom: 96px;
+  }
+  .v2-h2 {
+    font-family: var(--alc-font-serif);
+    font-size: clamp(30px, 4.5vw, 40px);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    font-weight: 500;
+    color: var(--alc-fg-1);
+    margin: 0 0 14px;
+  }
+  .v2-h3 {
+    font-family: var(--alc-font-serif);
+    font-size: clamp(24px, 3.5vw, 31px);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-weight: 500;
+    color: var(--alc-fg-1);
+    margin: 8px 0 12px;
+  }
+  .v2-lede {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--alc-fg-2);
+    max-width: 680px;
+    margin: 0 0 28px;
+  }
+
+  .v2-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  /* Grid items default to min-width:auto, so a long unwrappable terminal
+     line would stretch its column as the animation plays. Clamp both
+     columns to the track size; overflow stays inside the card. */
+  .v2-split > :global(*) {
+    min-width: 0;
+  }
+  @media (max-width: 900px) {
+    .v2-split {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ---------- workflow intro + stage nav ---------- */
+  .v2-workflow-intro {
+    padding-bottom: 40px;
+  }
+  .v2-stagenav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    font-family: var(--alc-font-mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--alc-fg-1);
+  }
+  .v2-stagenav__n {
+    color: var(--alc-accent-deep);
+    margin-right: 2px;
+  }
+  .v2-stagenav__sep {
+    color: var(--alc-fg-4);
+  }
+
+  /* ---------- stages ---------- */
+  .v2-stage {
+    padding: 0 32px;
+  }
+  .v2-stage__grid {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 0 28px;
+  }
+  .v2-stage__rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding-top: 6px;
+  }
+  .v2-stage__badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--alc-font-mono);
+    font-size: 14px;
+    color: var(--alc-accent-deep);
+    border: 1px solid var(--alc-accent-40);
+    background: var(--alc-bg-elev-1);
+    flex: none;
+  }
+  .v2-stage__line {
+    width: 1px;
+    flex: 1;
+    background: linear-gradient(
+      to bottom,
+      var(--alc-accent-40),
+      var(--alc-hairline-2)
+    );
+  }
+  .v2-stage__body {
+    padding-bottom: 72px;
+    min-width: 0;
+  }
+  .v2-stage--last .v2-stage__body {
+    padding-bottom: 80px;
+  }
+  .v2-stage__kicker {
+    font-family: var(--alc-font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--alc-accent-deep);
+  }
+  @media (max-width: 700px) {
+    .v2-stage {
+      padding: 0 20px;
+    }
+    .v2-stage__grid {
+      grid-template-columns: 1fr;
+    }
+    .v2-stage__rail {
+      flex-direction: row;
+      padding-top: 0;
+      margin-bottom: 14px;
+    }
+    .v2-stage__badge {
+      width: 36px;
+      height: 36px;
+      font-size: 13px;
+    }
+    .v2-stage__line {
+      width: auto;
+      height: 1px;
+      flex: 1;
+      background: linear-gradient(
+        to right,
+        var(--alc-accent-40),
+        var(--alc-hairline-2)
+      );
+    }
+  }
+  @media (max-width: 640px) {
+    .v2-section {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+  }
+
+  /* ---------- get started ---------- */
+  .v2-steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 32px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    max-width: 720px;
+  }
+  .v2-steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 44px;
+  }
+  .v2-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--alc-hairline-3);
+    color: var(--alc-fg-1);
+    font-family: var(--alc-font-mono);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .v2-steps__label {
+    display: block;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+    margin-bottom: 8px;
+  }
+  .v2-steps__code {
+    display: inline-block;
+    font-family: var(--alc-font-mono);
+    font-size: 14px;
+    background: var(--alc-bg-code);
+    color: var(--alc-fg-invert);
+    padding: 10px 16px;
+    border-radius: var(--alc-radius);
+  }
+  .v2-cta-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 40px;
+  }
+</style>

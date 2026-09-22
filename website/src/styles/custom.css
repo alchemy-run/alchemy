@@ -147,7 +147,9 @@ starlight-menu-button button {
   --sl-color-black: var(--alc-bg-nav);
   --sl-color-gray-1: var(--alc-walnut-900);
   --sl-color-gray-2: var(--alc-walnut-700);
-  --sl-color-gray-3: var(--alc-walnut-600);
+  /* Starlight uses gray-3 for muted text (Edit page, meta); fg-3 keeps it
+     at AAA 7:1 on the parchment surfaces. */
+  --sl-color-gray-3: var(--alc-fg-3);
   --sl-color-gray-4: var(--alc-walnut-500);
   --sl-color-gray-5: var(--alc-walnut-300);
   --sl-color-gray-6: var(--alc-walnut-100);
