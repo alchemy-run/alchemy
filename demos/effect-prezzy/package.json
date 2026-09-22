@@ -1,0 +1,36 @@
+{
+  "name": "alchemy-effect-prezzy",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "capture": "bunx bun@1.4.2 capture/capture.ts",
+    "studio": "remotion studio remotion/index.ts",
+    "render": "node render.ts",
+    "present": "pnpm tcut present out/presentation --open",
+    "tcut": "bunx bun@1.4.2 ../../submodules/tcut/packages/tcut/src/cli.ts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "catalog:",
+    "@remotion/cli": "catalog:",
+    "@remotion/google-fonts": "catalog:",
+    "@remotion/renderer": "catalog:",
+    "diff": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "remotion": "catalog:",
+    "shiki": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:"
+  }
+}

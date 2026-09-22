@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Editor support and `pnpm exec tsc -p demos/effect-prezzy` only (not part of
+  // the root `tsc -b`). "tcut" resolves to the fork in `submodules/tcut`,
+  // which is what the capture step runs. `template/` is the demo app itself
+  // and is type-checked by the scenes' real `alchemy deploy`.
+  "include": [
+    "capture",
+    "remotion",
+    "scenes",
+    "shared",
+    "deck.ts",
+    "render.ts",
+    "remotion.config.ts"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../..",
+    "paths": {
+      "tcut": ["../../submodules/tcut/packages/tcut/src/index.ts"]
+    }
+  }
+}
