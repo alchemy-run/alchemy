@@ -92,7 +92,7 @@ Dashboard (Website.Vite) ─► HttpApi typed client + live WebSockets
     sink is one expression.
 12. **KV is eventually consistent.** The logs say the job stored the
     preview, but `GET /links/:code` still shows none, and a new link is
-    missing from `GET /links` for up to a minute. (Seen on every real
+    missing from `GET /links` for up to a few minutes. (Seen on every real
     deploy while building the reference app.) Links need read-after-write
     consistency.
 13. **Swap the Layer to DynamoDB.** `LinksDynamo` owns an
@@ -163,7 +163,7 @@ import through `QueueSink`, previews filled in by the Jobs consumer,
 redirects, click counts arriving through the Clicks queue into each
 `LinkRoom`, WebSocket pushes on every click, the typed 404 from `HttpApi`,
 and the dashboard creating a link and updating counts live. With
-`LinksKV`, new links and previews took up to a minute to show up
+`LinksKV`, new links and previews took up to a few minutes to show up
 (scene 12); with `LinksDynamo` they appear as soon as the job finishes.
 
 The app uses the two product changes below from a local merge of their
