@@ -205,7 +205,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:certificate",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -254,7 +262,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:certificate",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -285,7 +301,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:certificate",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const MANAGED_PROBE_NAME = "alchemy-test-managed-probe";
@@ -340,7 +364,15 @@ test.provider.skipIf(!hasHetznerCreds || managedEnabled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:certificate",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds || !managedEnabled || !managedDomain)(
@@ -391,5 +423,13 @@ test.provider.skipIf(!hasHetznerCreds || !managedEnabled || !managedDomain)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:certificate",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

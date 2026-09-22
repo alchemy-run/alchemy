@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
+import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
@@ -163,7 +164,10 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.copyFile(full, target);
+              await fs.writeFile(
+                target,
+                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
+              );
             }),
           );
         }
@@ -221,6 +225,7 @@ export default defineConfig({
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
+        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -356,6 +361,12 @@ export default defineConfig({
                   link: "/environments/custom-auth-provider",
                 },
                 { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Secret providers",
+                  link: "/environments/secret-providers",
+                },
+                { label: "Doppler", link: "/environments/doppler" },
+                { label: "Infisical", link: "/environments/infisical" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",

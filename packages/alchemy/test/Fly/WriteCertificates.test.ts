@@ -160,5 +160,22 @@ test(
     // Removing again is a no-op.
     expect((yield* call(`/remove?hostname=${UPLOAD_HOST}`)).ok).toBe(true);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:certificate",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

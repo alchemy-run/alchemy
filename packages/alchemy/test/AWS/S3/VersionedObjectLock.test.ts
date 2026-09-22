@@ -378,518 +378,562 @@ afterAll(
   { timeout: 120_000, retry: 0 },
 );
 
-describe.sequential("versioned object lock bindings", () => {
-  for (const [binding, path] of [
-    ["GetObjectRetention", "/get-retention"],
-    ["PutObjectRetention", "/put-retention"],
-    ["GetObjectLegalHold", "/get-hold"],
-    ["PutObjectLegalHold", "/put-hold"],
-    ["RestoreObject", "/restore"],
-  ] as const) {
-    describe(binding, () => {
-      test.provider(
-        "returns typed errors for missing versions and a selected delete marker",
-        () =>
-          Effect.gen(function* () {
-            const Bucket = bucketFor(binding);
-            const Key = "versioned-object-lock/version-errors.txt";
-            const versions = yield* seedVersions(Bucket, Key);
-            const dates = yield* retentionDates;
-            const input = {
-              Key,
-              retainUntil: dates.old.toISOString(),
-              Status: "OFF",
-            };
-            yield* Effect.gen(function* () {
-              yield* S3.deleteObject({ Bucket, Key, VersionId: versions.old });
-              for (const VersionId of [versions.old, "null"]) {
+describe.sequential(
+  "versioned object lock bindings",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "live",
+    ],
+  },
+  () => {
+    for (const [binding, path] of [
+      ["GetObjectRetention", "/get-retention"],
+      ["PutObjectRetention", "/put-retention"],
+      ["GetObjectLegalHold", "/get-hold"],
+      ["PutObjectLegalHold", "/put-hold"],
+      ["RestoreObject", "/restore"],
+    ] as const) {
+      describe(binding, () => {
+        test.provider(
+          "returns typed errors for missing versions and a selected delete marker",
+          () =>
+            Effect.gen(function* () {
+              const Bucket = bucketFor(binding);
+              const Key = "versioned-object-lock/version-errors.txt";
+              const versions = yield* seedVersions(Bucket, Key);
+              const dates = yield* retentionDates;
+              const input = {
+                Key,
+                retainUntil: dates.old.toISOString(),
+                Status: "OFF",
+              };
+              yield* Effect.gen(function* () {
+                yield* S3.deleteObject({
+                  Bucket,
+                  Key,
+                  VersionId: versions.old,
+                });
+                for (const VersionId of [versions.old, "null"]) {
+                  yield* rejected(
+                    path,
+                    { ...input, VersionId },
+                    403,
+                    "AccessDeniedException",
+                  );
+                }
+                const marker = yield* S3.deleteObject({ Bucket, Key });
+                expect(marker.VersionId).toBeTruthy();
                 yield* rejected(
                   path,
-                  { ...input, VersionId },
-                  403,
-                  "AccessDeniedException",
+                  { ...input, VersionId: marker.VersionId! },
+                  binding === "RestoreObject" ? 405 : 403,
+                  binding === "RestoreObject"
+                    ? "MethodNotAllowed"
+                    : "AccessDeniedException",
                 );
-              }
-              const marker = yield* S3.deleteObject({ Bucket, Key });
-              expect(marker.VersionId).toBeTruthy();
-              yield* rejected(
-                path,
-                { ...input, VersionId: marker.VersionId! },
-                binding === "RestoreObject" ? 405 : 403,
-                binding === "RestoreObject"
-                  ? "MethodNotAllowed"
-                  : "AccessDeniedException",
+                const current = yield* S3.getObject({
+                  Bucket,
+                  Key,
+                  VersionId: versions.current,
+                });
+                expect(current.VersionId).toBe(versions.current);
+                expect(
+                  yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
+                ).toBe(versions.currentBody);
+                const listed = yield* S3.listObjectVersions({
+                  Bucket,
+                  Prefix: Key,
+                });
+                expect(
+                  listed.Versions?.map((version) => version.VersionId),
+                ).toEqual([versions.current]);
+                expect(
+                  listed.DeleteMarkers?.map((version) => version.VersionId),
+                ).toEqual([marker.VersionId]);
+              }).pipe(
+                Effect.ensuring(
+                  binding === "PutObjectRetention"
+                    ? removeRetention(Bucket, Key, [versions.current])
+                    : Effect.void,
+                ),
               );
-              const current = yield* S3.getObject({
+            }),
+          { timeout: 120_000, retry: 0 },
+        );
+      });
+    }
+
+    describe("GetObjectRetention", () => {
+      test.provider(
+        "reads the selected old version's retention separately from the latest version",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("GetObjectRetention");
+            const Key = "versioned-object-lock/get-retention.txt";
+            const versions = yield* seedVersions(Bucket, Key);
+            const dates = yield* retentionDates;
+            yield* Effect.gen(function* () {
+              yield* S3.putObjectRetention({
+                Bucket,
+                Key,
+                VersionId: versions.old,
+                Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.old },
+              });
+              yield* S3.putObjectRetention({
                 Bucket,
                 Key,
                 VersionId: versions.current,
+                Retention: {
+                  Mode: "GOVERNANCE",
+                  RetainUntilDate: dates.current,
+                },
               });
-              expect(current.VersionId).toBe(versions.current);
-              expect(
-                yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
-              ).toBe(versions.currentBody);
-              const listed = yield* S3.listObjectVersions({
-                Bucket,
-                Prefix: Key,
+              yield* assertProtectedDelete(Bucket, Key, versions.old);
+              const old = yield* post(
+                "/get-retention",
+                { Key, VersionId: versions.old },
+                retentionResponse,
+              );
+              const current = yield* post(
+                "/get-retention",
+                { Key },
+                retentionResponse,
+              );
+              expect(old.Retention).toEqual({
+                Mode: "GOVERNANCE",
+                RetainUntilDate: dates.old.toISOString(),
               });
+              expect(current.Retention).toEqual({
+                Mode: "GOVERNANCE",
+                RetainUntilDate: dates.current.toISOString(),
+              });
+              expect(old.Retention).not.toEqual(current.Retention);
               expect(
-                listed.Versions?.map((version) => version.VersionId),
-              ).toEqual([versions.current]);
+                yield* post(
+                  "/get-retention",
+                  { Key, VersionId: versions.current },
+                  retentionResponse,
+                ),
+              ).toEqual(current);
               expect(
-                listed.DeleteMarkers?.map((version) => version.VersionId),
-              ).toEqual([marker.VersionId]);
+                (yield* S3.getObjectRetention({
+                  Bucket,
+                  Key,
+                  VersionId: versions.old,
+                })).Retention,
+              ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.old });
+              expect(
+                (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
+              ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
+              yield* assertVersions(Bucket, Key, versions);
             }).pipe(
               Effect.ensuring(
-                binding === "PutObjectRetention"
-                  ? removeRetention(Bucket, Key, [versions.current])
-                  : Effect.void,
+                removeRetention(Bucket, Key, [versions.old, versions.current]),
               ),
             );
           }),
         { timeout: 120_000, retry: 0 },
       );
     });
-  }
 
-  describe("GetObjectRetention", () => {
-    test.provider(
-      "reads the selected old version's retention separately from the latest version",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("GetObjectRetention");
-          const Key = "versioned-object-lock/get-retention.txt";
-          const versions = yield* seedVersions(Bucket, Key);
-          const dates = yield* retentionDates;
-          yield* Effect.gen(function* () {
-            yield* S3.putObjectRetention({
-              Bucket,
-              Key,
-              VersionId: versions.old,
-              Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.old },
-            });
-            yield* S3.putObjectRetention({
-              Bucket,
-              Key,
-              VersionId: versions.current,
-              Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.current },
-            });
-            yield* assertProtectedDelete(Bucket, Key, versions.old);
-            const old = yield* post(
-              "/get-retention",
-              { Key, VersionId: versions.old },
-              retentionResponse,
-            );
-            const current = yield* post(
-              "/get-retention",
-              { Key },
-              retentionResponse,
-            );
-            expect(old.Retention).toEqual({
-              Mode: "GOVERNANCE",
-              RetainUntilDate: dates.old.toISOString(),
-            });
-            expect(current.Retention).toEqual({
-              Mode: "GOVERNANCE",
-              RetainUntilDate: dates.current.toISOString(),
-            });
-            expect(old.Retention).not.toEqual(current.Retention);
-            expect(
-              yield* post(
-                "/get-retention",
-                { Key, VersionId: versions.current },
-                retentionResponse,
-              ),
-            ).toEqual(current);
-            expect(
-              (yield* S3.getObjectRetention({
+    describe("PutObjectRetention", () => {
+      test.provider(
+        "extends GOVERNANCE retention on the old version without modifying latest retention",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("PutObjectRetention");
+            const Key = "versioned-object-lock/put-retention.txt";
+            const versions = yield* seedVersions(Bucket, Key);
+            const dates = yield* retentionDates;
+            yield* Effect.gen(function* () {
+              yield* S3.putObjectRetention({
                 Bucket,
                 Key,
                 VersionId: versions.old,
-              })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.old });
-            expect(
-              (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
-            yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeRetention(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-  });
-
-  describe("PutObjectRetention", () => {
-    test.provider(
-      "extends GOVERNANCE retention on the old version without modifying latest retention",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("PutObjectRetention");
-          const Key = "versioned-object-lock/put-retention.txt";
-          const versions = yield* seedVersions(Bucket, Key);
-          const dates = yield* retentionDates;
-          yield* Effect.gen(function* () {
-            yield* S3.putObjectRetention({
-              Bucket,
-              Key,
-              VersionId: versions.old,
-              Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.old },
-            });
-            yield* S3.putObjectRetention({
-              Bucket,
-              Key,
-              VersionId: versions.current,
-              Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.current },
-            });
-            expect(
-              yield* post(
+                Retention: { Mode: "GOVERNANCE", RetainUntilDate: dates.old },
+              });
+              yield* S3.putObjectRetention({
+                Bucket,
+                Key,
+                VersionId: versions.current,
+                Retention: {
+                  Mode: "GOVERNANCE",
+                  RetainUntilDate: dates.current,
+                },
+              });
+              expect(
+                yield* post(
+                  "/put-retention",
+                  {
+                    Key,
+                    VersionId: versions.old,
+                    retainUntil: dates.extended.toISOString(),
+                  },
+                  Schema.Struct({ retained: Schema.Boolean }),
+                ),
+              ).toEqual({ retained: true });
+              yield* rejected(
                 "/put-retention",
                 {
                   Key,
                   VersionId: versions.old,
-                  retainUntil: dates.extended.toISOString(),
+                  retainUntil: dates.old.toISOString(),
                 },
-                Schema.Struct({ retained: Schema.Boolean }),
+                403,
+                "AccessDeniedException",
+              );
+              yield* assertProtectedDelete(Bucket, Key, versions.old);
+              expect(
+                (yield* S3.getObjectRetention({
+                  Bucket,
+                  Key,
+                  VersionId: versions.old,
+                })).Retention,
+              ).toEqual({
+                Mode: "GOVERNANCE",
+                RetainUntilDate: dates.extended,
+              });
+              expect(
+                (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
+              ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
+              expect(
+                (yield* S3.getObjectRetention({
+                  Bucket,
+                  Key,
+                  VersionId: versions.current,
+                })).Retention,
+              ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
+              yield* assertVersions(Bucket, Key, versions);
+            }).pipe(
+              Effect.ensuring(
+                removeRetention(Bucket, Key, [versions.old, versions.current]),
               ),
-            ).toEqual({ retained: true });
-            yield* rejected(
-              "/put-retention",
-              {
-                Key,
-                VersionId: versions.old,
-                retainUntil: dates.old.toISOString(),
-              },
-              403,
-              "AccessDeniedException",
             );
-            yield* assertProtectedDelete(Bucket, Key, versions.old);
-            expect(
-              (yield* S3.getObjectRetention({
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+    });
+
+    describe("GetObjectLegalHold", () => {
+      test.provider(
+        "reads ON for the selected old version and OFF for the current version",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("GetObjectLegalHold");
+            const Key = "versioned-object-lock/get-hold.txt";
+            const versions = yield* seedVersions(Bucket, Key);
+            yield* Effect.gen(function* () {
+              yield* S3.putObjectLegalHold({
                 Bucket,
                 Key,
                 VersionId: versions.old,
-              })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.extended });
-            expect(
-              (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
-            expect(
-              (yield* S3.getObjectRetention({
+                LegalHold: { Status: "ON" },
+              });
+              yield* S3.putObjectLegalHold({
                 Bucket,
                 Key,
                 VersionId: versions.current,
-              })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
-            yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeRetention(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-  });
-
-  describe("GetObjectLegalHold", () => {
-    test.provider(
-      "reads ON for the selected old version and OFF for the current version",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("GetObjectLegalHold");
-          const Key = "versioned-object-lock/get-hold.txt";
-          const versions = yield* seedVersions(Bucket, Key);
-          yield* Effect.gen(function* () {
-            yield* S3.putObjectLegalHold({
-              Bucket,
-              Key,
-              VersionId: versions.old,
-              LegalHold: { Status: "ON" },
-            });
-            yield* S3.putObjectLegalHold({
-              Bucket,
-              Key,
-              VersionId: versions.current,
-              LegalHold: { Status: "OFF" },
-            });
-            expect(
-              yield* post(
-                "/get-hold",
-                { Key, VersionId: versions.old },
-                holdResponse,
-              ),
-            ).toEqual({ LegalHold: { Status: "ON" } });
-            yield* assertProtectedDelete(Bucket, Key, versions.old);
-            expect(yield* post("/get-hold", { Key }, holdResponse)).toEqual({
-              LegalHold: { Status: "OFF" },
-            });
-            expect(
-              yield* post(
-                "/get-hold",
-                { Key, VersionId: versions.current },
-                holdResponse,
-              ),
-            ).toEqual({ LegalHold: { Status: "OFF" } });
-            expect(
-              (yield* S3.getObjectLegalHold({
-                Bucket,
-                Key,
-                VersionId: versions.old,
-              })).LegalHold?.Status,
-            ).toBe("ON");
-            expect(
-              (yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold?.Status,
-            ).toBe("OFF");
-            yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeHolds(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-  });
-
-  describe("PutObjectLegalHold", () => {
-    test.provider(
-      "toggles only the selected old version's legal hold while latest stays OFF",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("PutObjectLegalHold");
-          const Key = "versioned-object-lock/put-hold.txt";
-          const versions = yield* seedVersions(Bucket, Key);
-          yield* Effect.gen(function* () {
-            yield* S3.putObjectLegalHold({
-              Bucket,
-              Key,
-              VersionId: versions.old,
-              LegalHold: { Status: "OFF" },
-            });
-            yield* S3.putObjectLegalHold({
-              Bucket,
-              Key,
-              VersionId: versions.current,
-              LegalHold: { Status: "OFF" },
-            });
-            for (const Status of ["ON", "OFF"] as const) {
+                LegalHold: { Status: "OFF" },
+              });
               expect(
                 yield* post(
-                  "/put-hold",
-                  { Key, VersionId: versions.old, Status },
-                  Schema.Struct({ updated: Schema.Boolean }),
+                  "/get-hold",
+                  { Key, VersionId: versions.old },
+                  holdResponse,
                 ),
-              ).toEqual({ updated: true });
-              if (Status === "ON") {
-                yield* assertProtectedDelete(Bucket, Key, versions.old);
-              }
+              ).toEqual({ LegalHold: { Status: "ON" } });
+              yield* assertProtectedDelete(Bucket, Key, versions.old);
+              expect(yield* post("/get-hold", { Key }, holdResponse)).toEqual({
+                LegalHold: { Status: "OFF" },
+              });
+              expect(
+                yield* post(
+                  "/get-hold",
+                  { Key, VersionId: versions.current },
+                  holdResponse,
+                ),
+              ).toEqual({ LegalHold: { Status: "OFF" } });
               expect(
                 (yield* S3.getObjectLegalHold({
                   Bucket,
                   Key,
                   VersionId: versions.old,
                 })).LegalHold?.Status,
-              ).toBe(Status);
+              ).toBe("ON");
               expect(
                 (yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold
                   ?.Status,
               ).toBe("OFF");
-              expect(
-                (yield* S3.getObjectLegalHold({
-                  Bucket,
-                  Key,
-                  VersionId: versions.current,
-                })).LegalHold?.Status,
-              ).toBe("OFF");
-            }
-            yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeHolds(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-  });
+              yield* assertVersions(Bucket, Key, versions);
+            }).pipe(
+              Effect.ensuring(
+                removeHolds(Bucket, Key, [versions.old, versions.current]),
+              ),
+            );
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+    });
 
-  describe("RestoreObject", () => {
-    test.provider(
-      "selects a suspended null STANDARD version without changing current data",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("RestoreObject");
-          const Key = "versioned-object-lock/restore-null.txt";
-          yield* Effect.gen(function* () {
-            yield* S3.putBucketVersioning({
-              Bucket,
-              VersioningConfiguration: { Status: "Suspended" },
-            });
-            yield* S3.putObject({
+    describe("PutObjectLegalHold", () => {
+      test.provider(
+        "toggles only the selected old version's legal hold while latest stays OFF",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("PutObjectLegalHold");
+            const Key = "versioned-object-lock/put-hold.txt";
+            const versions = yield* seedVersions(Bucket, Key);
+            yield* Effect.gen(function* () {
+              yield* S3.putObjectLegalHold({
+                Bucket,
+                Key,
+                VersionId: versions.old,
+                LegalHold: { Status: "OFF" },
+              });
+              yield* S3.putObjectLegalHold({
+                Bucket,
+                Key,
+                VersionId: versions.current,
+                LegalHold: { Status: "OFF" },
+              });
+              for (const Status of ["ON", "OFF"] as const) {
+                expect(
+                  yield* post(
+                    "/put-hold",
+                    { Key, VersionId: versions.old, Status },
+                    Schema.Struct({ updated: Schema.Boolean }),
+                  ),
+                ).toEqual({ updated: true });
+                if (Status === "ON") {
+                  yield* assertProtectedDelete(Bucket, Key, versions.old);
+                }
+                expect(
+                  (yield* S3.getObjectLegalHold({
+                    Bucket,
+                    Key,
+                    VersionId: versions.old,
+                  })).LegalHold?.Status,
+                ).toBe(Status);
+                expect(
+                  (yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold
+                    ?.Status,
+                ).toBe("OFF");
+                expect(
+                  (yield* S3.getObjectLegalHold({
+                    Bucket,
+                    Key,
+                    VersionId: versions.current,
+                  })).LegalHold?.Status,
+                ).toBe("OFF");
+              }
+              yield* assertVersions(Bucket, Key, versions);
+            }).pipe(
+              Effect.ensuring(
+                removeHolds(Bucket, Key, [versions.old, versions.current]),
+              ),
+            );
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+    });
+
+    describe("RestoreObject", () => {
+      test.provider(
+        "selects a suspended null STANDARD version without changing current data",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("RestoreObject");
+            const Key = "versioned-object-lock/restore-null.txt";
+            yield* Effect.gen(function* () {
+              yield* S3.putBucketVersioning({
+                Bucket,
+                VersioningConfiguration: { Status: "Suspended" },
+              });
+              yield* S3.putObject({
+                Bucket,
+                Key,
+                Body: "null restore version",
+              });
+            }).pipe(
+              Effect.ensuring(
+                S3.putBucketVersioning({
+                  Bucket,
+                  VersioningConfiguration: { Status: "Enabled" },
+                }).pipe(Effect.orDie),
+              ),
+            );
+            const current = yield* S3.putObject({
               Bucket,
               Key,
-              Body: "null restore version",
+              Body: "current restore version",
             });
-          }).pipe(
-            Effect.ensuring(
-              S3.putBucketVersioning({
-                Bucket,
-                VersioningConfiguration: { Status: "Enabled" },
-              }).pipe(Effect.orDie),
-            ),
-          );
-          const current = yield* S3.putObject({
-            Bucket,
-            Key,
-            Body: "current restore version",
-          });
-          expect(current.VersionId).toBeTruthy();
-          expect(current.VersionId).not.toBe("null");
-          expect(
-            yield* post(
-              "/restore",
-              { Key, VersionId: "null" },
-              Schema.Struct({ tag: Schema.Literal("InvalidObjectState") }),
-            ),
-          ).toEqual({ tag: "InvalidObjectState" });
-          for (const [VersionId, expectedBody] of [
-            ["null", "null restore version"],
-            [current.VersionId!, "current restore version"],
-          ]) {
-            const head = yield* S3.headObject({ Bucket, Key, VersionId });
-            expect(head.VersionId).toBe(VersionId);
-            expect(head.Restore).toBeUndefined();
-            const object = yield* S3.getObject({ Bucket, Key, VersionId });
+            expect(current.VersionId).toBeTruthy();
+            expect(current.VersionId).not.toBe("null");
             expect(
-              yield* object.Body!.pipe(Stream.decodeText, Stream.mkString),
-            ).toBe(expectedBody);
-          }
-          const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
-          expect(
-            listed.Versions?.map((version) => ({
-              id: version.VersionId,
-              latest: version.IsLatest,
-            })),
-          ).toEqual([
-            { id: current.VersionId, latest: true },
-            { id: "null", latest: false },
-          ]);
-          expect(listed.DeleteMarkers ?? []).toEqual([]);
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-    test.provider(
-      "returns typed InvalidObjectState for a selected STANDARD version without restoring or changing latest",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("RestoreObject");
-          const Key = "versioned-object-lock/restore-standard.txt";
-          const versions = yield* seedVersions(Bucket, Key);
-          const response = Schema.Struct({
-            tag: Schema.Literal("InvalidObjectState"),
-          });
-          expect(
-            yield* post("/restore", { Key, VersionId: versions.old }, response),
-          ).toEqual({ tag: "InvalidObjectState" });
-          expect(yield* post("/restore", { Key }, response)).toEqual({
-            tag: "InvalidObjectState",
-          });
-          for (const VersionId of [versions.old, versions.current]) {
-            const head = yield* S3.headObject({ Bucket, Key, VersionId });
-            expect(head.VersionId).toBe(VersionId);
-            expect(head.StorageClass ?? "STANDARD").toBe("STANDARD");
-            expect(head.Restore).toBeUndefined();
-          }
-          yield* assertVersions(Bucket, Key, versions);
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-
-    test.provider(
-      "accepts restoration of an old GLACIER version without waiting for retrieval or changing latest STANDARD",
-      () =>
-        Effect.gen(function* () {
-          const Bucket = bucketFor("RestoreObject");
-          const Key = "versioned-object-lock/restore-glacier.txt";
-          const versions = yield* seedVersions(Bucket, Key, "GLACIER");
-          const archived = yield* S3.headObject({
-            Bucket,
-            Key,
-            VersionId: versions.old,
-          });
-          expect(archived.VersionId).toBe(versions.old);
-          expect(archived.StorageClass).toBe("GLACIER");
-          expect(archived.ContentLength).toBe(versions.oldBody.length);
-          expect(archived.Restore).toBeUndefined();
-          expect(
-            yield* post(
-              "/restore",
-              { Key, VersionId: versions.old },
-              Schema.Struct({
-                tag: Schema.Literal("accepted"),
-                versionId: Schema.String,
-              }),
-            ),
-          ).toEqual({ tag: "accepted", versionId: versions.old });
-
-          // Poll only for restore-request visibility, never for retrieval completion.
-          const restored = yield* S3.headObject({
-            Bucket,
-            Key,
-            VersionId: versions.old,
-          }).pipe(
-            Effect.repeat({
-              until: (head) => head.Restore !== undefined,
-              schedule: Schedule.spaced("2 seconds"),
-              times: 9,
-            }),
-          );
-          expect(restored.VersionId).toBe(versions.old);
-          expect(restored.StorageClass).toBe("GLACIER");
-          expect(restored.ETag).toBe(archived.ETag);
-          expect(restored.ContentLength).toBe(archived.ContentLength);
-          expect(restored.Restore).toMatch(/ongoing-request="(?:true|false)"/);
-          const pending = restored.Restore!.includes('ongoing-request="true"');
-          if (!pending) {
-            expect(restored.Restore).toContain('expiry-date="');
-          }
-          yield* Effect.logInfo(
-            `RestoreObject accepted for ${versions.old}; retrieval ${pending ? "pending" : "completed"}`,
-          );
-
-          for (const VersionId of [undefined, versions.current]) {
-            const latest = yield* S3.headObject({ Bucket, Key, VersionId });
-            expect(latest.VersionId).toBe(versions.current);
-            expect(latest.StorageClass ?? "STANDARD").toBe("STANDARD");
-            expect(latest.ContentLength).toBe(versions.currentBody.length);
-            expect(latest.Restore).toBeUndefined();
-          }
-          const current = yield* S3.getObject({ Bucket, Key });
-          expect(current.VersionId).toBe(versions.current);
-          expect(current.Body).toBeDefined();
-          expect(
-            yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
-          ).toBe(versions.currentBody);
-          const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
-          expect(
-            listed.Versions?.filter((version) => version.Key === Key)
-              .map((version) => ({
+              yield* post(
+                "/restore",
+                { Key, VersionId: "null" },
+                Schema.Struct({ tag: Schema.Literal("InvalidObjectState") }),
+              ),
+            ).toEqual({ tag: "InvalidObjectState" });
+            for (const [VersionId, expectedBody] of [
+              ["null", "null restore version"],
+              [current.VersionId!, "current restore version"],
+            ]) {
+              const head = yield* S3.headObject({ Bucket, Key, VersionId });
+              expect(head.VersionId).toBe(VersionId);
+              expect(head.Restore).toBeUndefined();
+              const object = yield* S3.getObject({ Bucket, Key, VersionId });
+              expect(
+                yield* object.Body!.pipe(Stream.decodeText, Stream.mkString),
+              ).toBe(expectedBody);
+            }
+            const listed = yield* S3.listObjectVersions({
+              Bucket,
+              Prefix: Key,
+            });
+            expect(
+              listed.Versions?.map((version) => ({
                 id: version.VersionId,
                 latest: version.IsLatest,
-                storageClass: version.StorageClass,
-              }))
-              .sort((a, b) => a.id!.localeCompare(b.id!)),
-          ).toEqual(
-            [
-              { id: versions.old, latest: false, storageClass: "GLACIER" },
-              { id: versions.current, latest: true, storageClass: "STANDARD" },
-            ].sort((a, b) => a.id.localeCompare(b.id)),
-          );
-        }),
-      { timeout: 120_000, retry: 0 },
-    );
-  });
-});
+              })),
+            ).toEqual([
+              { id: current.VersionId, latest: true },
+              { id: "null", latest: false },
+            ]);
+            expect(listed.DeleteMarkers ?? []).toEqual([]);
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+      test.provider(
+        "returns typed InvalidObjectState for a selected STANDARD version without restoring or changing latest",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("RestoreObject");
+            const Key = "versioned-object-lock/restore-standard.txt";
+            const versions = yield* seedVersions(Bucket, Key);
+            const response = Schema.Struct({
+              tag: Schema.Literal("InvalidObjectState"),
+            });
+            expect(
+              yield* post(
+                "/restore",
+                { Key, VersionId: versions.old },
+                response,
+              ),
+            ).toEqual({ tag: "InvalidObjectState" });
+            expect(yield* post("/restore", { Key }, response)).toEqual({
+              tag: "InvalidObjectState",
+            });
+            for (const VersionId of [versions.old, versions.current]) {
+              const head = yield* S3.headObject({ Bucket, Key, VersionId });
+              expect(head.VersionId).toBe(VersionId);
+              expect(head.StorageClass ?? "STANDARD").toBe("STANDARD");
+              expect(head.Restore).toBeUndefined();
+            }
+            yield* assertVersions(Bucket, Key, versions);
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+
+      test.provider(
+        "accepts restoration of an old GLACIER version without waiting for retrieval or changing latest STANDARD",
+        () =>
+          Effect.gen(function* () {
+            const Bucket = bucketFor("RestoreObject");
+            const Key = "versioned-object-lock/restore-glacier.txt";
+            const versions = yield* seedVersions(Bucket, Key, "GLACIER");
+            const archived = yield* S3.headObject({
+              Bucket,
+              Key,
+              VersionId: versions.old,
+            });
+            expect(archived.VersionId).toBe(versions.old);
+            expect(archived.StorageClass).toBe("GLACIER");
+            expect(archived.ContentLength).toBe(versions.oldBody.length);
+            expect(archived.Restore).toBeUndefined();
+            expect(
+              yield* post(
+                "/restore",
+                { Key, VersionId: versions.old },
+                Schema.Struct({
+                  tag: Schema.Literal("accepted"),
+                  versionId: Schema.String,
+                }),
+              ),
+            ).toEqual({ tag: "accepted", versionId: versions.old });
+
+            // Poll only for restore-request visibility, never for retrieval completion.
+            const restored = yield* S3.headObject({
+              Bucket,
+              Key,
+              VersionId: versions.old,
+            }).pipe(
+              Effect.repeat({
+                until: (head) => head.Restore !== undefined,
+                schedule: Schedule.spaced("2 seconds"),
+                times: 9,
+              }),
+            );
+            expect(restored.VersionId).toBe(versions.old);
+            expect(restored.StorageClass).toBe("GLACIER");
+            expect(restored.ETag).toBe(archived.ETag);
+            expect(restored.ContentLength).toBe(archived.ContentLength);
+            expect(restored.Restore).toMatch(
+              /ongoing-request="(?:true|false)"/,
+            );
+            const pending = restored.Restore!.includes(
+              'ongoing-request="true"',
+            );
+            if (!pending) {
+              expect(restored.Restore).toContain('expiry-date="');
+            }
+            yield* Effect.logInfo(
+              `RestoreObject accepted for ${versions.old}; retrieval ${pending ? "pending" : "completed"}`,
+            );
+
+            for (const VersionId of [undefined, versions.current]) {
+              const latest = yield* S3.headObject({ Bucket, Key, VersionId });
+              expect(latest.VersionId).toBe(versions.current);
+              expect(latest.StorageClass ?? "STANDARD").toBe("STANDARD");
+              expect(latest.ContentLength).toBe(versions.currentBody.length);
+              expect(latest.Restore).toBeUndefined();
+            }
+            const current = yield* S3.getObject({ Bucket, Key });
+            expect(current.VersionId).toBe(versions.current);
+            expect(current.Body).toBeDefined();
+            expect(
+              yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
+            ).toBe(versions.currentBody);
+            const listed = yield* S3.listObjectVersions({
+              Bucket,
+              Prefix: Key,
+            });
+            expect(
+              listed.Versions?.filter((version) => version.Key === Key)
+                .map((version) => ({
+                  id: version.VersionId,
+                  latest: version.IsLatest,
+                  storageClass: version.StorageClass,
+                }))
+                .sort((a, b) => a.id!.localeCompare(b.id!)),
+            ).toEqual(
+              [
+                { id: versions.old, latest: false, storageClass: "GLACIER" },
+                {
+                  id: versions.current,
+                  latest: true,
+                  storageClass: "STANDARD",
+                },
+              ].sort((a, b) => a.id.localeCompare(b.id)),
+            );
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+    });
+  },
+);

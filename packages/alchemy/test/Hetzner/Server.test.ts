@@ -61,6 +61,7 @@ test(
     const raw = 'Content-Type: multipart/mixed; boundary="x"\n\n--x--\n';
     expect(Hetzner.composeUserData(raw)).toEqual(raw);
   }),
+  { tags: ["provider:hetzner", "provider:hetzner:server", "live"] },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -133,7 +134,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -182,7 +192,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -216,7 +235,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -289,5 +317,14 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 300_000,
+    exclusive: true,
+  },
 );

@@ -29,7 +29,8 @@ import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import { StackContext } from "./StackContext.ts";
 import type { State } from "./State/State.ts";
-import { loadConfigProvider } from "./Util/ConfigProvider.ts";
+import type { SecretsEntry, SecretsOption } from "./Secrets/Provider.ts";
+import { loadConfigProvider, stackConfigLayer } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
@@ -92,9 +93,44 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
+/**
+ * Where a stack's configuration comes from: a ConfigProvider layer, or a
+ * list of them applied in order, later ones overriding earlier ones.
+ *
+ * The process environment implicitly closes every list, so the shell
+ * overrides every provider. List `Secrets.ProcessEnv()` yourself to rank it
+ * elsewhere, or `Secrets.ProcessEnv({ disabled: true })` to leave it out.
+ * Omitting `secrets` preserves the existing ConfigProvider and CLI dotenv behavior.
+ *
+ * ```ts
+ * secrets: [
+ *   Doppler.Secrets({ project: "app", config: "dev" }),
+ *   Secrets.DotEnv(),
+ *   Secrets.ProcessEnv(),
+ * ]
+ * ```
+ */
+export type SecretProviders = SecretsEntry | ReadonlyArray<SecretsEntry>;
+
+/**
+ * The `secrets` option: providers, or a callback that picks them from the
+ * stage, so one stack can read `.env` locally and a secrets manager
+ * elsewhere:
+ *
+ * ```ts
+ * secrets: ({ stage }) =>
+ *   stage === "dev"
+ *     ? Secrets.DotEnv()
+ *     : Doppler.Secrets({ project: "app", config: stage }),
+ * ```
+ */
+export type StackSecrets = SecretsOption<SecretProviders>;
+
 export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** Opt in to secret providers. When omitted, existing configuration is preserved. */
+  secrets?: StackSecrets;
 }
 
 /**
@@ -171,6 +207,7 @@ export const Stack: Context.ServiceClass<
               stage: createStageProxy(stackName),
               state: options?.state,
               providers: options?.providers,
+              secrets: options?.secrets,
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
@@ -192,6 +229,7 @@ export const Stack: Context.ServiceClass<
             stage: createStageProxy(stackName),
             state: options?.state,
             providers: options?.providers,
+            secrets: options?.secrets,
           }),
       );
     },
@@ -236,6 +274,8 @@ export interface MakeStackProps<ROut = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** Opt in to secret providers. When omitted, existing configuration is preserved. */
+  secrets?: StackSecrets;
   /** @internal */
   stack?: StackSpec;
 }
@@ -274,6 +314,7 @@ export const make =
         }
         return options.providers.pipe(
           Layer.provideMerge(options.state),
+          Layer.provideMerge(stackConfigLayer(options.secrets)),
           Layer.provideMerge(
             Layer.effect(
               Stack,
@@ -361,7 +402,6 @@ export const evalStack = <A, B, StackErr, Err, Req>(
   const body = Effect.gen(function* () {
     const stack = yield* effect;
     const configProvider = yield* loadConfigProvider(Option.none());
-
     return yield* fn(stack).pipe(
       provideFreshArtifactStore,
       Effect.provide(

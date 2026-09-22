@@ -65,7 +65,7 @@ const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
     return { stderr, exitCode };
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe("CLI exit codes", () => {
+describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
   it.live("dev without a stack entrypoint reports it and exits 1", () =>
     Effect.gen(function* () {
       const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);

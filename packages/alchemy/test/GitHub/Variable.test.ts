@@ -64,5 +64,13 @@ test.provider.skipIf(!owner)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:repository",
+      "provider:github:variable",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

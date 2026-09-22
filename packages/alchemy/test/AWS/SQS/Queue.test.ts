@@ -158,7 +158,10 @@ for (const fifo of [false, true]) {
         yield* stack.destroy();
         yield* assertQueueDeleted(created.queueUrl);
       }),
-    { timeout: 120_000 },
+    {
+      tags: ["provider:aws", "provider:aws:iam", "provider:aws:sqs", "live"],
+      timeout: 120_000,
+    },
   );
 }
 
@@ -236,430 +239,458 @@ for (const fifo of [false, true]) {
         yield* stack.destroy();
         yield* assertQueueDeleted(owner.queueUrl);
       }),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
   );
 }
 
-describe.concurrent("queue mode changes", () => {
-  for (const initialFifo of [false, true]) {
-    for (const suffixed of [false, true]) {
-      provider(
-        `changing ${initialFifo ? "FIFO to standard" : "standard to FIFO"} with an explicit ${suffixed ? "suffixed" : "base"} name replaces the queue and updates references`,
-        (stack) =>
-          Effect.gen(function* () {
-            yield* stack.destroy();
-            const baseName = `alchemy-test-sqs-${stack.stage}-${initialFifo}-${suffixed}`;
-            const queueName = suffixed ? `${baseName}.fifo` : baseName;
-            const { accountId } = yield* AWSEnvironment.current;
-            const deployQueue = (
-              fifo: boolean,
-              visibilityTimeout: "30 seconds" | "45 seconds",
-            ) =>
-              stack.deploy(
-                Effect.gen(function* () {
-                  const settings = yield* fifo === initialFifo
-                    ? Effect.succeed(undefined)
-                    : Queue("SettingsSource");
-                  const props = {
-                    queueName,
-                    visibilityTimeout: settings
-                      ? settings.queueArn.pipe(
-                          Output.map(() => visibilityTimeout),
-                        )
-                      : visibilityTimeout,
-                  };
-                  const queue = yield* Queue(
-                    "Queue",
-                    fifo ? { ...props, fifo: true } : props,
-                  );
+describe.concurrent(
+  "queue mode changes",
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:sqs", "live"] },
+  () => {
+    for (const initialFifo of [false, true]) {
+      for (const suffixed of [false, true]) {
+        provider(
+          `changing ${initialFifo ? "FIFO to standard" : "standard to FIFO"} with an explicit ${suffixed ? "suffixed" : "base"} name replaces the queue and updates references`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const baseName = `alchemy-test-sqs-${stack.stage}-${initialFifo}-${suffixed}`;
+              const queueName = suffixed ? `${baseName}.fifo` : baseName;
+              const { accountId } = yield* AWSEnvironment.current;
+              const deployQueue = (
+                fifo: boolean,
+                visibilityTimeout: "30 seconds" | "45 seconds",
+              ) =>
+                stack.deploy(
+                  Effect.gen(function* () {
+                    const settings = yield* fifo === initialFifo
+                      ? Effect.succeed(undefined)
+                      : Queue("SettingsSource");
+                    const props = {
+                      queueName,
+                      visibilityTimeout: settings
+                        ? settings.queueArn.pipe(
+                            Output.map(() => visibilityTimeout),
+                          )
+                        : visibilityTimeout,
+                    };
+                    const queue = yield* Queue(
+                      "Queue",
+                      fifo ? { ...props, fifo: true } : props,
+                    );
+                    yield* queue.bind`SelfPolicy`({
+                      policyStatements: [
+                        {
+                          Effect: "Allow",
+                          Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                          Action: ["sqs:SendMessage"],
+                          Resource: queue.queueArn,
+                        },
+                      ],
+                    });
+                    const reference = yield* Queue("Reference", {
+                      tags: { target: queue.queueArn },
+                    });
+                    return { queue, reference };
+                  }),
+                );
+              const original = yield* deployQueue(initialFifo, "30 seconds");
+              expect(original.queue.queueName).toBe(
+                initialFifo ? `${baseName}.fifo` : baseName,
+              );
+              const replacement = yield* deployQueue(
+                !initialFifo,
+                "30 seconds",
+              );
+              expect(replacement.queue.queueName).toBe(
+                initialFifo ? baseName : `${baseName}.fifo`,
+              );
+              expect(replacement.queue.queueArn).not.toBe(
+                original.queue.queueArn,
+              );
+              expect(replacement.reference).toEqual(original.reference);
+              yield* waitForQueueTags(
+                replacement.reference.queueUrl,
+                (tags) => tags.target === replacement.queue.queueArn,
+              );
+              yield* waitForQueueAttributeMatch(replacement.queue.queueUrl, {
+                QueueArn: replacement.queue.queueArn,
+                VisibilityTimeout: "30",
+              });
+              const attributes = yield* SQS.getQueueAttributes({
+                QueueUrl: replacement.queue.queueUrl,
+                AttributeNames: ["All"],
+              });
+              expect(attributes.Attributes?.FifoQueue === "true").toBe(
+                !initialFifo,
+              );
+              yield* waitForQueuePolicy(replacement.queue.queueUrl, [
+                {
+                  Effect: "Allow",
+                  Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                  Action: ["sqs:SendMessage"],
+                  Resource: replacement.queue.queueArn,
+                },
+              ]);
+              yield* assertQueueDeleted(original.queue.queueUrl);
+              const updated = yield* deployQueue(!initialFifo, "45 seconds");
+              expect(updated).toEqual(replacement);
+              yield* waitForQueueAttributeMatch(updated.queue.queueUrl, {
+                VisibilityTimeout: "45",
+              });
+              yield* SQS.sendMessage({
+                QueueUrl: updated.queue.queueUrl,
+                MessageBody: "replacement-message",
+                ...(!initialFifo
+                  ? {
+                      MessageGroupId: "replacement",
+                      MessageDeduplicationId: "replacement",
+                    }
+                  : {}),
+              });
+              const messages = yield* SQS.receiveMessage({
+                QueueUrl: updated.queue.queueUrl,
+                WaitTimeSeconds: 10,
+                MaxNumberOfMessages: 1,
+              });
+              expect(messages.Messages?.map((message) => message.Body)).toEqual(
+                ["replacement-message"],
+              );
+              yield* stack.destroy();
+              yield* assertQueueDeleted(updated.queue.queueUrl);
+              yield* assertQueueDeleted(updated.reference.queueUrl);
+            }),
+          { timeout: 120_000 },
+        );
+      }
+    }
+  },
+);
+
+provider(
+  "create and delete queue with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("DefaultQueue");
+        }),
+      );
+
+      expect(queue.queueName).toBeDefined();
+      expect(queue.queueUrl).toBeDefined();
+      expect(queue.queueArn).toBeDefined();
+
+      const queueAttributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["All"],
+      });
+      expect(queueAttributes.Attributes?.QueueArn).toBe(queue.queueArn);
+      expect(queueAttributes.Attributes?.Policy).toBeFalsy();
+      expect(queueAttributes.Attributes?.FifoQueue).not.toBe("true");
+      expect(queueAttributes.Attributes?.VisibilityTimeout).toBe("30");
+
+      yield* SQS.sendMessage({
+        QueueUrl: queue.queueUrl,
+        MessageBody: "default-queue-message",
+      });
+      expect(yield* waitForQueueMessage(queue.queueUrl)).toBe(
+        "default-queue-message",
+      );
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
+);
+
+provider(
+  "create, update, delete standard queue",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TestQueue", {
+            visibilityTimeout: "30 seconds",
+            delay: "0 seconds",
+            // exercise the non-string Duration.Input forms end-to-end
+            messageRetentionPeriod: Duration.days(4),
+            receiveMessageWaitTime: 10_000, // bare number = millis
+          });
+        }),
+      );
+
+      // Verify the queue was created
+      const queueAttributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["All"],
+      });
+      expect(queueAttributes.Attributes?.VisibilityTimeout).toEqual("30");
+      expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
+      expect(queueAttributes.Attributes?.MessageRetentionPeriod).toEqual(
+        "345600",
+      );
+      expect(queueAttributes.Attributes?.ReceiveMessageWaitTimeSeconds).toEqual(
+        "10",
+      );
+
+      // Update the queue
+      const updatedQueue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TestQueue", {
+            visibilityTimeout: "60 seconds",
+            delay: "5 seconds",
+            messageRetentionPeriod: "5 days",
+            receiveMessageWaitTime: "20 seconds",
+          });
+        }),
+      );
+
+      // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
+      yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
+        VisibilityTimeout: "60",
+        DelaySeconds: "5",
+        MessageRetentionPeriod: "432000",
+        ReceiveMessageWaitTimeSeconds: "20",
+      });
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
+);
+
+provider(
+  "create, update, delete fifo queue",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TestFifoQueue", {
+            fifo: true,
+            contentBasedDeduplication: false,
+            visibilityTimeout: "30 seconds",
+          });
+        }),
+      );
+
+      // Verify the FIFO queue was created
+      expect(queue.queueUrl).toContain(".fifo");
+      expect(queue.queueName).toContain(".fifo");
+
+      const queueAttributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["All"],
+      });
+      expect(queueAttributes.Attributes?.FifoQueue).toEqual("true");
+      expect(queueAttributes.Attributes?.ContentBasedDeduplication).toEqual(
+        "false",
+      );
+
+      // Update the FIFO queue to enable content-based deduplication
+      const updatedQueue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TestFifoQueue", {
+            fifo: true,
+            contentBasedDeduplication: true,
+            visibilityTimeout: "60 seconds",
+          });
+        }),
+      );
+
+      // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
+      yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
+        ContentBasedDeduplication: "true",
+        VisibilityTimeout: "60",
+      });
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
+);
+
+provider(
+  "create queue with custom name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("CustomNameQueue", {
+            queueName: "my-custom-test-queue",
+          });
+        }),
+      );
+
+      expect(queue.queueName).toEqual("my-custom-test-queue");
+      expect(queue.queueUrl).toContain("my-custom-test-queue");
+
+      // Verify the queue exists
+      const queueAttributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["All"],
+      });
+      expect(queueAttributes.Attributes).toBeDefined();
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
+);
+
+describe.concurrent(
+  "queue runtime and recovery",
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
+  () => {
+    provider(
+      "QueueSink writes arbitrary messages through a deployed Lambda",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const apiFunction = yield* stack.deploy(
+            QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
+          );
+          const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
+
+          const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
+
+          // 25 messages > the SendMessageBatch limit of 10, so the batched sink
+          // must split the chunk into 3 sequential API calls (10 + 10 + 5).
+          const messages = Array.from(
+            { length: 25 },
+            (_, i) => `sink-${i}-${crypto.randomUUID()}`,
+          );
+          const response = yield* HttpClient.post(`${baseUrl}/sink`, {
+            body: yield* HttpBody.json({ messages }),
+          }).pipe(
+            // QueueSink can legitimately spend several seconds retrying a partial
+            // batch failure, but a stalled Function URL request must not consume
+            // the whole test timeout.
+            Effect.timeout("15 seconds"),
+            Effect.mapError(() => "not ready" as const),
+            Effect.flatMap((result) =>
+              result.status === 200
+                ? Effect.succeed(result)
+                : Effect.fail("not ready"),
+            ),
+            Effect.tapError(Console.log),
+            Effect.retry({
+              while: (error) => error === "not ready",
+              schedule: Schedule.fixed("3 seconds"),
+              times: 4,
+            }),
+            Effect.flatMap((result) => result.json),
+          );
+
+          expect((response as any).ok).toBe(true);
+          expect((response as any).count).toBe(messages.length);
+
+          const received = yield* waitForQueueMessages(
+            queueUrl,
+            messages.length,
+          );
+
+          expect(received.sort()).toEqual([...messages].sort());
+
+          yield* stack.destroy();
+
+          yield* assertQueueDeleted(queueUrl);
+        }),
+      { tags: ["provider:aws:lambda"], timeout: 120_000 },
+    );
+
+    provider(
+      "self-bound queue recovers a missing physical queue with persisted output",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { accountId } = yield* AWSEnvironment.current;
+          const principal = { AWS: `arn:aws:iam::${accountId}:root` };
+          const deployQueue = (
+            visibilityTimeout: "30 seconds" | "60 seconds",
+            withBinding = true,
+          ) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const queue = yield* Queue("RecoveryQueue", {
+                  visibilityTimeout,
+                  tags: { purpose: "recovery" },
+                });
+                if (withBinding) {
                   yield* queue.bind`SelfPolicy`({
                     policyStatements: [
                       {
                         Effect: "Allow",
-                        Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                        Principal: principal,
                         Action: ["sqs:SendMessage"],
                         Resource: queue.queueArn,
                       },
                     ],
                   });
-                  const reference = yield* Queue("Reference", {
-                    tags: { target: queue.queueArn },
-                  });
-                  return { queue, reference };
-                }),
-              );
-            const original = yield* deployQueue(initialFifo, "30 seconds");
-            expect(original.queue.queueName).toBe(
-              initialFifo ? `${baseName}.fifo` : baseName,
+                }
+                return queue;
+              }),
             );
-            const replacement = yield* deployQueue(!initialFifo, "30 seconds");
-            expect(replacement.queue.queueName).toBe(
-              initialFifo ? baseName : `${baseName}.fifo`,
-            );
-            expect(replacement.queue.queueArn).not.toBe(
-              original.queue.queueArn,
-            );
-            expect(replacement.reference).toEqual(original.reference);
-            yield* waitForQueueTags(
-              replacement.reference.queueUrl,
-              (tags) => tags.target === replacement.queue.queueArn,
-            );
-            yield* waitForQueueAttributeMatch(replacement.queue.queueUrl, {
-              QueueArn: replacement.queue.queueArn,
-              VisibilityTimeout: "30",
-            });
-            const attributes = yield* SQS.getQueueAttributes({
-              QueueUrl: replacement.queue.queueUrl,
-              AttributeNames: ["All"],
-            });
-            expect(attributes.Attributes?.FifoQueue === "true").toBe(
-              !initialFifo,
-            );
-            yield* waitForQueuePolicy(replacement.queue.queueUrl, [
-              {
-                Effect: "Allow",
-                Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-                Action: ["sqs:SendMessage"],
-                Resource: replacement.queue.queueArn,
-              },
-            ]);
-            yield* assertQueueDeleted(original.queue.queueUrl);
-            const updated = yield* deployQueue(!initialFifo, "45 seconds");
-            expect(updated).toEqual(replacement);
-            yield* waitForQueueAttributeMatch(updated.queue.queueUrl, {
-              VisibilityTimeout: "45",
-            });
-            yield* SQS.sendMessage({
-              QueueUrl: updated.queue.queueUrl,
-              MessageBody: "replacement-message",
-              ...(!initialFifo
-                ? {
-                    MessageGroupId: "replacement",
-                    MessageDeduplicationId: "replacement",
-                  }
-                : {}),
-            });
-            const messages = yield* SQS.receiveMessage({
-              QueueUrl: updated.queue.queueUrl,
-              WaitTimeSeconds: 10,
-              MaxNumberOfMessages: 1,
-            });
-            expect(messages.Messages?.map((message) => message.Body)).toEqual([
-              "replacement-message",
-            ]);
-            yield* stack.destroy();
-            yield* assertQueueDeleted(updated.queue.queueUrl);
-            yield* assertQueueDeleted(updated.reference.queueUrl);
-          }),
-        { timeout: 120_000 },
-      );
-    }
-  }
-});
+          const initial = yield* deployQueue("30 seconds");
+          yield* waitForQueuePolicy(initial.queueUrl, [
+            {
+              Effect: "Allow",
+              Principal: principal,
+              Action: ["sqs:SendMessage"],
+              Resource: initial.queueArn,
+            },
+          ]);
 
-provider("create and delete queue with default props", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+          yield* SQS.deleteQueue({ QueueUrl: initial.queueUrl });
+          yield* assertQueueDeleted(initial.queueUrl);
+          const recovered = yield* deployQueue("60 seconds");
+          expect(recovered).toEqual(initial);
+          yield* waitForQueueAttributeMatch(recovered.queueUrl, {
+            QueueArn: initial.queueArn,
+            VisibilityTimeout: "60",
+          });
+          yield* waitForQueuePolicy(recovered.queueUrl, [
+            {
+              Effect: "Allow",
+              Principal: principal,
+              Action: ["sqs:SendMessage"],
+              Resource: recovered.queueArn,
+            },
+          ]);
+          const tags = yield* SQS.listQueueTags({
+            QueueUrl: recovered.queueUrl,
+          });
+          expect(tags.Tags?.purpose).toBe("recovery");
+          expect(tags.Tags?.["alchemy::id"]).toBe("RecoveryQueue");
 
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("DefaultQueue");
-      }),
-    );
-
-    expect(queue.queueName).toBeDefined();
-    expect(queue.queueUrl).toBeDefined();
-    expect(queue.queueArn).toBeDefined();
-
-    const queueAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: queue.queueUrl,
-      AttributeNames: ["All"],
-    });
-    expect(queueAttributes.Attributes?.QueueArn).toBe(queue.queueArn);
-    expect(queueAttributes.Attributes?.Policy).toBeFalsy();
-    expect(queueAttributes.Attributes?.FifoQueue).not.toBe("true");
-    expect(queueAttributes.Attributes?.VisibilityTimeout).toBe("30");
-
-    yield* SQS.sendMessage({
-      QueueUrl: queue.queueUrl,
-      MessageBody: "default-queue-message",
-    });
-    expect(yield* waitForQueueMessage(queue.queueUrl)).toBe(
-      "default-queue-message",
-    );
-
-    yield* stack.destroy();
-
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
-);
-
-provider("create, update, delete standard queue", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
-
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("TestQueue", {
-          visibilityTimeout: "30 seconds",
-          delay: "0 seconds",
-          // exercise the non-string Duration.Input forms end-to-end
-          messageRetentionPeriod: Duration.days(4),
-          receiveMessageWaitTime: 10_000, // bare number = millis
-        });
-      }),
-    );
-
-    // Verify the queue was created
-    const queueAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: queue.queueUrl,
-      AttributeNames: ["All"],
-    });
-    expect(queueAttributes.Attributes?.VisibilityTimeout).toEqual("30");
-    expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
-    expect(queueAttributes.Attributes?.MessageRetentionPeriod).toEqual(
-      "345600",
-    );
-    expect(queueAttributes.Attributes?.ReceiveMessageWaitTimeSeconds).toEqual(
-      "10",
-    );
-
-    // Update the queue
-    const updatedQueue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("TestQueue", {
-          visibilityTimeout: "60 seconds",
-          delay: "5 seconds",
-          messageRetentionPeriod: "5 days",
-          receiveMessageWaitTime: "20 seconds",
-        });
-      }),
-    );
-
-    // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
-    yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
-      VisibilityTimeout: "60",
-      DelaySeconds: "5",
-      MessageRetentionPeriod: "432000",
-      ReceiveMessageWaitTimeSeconds: "20",
-    });
-
-    yield* stack.destroy();
-
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
-);
-
-provider("create, update, delete fifo queue", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
-
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("TestFifoQueue", {
-          fifo: true,
-          contentBasedDeduplication: false,
-          visibilityTimeout: "30 seconds",
-        });
-      }),
-    );
-
-    // Verify the FIFO queue was created
-    expect(queue.queueUrl).toContain(".fifo");
-    expect(queue.queueName).toContain(".fifo");
-
-    const queueAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: queue.queueUrl,
-      AttributeNames: ["All"],
-    });
-    expect(queueAttributes.Attributes?.FifoQueue).toEqual("true");
-    expect(queueAttributes.Attributes?.ContentBasedDeduplication).toEqual(
-      "false",
-    );
-
-    // Update the FIFO queue to enable content-based deduplication
-    const updatedQueue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("TestFifoQueue", {
-          fifo: true,
-          contentBasedDeduplication: true,
-          visibilityTimeout: "60 seconds",
-        });
-      }),
-    );
-
-    // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
-    yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
-      ContentBasedDeduplication: "true",
-      VisibilityTimeout: "60",
-    });
-
-    yield* stack.destroy();
-
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
-);
-
-provider("create queue with custom name", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
-
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("CustomNameQueue", {
-          queueName: "my-custom-test-queue",
-        });
-      }),
-    );
-
-    expect(queue.queueName).toEqual("my-custom-test-queue");
-    expect(queue.queueUrl).toContain("my-custom-test-queue");
-
-    // Verify the queue exists
-    const queueAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: queue.queueUrl,
-      AttributeNames: ["All"],
-    });
-    expect(queueAttributes.Attributes).toBeDefined();
-
-    yield* stack.destroy();
-
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
-);
-
-describe.concurrent("queue runtime and recovery", () => {
-  provider(
-    "QueueSink writes arbitrary messages through a deployed Lambda",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
-
-        const apiFunction = yield* stack.deploy(
-          QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
-        );
-        const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
-
-        const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
-
-        // 25 messages > the SendMessageBatch limit of 10, so the batched sink
-        // must split the chunk into 3 sequential API calls (10 + 10 + 5).
-        const messages = Array.from(
-          { length: 25 },
-          (_, i) => `sink-${i}-${crypto.randomUUID()}`,
-        );
-        const response = yield* HttpClient.post(`${baseUrl}/sink`, {
-          body: yield* HttpBody.json({ messages }),
-        }).pipe(
-          // QueueSink can legitimately spend several seconds retrying a partial
-          // batch failure, but a stalled Function URL request must not consume
-          // the whole test timeout.
-          Effect.timeout("15 seconds"),
-          Effect.mapError(() => "not ready" as const),
-          Effect.flatMap((result) =>
-            result.status === 200
-              ? Effect.succeed(result)
-              : Effect.fail("not ready"),
-          ),
-          Effect.tapError(Console.log),
-          Effect.retry({
-            while: (error) => error === "not ready",
-            schedule: Schedule.fixed("3 seconds"),
-            times: 4,
-          }),
-          Effect.flatMap((result) => result.json),
-        );
-
-        expect((response as any).ok).toBe(true);
-        expect((response as any).count).toBe(messages.length);
-
-        const received = yield* waitForQueueMessages(queueUrl, messages.length);
-
-        expect(received.sort()).toEqual([...messages].sort());
-
-        yield* stack.destroy();
-
-        yield* assertQueueDeleted(queueUrl);
-      }),
-    { timeout: 120_000 },
-  );
-
-  provider(
-    "self-bound queue recovers a missing physical queue with persisted output",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
-
-        const { accountId } = yield* AWSEnvironment.current;
-        const principal = { AWS: `arn:aws:iam::${accountId}:root` };
-        const deployQueue = (
-          visibilityTimeout: "30 seconds" | "60 seconds",
-          withBinding = true,
-        ) =>
-          stack.deploy(
-            Effect.gen(function* () {
-              const queue = yield* Queue("RecoveryQueue", {
-                visibilityTimeout,
-                tags: { purpose: "recovery" },
-              });
-              if (withBinding) {
-                yield* queue.bind`SelfPolicy`({
-                  policyStatements: [
-                    {
-                      Effect: "Allow",
-                      Principal: principal,
-                      Action: ["sqs:SendMessage"],
-                      Resource: queue.queueArn,
-                    },
-                  ],
-                });
-              }
-              return queue;
-            }),
+          const unbound = yield* deployQueue("60 seconds", false);
+          expect(unbound).toEqual(recovered);
+          yield* waitForQueueAttributePredicate(
+            unbound.queueUrl,
+            (attrs) => !attrs.Policy,
           );
-        const initial = yield* deployQueue("30 seconds");
-        yield* waitForQueuePolicy(initial.queueUrl, [
-          {
-            Effect: "Allow",
-            Principal: principal,
-            Action: ["sqs:SendMessage"],
-            Resource: initial.queueArn,
-          },
-        ]);
 
-        yield* SQS.deleteQueue({ QueueUrl: initial.queueUrl });
-        yield* assertQueueDeleted(initial.queueUrl);
-        const recovered = yield* deployQueue("60 seconds");
-        expect(recovered).toEqual(initial);
-        yield* waitForQueueAttributeMatch(recovered.queueUrl, {
-          QueueArn: initial.queueArn,
-          VisibilityTimeout: "60",
-        });
-        yield* waitForQueuePolicy(recovered.queueUrl, [
-          {
-            Effect: "Allow",
-            Principal: principal,
-            Action: ["sqs:SendMessage"],
-            Resource: recovered.queueArn,
-          },
-        ]);
-        const tags = yield* SQS.listQueueTags({ QueueUrl: recovered.queueUrl });
-        expect(tags.Tags?.purpose).toBe("recovery");
-        expect(tags.Tags?.["alchemy::id"]).toBe("RecoveryQueue");
-
-        const unbound = yield* deployQueue("60 seconds", false);
-        expect(unbound).toEqual(recovered);
-        yield* waitForQueueAttributePredicate(
-          unbound.queueUrl,
-          (attrs) => !attrs.Policy,
-        );
-
-        yield* stack.destroy();
-        yield* assertQueueDeleted(recovered.queueUrl);
-      }),
-    { timeout: 120_000 },
-  );
-});
+          yield* stack.destroy();
+          yield* assertQueueDeleted(recovered.queueUrl);
+        }),
+      { tags: ["provider:aws:iam"], timeout: 120_000 },
+    );
+  },
+);
 
 // State-loss fixtures need cleanup even if adoption fails before state is restored.
 const ADOPT_QUEUE_NAME = "alchemy-test-sqs-adopt";
@@ -764,6 +795,7 @@ provider(
     }).pipe(
       Effect.ensuring(deleteQueueIfExists(ADOPT_QUEUE_NAME).pipe(Effect.orDie)),
     ),
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:sqs", "live"] },
 );
 
 describe.concurrent("queue adoption", () => {
@@ -870,7 +902,7 @@ describe.concurrent("queue adoption", () => {
         }).pipe(
           Effect.ensuring(deleteQueueIfExists(queueName).pipe(Effect.orDie)),
         ),
-      { timeout: 120_000 },
+      { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
     );
   }
 });
@@ -908,7 +940,7 @@ provider(
 
       yield* assertQueueDeleted(deployed.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
 provider(
@@ -956,7 +988,7 @@ provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(source.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
 provider(
@@ -987,49 +1019,55 @@ provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(dlq.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
-provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+provider(
+  "SSE-SQS encryption enables sqs-managed key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("SseSqsQueue", { sqsManagedSseEnabled: true });
-      }),
-    );
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("SseSqsQueue", { sqsManagedSseEnabled: true });
+        }),
+      );
 
-    yield* waitForQueueAttributeMatch(queue.queueUrl, {
-      SqsManagedSseEnabled: "true",
-    });
+      yield* waitForQueueAttributeMatch(queue.queueUrl, {
+        SqsManagedSseEnabled: "true",
+      });
 
-    yield* stack.destroy();
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
+      yield* stack.destroy();
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
 );
 
-provider("SSE-KMS encryption with AWS-managed key", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+provider(
+  "SSE-KMS encryption with AWS-managed key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const queue = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Queue("KmsQueue", {
-          kmsMasterKeyId: "alias/aws/sqs",
-          kmsDataKeyReusePeriod: "300 seconds",
-        });
-      }),
-    );
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("KmsQueue", {
+            kmsMasterKeyId: "alias/aws/sqs",
+            kmsDataKeyReusePeriod: "300 seconds",
+          });
+        }),
+      );
 
-    yield* waitForQueueAttributeMatch(queue.queueUrl, {
-      KmsMasterKeyId: "alias/aws/sqs",
-      KmsDataKeyReusePeriodSeconds: "300",
-    });
+      yield* waitForQueueAttributeMatch(queue.queueUrl, {
+        KmsMasterKeyId: "alias/aws/sqs",
+        KmsDataKeyReusePeriodSeconds: "300",
+      });
 
-    yield* stack.destroy();
-    yield* assertQueueDeleted(queue.queueUrl);
-  }),
+      yield* stack.destroy();
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
 );
 
 provider(
@@ -1054,7 +1092,7 @@ provider(
       yield* assertQueueDeleted(source.queueUrl);
       yield* assertQueueDeleted(queue.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
 provider(
@@ -1079,6 +1117,7 @@ provider(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
 );
 
 for (const property of ["fifo", "queueName"] as const) {
@@ -1115,7 +1154,7 @@ for (const property of ["fifo", "queueName"] as const) {
         expect(queues.QueueUrls ?? []).toEqual([]);
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
   );
 }
 
@@ -1140,6 +1179,7 @@ provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(queue.queueUrl);
     }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"] },
 );
 
 provider(
@@ -1189,7 +1229,7 @@ provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(withTags.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
 provider(
@@ -1220,7 +1260,7 @@ provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(source.queueUrl);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
 );
 
 class QueueNotListed extends Data.TaggedError("QueueNotListed") {}

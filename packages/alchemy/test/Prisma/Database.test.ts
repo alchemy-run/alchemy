@@ -109,7 +109,15 @@ test.provider(
     yield* expectDatabaseGone(initial.named.databaseId);
     yield* expectProjectGone(initial.project.projectId);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -178,5 +186,14 @@ test.provider(
     yield* expectBranchGone(initial.second.branchId);
     yield* expectProjectGone(initial.project.projectId);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:branch",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

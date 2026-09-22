@@ -53,7 +53,7 @@ test(
       expect(notes).toEqual(expect.arrayContaining(["hello", "warning"]));
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -78,7 +78,7 @@ test(
       expect(error.message).toContain("exited with code 7");
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -142,7 +142,7 @@ test(
       expect(alive).toBe(false);
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -214,7 +214,7 @@ test(
       expect(collisionNotes.join("\n")).not.toContain(markerCollision);
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 for (const mode of ["cooperative", "stubborn", "early-exit"]) {
@@ -243,7 +243,7 @@ for (const mode of ["cooperative", "stubborn", "early-exit"]) {
         yield* assertDead(pids.leaf);
       }),
     ),
-    { timeout: 20_000 },
+    { tags: ["unit", "local"], timeout: 20_000 },
   );
 }
 
@@ -265,7 +265,7 @@ test.skipIf(process.platform === "win32")(
       yield* assertDead(pids.leaf);
     }),
   ),
-  { timeout: 20_000 },
+  { tags: ["unit", "local"], timeout: 20_000 },
 );
 
 test.skipIf(process.platform === "win32")(
@@ -285,7 +285,7 @@ test.skipIf(process.platform === "win32")(
     expect(yield* fixture.has("wrapper.clean")).toBe(false);
     expect(yield* pidAlive(pids.leaf)).toBe(true);
   }),
-  { timeout: 20_000 },
+  { tags: ["unit", "local"], timeout: 20_000 },
 );
 
 test.skipIf(process.platform === "win32")(
@@ -307,7 +307,7 @@ test.skipIf(process.platform === "win32")(
       yield* assertDead(pids.leaf);
     }),
   ),
-  { timeout: 20_000 },
+  { tags: ["unit", "local"], timeout: 20_000 },
 );
 
 test.skipIf(process.platform === "win32")(
@@ -327,7 +327,7 @@ test.skipIf(process.platform === "win32")(
       yield* assertDead(pids.leaf);
     }),
   ),
-  { timeout: 20_000 },
+  { tags: ["unit", "local"], timeout: 20_000 },
 );
 
 test.skipIf(process.platform === "win32")(
@@ -347,5 +347,5 @@ test.skipIf(process.platform === "win32")(
     expect(yield* pidAlive(pids.wrapper)).toBe(true);
     expect(yield* pidAlive(pids.leaf)).toBe(true);
   }),
-  { timeout: 20_000 },
+  { tags: ["unit", "local"], timeout: 20_000 },
 );

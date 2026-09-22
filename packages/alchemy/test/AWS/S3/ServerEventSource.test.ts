@@ -47,9 +47,19 @@ let queueUrl: string | undefined;
 
 // Cold Docker/ECR/Fargate startup can exceed 120s; opt in with warm build
 // caches and an existing public default VPC. There is no ALB or HTTP probe.
-describe
-  .skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)
-  .concurrent("S3 Server/SQS event source on ECS", () => {
+describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
+  "S3 Server/SQS event source on ECS",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:ecs",
+      "provider:aws:s3",
+      "provider:aws:sqs",
+      "live",
+    ],
+  },
+  () => {
     beforeAll(Core.withProviders(stack.destroy(), testOptions, stackName), {
       timeout: 120_000,
     });
@@ -363,12 +373,20 @@ describe
             Body: content,
           });
           expect(source.VersionId).toBeTruthy();
-          yield* S3.putObject({ Bucket, Key: sourceKey, Body: "newer source" });
+          yield* S3.putObject({
+            Bucket,
+            Key: sourceKey,
+            Body: "newer source",
+          });
           const CopySource = yield* Effect.sync(
             () =>
               `${Bucket}/${encodeURIComponent(sourceKey)}?versionId=${encodeURIComponent(source.VersionId!)}`,
           );
-          const copied = yield* S3.copyObject({ Bucket, Key: key, CopySource });
+          const copied = yield* S3.copyObject({
+            Bucket,
+            Key: key,
+            CopySource,
+          });
           expect(copied.CopySourceVersionId).toBe(source.VersionId);
           expect(copied.VersionId).toBeTruthy();
           const overwritten = yield* S3.putObject({
@@ -414,7 +432,10 @@ describe
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}multipart/completed + 雪${INCOMING_SUFFIX}`;
           const content = "completed multipart version: 雪 + %";
-          const upload = yield* S3.createMultipartUpload({ Bucket, Key: key });
+          const upload = yield* S3.createMultipartUpload({
+            Bucket,
+            Key: key,
+          });
           expect(upload.UploadId).toBeTruthy();
           const UploadId = upload.UploadId!;
           yield* Effect.gen(function* () {
@@ -432,7 +453,9 @@ describe
               Bucket,
               Key: key,
               UploadId,
-              MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] },
+              MultipartUpload: {
+                Parts: [{ PartNumber: 1, ETag: part.ETag! }],
+              },
             });
             expect(completed.VersionId).toBeTruthy();
             const overwritten = yield* S3.putObject({
@@ -743,13 +766,17 @@ describe
           yield* Effect.forEach(excludedKeys, (excludedKey) =>
             assertArtifactCount(excludedKey, 0),
           ).pipe(
-            Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 4 }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              times: 4,
+            }),
           );
           yield* assertArtifactCount(key, 2);
         }),
       { timeout: 120_000 },
     );
-  });
+  },
+);
 
 interface NotificationIdentity {
   key: string;
