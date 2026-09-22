@@ -12,7 +12,6 @@ import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
-import { referenceRedirects } from "./plugins/reference-redirects.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
@@ -202,7 +201,6 @@ export default defineConfig({
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
-    referenceRedirects(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
