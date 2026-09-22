@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { rewriteForPagefind } from "./pagefind-ignore-noise.ts";
+import { rewriteReferenceLinks } from "../src/reference-links.ts";
 
 /** Populated before the sitemap integration runs. */
 export const noindexPaths = new Set();
@@ -78,7 +79,7 @@ export function buildOutputChecks(): AstroIntegration {
             path.join(distPath, htmlFile.slice(1)),
             "utf8",
           );
-          const html = rewriteForPagefind(before);
+          const html = rewriteForPagefind(rewriteReferenceLinks(before));
           if (noindexRegex.test(html)) {
             noindexPaths.add(
               htmlFile.endsWith("/index.html")

@@ -679,25 +679,11 @@ function linkifyMarkdown(markdown: string, resolve: LinkResolver): string {
   return out.join("\n");
 }
 
-/** Reduce `{@link ...}` tags to plain text for frontmatter descriptions. */
-function stripLinkTags(text: string): string {
-  return text.replace(LINK_TAG_RE, (_, inner: string) => {
-    const { target, label } = parseLinkTag(inner.replace(/\s+/g, " "));
-    return (label ?? normalizeLinkTarget(target)).replace(/`/g, "");
-  });
-}
-
 function yamlString(value: string): string {
   if (/[\n:"{}[\],&*?|>!%@`#]/.test(value) || value.trim() !== value) {
     return JSON.stringify(value);
   }
   return value;
-}
-
-function firstParagraph(value: string): string {
-  const idx = value.indexOf("\n\n");
-  const para = idx === -1 ? value : value.slice(0, idx);
-  return para.replace(/\s+/g, " ").trim();
 }
 
 function renderPageBody(doc: PageDoc): string {
@@ -724,30 +710,27 @@ function renderPageBody(doc: PageDoc): string {
   return parts.join("\n\n");
 }
 
-function renderPage(doc: PageDoc, resolve: LinkResolver): string {
-  const description =
-    stripLinkTags(firstParagraph(doc.summary)) ||
-    `API reference for ${doc.title}`;
-  const frontmatter = [
+function renderReferenceFrontmatter(title: string): string {
+  return [
     "---",
-    `title: ${yamlString(doc.title)}`,
-    `description: ${yamlString(description)}`,
-    // Generated reference pages are ~4k near-identical one-paragraph +
-    // one-snippet stubs (92% of the site). Indexed as separate documents
-    // they read as programmatic thin content, dilute crawl budget, and are
-    // what surfaces as "random" search results instead of the hub and
-    // guide pages. Keep them navigable and crawlable (`follow`) but out of
-    // search indexes; the sitemap integration drops any page carrying this
-    // meta. Revisit once pages are consolidated per service / carry real
-    // prose — this is the only line to change.
+    `title: ${yamlString(`${title} reference`)}`,
+    `description: ${yamlString(`Resources and capabilities for ${title}.`)}`,
+    // Keep the existing search-engine indexing policy during this experiment.
     "head:",
     "  - tag: meta",
     "    attrs:",
     "      name: robots",
     '      content: "noindex, follow"',
+    "prev: false",
+    "next: false",
+    "tableOfContents:",
+    "  minHeadingLevel: 2",
+    "  maxHeadingLevel: 2",
     "---",
   ].join("\n");
+}
 
+function renderResource(doc: PageDoc, resolve: LinkResolver): string {
   const headerLines = [`> **Source:** \`${doc.sourceDisplay}\``];
   if (doc.isLayer) {
     const meta = ["**Kind:** Layer"];
@@ -769,9 +752,47 @@ function renderPage(doc: PageDoc, resolve: LinkResolver): string {
   const body = linkifyMarkdown(renderPageBody(doc).trim(), resolve);
 
   if (body) {
-    return `${frontmatter}\n\n${sourceBlock}\n\n${body}\n`;
+    return `${sourceBlock}\n\n${body}\n`;
   }
-  return `${frontmatter}\n\n${sourceBlock}\n`;
+  return `${sourceBlock}\n`;
+}
+
+/** Change this grouping to experiment with larger or smaller reference pages. */
+function referenceLocation(outputRelative: string) {
+  const parts = normalizeSlashes(outputRelative)
+    .replace(/\.md$/, "")
+    .split("/");
+  const group = parts.length > 2 ? parts.slice(0, 2) : [parts[0], "reference"];
+  const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
+  return {
+    outputRelative: `${group.join("/")}.md`,
+    title: parts.length > 2 ? group.join(".") : parts[0],
+    resourceTitle: title,
+    link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
+  };
+}
+
+/** Keep example headings below their resource, with resource-scoped slugs. */
+function nestResourceHeadings(markdown: string, resource: string): string {
+  let fence: string | undefined;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length)
+          fence = undefined;
+        return line;
+      }
+      if (fence) return line;
+      return line.replace(
+        /^(#{1,6})\s+(.+)$/,
+        (_, hashes: string, title: string) =>
+          `${"#".repeat(Math.min(6, Math.max(3, hashes.length + 1)))} ${resource}: ${title}`,
+      );
+    })
+    .join("\n");
 }
 
 /** Providers shown first in the sidebar; the rest follow alphabetically. */
@@ -959,6 +980,8 @@ async function main() {
   const pageEntries: PageEntry[] = [];
   const pending: { outputRelative: string; doc: PageDoc }[] = [];
   let written = 0;
+  const redirects: Record<string, string> = {};
+  const anchors = new Set<string>();
   let skipped = 0;
 
   for (const root of config.roots) {
@@ -1021,15 +1044,20 @@ async function main() {
       const exportNames = exportedNames(sourceFile);
 
       const segments = normalizeSlashes(outputRelative).split("/");
+      const location = referenceLocation(outputRelative);
+      const oldLink = `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`;
+      if (anchors.has(location.link)) {
+        throw new Error(`Duplicate reference anchor: ${location.link}`);
+      }
+      anchors.add(location.link);
+      redirects[oldLink] = location.link;
       pageEntries.push({
         provider: segments[0] ?? "",
         service: segments.length > 2 ? segments[1] : "",
         resource: primary.name,
         category: primary.category,
         product: primary.product,
-        link: `/providers/${normalizeSlashes(outputRelative)
-          .replace(/\.md$/, "")
-          .toLowerCase()}`,
+        link: location.link,
         dir: normalizeSlashes(relDir),
         exports: exportNames,
       });
@@ -1039,13 +1067,29 @@ async function main() {
   // Second pass: render with `{@link}` resolution — the full page set must be
   // known before symbol targets can resolve to their pages.
   const resolverFor = makeLinkResolverFactory(pageEntries);
+  const groups = new Map<string, { title: string; sections: string[] }>();
   for (const page of pending) {
+    const location = referenceLocation(page.outputRelative);
     const resolve = resolverFor(
       normalizeSlashes(path.dirname(page.outputRelative)),
     );
-    const outputPath = path.join(config.outRoot, page.outputRelative);
+    const group = groups.get(location.outputRelative) ?? {
+      title: location.title,
+      sections: [],
+    };
+    group.sections.push(
+      `## ${location.resourceTitle}\n\n${nestResourceHeadings(renderResource(page.doc, resolve), location.resourceTitle)}`,
+    );
+    groups.set(location.outputRelative, group);
+  }
+  for (const [relative, group] of groups) {
+    const outputPath = path.join(config.outRoot, relative);
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, renderPage(page.doc, resolve), "utf8");
+    await fs.writeFile(
+      outputPath,
+      `${renderReferenceFrontmatter(group.title)}\n\n${group.sections.join("\n\n")}\n`,
+      "utf8",
+    );
     written++;
   }
 
@@ -1084,13 +1128,17 @@ async function main() {
   );
   await fs.mkdir(path.dirname(sidebarPath), { recursive: true });
   await fs.writeFile(
+    path.join(websiteRoot, "src/generated/reference-redirects.json"),
+    `${JSON.stringify(redirects, null, 2)}\n`,
+  );
+  await fs.writeFile(
     sidebarPath,
     `${JSON.stringify(sidebar, null, 2)}\n`,
     "utf8",
   );
 
   console.log(
-    `Done. Wrote ${written} resource pages (skipped ${skipped} untagged) to ${normalizeSlashes(
+    `Done. Wrote ${written} reference pages containing ${pending.length} resources (skipped ${skipped} untagged) to ${normalizeSlashes(
       path.relative(path.join(import.meta.dir, ".."), config.outRoot),
     )}.`,
   );
