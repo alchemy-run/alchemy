@@ -49,7 +49,10 @@ import { makeMachineLeases } from "@/Fly/leases";
 import * as Clock from "effect/Clock";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
-import { type MachineProps } from "@/Fly/Machine";
+import { type MachineContainer, type MachineProps } from "@/Fly/Machine";
+import { ReplicaChecksNotPassing } from "@/Fly/replicas";
+import type { ScratchStack } from "@/Test/Alchemy";
+import * as Path from "effect/Path";
 import * as Deferred from "effect/Deferred";
 import {
   assertReadinessCommit,
@@ -10795,5 +10798,659 @@ describe.sequential(
         );
       }
     });
+  },
+);
+
+describe.sequential(
+  "multi-container",
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+  },
+  () => {
+    const { test } = Test.make({ providers: Fly.providers() });
+    const firstImage =
+      "docker-hub-mirror.fly.io/library/nginx@sha256:7396be67b6f53012a5cf955fa9040619294c25ccacf11e22af5de1b572fc756e";
+    const nextImage =
+      "docker-hub-mirror.fly.io/library/nginx@sha256:ef8676b33d681f272ba429b27658bdd7e640963279714c96bddf1dc76307f7b6";
+
+    interface GroupOptions {
+      count?: number;
+      /** Reverse declaration order and add empty optional fields. */
+      reordered?: boolean;
+      /** Add a third container to the group. */
+      extra?: boolean;
+      badHealth?: boolean;
+      strategy?: "rolling" | "bluegreen";
+    }
+
+    const containers = (
+      sidecarImage: string,
+      { reordered = false, extra = false }: GroupOptions,
+    ): MachineContainer[] => {
+      const group: MachineContainer[] = [
+        {
+          name: "web",
+          image: firstImage,
+          healthChecks: [
+            {
+              name: "web-tcp",
+              kind: "readiness",
+              tcp: { port: 80 },
+              interval: 5,
+              timeout: 2,
+            },
+          ],
+        },
+        {
+          name: "sidecar",
+          image: sidecarImage,
+          cmd: [
+            "sh",
+            "-c",
+            "sed -i 's/80/8080/g' /etc/nginx/conf.d/default.conf; exec nginx -g 'daemon off;'",
+          ],
+          dependsOn: [{ name: "web", condition: "healthy" }],
+          healthChecks: [
+            {
+              name: "sidecar-tcp",
+              kind: "readiness",
+              tcp: { port: 8080 },
+              interval: 5,
+              timeout: 2,
+            },
+          ],
+        },
+        ...(extra
+          ? [
+              {
+                name: "extra",
+                image: firstImage,
+                cmd: ["sh", "-c", "sleep infinity"],
+              },
+            ]
+          : []),
+      ];
+      return reordered
+        ? group.reverse().map((container) => ({ ...container, env: {} }))
+        : group;
+    };
+
+    const machineChecks = (badHealth: boolean) => ({
+      web: { type: "tcp" as const, port: 80, interval: "2s", timeout: "1s" },
+      sidecar: {
+        type: "tcp" as const,
+        port: badHealth ? 9999 : 8080,
+        interval: "2s",
+        timeout: "1s",
+      },
+    });
+
+    const deployGroup = (
+      stack: ScratchStack,
+      sidecarImage: string,
+      options: GroupOptions = {},
+    ) =>
+      stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Fly.App("MultiContainerBlueGreenSite");
+          return yield* Fly.Machine("Group", {
+            app,
+            region: "fra",
+            count: options.count ?? 1,
+            guest: { cpus: 1, memoryMb: 256 },
+            containers: containers(sidecarImage, options),
+            checks: machineChecks(options.badHealth ?? false),
+            deploy: {
+              strategy: options.strategy ?? "bluegreen",
+              healthTimeout: options.badHealth ? "15 seconds" : "30 seconds",
+            },
+            shutdown: { signal: "SIGTERM", timeout: "1 second" },
+          });
+        }),
+      );
+
+    const images = (machine: Machine) =>
+      (machine.config?.containers ?? [])
+        .map(({ name, image }) => ({ name, image }))
+        .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+
+    const appGone = (appName: string) =>
+      machines.getApp({ app_name: appName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+      );
+
+    const machineGone = (appName: string, machineId: string) =>
+      machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
+        Effect.map((machine) => machine.state === "destroyed"),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+          until: (gone) => gone,
+        }),
+      );
+
+    test.provider(
+      "checks two named-container replicas and ignores declaration order and empty fields",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const first = yield* deployGroup(stack, firstImage, { count: 2 });
+          expect(first.machineIds).toHaveLength(2);
+          const observed = yield* Effect.forEach(first.machineIds, (id) =>
+            machines.getMachine({ app_name: first.appName, machine_id: id }),
+          );
+          for (const machine of observed) {
+            expect(images(machine)).toEqual([
+              { name: "sidecar", image: firstImage },
+              { name: "web", image: firstImage },
+            ]);
+            expect(machine.cordoned).toBe(false);
+            expect(machine.config?.metadata?.[keys.phase]).toBe("active");
+            expect(machine.config?.metadata?.[keys.protocol]).toBe("2");
+            const ready = yield* waitHealthy(first.appName, machine, 30_000);
+            for (const check of ["web", "sidecar"])
+              expect(
+                ready.checks?.some(
+                  ({ name, status }) => name === check && status === "passing",
+                ),
+              ).toBe(true);
+          }
+          const reordered = yield* deployGroup(stack, firstImage, {
+            count: 2,
+            reordered: true,
+          });
+          expect([...reordered.machineIds].sort()).toEqual(
+            [...first.machineIds].sort(),
+          );
+          for (const machine of observed) {
+            const after = yield* machines.getMachine({
+              app_name: first.appName,
+              machine_id: machine.id!,
+            });
+            expect(after.instance_id).toBe(machine.instance_id);
+          }
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "named group transitions from rolling to blue/green and back",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rolling = yield* deployGroup(stack, firstImage, {
+            strategy: "rolling",
+          });
+          const promoted = yield* deployGroup(stack, firstImage);
+          expect(promoted.machineId).not.toBe(rolling.machineId);
+          const promotedMachine = yield* machines.getMachine({
+            app_name: promoted.appName,
+            machine_id: promoted.machineId,
+          });
+          expect(promotedMachine.config?.metadata?.[keys.protocol]).toBe("2");
+          expect(images(promotedMachine)).toEqual([
+            { name: "sidecar", image: firstImage },
+            { name: "web", image: firstImage },
+          ]);
+          const optedOut = yield* deployGroup(stack, firstImage, {
+            strategy: "rolling",
+          });
+          expect(optedOut.machineId).toBe(promoted.machineId);
+          const live = yield* machines.getMachine({
+            app_name: optedOut.appName,
+            machine_id: optedOut.machineId,
+          });
+          expect(live.config?.metadata?.[keys.protocol]).toBeUndefined();
+          expect(images(live)).toEqual([
+            { name: "sidecar", image: firstImage },
+            { name: "web", image: firstImage },
+          ]);
+          yield* stack.destroy();
+          expect(yield* appGone(rolling.appName)).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "a single-image blue/green generation is replaced by a named group",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const single = yield* stack.deploy(
+            Effect.gen(function* () {
+              const app = yield* Fly.App("MultiContainerBlueGreenSite");
+              return yield* Fly.Machine("Group", {
+                app,
+                region: "fra",
+                guest: { cpus: 1, memoryMb: 256 },
+                image: firstImage,
+                checks: { web: machineChecks(false).web },
+                deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
+                shutdown: { signal: "SIGTERM", timeout: "1 second" },
+              });
+            }),
+          );
+          const before = yield* machines.getMachine({
+            app_name: single.appName,
+            machine_id: single.machineId,
+          });
+          expect(before.config?.metadata?.[keys.protocol]).toBe("1");
+          const group = yield* deployGroup(stack, firstImage);
+          expect(group.machineId).not.toBe(single.machineId);
+          const after = yield* machines.getMachine({
+            app_name: group.appName,
+            machine_id: group.machineId,
+          });
+          expect(after.config?.metadata?.[keys.protocol]).toBe("2");
+          expect(after.config?.metadata?.[keys.phase]).toBe("active");
+          expect(images(after)).toEqual([
+            { name: "sidecar", image: firstImage },
+            { name: "web", image: firstImage },
+          ]);
+          expect(yield* machineGone(single.appName, single.machineId)).toBe(
+            true,
+          );
+          yield* stack.destroy();
+          expect(yield* appGone(single.appName)).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "changing one image or adding a container replaces the whole group",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const first = yield* deployGroup(stack, firstImage);
+          const updated = yield* deployGroup(stack, nextImage, {
+            reordered: true,
+          });
+          expect(updated.machineId).not.toBe(first.machineId);
+          const replacement = yield* machines.getMachine({
+            app_name: updated.appName,
+            machine_id: updated.machineId,
+          });
+          expect(images(replacement)).toEqual([
+            { name: "sidecar", image: nextImage },
+            { name: "web", image: firstImage },
+          ]);
+          expect(replacement.cordoned).toBe(false);
+          expect(replacement.config?.metadata?.[keys.phase]).toBe("active");
+          expect(yield* machineGone(first.appName, first.machineId)).toBe(true);
+
+          const extended = yield* deployGroup(stack, nextImage, {
+            extra: true,
+          });
+          expect(extended.machineId).not.toBe(updated.machineId);
+          expect(
+            images(
+              yield* machines.getMachine({
+                app_name: extended.appName,
+                machine_id: extended.machineId,
+              }),
+            ),
+          ).toEqual([
+            { name: "extra", image: firstImage },
+            { name: "sidecar", image: nextImage },
+            { name: "web", image: firstImage },
+          ]);
+          expect(yield* machineGone(updated.appName, updated.machineId)).toBe(
+            true,
+          );
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "bad secondary readiness preserves the serving predecessor",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const first = yield* deployGroup(stack, firstImage);
+          const failed = yield* deployGroup(stack, nextImage, {
+            badHealth: true,
+          }).pipe(Effect.result);
+          expect(Result.isFailure(failed)).toBe(true);
+          const predecessor = yield* machines.getMachine({
+            app_name: first.appName,
+            machine_id: first.machineId,
+          });
+          expect(predecessor.state).toBe("started");
+          expect(predecessor.cordoned).toBe(false);
+          expect(predecessor.config?.metadata?.[keys.phase]).toBe("active");
+          expect(images(predecessor)).toEqual([
+            { name: "sidecar", image: firstImage },
+            { name: "web", image: firstImage },
+          ]);
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "tampered deployment metadata preserves the serving group",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const first = yield* deployGroup(stack, firstImage);
+          const target = {
+            app_name: first.appName,
+            machine_id: first.machineId,
+          };
+          const original = yield* machines.getMachine(target);
+          const tamperings: Array<[string, Record<string, string>]> = [
+            ["unknown protocol", { [keys.protocol]: "future" }],
+            [
+              "incomplete image set",
+              {
+                [keys.containerImageSet]: JSON.stringify([
+                  { name: "web", image: firstImage },
+                ]),
+              },
+            ],
+          ];
+          for (const [label, overrides] of tamperings) {
+            // Rewrite Alchemy's ownership metadata directly through the Fly API.
+            const current = yield* machines.getMachine(target);
+            const tampered = yield* machines.updateMachine({
+              ...target,
+              config: {
+                ...current.config,
+                metadata: { ...original.config?.metadata, ...overrides },
+              },
+            });
+            yield* machines.waitMachine({
+              ...target,
+              state: "started",
+              instance_id: tampered.instance_id,
+              timeout: 30,
+            });
+            const failed = yield* deployGroup(stack, nextImage).pipe(
+              Effect.flip,
+            );
+            expect(failed, label).toBeInstanceOf(DeploymentRecoveryAmbiguous);
+            const preserved = yield* machines.getMachine(target);
+            expect(preserved.instance_id, label).toBe(tampered.instance_id);
+            expect(preserved.state, label).toBe("started");
+            expect(images(preserved), label).toEqual([
+              { name: "sidecar", image: firstImage },
+              { name: "web", image: firstImage },
+            ]);
+            const inventory = (yield* machines.listMachines({
+              app_name: first.appName,
+            })).filter((machine) => machine.state !== "destroyed");
+            expect(
+              inventory.map(({ id }) => id),
+              label,
+            ).toEqual([first.machineId]);
+          }
+          const restored = yield* machines.updateMachine({
+            ...target,
+            config: {
+              ...(yield* machines.getMachine(target)).config,
+              metadata: original.config?.metadata,
+            },
+          });
+          yield* machines.waitMachine({
+            ...target,
+            state: "started",
+            instance_id: restored.instance_id,
+            timeout: 30,
+          });
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+  },
+);
+
+describe.sequential(
+  "multi-container public traffic",
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+  },
+  () => {
+    const { test } = Test.make({ providers: Fly.providers() });
+    const image =
+      "docker-hub-mirror.fly.io/library/node@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85";
+
+    const scenario = (stack: ScratchStack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const script = yield* fs.readFileString(
+          yield* path.fromFileUrl(
+            new URL("./fixtures/multi-container-http.mjs", import.meta.url),
+          ),
+        );
+        return (version: string, badHealth = false) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const app = yield* Fly.App("Traffic");
+              yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
+              return yield* Fly.Machine("Group", {
+                app,
+                region: "fra",
+                guest: { cpus: 1, memoryMb: 256 },
+                containers: [
+                  {
+                    name: "web",
+                    image,
+                    cmd: ["node", "--input-type=module", "-e", script],
+                    env: {
+                      PORT: "3000",
+                      CONTAINER_NAME: "web",
+                      VERSION: version,
+                    },
+                  },
+                  {
+                    name: "sidecar",
+                    image,
+                    cmd: ["node", "--input-type=module", "-e", script],
+                    env: {
+                      PORT: "3001",
+                      CONTAINER_NAME: "sidecar",
+                      VERSION: version,
+                      BAD_HEALTH: String(badHealth),
+                    },
+                    dependsOn: [{ name: "web", condition: "started" }],
+                  },
+                ],
+                checks: {
+                  sidecar: {
+                    type: "http",
+                    port: 3001,
+                    path: "/health",
+                    interval: "2s",
+                    timeout: "1s",
+                  },
+                },
+                services: [
+                  {
+                    protocol: "tcp",
+                    internalPort: 3000,
+                    ports: [{ port: 443, handlers: ["tls", "http"] }],
+                    checks: [
+                      {
+                        type: "http",
+                        port: 3000,
+                        path: "/health",
+                        interval: "2s",
+                        timeout: "1s",
+                      },
+                    ],
+                    autostop: "off",
+                  },
+                ],
+                deploy: {
+                  strategy: "bluegreen",
+                  healthTimeout: badHealth ? "15 seconds" : "30 seconds",
+                },
+                shutdown: { signal: "SIGTERM", timeout: "10 seconds" },
+              });
+            }),
+          );
+      });
+
+    const request = (appName: string, route = "/") =>
+      HttpClient.get(`https://${appName}.fly.dev${route}`, {
+        headers: { connection: "close" },
+      }).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Public HTTP ${response.status}`)),
+        ),
+        Effect.timeout("5 seconds"),
+      );
+    const version = (appName: string) =>
+      request(appName).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.timeout("5 seconds"),
+      );
+    const sampleTraffic = (appName: string) =>
+      Effect.gen(function* () {
+        const samples = yield* Ref.make<string[]>([]);
+        const finished = yield* Ref.make(false);
+        const fiber = yield* Stream.range(0, 359).pipe(
+          Stream.mapEffect(() =>
+            version(appName).pipe(
+              Effect.result,
+              Effect.flatMap((result) =>
+                Ref.update(samples, (values) => [
+                  ...values,
+                  Result.isSuccess(result) ? result.success : "HTTP failure",
+                ]),
+              ),
+              Effect.andThen(Effect.sleep("250 millis")),
+              Effect.andThen(Ref.get(finished)),
+            ),
+          ),
+          Stream.takeUntil((done) => done),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+        return Effect.gen(function* () {
+          yield* Ref.set(finished, true);
+          yield* Fiber.join(fiber);
+          return yield* Ref.get(samples);
+        });
+      });
+    const appGone = (appName: string) =>
+      machines.getApp({ app_name: appName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+      );
+    const deployServing = (stack: ScratchStack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const deploy = yield* scenario(stack);
+        const first = yield* deploy("old");
+        expect(
+          yield* version(first.appName).pipe(
+            Effect.retry({ times: 8, schedule: Schedule.spaced("1 second") }),
+          ),
+        ).toBe("old");
+        return { first, deploy };
+      });
+
+    test.provider(
+      "public replacement drains in-flight requests in both containers after SIGTERM",
+      (stack) =>
+        Effect.gen(function* () {
+          const { first, deploy } = yield* deployServing(stack);
+          const finishTraffic = yield* sampleTraffic(first.appName);
+          // Headers arrive only once the request is held inside each container.
+          const web = yield* request(first.appName, "/hold");
+          const sidecar = yield* request(first.appName, "/sidecar/hold");
+          const webBody = yield* web.text.pipe(
+            Effect.timeout("90 seconds"),
+            Effect.forkScoped,
+          );
+          const sidecarBody = yield* sidecar.text.pipe(
+            Effect.timeout("90 seconds"),
+            Effect.forkScoped,
+          );
+          const second = yield* deploy("new");
+          expect(second.machineId).not.toBe(first.machineId);
+          for (const [name, body] of [
+            ["web", yield* Fiber.join(webBody)],
+            ["sidecar", yield* Fiber.join(sidecarBody)],
+          ]) {
+            expect(body).toBe(
+              "waiting\n" +
+                JSON.stringify({
+                  machine: first.machineId,
+                  name,
+                  version: "old",
+                  signal: "SIGTERM",
+                }),
+            );
+          }
+          expect(yield* version(first.appName)).toBe("new");
+          // Include a post-cutover sample before joining the continuous probe.
+          yield* Effect.sleep("500 millis");
+          const samples = yield* finishTraffic;
+          expect(samples).toContain("old");
+          expect(samples).toContain("new");
+          expect(
+            samples.every((sample) => sample === "old" || sample === "new"),
+          ).toBe(true);
+          const oldGone = yield* machines
+            .getMachine({
+              app_name: first.appName,
+              machine_id: first.machineId,
+            })
+            .pipe(
+              Effect.map((machine) => machine.state === "destroyed"),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            );
+          expect(oldGone).toBe(true);
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "unhealthy container candidates never receive public traffic",
+      (stack) =>
+        Effect.gen(function* () {
+          const { first, deploy } = yield* deployServing(stack);
+          const finishTraffic = yield* sampleTraffic(first.appName);
+          const failed = yield* deploy("unready", true).pipe(Effect.flip);
+          expect(failed).toBeInstanceOf(ReplicaChecksNotPassing);
+          if (failed instanceof ReplicaChecksNotPassing) {
+            expect(failed.machineId).not.toBe(first.machineId);
+            expect(
+              failed.checks.some(
+                (check) =>
+                  check.name === "sidecar" && check.status !== "passing",
+              ),
+            ).toBe(true);
+          }
+          expect(yield* version(first.appName)).toBe("old");
+          const samples = yield* finishTraffic;
+          expect(samples.length).toBeGreaterThan(1);
+          expect([...new Set(samples)]).toEqual(["old"]);
+          const old = yield* machines.getMachine({
+            app_name: first.appName,
+            machine_id: first.machineId,
+          });
+          expect(old.state).toBe("started");
+          expect(old.cordoned).toBe(false);
+          yield* stack.destroy();
+          expect(yield* appGone(first.appName)).toBe(true);
+        }),
+      { timeout: 300_000 },
+    );
   },
 );
