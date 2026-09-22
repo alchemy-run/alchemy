@@ -41,7 +41,7 @@ const runFixture = (path: string) =>
     },
   );
 
-describe("importStack", () => {
+describe("importStack", { tags: ["unit", "local"] }, () => {
   test("--env-file is rejected when the stack declares its own secrets", () =>
     TestCore.run(
       Effect.gen(function* () {

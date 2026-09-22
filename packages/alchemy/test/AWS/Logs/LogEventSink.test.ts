@@ -182,5 +182,8 @@ test.provider(
         ),
       ).toBe(false);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"],
+    timeout: 240_000,
+  },
 );

@@ -11,6 +11,8 @@ import type { LogEntry } from "./Model.ts";
 export type TestStatus = "pass" | "fail" | "skip" | "todo";
 
 export interface TestMeta {
+  readonly tags: ReadonlyArray<string>;
+  readonly optInTags: ReadonlyArray<string>;
   /** Stable id: `<file> > <describe chain> > <name>`. */
   readonly id: string;
   readonly file: string;

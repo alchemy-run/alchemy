@@ -5,6 +5,7 @@
  * alchemy-test [paths...] [-t pattern] [--exclude path]... [--timeout ms]
  *              [--retry n] [--concurrency n] [--sequential] [--tui]
  *              [--profile name] [--fast]
+ *              [--tags 'unit || (e2e && !live)']
  * ```
  *
  * Runs every `*.test.ts` under the given paths (default `./test`) in a single
@@ -52,6 +53,13 @@ const testNamePattern = Flag.String("test-name-pattern").pipe(
 const exclude = Flag.String("exclude").pipe(
   Flag.withDescription(
     "Skip test files under this path (repeatable). Existing files/directories exclude by prefix; anything else is a case-insensitive substring filter. Explicitly passing an excluded path as a positional argument overrides the exclusion.",
+  ),
+  Flag.atLeast(0),
+);
+
+const tagsFilter = Flag.String("tags").pipe(
+  Flag.withDescription(
+    'Select tags using &&, ||, !, parentheses and * wildcards (e.g. "e2e && provider:aws && !slow"). Repeated filters are ANDed.',
   ),
   Flag.atLeast(0),
 );
@@ -141,6 +149,7 @@ const rootCommand = Command.make(
   {
     paths,
     testNamePattern,
+    tagsFilter,
     exclude,
     timeout,
     retry,
@@ -199,6 +208,7 @@ const rootCommand = Command.make(
       paths: args.paths,
       exclude: args.exclude,
       filter: toFilter(args.testNamePattern),
+      tagsFilter: args.tagsFilter,
       timeout: args.timeout,
       retry: args.retry,
       concurrency: toConcurrency(args.concurrency),

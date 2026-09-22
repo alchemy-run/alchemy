@@ -68,6 +68,15 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000, exclusive: true },
+    {
+      tags: [
+        "provider:hetzner",
+        "provider:hetzner:server",
+        "provider:hetzner:service",
+        "live",
+      ],
+      timeout: 120_000,
+      exclusive: true,
+    },
   );
 }

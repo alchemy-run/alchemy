@@ -1245,6 +1245,8 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
             file: event.file,
             titlePath: ["[file]"],
             name: "[file]",
+            tags: [],
+            optInTags: [],
           },
           "fail",
           {

@@ -8,7 +8,7 @@ import { BetterAuth, Database } from "@/index.ts";
 import { Drizzle } from "@/Drizzle.ts";
 import * as schema from "./fixtures/drizzle-auth-schema.ts";
 
-describe("BetterAuth (drizzle)", () => {
+describe("BetterAuth (drizzle)", { tags: ["unit", "local"] }, () => {
   it.live(
     "uses generated Relations v2 for sign-up, sign-in, and joined sessions",
     () =>

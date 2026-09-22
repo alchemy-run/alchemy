@@ -81,6 +81,7 @@ const getJson = <T>(
 
 describe.skipIf(!!process.env.FAST)(
   "DurableObjectState.abort resets the isolate",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
   () => {
     test(
       "abort resets the Durable Object so the constructor re-runs",

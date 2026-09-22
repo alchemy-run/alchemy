@@ -40,6 +40,7 @@ it.effect(
         }),
       ).toBe(false);
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
 
 it.effect(
@@ -71,6 +72,7 @@ it.effect(
       expect(emitSchemas(contract)).not.toContain("Postgres");
       expect(emitSchemas(contract)).not.toContain("@prisma");
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
 
 it.effect(
@@ -135,6 +137,7 @@ it.effect(
         'Schema.Literals(["active","inactive"])',
       );
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
 
 it.effect(
@@ -147,6 +150,7 @@ it.effect(
       expect(first).not.toContain('"posts":');
       expect(first).not.toContain('"author":');
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
 
 it.effect(
@@ -188,4 +192,5 @@ it.effect(
       ).toBe(true);
       expect(emitSchemas(custom, options)).toContain('"id": Schema.String');
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );

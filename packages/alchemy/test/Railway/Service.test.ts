@@ -456,7 +456,16 @@ test.provider(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -518,7 +527,16 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.worker.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const localContextDir = `${import.meta.dirname}/fixtures/local-context`;
@@ -614,7 +632,16 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.api.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // GitHub repo source requires a GitHub App connection on the Railway
@@ -645,7 +672,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:railway", "provider:railway:service", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!githubEntitled)(
@@ -692,5 +722,14 @@ test.provider.skipIf(!githubEntitled)(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

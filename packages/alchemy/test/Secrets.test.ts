@@ -103,7 +103,7 @@ const values = Effect.all({
   empty: Config.String("ALCHEMY_DOTENV_TEST_EMPTY"),
 });
 
-describe("stack secrets", () => {
+describe("stack secrets", { tags: ["unit", "local"] }, () => {
   it.effect("scratch deploys and plans retain per-call config overrides", () =>
     TestCore.toEffect(
       Effect.gen(function* () {

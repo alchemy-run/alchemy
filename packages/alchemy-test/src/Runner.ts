@@ -1,9 +1,8 @@
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
- * collector rides AsyncLocalStorage, so registration attribution survives
- * concurrent imports — see Registry.ts), then executes every collected
+ * Discovers `*.test.ts` files, imports them sequentially with an explicit
+ * per-file collector (see Registry.ts), then executes every collected
  * test as an Effect — files run concurrently up to a limit, tests within a
  * file run sequentially unless their suite is `describe.concurrent`. Each
  * test gets a buffering Effect Logger + Console so its output can be shown
@@ -27,6 +26,7 @@ import { makeFileLog } from "./FileLog.ts";
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, titlePath } from "./Model.ts";
 import * as Registry from "./Registry.ts";
+import { compileTagsFilter, type TagsFilter } from "./Tags.ts";
 import {
   Reporter,
   type RunController,
@@ -58,6 +58,8 @@ export interface RunOptions {
    * (`file > describe chain > name`).
    */
   readonly filter?: ((fullTitle: string) => boolean) | undefined;
+  /** Match the combined suite and test tags, in addition to other filters. */
+  readonly tagsFilter?: ReadonlyArray<string>;
   /** Default per-test timeout in ms. */
   readonly timeout: number;
   /** Times a failing test body is re-run before being reported as failed. */
@@ -291,8 +293,8 @@ const collectFile = (
         await import(pathToFileURL(absolute).href);
         // Flush microtasks + one macrotask so registrations deferred with
         // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
-        // tree — their ALS context resolves this file's collector.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        // tree — their AsyncLocalStorage context resolves this file's collector.
+        await new Promise<void>((resolve) => setImmediate(resolve));
       });
       return { file: relative, suite };
     } catch (error) {
@@ -323,7 +325,9 @@ const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
   hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
 
 interface ExecContext {
-  readonly options: RunOptions;
+  readonly options: Omit<RunOptions, "tagsFilter"> & {
+    readonly tagsFilter: TagsFilter;
+  };
   readonly onlyMode: boolean;
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   readonly fileLogs: Array<LogEntry>;
@@ -345,6 +349,8 @@ const metaOf = (file: string, test: TestCase): TestMeta => {
     file,
     titlePath: parts,
     name: test.name,
+    tags: test.tags,
+    optInTags: test.optInTags,
   };
 };
 
@@ -353,6 +359,12 @@ const included = (
   test: TestCase,
   ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
+  if (
+    ctx.options.tagsFilter !== undefined &&
+    !ctx.options.tagsFilter(test.tags, test.optInTags)
+  ) {
+    return false;
+  }
   if (ctx.options.filter !== undefined) {
     // Match against the full nested title, so `-t` finds a test by any
     // fragment regardless of how it's nested in describe blocks.
@@ -562,7 +574,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     );
   };
 
-  const start = Date.now();
+  let durationMs = 0;
   let retries = 0;
   const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
 
@@ -572,9 +584,25 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     Effect.Effect<any>,
     Exit.Exit<TestAttempt, unknown>
   > {
-    const fiber = yield* Effect.forkChild(withLock(attempt()), {
-      startImmediately: true,
-    });
+    const fiber = yield* Effect.forkChild(
+      withLock(
+        Effect.suspend(() => {
+          // Queue time behind an exclusive test is not execution time. Sum only
+          // attempts (including their hooks), retaining time spent on retries.
+          const start = Date.now();
+          return attempt().pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                durationMs += Date.now() - start;
+              }),
+            ),
+          );
+        }),
+      ),
+      {
+        startImmediately: true,
+      },
+    );
     ctx.running.set(meta.id, fiber);
     const exit: Exit.Exit<TestAttempt, unknown> = yield* Fiber.await(fiber);
     ctx.running.delete(meta.id);
@@ -591,7 +619,6 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     logs.length = 0;
     exit = yield* runAttempt();
   }
-  const durationMs = Date.now() - start;
 
   let status: TestResult["status"];
   let error: string | undefined;
@@ -779,7 +806,11 @@ const suiteHasRunnableTests = (
 // run
 // ---------------------------------------------------------------------------
 
-export const run = Effect.fn(function* (options: RunOptions) {
+export const run = Effect.fn(function* (input: RunOptions) {
+  const options = {
+    ...input,
+    tagsFilter: compileTagsFilter(input.tagsFilter ?? []),
+  };
   const reporter = yield* Reporter;
   const path = yield* Path.Path;
   const startedAt = Date.now();
@@ -790,23 +821,13 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const emit = (event: TestEvent): Effect.Effect<void> =>
     reporter.emit(event).pipe(Effect.andThen(fileLog.append(event)));
 
-  const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
+  const absoluteFiles = yield* discover(input).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
 
-  // Phase 1 — import EVERY file before running anything, in parallel.
-  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
-  // registration stays correctly attributed under concurrent imports.
-  // Collecting fully up-front keeps run semantics simple: `.only` applies
-  // across the whole run, and the full test list is known before the first
-  // test starts.
-  //
-  // Concurrency is BOUNDED: kicking off every import at once floods the
-  // main thread with synchronous parse/link/evaluate work — timers and the
-  // progress line starve (a slow start becomes indistinguishable from a
-  // hang), and it maximizes exposure to loader races under concurrent
-  // dynamic imports. The shared dependency graph is deduped by the module
-  // cache, so a modest bound keeps nearly all of the speedup.
+  // Import every file before running anything so `.only` applies across
+  // the whole run. AsyncLocalStorage keeps registrations attached to their
+  // file while imports overlap. Bound collection to avoid loader saturation.
   const collectConcurrency =
     options.concurrency === "unbounded"
       ? 32

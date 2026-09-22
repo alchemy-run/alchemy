@@ -141,7 +141,16 @@ test.provider(
       );
       expect(proxyGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:tcpproxy",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -203,5 +212,14 @@ test.provider(
       );
       expect(proxyGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:tcpproxy",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

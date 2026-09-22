@@ -164,7 +164,10 @@ test.provider(
         "10.172.0.0/16",
       );
     }),
-  { timeout: clientVpnTestTimeout },
+  {
+    tags: ["provider:aws", "provider:aws:acm", "provider:aws:ec2", "live"],
+    timeout: clientVpnTestTimeout,
+  },
 );
 
 test.provider(
@@ -215,7 +218,10 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: clientVpnTestTimeout },
+  {
+    tags: ["provider:aws", "provider:aws:acm", "provider:aws:ec2", "live"],
+    timeout: clientVpnTestTimeout,
+  },
 );
 
 test.provider(
@@ -281,5 +287,8 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: clientVpnTestTimeout },
+  {
+    tags: ["provider:aws", "provider:aws:acm", "provider:aws:ec2", "live"],
+    timeout: clientVpnTestTimeout,
+  },
 );

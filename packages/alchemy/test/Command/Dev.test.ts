@@ -103,7 +103,7 @@ test.provider(
       const all = yield* provider.list();
       expect(all).toEqual([]);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -127,7 +127,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -163,7 +163,7 @@ test.provider(
       yield* waitForDeath(alpha.pid);
       yield* waitForDeath(beta.pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -195,7 +195,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(first.pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -232,7 +232,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(second.pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -260,7 +260,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -289,7 +289,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -323,7 +323,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -355,7 +355,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -386,7 +386,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -417,7 +417,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 test.provider(
@@ -441,7 +441,7 @@ test.provider(
       yield* waitForDeath(pid);
       expect(yield* isAlive(pid)).toBe(false);
     }),
-  { timeout: 30_000 },
+  { tags: ["local"], timeout: 30_000 },
 );
 
 inProcessTest.provider(
@@ -460,9 +460,10 @@ inProcessTest.provider(
       expect(error.reason.exitCode).toBe(1);
       expect(error.reason.stderr).toContain("I'm not feeling it...");
     }),
+  { tags: ["local"] },
 );
 
-describe("extractUrl", () => {
+describe("extractUrl", { tags: ["unit", "local"] }, () => {
   it("returns a plain URL when it is the only match", () => {
     expect(Command.extractUrl("Local: http://localhost:5173/")).toBe(
       "http://localhost:5173/",

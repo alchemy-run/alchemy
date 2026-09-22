@@ -84,5 +84,16 @@ test.skipIf(!runLive)(
       expect.arrayContaining([{ id: 1, name: "anvil" }]),
     );
   }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:prisma",
+      "provider:prisma:connection",
+      "provider:prisma:project",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

@@ -42,6 +42,7 @@ const LONG_RUNNING_CJS = fileURLToPath(
 for (const runtime of runtimes()) {
   describe.skipIf(!runtime.available)(
     `Local.RpcSpawner cleanup (${runtime.name})`,
+    { tags: ["local"] },
     () => {
       /**
        * Boots the parent fixture and waits until it has reported both its own

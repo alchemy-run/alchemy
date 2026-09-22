@@ -15,6 +15,7 @@ type State = { id: string; count: number; rows: { value: string }[] };
 for (const dev of [true, false]) {
   describe(
     dev ? "local SQL migration updates" : "live SQL migration updates",
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker"] },
     () => {
       const { test } = Test.make({
         providers: Cloudflare.providers(),
@@ -107,7 +108,7 @@ for (const dev of [true, false]) {
             expect(yield* read(third.url)).toEqual(upgraded);
             yield* stack.destroy();
           }),
-        { timeout: 120_000 },
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
       );
     },
   );

@@ -160,5 +160,17 @@ test.provider(
         "Custom domain, DNS record, and project independently absent",
       );
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "provider:neon",
+      "provider:neon:customdomain",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

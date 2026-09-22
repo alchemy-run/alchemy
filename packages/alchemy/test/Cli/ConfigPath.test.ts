@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { describe, expect, it } from "alchemy-test";
 
-describe("stack command config paths", () => {
+describe("stack command config paths", { tags: ["unit", "local"] }, () => {
   it.effect("uses the positional config path", () =>
     Effect.gen(function* () {
       const args = yield* resolveConfig({
@@ -64,7 +64,7 @@ describe("stack command config paths", () => {
   );
 });
 
-describe("stack selection options", () => {
+describe("stack selection options", { tags: ["unit", "local"] }, () => {
   for (const [name, flag] of [
     ["include", include],
     ["exclude", exclude],

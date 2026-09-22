@@ -29,6 +29,7 @@ test.effect(
       );
       expect(event).toEqual(payload);
     }),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
 
 for (const [name, body, headers, status] of [
@@ -52,16 +53,19 @@ for (const [name, body, headers, status] of [
     400,
   ],
 ] as const)
-  test.effect(name, () =>
-    Effect.gen(function* () {
-      const result = yield* decodeFunctionTriggerEvent(
-        yield* Effect.sync(() => request(body, headers)),
-      ).pipe(
-        Effect.as(200),
-        Effect.catchTag("FunctionTriggerEventError", (error) =>
-          Effect.succeed(error.status),
-        ),
-      );
-      expect(result).toBe(status);
-    }),
+  test.effect(
+    name,
+    () =>
+      Effect.gen(function* () {
+        const result = yield* decodeFunctionTriggerEvent(
+          yield* Effect.sync(() => request(body, headers)),
+        ).pipe(
+          Effect.as(200),
+          Effect.catchTag("FunctionTriggerEventError", (error) =>
+            Effect.succeed(error.status),
+          ),
+        );
+        expect(result).toBe(status);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
