@@ -32,6 +32,8 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
+import { parsePlan } from "./Plan.ts";
+
 import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
 import { Reporter } from "./Reporter.ts";
@@ -62,6 +64,20 @@ const tagsFilter = Flag.String("tags").pipe(
     'Select tags using &&, ||, !, parentheses and * wildcards (e.g. "e2e && provider:aws && !slow"). Repeated filters are ANDed.',
   ),
   Flag.atLeast(0),
+);
+
+const plan = Flag.String("plan").pipe(
+  Flag.withDescription(
+    "JSON array of sequential phases; nested arrays run branches in parallel. Each branch has tags (ANDed expressions) and optional file concurrency. First match wins; shared hooks live until the file's final phase.",
+  ),
+  Flag.optional,
+);
+
+const dryRun = Flag.Boolean("dry-run").pipe(
+  Flag.withDescription(
+    "Collect tests and show the execution plan without running tests or hooks",
+  ),
+  Flag.withDefault(false),
 );
 
 const timeout = Flag.Int("timeout").pipe(
@@ -150,6 +166,8 @@ const rootCommand = Command.make(
     paths,
     testNamePattern,
     tagsFilter,
+    plan,
+    dryRun,
     exclude,
     timeout,
     retry,
@@ -186,7 +204,8 @@ const rootCommand = Command.make(
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.
-    const interactive = args.tui && process.stdout.isTTY === true;
+    const interactive =
+      !args.dryRun && args.tui && process.stdout.isTTY === true;
     const path = yield* Path.Path;
     const root = process.cwd();
     // Per-run log file (timestamp + pid) so concurrent runs in different
@@ -209,6 +228,8 @@ const rootCommand = Command.make(
       exclude: args.exclude,
       filter: toFilter(args.testNamePattern),
       tagsFilter: args.tagsFilter,
+      dryRun: args.dryRun,
+      plan: Option.isSome(args.plan) ? parsePlan(args.plan.value) : undefined,
       timeout: args.timeout,
       retry: args.retry,
       concurrency: toConcurrency(args.concurrency),
