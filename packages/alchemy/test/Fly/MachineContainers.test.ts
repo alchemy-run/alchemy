@@ -1,5 +1,12 @@
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { withControlledClient } from "./fixtures/protocol-branches.ts";
+import { Machine, MachineProvider } from "@/Fly/Machine";
 
 import type { MachineProps } from "@/Fly/Machine";
 import {
@@ -8,6 +15,12 @@ import {
   toFlyContainers,
   validateMachineContainers,
 } from "@/Fly/MachineContainers";
+
+const noRequests = HttpClient.make((request) =>
+  Effect.die(
+    new Error(`Unexpected Fly request: ${request.method} ${request.url}`),
+  ),
+);
 
 const base = {
   containers: [
@@ -146,4 +159,110 @@ it.effect(
         sameContainers([{ ...desired[0], env: {} }, desired[1]!], desired),
       ).toBe(true);
     }),
+);
+
+it.effect(
+  "provider diff rejects malformed JavaScript containers before wire mapping",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Provider<Machine>("Fly.Machine");
+      for (const containers of [null, [null]]) {
+        const result = yield* provider.diff!({
+          id: "Worker",
+          fqn: "pure/Worker",
+          instanceId: "fixture-instance",
+          // @ts-expect-error deliberate malformed JavaScript props at the provider boundary
+          news: { app: undefined, containers },
+          // @ts-expect-error the prior state is absent on initial create
+          olds: undefined,
+          oldBindings: [],
+          newBindings: [],
+          output: undefined,
+        }).pipe(Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result))
+          expect(result.failure._tag).toBe("Fly.InvalidMachineContainers");
+      }
+    }).pipe(
+      Effect.provide(MachineProvider()),
+      withControlledClient(noRequests),
+      Effect.provideService(Stack, {
+        name: "review-app",
+        stage: "pure",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "pure"),
+    ),
+);
+
+it.effect(
+  "provider diff validates resolved containers with an unrelated unresolved app",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Provider<Machine>("Fly.Machine");
+      const result = yield* provider.diff!({
+        id: "Worker",
+        fqn: "pure/Worker",
+        instanceId: "fixture-instance",
+        // @ts-expect-error deliberate malformed JavaScript container with unresolved app
+        news: { app: Effect.succeed("review-app"), containers: [null] },
+        // @ts-expect-error the prior state is absent on initial create
+        olds: undefined,
+        oldBindings: [],
+        newBindings: [],
+        output: undefined,
+      }).pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result))
+        expect(result.failure._tag).toBe("Fly.InvalidMachineContainers");
+    }).pipe(
+      Effect.provide(MachineProvider()),
+      withControlledClient(noRequests),
+      Effect.provideService(Stack, {
+        name: "review-app",
+        stage: "pure",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "pure"),
+    ),
+);
+
+it.effect(
+  "provider diff waits for unresolved image mode before mapping containers",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Provider<Machine>("Fly.Machine");
+      const result = yield* provider.diff!({
+        id: "Worker",
+        fqn: "pure/Worker",
+        instanceId: "fixture-instance",
+        // @ts-expect-error deliberate unresolved image and malformed JavaScript containers
+        news: {
+          app: "review-app",
+          image: Effect.succeed("example:v1"),
+          containers: [null],
+        },
+        // @ts-expect-error the prior state is absent on initial create
+        olds: undefined,
+        oldBindings: [],
+        newBindings: [],
+        output: undefined,
+      }).pipe(Effect.result);
+      expect(Result.isSuccess(result)).toBe(true);
+    }).pipe(
+      Effect.provide(MachineProvider()),
+      withControlledClient(noRequests),
+      Effect.provideService(Stack, {
+        name: "review-app",
+        stage: "pure",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "pure"),
+    ),
 );

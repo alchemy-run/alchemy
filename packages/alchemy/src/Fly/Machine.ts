@@ -1122,6 +1122,16 @@ export const MachineProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined) return;
       if ("app" in news) {
+        const imageMode = {
+          image: news.image,
+          containers: news.containers,
+          init: news.init,
+        };
+        const imageModeResolved =
+          isResolved<Pick<MachineProps, "image" | "containers" | "init">>(
+            imageMode,
+          );
+        if (imageModeResolved) yield* validateMachineContainers(imageMode);
         const settings: Input<
           Pick<
             MachineProps,
@@ -1147,6 +1157,7 @@ export const MachineProvider = () =>
           containers: news.containers,
         };
         if (
+          imageModeResolved &&
           isResolved<
             Pick<
               MachineProps,

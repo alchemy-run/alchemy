@@ -44,20 +44,23 @@ makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 Use `containers` for a group that shares one Machine. Each named container has its own image and can set `cmd`, `entrypoint`, `exec`, `env`, startup `dependsOn`, and Pilot `healthChecks`. Check intervals and timeouts are numeric seconds. A dependency condition can be `started`, `healthy`, or `exited_successfully`.
 
 ```typescript
-const preview =
-  yield *
-  Fly.Machine('Preview', {
-    app: Site,
-    region: 'iad',
-    guest: { cpus: 1, memoryMb: 1024 },
-    containers: [
-      { name: 'api', image: apiImage, healthChecks: [{ http: { port: 3000, path: '/health' } }] },
-      { name: 'worker', image: workerImage, dependsOn: [{ name: 'api', condition: 'healthy' }] },
-    ],
-  });
+const preview = yield* Fly.Machine("Preview", {
+  app: Site,
+  region: "iad",
+  guest: { cpus: 1, memoryMb: 1024 },
+  containers: [
+    { name: "api", image: apiImage, healthChecks: [{ http: { port: 3000, path: "/health" } }] },
+    { name: "worker", image: workerImage, dependsOn: [{ name: "api", condition: "healthy" }] },
+  ],
+});
 ```
 
 `count` duplicates the entire group. A rolling change to one container can restart the whole group; attached volumes stay with their Machine. Machine `env` and bindings remain shared, while container `env` is passed to Fly as a per-container override. Configure Machine or service readiness checks for every critical component before treating a deploy as ready: Pilot container checks and dependencies control startup, not Alchemy's rollout readiness. Multi-container Machines currently support rolling deployment only.
+
+If a rolling update is interrupted, Fly may have accepted the update even
+though the CLI reported a failure. Wait for the in-progress Machine update to
+settle, then rerun the same desired deployment. Reconciliation reuses the
+owned Machine and its attached volumes.
 
 ## Scale up
 
