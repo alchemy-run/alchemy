@@ -106,8 +106,8 @@ const STAGES = [
 ---
 
 <Marketing
-  title="Alchemy — the fastest and safest way to build and ship production cloud apps."
-  description="Alchemy is Infrastructure-as-Code that is actually TypeScript: your app and its infrastructure are one typed program that you — or your coding agent — can build, test, ship, and operate."
+  title="Alchemy — reach for the better primitives."
+  description="Snap together cloud resources in TypeScript and let Alchemy take care of the wiring — permissions, config, and bindings — so you can focus on your product."
 >
   <!-- ───────────────── HERO ───────────────── -->
   <section class="alc-hero" style="padding:64px 32px 48px;">
@@ -132,17 +132,15 @@ const STAGES = [
         id="hero-h1"
         style="font-size:clamp(38px,6.4vw,60px);"
       >
-        The fastest, safest way{" "}<br class="v2-hero-br" />to ship cloud apps.
+        Reach for the better primitives.
       </h1>
       <h2
         class="alc-hero__subtitle"
         id="hero-sub"
-        style="font-size:clamp(17px,2.6vw,22px);"
+        style="font-size:clamp(17px,2.6vw,22px);max-width:640px;margin-inline:auto;"
       >
-        Alchemy is Infrastructure-as-Code in pure TypeScript, built on{" "}
-        <a href="https://effect.website" style="color:inherit;">Effect</a> —<br
-          class="v2-hero-br"
-        /> one typed program for your app and its cloud.
+        Snap together cloud resources and let Alchemy take care of the wiring
+        so you can focus on your product.
       </h2>
       <div class="alc-hero__cta">
         <Button variant="primary" icon="arrow" href="/getting-started">
@@ -162,65 +160,66 @@ const STAGES = [
   </div>
 
   <script>
-    // TEMP hero-copy variants (see the switcher above).
+    // TEMP hero-copy variants (see the switcher above). Line breaks come
+    // from `text-wrap: balance`, so the strings carry no manual <br>s.
     const EFFECT = `<a href="https://effect.website" style="color:inherit;">Effect</a>`;
-    const BR = `<br class="v2-hero-br" />`;
     const VARIANTS: { name: string; h1: string; sub: string }[] = [
-      // ── the three keepers from round 1 ──
+      // ── the chosen direction ──
       {
-        name: "snap together",
-        h1: `Snap your cloud together.`,
-        sub: `Typed building blocks for infrastructure and runtime code, built on ${EFFECT} —${BR} proven components you and your agent glue into production, on any cloud.`,
+        name: "better primitives",
+        h1: `Reach for the better primitives.`,
+        sub: `Snap together cloud resources and let Alchemy take care of the wiring so you can focus on your product.`,
+      },
+      // ── same headline, subtitles that name the wiring ──
+      {
+        name: "wiring, named",
+        h1: `Reach for the better primitives.`,
+        sub: `Snap together buckets, queues, databases, and workers in TypeScript. Alchemy wires the permissions, config, and bindings so you can focus on your product.`,
       },
       {
-        name: "building blocks",
-        h1: `Building blocks ${BR}for the cloud.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} — typed${BR} blocks for infra and runtime code that you, or your agent, snap into production.`,
+        name: "use it → wired",
+        h1: `Reach for the better primitives.`,
+        sub: `Every cloud resource is a typed value. Use one in your code and Alchemy wires up the permissions, config, and bindings for you.`,
       },
       {
-        name: "zero → production",
-        h1: `Zero &rarr; production.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} one typed program for your app and its cloud.`,
-      },
-      // ── round 2: agents in the headline ──
-      {
-        name: "agents snap → prod",
-        h1: `Building blocks agents ${BR}snap into production.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed infra and runtime blocks the compiler checks, on any cloud.`,
+        name: "agents + compiler",
+        h1: `Reach for the better primitives.`,
+        sub: `Typed cloud resources you and your agent snap together. Alchemy handles the wiring, and the compiler checks the result.`,
       },
       {
-        name: "agents snap together",
-        h1: `Infrastructure agents ${BR}snap together.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for your app and its cloud, checked by the compiler.`,
+        name: "any cloud + Effect",
+        h1: `Reach for the better primitives.`,
+        sub: `Snap together resources on any cloud and let Alchemy take care of the wiring so you can focus on your product. Built on ${EFFECT}.`,
+      },
+      // ── headline variations on the primitives angle ──
+      {
+        name: "better primitives for the cloud",
+        h1: `Better primitives for the cloud.`,
+        sub: `Snap together cloud resources and let Alchemy take care of the wiring so you can focus on your product.`,
       },
       {
-        name: "you + your agents",
-        h1: `Building blocks for you ${BR}and your agents.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} snap infra and runtime code into production the compiler guarantees.`,
+        name: "primitives that snap",
+        h1: `Cloud primitives that snap together.`,
+        sub: `Declare a bucket, bind it to a worker, and ship. Alchemy takes care of the permissions, config, and bindings in between.`,
       },
       {
-        name: "zero → prod, agent speed",
-        h1: `Zero &rarr; production, ${BR}at agent speed.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for your app and its cloud.`,
+        name: "less wiring",
+        h1: `Better primitives. Less wiring.`,
+        sub: `Snap together cloud resources in TypeScript. Alchemy derives the permissions, config, and bindings so you can focus on your product.`,
       },
       {
-        name: "or let your agent",
-        h1: `Snap your cloud together — ${BR}or let your agent.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed building blocks for infra and runtime code, on any cloud.`,
+        name: "agent reaches for",
+        h1: `The primitives your agent reaches for.`,
+        sub: `Typed cloud resources that snap together. Alchemy takes care of the wiring, so your agent works on the product and gets the infrastructure right.`,
       },
       {
-        name: "safe blocks, fast agents",
-        h1: `Safe building blocks ${BR}for fast agents.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} least privilege and correct configuration, enforced by the type system.`,
-      },
-      {
-        name: "blocks agents build with",
-        h1: `The building blocks ${BR}agents build with.`,
-        sub: `Alchemy is Infrastructure-as-Code in pure TypeScript, built on ${EFFECT} —${BR} typed, composable, documented — everything an agent needs to ship correctly.`,
+        name: "skip the wiring",
+        h1: `Reach for better primitives. Skip the wiring.`,
+        sub: `Buckets, queues, and workers snap together in one TypeScript program. Alchemy connects them on any cloud so you can focus on your product.`,
       },
     ];
 
-    const KEY = "alc-hero-copy-variant";
+    const KEY = "alc-hero-copy-variant-v3";
     const h1 = document.getElementById("hero-h1")!;
     const sub = document.getElementById("hero-sub")!;
     const label = document.getElementById("copy-toggle-label")!;
@@ -481,12 +480,6 @@ const STAGES = [
     margin: 0 auto;
   }
 
-  /* ---------- hero ---------- */
-  @media (max-width: 720px) {
-    .v2-hero-br {
-      display: none;
-    }
-  }
   /* TEMP: hero-copy variant switcher (remove with the widget). */
   .v2-copy-toggle {
     position: fixed;
@@ -698,6 +691,7 @@ const STAGES = [
     color: var(--alc-fg-2);
     max-width: 680px;
     margin: 0 0 28px;
+    text-wrap: balance;
   }
 
   .v2-split {

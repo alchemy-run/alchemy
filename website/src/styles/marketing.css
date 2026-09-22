@@ -6,6 +6,7 @@
    ============================================================ */
 
 @import "./terminal.css";
+@import "./text-wrap.css";
 
 body.alc-root,
 .alc-root {
