@@ -11228,7 +11228,7 @@ describe.sequential(
         const path = yield* Path.Path;
         const script = yield* fs.readFileString(
           yield* path.fromFileUrl(
-            new URL("./fixtures/multi-container-http.mjs", import.meta.url),
+            new URL("./fixtures/multi-container-http.ts", import.meta.url),
           ),
         );
         return (version: string, badHealth = false) =>
@@ -11244,7 +11244,12 @@ describe.sequential(
                   {
                     name: "web",
                     image,
-                    cmd: ["node", "--input-type=module", "-e", script],
+                    cmd: [
+                      "node",
+                      "--input-type=module-typescript",
+                      "-e",
+                      script,
+                    ],
                     env: {
                       PORT: "3000",
                       CONTAINER_NAME: "web",
@@ -11254,7 +11259,12 @@ describe.sequential(
                   {
                     name: "sidecar",
                     image,
-                    cmd: ["node", "--input-type=module", "-e", script],
+                    cmd: [
+                      "node",
+                      "--input-type=module-typescript",
+                      "-e",
+                      script,
+                    ],
                     env: {
                       PORT: "3001",
                       CONTAINER_NAME: "sidecar",
