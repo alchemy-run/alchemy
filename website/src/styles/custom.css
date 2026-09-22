@@ -1058,6 +1058,11 @@ header.header {
   color: var(--alc-accent-deep);
 }
 
+#starlight__sidebar .sidebar-content summary a.reference-group-link {
+  padding: 0;
+  border: 0;
+}
+
 /* Nested group labels (Resources categories/services, the Reference tree)
    read like regular entries, not headings — only top-level group summaries
    get the small-caps heading treatment above. */

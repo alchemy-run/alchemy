@@ -20,6 +20,18 @@ interface Props {
 
 const { sublist, nested } = Astro.props;
 
+// A service group links to its shared page; categories spanning pages stay toggles.
+const servicePages = new Map(sublist.flatMap((entry) => {
+  if (entry.type !== "group") return [];
+  const pages = new Set(entry.entries.map((item) =>
+    item.type === "link" && item.href.startsWith("/providers/")
+      ? item.href.split("#")[0]
+      : undefined,
+  ));
+  const [page] = pages;
+  return pages.size === 1 && page ? [[entry, page] as const] : [];
+}));
+
 const isCurrentDeep = (entries: SidebarEntry[]): boolean =>
   entries.some((entry) =>
     entry.type === "link" ? entry.isCurrent : isCurrentDeep(entry.entries),
@@ -60,7 +72,7 @@ const nextGroupIndex = () => {
             )}
           </a>
         ) : (
-          <details open={isCurrentDeep(entry.entries) || !entry.collapsed}>
+          <details open={servicePages.get(entry) === Astro.url.pathname.replace(/\/$/, "") || isCurrentDeep(entry.entries) || !entry.collapsed}>
             <sl-sidebar-restore data-index={nextGroupIndex()} />
             <summary>
               <div class="group-label">
@@ -74,7 +86,11 @@ const nextGroupIndex = () => {
                     set:html={sidebarGroupIcon(entry.label)}
                   />
                 )}
-                <span class="large">{entry.label}</span>
+                {servicePages.has(entry) ? (
+                  <a class="large reference-group-link" href={`${servicePages.get(entry)}#_top`} data-reference-group>{entry.label}</a>
+                ) : (
+                  <span class="large">{entry.label}</span>
+                )}
                 {entry.badge && (
                   <Badge
                     variant={entry.badge.variant}

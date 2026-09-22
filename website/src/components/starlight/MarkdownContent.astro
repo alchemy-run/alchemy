@@ -1,0 +1,17 @@
+---
+import DefaultMarkdownContent from "@astrojs/starlight/components/MarkdownContent.astro";
+
+const reference = Astro.url.pathname.startsWith("/providers/");
+---
+
+<div class:list={{ "reference-content": reference }}>
+  <DefaultMarkdownContent><slot /></DefaultMarkdownContent>
+</div>
+
+<style>
+  .reference-content :global(.sl-markdown-content h3) {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+</style>

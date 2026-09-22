@@ -23,8 +23,28 @@ const { sidebar } = Astro.locals.starlightRoute;
 </div>
 
 <script>
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const link = event.target.closest<HTMLAnchorElement>("a[data-reference-group]");
+    const group = link?.closest("details");
+    if (!link || !group || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    group.open = true;
+    window.location.assign(link.href);
+    if (link.pathname.replace(/\/$/, "") === window.location.pathname.replace(/\/$/, "")) {
+      document.getElementById("_top")?.scrollIntoView({ behavior: "instant" });
+    }
+  });
+
   function updateReferenceSelection() {
     const currentPath = window.location.pathname.replace(/\/$/, "");
+    // Override persisted collapse state when arriving at a service's own page.
+    for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-reference-group]")) {
+      if (link.pathname.replace(/\/$/, "") === currentPath) {
+        const group = link.closest("details");
+        if (group) group.open = true;
+      }
+    }
     const links = [...document.querySelectorAll<HTMLAnchorElement>("a[data-reference-link]")];
     // Example headings extend the resource's anchor; prefer the longest match.
     const selected = links.filter((link) => {
