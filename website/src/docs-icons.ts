@@ -15,6 +15,10 @@ import { icons as brands } from "@iconify-json/simple-icons";
  * mark and move the call site back to `b()`.
  */
 const custom: Record<string, string> = {
+  // Official mark: https://axiom.co/axiom-brand-assets.zip
+  // Preserve its 800×690 proportions, centered in our 24×24 icon box.
+  axiom:
+    '<g transform="translate(0 1.65) scale(0.03)"><path fill="currentColor" d="M792.736 481.458L622.15 196.164C614.327 183.052 595.051 172.324 579.311 172.324H472.812C448.058 172.324 437.911 155.47 450.257 134.872L508.662 37.4525C513.296 29.7211 513.285 20.2029 508.637 12.4796C503.986 4.75638 495.399 0 486.106 0H337.536C321.798 0 302.48 10.7039 294.606 23.7869L5.91039 503.427C-1.9666 516.51 -1.96962 537.921 5.8983 551.006L80.182 674.547C92.5601 695.13 112.858 695.154 125.287 674.599L183.33 578.624C195.763 558.069 216.057 558.093 228.435 578.675L281.058 666.192C288.925 679.277 308.24 689.983 323.979 689.983H667.291C683.024 689.983 702.342 679.277 710.21 666.192L792.65 529.092C800.518 516.006 800.556 494.571 792.736 481.458ZM562.356 467.727C574.656 488.351 564.468 505.228 539.714 505.228H272.672C247.919 505.228 237.791 488.385 250.17 467.803L383.793 245.58C396.17 224.997 416.422 224.997 428.799 245.581L562.356 467.727Z"/></g>',
   // Prisma's 2026 prism mark; simple-icons still ships the pre-2026 logo.
   // Traced from the "Symbol" artwork in Prisma's brand kit (263×264), scaled
   // uniformly and centred — the mark must not be stretched to fill the box.
@@ -42,7 +46,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Prisma: c("prisma"),
-  Axiom: l("activity"),
+  Axiom: c("axiom"),
   "Better Auth": l("key-round"),
   GitHub: b("github"),
   Git: c("git"),
@@ -96,7 +100,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),
-  Axiom: l("activity"),
+  Axiom: c("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
