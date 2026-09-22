@@ -49,6 +49,7 @@ test(
       expect(priority).toBeLessThanOrEqual(50000);
     }
   }),
+  { tags: ["provider:aws", "provider:aws:ecs", "live"] },
 );
 
 class RouteMismatch extends Data.TaggedError("RouteMismatch")<{
@@ -285,5 +286,14 @@ test.provider.skipIf(!!process.env.FAST)(
         );
       expect(listenerGone).toBe(true);
     }),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:ecs",
+      "provider:aws:elbv2",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

@@ -42,7 +42,10 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello from BindingTargetWorker");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -57,7 +60,10 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello alice");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -72,5 +78,8 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello bob");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

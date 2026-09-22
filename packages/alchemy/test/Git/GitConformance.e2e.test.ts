@@ -340,7 +340,15 @@ test(
       "refs/heads/picks",
     ]);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -424,7 +432,15 @@ test(
     });
     expect(refs.refs.map((ref) => ref.name)).toEqual(["refs/heads/main"]);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -492,5 +508,13 @@ test(
     );
     expect(Number(verify.stdout.trim())).toBe(32);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

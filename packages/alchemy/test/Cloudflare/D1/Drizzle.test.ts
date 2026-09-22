@@ -125,5 +125,13 @@ test(
     };
     expect(rows.map((r) => r.email)).toContain("alice@example.com");
   }),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

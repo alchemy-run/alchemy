@@ -147,7 +147,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const zoneGone = yield* waitUntilZoneGone(created.zone.zoneId);
       expect(zoneGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:recordset",
+      "provider:hetzner:service",
+      "provider:hetzner:zone",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -215,7 +224,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const zoneGone = yield* waitUntilZoneGone(created.zone.zoneId);
       expect(zoneGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:recordset",
+      "provider:hetzner:service",
+      "provider:hetzner:zone",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -259,5 +277,14 @@ test.provider.skipIf(!hasHetznerCreds)(
       const zoneGone = yield* waitUntilZoneGone(deployed.zone.zoneId);
       expect(zoneGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:recordset",
+      "provider:hetzner:service",
+      "provider:hetzner:zone",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

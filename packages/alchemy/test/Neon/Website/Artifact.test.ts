@@ -63,6 +63,7 @@ it.effect(
       );
       expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
 );
 
 for (const kind of [
@@ -73,35 +74,38 @@ for (const kind of [
   "cycle",
   "error-page",
 ] as const) {
-  it.effect(`rejects unsafe ${kind} output`, () =>
-    Effect.gen(function* () {
-      const { fs, path, root, dist } = yield* fixture;
-      if (kind === "escape") {
-        yield* fs.writeFileString(path.join(root, "secret.txt"), "private");
-        yield* fs.symlink("../secret.txt", path.join(dist, "leak.txt"));
-      } else if (kind === "native")
-        yield* fs.writeFileString(path.join(dist, "addon.node"), "native");
-      else if (kind === "executable")
-        yield* fs.writeFile(
-          path.join(dist, "binary"),
-          new Uint8Array([0xcf, 0xfa, 0xed, 0xfe]),
-        );
-      else if (kind === "secret-alias") {
-        yield* fs.writeFileString(path.join(dist, ".env"), "SECRET=hidden");
-        yield* fs.symlink(".env", path.join(dist, "public.txt"));
-      } else if (kind === "cycle")
-        yield* fs.symlink(".", path.join(dist, "cycle"));
-      const result = yield* stageWebsiteArtifact({
-        root,
-        distDir: dist,
-        static: {
-          errorPage: kind === "error-page" ? "../secret.txt" : undefined,
-        },
-      }).pipe(Effect.result);
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result))
-        expect(result.failure._tag).toBe("WebsiteArtifactError");
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  it.effect(
+    `rejects unsafe ${kind} output`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, path, root, dist } = yield* fixture;
+        if (kind === "escape") {
+          yield* fs.writeFileString(path.join(root, "secret.txt"), "private");
+          yield* fs.symlink("../secret.txt", path.join(dist, "leak.txt"));
+        } else if (kind === "native")
+          yield* fs.writeFileString(path.join(dist, "addon.node"), "native");
+        else if (kind === "executable")
+          yield* fs.writeFile(
+            path.join(dist, "binary"),
+            new Uint8Array([0xcf, 0xfa, 0xed, 0xfe]),
+          );
+        else if (kind === "secret-alias") {
+          yield* fs.writeFileString(path.join(dist, ".env"), "SECRET=hidden");
+          yield* fs.symlink(".env", path.join(dist, "public.txt"));
+        } else if (kind === "cycle")
+          yield* fs.symlink(".", path.join(dist, "cycle"));
+        const result = yield* stageWebsiteArtifact({
+          root,
+          distDir: dist,
+          static: {
+            errorPage: kind === "error-page" ? "../secret.txt" : undefined,
+          },
+        }).pipe(Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result))
+          expect(result.failure._tag).toBe("WebsiteArtifactError");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
   );
 }
 
@@ -145,6 +149,7 @@ export default { fetch: () => new Response(value) };`,
             );
           }
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
     );
 
 it.effect(
@@ -181,6 +186,7 @@ it.effect(
       );
       expect((yield* packageWebsiteArtifact(props)).hash).not.toBe(first.hash);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
 );
 
 for (const alias of [false, true])
@@ -214,6 +220,7 @@ for (const alias of [false, true])
           );
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
   );
 
 for (const mode of ["import", "require"] as const)
@@ -315,6 +322,7 @@ for (const mode of ["import", "require"] as const)
           first.hash,
         );
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
   );
 
 const elf = (machine = 183) => {
@@ -326,52 +334,61 @@ const elf = (machine = 183) => {
 };
 
 for (const machine of [183, 62])
-  it.effect(`validates ELF target architecture ${machine}`, () =>
-    Effect.gen(function* () {
-      const { fs, path, root, dist } = yield* fixture;
-      yield* fs.writeFile(
-        path.join(dist, "addon.node"),
-        yield* Effect.sync(() => elf(machine)),
-      );
-      const result = yield* stageWebsiteArtifact({
-        root,
-        distDir: dist,
-        static: {},
-      }).pipe(Effect.result);
-      expect(Result.isSuccess(result)).toBe(machine === 183);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  it.effect(
+    `validates ELF target architecture ${machine}`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, path, root, dist } = yield* fixture;
+        yield* fs.writeFile(
+          path.join(dist, "addon.node"),
+          yield* Effect.sync(() => elf(machine)),
+        );
+        const result = yield* stageWebsiteArtifact({
+          root,
+          distDir: dist,
+          static: {},
+        }).pipe(Effect.result);
+        expect(Result.isSuccess(result)).toBe(machine === 183);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
   );
 
-it.effect("Sharp metadata-only traces do not materialize native packages", () =>
-  Effect.gen(function* () {
-    const { fs, path, root, dist } = yield* fixture;
-    const sharp = path.join(root, "node_modules/sharp");
-    yield* fs.makeDirectory(sharp, { recursive: true });
-    yield* fs.writeFileString(
-      path.join(sharp, "package.json"),
-      JSON.stringify({ name: "sharp", version: "0.35.4" }),
-    );
-    const serverEntry = path.join(dist, "serve.mjs");
-    yield* fs.writeFileString(
-      serverEntry,
-      'import manifest from "sharp/package.json" with { type: "json" }; export default { fetch: () => new Response(manifest.version) };',
-    );
-    const artifact = yield* stageWebsiteArtifact({
-      root,
-      distDir: dist,
-      serverEntry,
-    });
-    expect(
-      yield* fs.exists(
-        path.join(artifact.directory, "files/node_modules/sharp/package.json"),
-      ),
-    ).toBe(true);
-    expect(
-      yield* fs.exists(
-        path.join(artifact.directory, "files/node_modules/@img"),
-      ),
-    ).toBe(false);
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+it.effect(
+  "Sharp metadata-only traces do not materialize native packages",
+  () =>
+    Effect.gen(function* () {
+      const { fs, path, root, dist } = yield* fixture;
+      const sharp = path.join(root, "node_modules/sharp");
+      yield* fs.makeDirectory(sharp, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(sharp, "package.json"),
+        JSON.stringify({ name: "sharp", version: "0.35.4" }),
+      );
+      const serverEntry = path.join(dist, "serve.mjs");
+      yield* fs.writeFileString(
+        serverEntry,
+        'import manifest from "sharp/package.json" with { type: "json" }; export default { fetch: () => new Response(manifest.version) };',
+      );
+      const artifact = yield* stageWebsiteArtifact({
+        root,
+        distDir: dist,
+        serverEntry,
+      });
+      expect(
+        yield* fs.exists(
+          path.join(
+            artifact.directory,
+            "files/node_modules/sharp/package.json",
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        yield* fs.exists(
+          path.join(artifact.directory, "files/node_modules/@img"),
+        ),
+      ).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
 );
 
 // Minimal ustar fixtures exercise the registry boundary without downloading packages.
@@ -409,99 +426,103 @@ for (const scenario of [
   "architecture",
   "musl",
 ] as const)
-  it.effect(`Sharp platform replacement verifies ${scenario}`, () =>
-    Effect.gen(function* () {
-      const { fs, path, root, dist } = yield* fixture;
-      const sharp = path.join(root, "node_modules/sharp");
-      yield* fs.makeDirectory(sharp, { recursive: true });
-      yield* fs.writeFileString(
-        path.join(sharp, "package.json"),
-        JSON.stringify({
-          name: "sharp",
-          version: "0.34.5",
-          main: "index.js",
-          optionalDependencies: {
-            "@img/sharp-linux-arm64": "0.34.5",
-            "@img/sharp-libvips-linux-arm64": "1.2.4",
-          },
-        }),
-      );
-      yield* fs.writeFileString(
-        path.join(sharp, "index.js"),
-        "module.exports = 42;",
-      );
-      const serverEntry = path.join(dist, "serve.mjs");
-      yield* fs.writeFileString(
-        serverEntry,
-        'import sharp from "sharp"; export default { fetch: () => new Response(String(sharp)) };',
-      );
-      const requested: string[] = [];
-      const fetch = ((input: string | URL | Request) =>
-        Effect.runPromise(
-          Effect.sync(() => {
-            const url = String(input);
-            requested.push(url);
-            const name = url.includes("libvips")
-              ? "@img/sharp-libvips-linux-arm64"
-              : "@img/sharp-linux-arm64";
-            const version = name.includes("libvips") ? "1.2.4" : "0.34.5";
-            const manifest = {
-              name,
-              version,
-              os: ["linux"],
-              cpu: ["arm64"],
-              libc: [scenario === "musl" ? "musl" : "glibc"],
-            };
-            const binary = name.includes("libvips")
-              ? "lib/libvips.so.42"
-              : "lib/sharp-linux-arm64.node";
-            const archive = tarball([
-              ["package/package.json", Buffer.from(JSON.stringify(manifest))],
-              [
-                scenario === "traversal"
-                  ? "package/../escape"
-                  : `package/${binary}`,
-                elf(scenario === "architecture" ? 62 : 183),
-                scenario === "symlink" ? "2" : "0",
-              ],
-            ]);
-            if (url.endsWith(".tgz")) return new Response(archive);
-            return Response.json({
-              ...manifest,
-              version: scenario === "identity" ? "99.0.0" : version,
-              dist: {
-                integrity: `sha512-${createHash("sha512")
-                  .update(scenario === "integrity" ? "wrong" : archive)
-                  .digest("base64")}`,
-                tarball: `${scenario === "origin" ? "https://untrusted.invalid" : "https://registry.npmjs.org"}/${name}/-/${name.split("/")[1]}-${version}.tgz`,
-              },
-            });
+  it.effect(
+    `Sharp platform replacement verifies ${scenario}`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, path, root, dist } = yield* fixture;
+        const sharp = path.join(root, "node_modules/sharp");
+        yield* fs.makeDirectory(sharp, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(sharp, "package.json"),
+          JSON.stringify({
+            name: "sharp",
+            version: "0.34.5",
+            main: "index.js",
+            optionalDependencies: {
+              "@img/sharp-linux-arm64": "0.34.5",
+              "@img/sharp-libvips-linux-arm64": "1.2.4",
+            },
           }),
-        )) as typeof globalThis.fetch;
-      const result = yield* stageWebsiteArtifact({
-        root,
-        distDir: dist,
-        serverEntry,
-      }).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.result,
-      );
-      expect(Result.isSuccess(result)).toBe(scenario === "valid");
-      expect(requested.length).toBeGreaterThan(0);
-      if (Result.isFailure(result))
-        expect(result.failure._tag).toBe("WebsiteArtifactError");
-      if (Result.isSuccess(result)) {
-        const packageFile = path.join(
-          result.success.directory,
-          "files/node_modules/@img/sharp-linux-arm64/package.json",
         );
-        expect(JSON.parse(yield* fs.readFileString(packageFile)).version).toBe(
-          "0.34.5",
+        yield* fs.writeFileString(
+          path.join(sharp, "index.js"),
+          "module.exports = 42;",
         );
-        expect(
-          JSON.parse(yield* fs.readFileString(path.join(sharp, "package.json")))
-            .version,
-        ).toBe("0.34.5");
-      }
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+        const serverEntry = path.join(dist, "serve.mjs");
+        yield* fs.writeFileString(
+          serverEntry,
+          'import sharp from "sharp"; export default { fetch: () => new Response(String(sharp)) };',
+        );
+        const requested: string[] = [];
+        const fetch = ((input: string | URL | Request) =>
+          Effect.runPromise(
+            Effect.sync(() => {
+              const url = String(input);
+              requested.push(url);
+              const name = url.includes("libvips")
+                ? "@img/sharp-libvips-linux-arm64"
+                : "@img/sharp-linux-arm64";
+              const version = name.includes("libvips") ? "1.2.4" : "0.34.5";
+              const manifest = {
+                name,
+                version,
+                os: ["linux"],
+                cpu: ["arm64"],
+                libc: [scenario === "musl" ? "musl" : "glibc"],
+              };
+              const binary = name.includes("libvips")
+                ? "lib/libvips.so.42"
+                : "lib/sharp-linux-arm64.node";
+              const archive = tarball([
+                ["package/package.json", Buffer.from(JSON.stringify(manifest))],
+                [
+                  scenario === "traversal"
+                    ? "package/../escape"
+                    : `package/${binary}`,
+                  elf(scenario === "architecture" ? 62 : 183),
+                  scenario === "symlink" ? "2" : "0",
+                ],
+              ]);
+              if (url.endsWith(".tgz")) return new Response(archive);
+              return Response.json({
+                ...manifest,
+                version: scenario === "identity" ? "99.0.0" : version,
+                dist: {
+                  integrity: `sha512-${createHash("sha512")
+                    .update(scenario === "integrity" ? "wrong" : archive)
+                    .digest("base64")}`,
+                  tarball: `${scenario === "origin" ? "https://untrusted.invalid" : "https://registry.npmjs.org"}/${name}/-/${name.split("/")[1]}-${version}.tgz`,
+                },
+              });
+            }),
+          )) as typeof globalThis.fetch;
+        const result = yield* stageWebsiteArtifact({
+          root,
+          distDir: dist,
+          serverEntry,
+        }).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
+          Effect.result,
+        );
+        expect(Result.isSuccess(result)).toBe(scenario === "valid");
+        expect(requested.length).toBeGreaterThan(0);
+        if (Result.isFailure(result))
+          expect(result.failure._tag).toBe("WebsiteArtifactError");
+        if (Result.isSuccess(result)) {
+          const packageFile = path.join(
+            result.success.directory,
+            "files/node_modules/@img/sharp-linux-arm64/package.json",
+          );
+          expect(
+            JSON.parse(yield* fs.readFileString(packageFile)).version,
+          ).toBe("0.34.5");
+          expect(
+            JSON.parse(
+              yield* fs.readFileString(path.join(sharp, "package.json")),
+            ).version,
+          ).toBe("0.34.5");
+        }
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },
   );

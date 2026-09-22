@@ -63,6 +63,14 @@ unit.effect(
       // @ts-expect-error Runtime validation protects JavaScript callers and persisted state.
       expect(yield* refused(validateOrganizationRole("owner"))).toBe(true);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -92,6 +100,14 @@ unit.effect(
         baseline,
       );
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -112,6 +128,14 @@ unit.effect(
       ).toBe(true);
       expect(baseline.originalRole).toBe("member");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -130,6 +154,14 @@ unit.effect(
         ),
       ).toBe(true);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -143,6 +175,14 @@ unit.effect(
       expect(yield* refused(validateGovernanceActor("member", ""))).toBe(true);
       yield* validateGovernanceActor("authorized-member", "administrator");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -166,6 +206,14 @@ unit.effect(
       ).toBe(true);
       expect(legacy.originalRole).toBe("member");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "local",
+    ],
+  },
 );
 
 const { test } = Test.make({ providers: providers() });
@@ -218,7 +266,10 @@ test.provider(
         ).toBeUndefined();
       }
     }).pipe(Effect.provideService(SDK.Credentials, noCloudCredentials)),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:organizationmemberrole", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -252,7 +303,10 @@ test.provider(
         yield* refused(provider.delete({ ...context, olds: news, output })),
       ).toBe(true);
     }).pipe(Effect.provideService(SDK.Credentials, noCloudCredentials)),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:organizationmemberrole", "live"],
+    timeout: 120_000,
+  },
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -310,5 +364,8 @@ test.provider.skipIf(!orgId || !memberId || !authorized)(
       expect(restored.user_id).toBe(original.user_id);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:organizationmemberrole", "live"],
+    timeout: 120_000,
+  },
 );

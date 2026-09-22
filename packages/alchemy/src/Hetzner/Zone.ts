@@ -141,6 +141,7 @@ export type Zone = Resource<
  * ```
  *
  * @resource
+ * @product DNS
  */
 export const Zone = Resource<Zone>("Hetzner.Zone");
 

@@ -104,56 +104,65 @@ const generatedEntry = (exports: Record<string, WorkerExport>) =>
   })("./worker.ts");
 
 layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
-  it.effect("captures ordered flat files and their raw-content hashes", () =>
-    Effect.gen(function* () {
-      const first = "CREATE TABLE users (id INTEGER PRIMARY KEY);\n";
-      const second = "CREATE TABLE posts (id INTEGER PRIMARY KEY);\n";
-      const dir = yield* writeMigrations({
-        "10_posts.sql": second,
-        "2_users.sql": first,
-        "ignored.txt": "not a migration",
-      });
-      const { worker, snapshot, exports } = yield* capture(dir);
+  it.effect(
+    "captures ordered flat files and their raw-content hashes",
+    () =>
+      Effect.gen(function* () {
+        const first = "CREATE TABLE users (id INTEGER PRIMARY KEY);\n";
+        const second = "CREATE TABLE posts (id INTEGER PRIMARY KEY);\n";
+        const dir = yield* writeMigrations({
+          "10_posts.sql": second,
+          "2_users.sql": first,
+          "ignored.txt": "not a migration",
+        });
+        const { worker, snapshot, exports } = yield* capture(dir);
 
-      expect(snapshot._tag).toBe("Cloudflare.SqlMigrations");
-      expect(snapshot.table).toBe("__alchemy_migrations");
-      expect(snapshot.records).toEqual(yield* readMigrationRecords(dir));
-      expect(snapshot.records.map((record) => record.name)).toEqual([
-        "2_users.sql",
-        "10_posts.sql",
-      ]);
-      expect(snapshot.records.map((record) => record.hash)).toEqual([
-        yield* sha256(first),
-        yield* sha256(second),
-      ]);
-      expect(snapshot.records.map((record) => record.sql)).toEqual([
-        first,
-        second,
-      ]);
-      expect(snapshot.records.map((record) => record.createdAtMillis)).toEqual([
-        undefined,
-        undefined,
-      ]);
-      expect(typeof snapshot.apply).toBe("function");
-      expect(Effect.isEffect(snapshot.apply())).toBe(true);
-      expect(Object.values(exports)).toEqual([
-        {
-          kind: "sqlMigrations",
-          snapshot: {
-            _tag: snapshot._tag,
-            table: snapshot.table,
-            records: snapshot.records,
+        expect(snapshot._tag).toBe("Cloudflare.SqlMigrations");
+        expect(snapshot.table).toBe("__alchemy_migrations");
+        expect(snapshot.records).toEqual(yield* readMigrationRecords(dir));
+        expect(snapshot.records.map((record) => record.name)).toEqual([
+          "2_users.sql",
+          "10_posts.sql",
+        ]);
+        expect(snapshot.records.map((record) => record.hash)).toEqual([
+          yield* sha256(first),
+          yield* sha256(second),
+        ]);
+        expect(snapshot.records.map((record) => record.sql)).toEqual([
+          first,
+          second,
+        ]);
+        expect(
+          snapshot.records.map((record) => record.createdAtMillis),
+        ).toEqual([undefined, undefined]);
+        expect(typeof snapshot.apply).toBe("function");
+        expect(Effect.isEffect(snapshot.apply())).toBe(true);
+        expect(Object.values(exports)).toEqual([
+          {
+            kind: "sqlMigrations",
+            snapshot: {
+              _tag: snapshot._tag,
+              table: snapshot.table,
+              records: snapshot.records,
+            },
           },
-        },
-      ]);
-      for (const exported of Object.values(exports)) {
-        if (exported.kind === "sqlMigrations") {
-          expect(exported.snapshot).not.toHaveProperty("apply");
-          expect(exported.snapshot).not.toBe(snapshot);
+        ]);
+        for (const exported of Object.values(exports)) {
+          if (exported.kind === "sqlMigrations") {
+            expect(exported.snapshot).not.toHaveProperty("apply");
+            expect(exported.snapshot).not.toBe(snapshot);
+          }
         }
-      }
-      expect(worker.env).toEqual({});
-    }).pipe(Effect.scoped),
+        expect(worker.env).toEqual({});
+      }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -202,6 +211,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         ]);
         expect(worker.env).toEqual({});
       }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -254,7 +271,15 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
           expect(snapshot).not.toHaveProperty("apply");
         }
       }).pipe(Effect.scoped),
-    { exclusive: true },
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+      exclusive: true,
+    },
   );
 
   it.effect(
@@ -281,6 +306,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(Object.keys(yield* worker.exports)).toEqual(["default"]);
         expect(worker.env).toEqual({});
       }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -309,6 +342,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         }
         expect(Object.keys(yield* worker.exports)).toEqual(["default"]);
       }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -343,6 +384,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(entry).not.toContain("Records.ts");
         expect(worker.env).toEqual({});
       }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -375,6 +424,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(secondEntry).not.toContain(JSON.stringify(firstSql));
         expect(first.snapshot.records[0]!.sql).toBe(firstSql);
       }).pipe(Effect.scoped),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -445,6 +502,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(code).not.toContain("node:crypto");
         expect(code).not.toContain("readMigrationRecords");
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -506,6 +571,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(code).not.toContain("node:fs");
         expect(code).not.toContain("node:crypto");
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect.skipIf(!nodeSupportsDevMode)(
@@ -568,6 +641,14 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(stdout).toContain('"exports":1');
         expect(stdout).toContain('"env":{}');
       }).pipe(Effect.scoped),
-    { timeout: 60_000 },
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+      timeout: 60_000,
+    },
   );
 });

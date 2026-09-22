@@ -79,6 +79,7 @@ export interface ProjectVPCEndpoint extends Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
 export const ProjectVPCEndpoint = Resource<ProjectVPCEndpoint>(
   "Neon.ProjectVPCEndpoint",

@@ -308,430 +308,481 @@ const waitForDelivery = (
   }).pipe(Effect.timeout("80 seconds"));
 
 // Account-wide subscriptions are unique per product, regardless of the selected resource.
-describe.sequential("resource subscription sources", () => {
-  for (const kind of [
-    "images",
-    "kv",
-    "r2",
-    "vectorize",
-    "model",
-    "worker",
-  ] as const) {
-    test.provider(
-      `${kind} direct source and persisted ref retain identity and ownership`,
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const program = (reference: boolean) =>
-            Effect.gen(function* () {
-              const resource = yield* createSource(kind);
-              const queue = yield* Cloudflare.Queues.Queue("EventsQueue");
-              const subscription = yield* Cloudflare.Queues.Subscription(
-                "Events",
-                Effect.gen(function* () {
-                  return {
-                    source: reference ? yield* refSource(kind) : resource,
-                    events: [eventType(kind)],
-                    queueId: queue.queueId,
-                  };
-                }),
-              );
-              return { resource, queue, subscription };
-            });
-          const initial = yield* stack.deploy(program(false));
-          const configuredAt = yield* Clock.currentTimeMillis;
-          expect(initial.subscription.accountId).toBe(accountId);
-          const expected =
-            kind === "model"
-              ? { type: "workersAi.model", modelName: "@cf/baai/bge-m3" }
-              : kind === "worker" && "workerName" in initial.resource
-                ? {
-                    type: "workersBuilds.worker",
-                    workerName: initial.resource.workerName,
-                  }
-                : { type: kind };
-          expect(initial.subscription.source).toEqual(expected);
-          const plan = yield* stack.plan(program(false));
-          expect(plan.resources.Source.downstream).toContain("Events");
-          expect(plan.resources.Events.state).toHaveProperty(
-            "props.sourceAccountId",
-            accountId,
-          );
-          expect(plan.resources.Events.state).toHaveProperty(
-            "props.source",
-            expected,
-          );
-          const observed = yield* queues.getSubscription({
-            accountId,
-            subscriptionId: initial.subscription.subscriptionId,
-          });
-          expect(observed.source).toEqual(expect.objectContaining(expected));
-          const receivesLifecycle =
-            kind === "kv" || kind === "r2" || kind === "vectorize";
-          if (receivesLifecycle) {
-            yield* queues.createConsumer({
+describe.sequential(
+  "resource subscription sources",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "live",
+    ],
+  },
+  () => {
+    for (const kind of [
+      "images",
+      "kv",
+      "r2",
+      "vectorize",
+      "model",
+      "worker",
+    ] as const) {
+      test.provider(
+        `${kind} direct source and persisted ref retain identity and ownership`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const program = (reference: boolean) =>
+              Effect.gen(function* () {
+                const resource = yield* createSource(kind);
+                const queue = yield* Cloudflare.Queues.Queue("EventsQueue");
+                const subscription = yield* Cloudflare.Queues.Subscription(
+                  "Events",
+                  Effect.gen(function* () {
+                    return {
+                      source: reference ? yield* refSource(kind) : resource,
+                      events: [eventType(kind)],
+                      queueId: queue.queueId,
+                    };
+                  }),
+                );
+                return { resource, queue, subscription };
+              });
+            const initial = yield* stack.deploy(program(false));
+            const configuredAt = yield* Clock.currentTimeMillis;
+            expect(initial.subscription.accountId).toBe(accountId);
+            const expected =
+              kind === "model"
+                ? { type: "workersAi.model", modelName: "@cf/baai/bge-m3" }
+                : kind === "worker" && "workerName" in initial.resource
+                  ? {
+                      type: "workersBuilds.worker",
+                      workerName: initial.resource.workerName,
+                    }
+                  : { type: kind };
+            expect(initial.subscription.source).toEqual(expected);
+            const plan = yield* stack.plan(program(false));
+            expect(plan.resources.Source.downstream).toContain("Events");
+            expect(plan.resources.Events.state).toHaveProperty(
+              "props.sourceAccountId",
               accountId,
-              queueId: initial.queue.queueId,
-              type: "http_pull",
+            );
+            expect(plan.resources.Events.state).toHaveProperty(
+              "props.source",
+              expected,
+            );
+            const observed = yield* queues.getSubscription({
+              accountId,
+              subscriptionId: initial.subscription.subscriptionId,
             });
-            yield* pullEvents(accountId, initial.queue.queueId);
-          }
-          const referenced = yield* stack.deploy(program(true));
-          expect(referenced.subscription.subscriptionId).toBe(
-            initial.subscription.subscriptionId,
-          );
-          if (receivesLifecycle) {
-            yield* Effect.gen(function* () {
-              yield* waitForDelivery(
-                kind,
+            expect(observed.source).toEqual(expect.objectContaining(expected));
+            const receivesLifecycle =
+              kind === "kv" || kind === "r2" || kind === "vectorize";
+            if (receivesLifecycle) {
+              yield* queues.createConsumer({
                 accountId,
-                referenced.queue.queueId,
-                referenced.subscription.subscriptionId,
-                // Allow the observed Vectorize propagation interval before probing.
-                kind === "vectorize" ? configuredAt + 60_000 : 0,
-              );
-              const identities = [
-                yield* triggerEvent(
+                queueId: initial.queue.queueId,
+                type: "http_pull",
+              });
+              yield* pullEvents(accountId, initial.queue.queueId);
+            }
+            const referenced = yield* stack.deploy(program(true));
+            expect(referenced.subscription.subscriptionId).toBe(
+              initial.subscription.subscriptionId,
+            );
+            if (receivesLifecycle) {
+              yield* Effect.gen(function* () {
+                yield* waitForDelivery(
                   kind,
                   accountId,
-                  referenced.queue.queueName,
-                ),
-              ];
-              if (kind === "vectorize") {
-                for (const suffix of ["second", "third"]) {
-                  identities.push(
-                    yield* triggerEvent(
-                      kind,
-                      accountId,
-                      `vec-${referenced.subscription.subscriptionId}-${suffix}`,
-                    ),
-                  );
-                }
-              }
-              const events: SubscriptionEvent[] = [];
-              const missing = () =>
-                identities.filter(
-                  (identity) =>
-                    !events.some((event) =>
-                      matchesSubscriptionEvent(event, {
-                        source: kind,
-                        type: eventType(kind),
-                        accountId,
-                        subscriptionId: referenced.subscription.subscriptionId,
-                        identity,
-                      }),
-                    ),
+                  referenced.queue.queueId,
+                  referenced.subscription.subscriptionId,
+                  // Allow the observed Vectorize propagation interval before probing.
+                  kind === "vectorize" ? configuredAt + 60_000 : 0,
                 );
-              yield* pullEvents(
-                accountId,
-                referenced.queue.queueId,
-                events,
-              ).pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced("5 seconds"),
-                  times: 10,
-                  until: () => missing().length === 0,
-                }),
-                Effect.timeout("60 seconds"),
-                Effect.onExit(() =>
-                  Effect.gen(function* () {
-                    if (missing().length === 0) return;
-                    yield* Effect.logInfo("Missing subscription delivery", {
-                      expected: identities,
-                      missing: missing(),
-                      received: events,
-                    });
-                    yield* Effect.all({
-                      subscription: queues.getSubscription({
+                const identities = [
+                  yield* triggerEvent(
+                    kind,
+                    accountId,
+                    referenced.queue.queueName,
+                  ),
+                ];
+                if (kind === "vectorize") {
+                  for (const suffix of ["second", "third"]) {
+                    identities.push(
+                      yield* triggerEvent(
+                        kind,
                         accountId,
-                        subscriptionId: referenced.subscription.subscriptionId,
-                      }),
-                      queue: queues.getQueue({
-                        accountId,
-                        queueId: referenced.queue.queueId,
-                      }),
-                      metrics: queues.getMetricsQueue({
-                        accountId,
-                        queueId: referenced.queue.queueId,
-                      }),
-                    }).pipe(
-                      Effect.tap((state) =>
-                        Effect.logInfo("Subscription delivery state", state),
-                      ),
-                      Effect.timeout("5 seconds"),
-                      Effect.catch((error) =>
-                        Effect.logWarning(
-                          "Subscription delivery state unavailable",
-                          { error: error._tag },
-                        ),
+                        `vec-${referenced.subscription.subscriptionId}-${suffix}`,
                       ),
                     );
+                  }
+                }
+                const events: SubscriptionEvent[] = [];
+                const missing = () =>
+                  identities.filter(
+                    (identity) =>
+                      !events.some((event) =>
+                        matchesSubscriptionEvent(event, {
+                          source: kind,
+                          type: eventType(kind),
+                          accountId,
+                          subscriptionId:
+                            referenced.subscription.subscriptionId,
+                          identity,
+                        }),
+                      ),
+                  );
+                yield* pullEvents(
+                  accountId,
+                  referenced.queue.queueId,
+                  events,
+                ).pipe(
+                  Effect.repeat({
+                    schedule: Schedule.spaced("5 seconds"),
+                    times: 10,
+                    until: () => missing().length === 0,
+                  }),
+                  Effect.timeout("60 seconds"),
+                  Effect.onExit(() =>
+                    Effect.gen(function* () {
+                      if (missing().length === 0) return;
+                      yield* Effect.logInfo("Missing subscription delivery", {
+                        expected: identities,
+                        missing: missing(),
+                        received: events,
+                      });
+                      yield* Effect.all({
+                        subscription: queues.getSubscription({
+                          accountId,
+                          subscriptionId:
+                            referenced.subscription.subscriptionId,
+                        }),
+                        queue: queues.getQueue({
+                          accountId,
+                          queueId: referenced.queue.queueId,
+                        }),
+                        metrics: queues.getMetricsQueue({
+                          accountId,
+                          queueId: referenced.queue.queueId,
+                        }),
+                      }).pipe(
+                        Effect.tap((state) =>
+                          Effect.logInfo("Subscription delivery state", state),
+                        ),
+                        Effect.timeout("5 seconds"),
+                        Effect.catch((error) =>
+                          Effect.logWarning(
+                            "Subscription delivery state unavailable",
+                            { error: error._tag },
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+                expect(missing()).toEqual([]);
+              }).pipe(Effect.timeout("90 seconds"));
+            }
+            yield* stack.deploy(createSource(kind));
+            yield* gone(accountId, initial.subscription.subscriptionId);
+            yield* verifySource(initial.resource);
+            yield* stack.destroy();
+            if (kind === "model")
+              yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
+          }).pipe(
+            Effect.scoped,
+            Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
+          ),
+        {
+          tags: [
+            "provider:cloudflare:ai",
+            "provider:cloudflare:images",
+            "provider:cloudflare:r2",
+            "provider:cloudflare:vectorize",
+            "provider:cloudflare:worker",
+          ],
+          timeout: 120_000,
+          exclusive: true,
+        },
+      );
+    }
+
+    test.provider(
+      "cross-stack and cross-stage namespace ref does not own the source",
+      (stack) => {
+        const host = TestCore.scratchStack(
+          { providers: Cloudflare.providers(), stage: `${stack.stage}-host` },
+          "SubscriptionRefHost",
+          "test/Cloudflare/Queue/SubscriptionSources.test.ts",
+        );
+        return Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* host.destroy();
+          const source = yield* host.deploy(Cloudflare.KV.Namespace("Source"));
+          const program = Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queues.Queue("Queue");
+            return yield* Cloudflare.Queues.Subscription("Events", {
+              source: yield* refSource("kv", {
+                stack: host.name,
+                stage: host.stage,
+              }),
+              events: ["namespace.created"],
+              queueId: queue.queueId,
+            });
+          });
+          const subscription = yield* stack.deploy(program);
+          expect(subscription.source).toEqual({ type: "kv" });
+          const plan = yield* stack.plan(program);
+          expect(
+            Object.values(plan.resources).some(
+              (node) => node.resource.Type === "Cloudflare.KV.Namespace",
+            ),
+          ).toBe(false);
+          yield* stack.destroy();
+          yield* verifySource(source);
+          yield* host.destroy();
+        }).pipe(
+          Effect.ensuring(
+            stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
+          ),
+        );
+      },
+      {
+        tags: [
+          "provider:cloudflare:ai",
+          "provider:cloudflare:images",
+          "provider:cloudflare:r2",
+          "provider:cloudflare:vectorize",
+          "provider:cloudflare:worker",
+        ],
+        timeout: 120_000,
+        exclusive: true,
+      },
+    );
+
+    test.provider(
+      "a source reference from another account is rejected before subscription creation",
+      (stack) => {
+        const host = TestCore.scratchStack(
+          { providers: Cloudflare.providers(), stage: `${stack.stage}-host` },
+          "SubscriptionAccountHost",
+          "test/Cloudflare/Queue/SubscriptionSources.test.ts",
+        );
+        return Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* host.destroy();
+          const environment = yield* yield* CloudflareEnvironment;
+          const hosted = yield* host.deploy(
+            Effect.gen(function* () {
+              const source = yield* Cloudflare.KV.Namespace("Source");
+              const queue = yield* Cloudflare.Queues.Queue("Queue");
+              return { source, queue };
+            }),
+          );
+          const rejecting = TestCore.scratchStack(
+            {
+              providers: Layer.mergeAll(
+                Cloudflare.providers(),
+                Layer.succeed(
+                  CloudflareEnvironment,
+                  Effect.succeed({
+                    ...environment,
+                    accountId: "00000000000000000000000000000000",
                   }),
                 ),
-              );
-              expect(missing()).toEqual([]);
-            }).pipe(Effect.timeout("90 seconds"));
-          }
-          yield* stack.deploy(createSource(kind));
-          yield* gone(accountId, initial.subscription.subscriptionId);
-          yield* verifySource(initial.resource);
+              ),
+              stage: stack.stage,
+            },
+            "SubscriptionAccountMismatch",
+            "test/Cloudflare/Queue/SubscriptionSources.test.ts",
+          );
+          const cleanup = TestCore.scratchStack(
+            { providers: Cloudflare.providers(), stage: stack.stage },
+            "SubscriptionAccountMismatch",
+            "test/Cloudflare/Queue/SubscriptionSources.test.ts",
+          );
+          yield* cleanup.destroy();
+          yield* Effect.addFinalizer(() =>
+            cleanup.destroy().pipe(Effect.orDie),
+          );
+          const mismatch = yield* rejecting
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Queues.Subscription("Events", {
+                  source: yield* refSource("kv", {
+                    stack: host.name,
+                    stage: host.stage,
+                  }),
+                  events: ["namespace.created"],
+                  queueId: hosted.queue.queueId,
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(mismatch)).toBe(true);
+          if (Exit.isFailure(mismatch))
+            expect(Cause.pretty(mismatch.cause)).toContain(
+              "SubscriptionSourceAccountMismatch",
+            );
           yield* stack.destroy();
-          if (kind === "model")
-            yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
+          yield* verifySource(hosted.source);
+          yield* host.destroy();
         }).pipe(
           Effect.scoped,
-          Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
-        ),
-      { timeout: 120_000, exclusive: true },
-    );
-  }
-
-  test.provider(
-    "cross-stack and cross-stage namespace ref does not own the source",
-    (stack) => {
-      const host = TestCore.scratchStack(
-        { providers: Cloudflare.providers(), stage: `${stack.stage}-host` },
-        "SubscriptionRefHost",
-        "test/Cloudflare/Queue/SubscriptionSources.test.ts",
-      );
-      return Effect.gen(function* () {
-        yield* stack.destroy();
-        yield* host.destroy();
-        const source = yield* host.deploy(Cloudflare.KV.Namespace("Source"));
-        const program = Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue("Queue");
-          return yield* Cloudflare.Queues.Subscription("Events", {
-            source: yield* refSource("kv", {
-              stack: host.name,
-              stage: host.stage,
-            }),
-            events: ["namespace.created"],
-            queueId: queue.queueId,
-          });
-        });
-        const subscription = yield* stack.deploy(program);
-        expect(subscription.source).toEqual({ type: "kv" });
-        const plan = yield* stack.plan(program);
-        expect(
-          Object.values(plan.resources).some(
-            (node) => node.resource.Type === "Cloudflare.KV.Namespace",
+          Effect.ensuring(
+            stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
           ),
-        ).toBe(false);
-        yield* stack.destroy();
-        yield* verifySource(source);
-        yield* host.destroy();
-      }).pipe(
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
-      );
-    },
-    { timeout: 120_000, exclusive: true },
-  );
-
-  test.provider(
-    "a source reference from another account is rejected before subscription creation",
-    (stack) => {
-      const host = TestCore.scratchStack(
-        { providers: Cloudflare.providers(), stage: `${stack.stage}-host` },
-        "SubscriptionAccountHost",
-        "test/Cloudflare/Queue/SubscriptionSources.test.ts",
-      );
-      return Effect.gen(function* () {
-        yield* stack.destroy();
-        yield* host.destroy();
-        const environment = yield* yield* CloudflareEnvironment;
-        const hosted = yield* host.deploy(
-          Effect.gen(function* () {
-            const source = yield* Cloudflare.KV.Namespace("Source");
-            const queue = yield* Cloudflare.Queues.Queue("Queue");
-            return { source, queue };
-          }),
         );
-        const rejecting = TestCore.scratchStack(
-          {
-            providers: Layer.mergeAll(
-              Cloudflare.providers(),
-              Layer.succeed(
-                CloudflareEnvironment,
-                Effect.succeed({
-                  ...environment,
-                  accountId: "00000000000000000000000000000000",
-                }),
-              ),
-            ),
-            stage: stack.stage,
-          },
-          "SubscriptionAccountMismatch",
+      },
+      {
+        tags: [
+          "provider:cloudflare:ai",
+          "provider:cloudflare:images",
+          "provider:cloudflare:r2",
+          "provider:cloudflare:vectorize",
+          "provider:cloudflare:worker",
+        ],
+        timeout: 120_000,
+        exclusive: true,
+      },
+    );
+
+    test.provider(
+      "a foreign subscription collision preserves the original destination",
+      (stack) => {
+        const host = TestCore.scratchStack(
+          { providers: Cloudflare.providers(), stage: `${stack.stage}-owner` },
+          "SubscriptionOwner",
           "test/Cloudflare/Queue/SubscriptionSources.test.ts",
         );
-        const cleanup = TestCore.scratchStack(
-          { providers: Cloudflare.providers(), stage: stack.stage },
-          "SubscriptionAccountMismatch",
-          "test/Cloudflare/Queue/SubscriptionSources.test.ts",
-        );
-        yield* cleanup.destroy();
-        yield* Effect.addFinalizer(() => cleanup.destroy().pipe(Effect.orDie));
-        const mismatch = yield* rejecting
-          .deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.Queues.Subscription("Events", {
-                source: yield* refSource("kv", {
-                  stack: host.name,
-                  stage: host.stage,
-                }),
-                events: ["namespace.created"],
-                queueId: hosted.queue.queueId,
-              });
-            }),
-          )
-          .pipe(Effect.exit);
-        expect(Exit.isFailure(mismatch)).toBe(true);
-        if (Exit.isFailure(mismatch))
-          expect(Cause.pretty(mismatch.cause)).toContain(
-            "SubscriptionSourceAccountMismatch",
-          );
-        yield* stack.destroy();
-        yield* verifySource(hosted.source);
-        yield* host.destroy();
-      }).pipe(
-        Effect.scoped,
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
-      );
-    },
-    { timeout: 120_000, exclusive: true },
-  );
-
-  test.provider(
-    "a foreign subscription collision preserves the original destination",
-    (stack) => {
-      const host = TestCore.scratchStack(
-        { providers: Cloudflare.providers(), stage: `${stack.stage}-owner` },
-        "SubscriptionOwner",
-        "test/Cloudflare/Queue/SubscriptionSources.test.ts",
-      );
-      return Effect.gen(function* () {
-        yield* stack.destroy();
-        yield* host.destroy();
-        const owner = yield* host.deploy(
-          Effect.gen(function* () {
-            const queue = yield* Cloudflare.Queues.Queue("Queue");
-            const subscription = yield* Cloudflare.Queues.Subscription(
-              "OwnedEvents",
-              {
-                source: { type: "kv" },
-                events: ["namespace.created"],
-                queueId: queue.queueId,
-              },
-            );
-            return { queue, subscription };
-          }),
-        );
-        const result = yield* stack
-          .deploy(
+        return Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* host.destroy();
+          const owner = yield* host.deploy(
             Effect.gen(function* () {
               const queue = yield* Cloudflare.Queues.Queue("Queue");
-              const source = yield* Cloudflare.KV.Namespace("Source");
-              return yield* Cloudflare.Queues.Subscription("ForeignEvents", {
-                source,
-                events: ["namespace.created"],
-                queueId: queue.queueId,
-              });
+              const subscription = yield* Cloudflare.Queues.Subscription(
+                "OwnedEvents",
+                {
+                  source: { type: "kv" },
+                  events: ["namespace.created"],
+                  queueId: queue.queueId,
+                },
+              );
+              return { queue, subscription };
             }),
-          )
-          .pipe(Effect.exit);
-        expect(Exit.isFailure(result)).toBe(true);
-        if (Exit.isFailure(result))
-          expect(Cause.pretty(result.cause)).toContain(
-            "SubscriptionAlreadyExists",
           );
-        yield* stack.destroy();
-        const observed = yield* queues.getSubscription({
-          accountId: owner.subscription.accountId,
-          subscriptionId: owner.subscription.subscriptionId,
-        });
-        expect(observed.destination.queueId).toBe(owner.queue.queueId);
-        expect(observed.name).toBe(owner.subscription.name);
-        yield* host.destroy();
-      }).pipe(
-        Effect.ensuring(
-          stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
-        ),
-      );
-    },
-    { timeout: 120_000, exclusive: true },
-  );
-});
+          const result = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const queue = yield* Cloudflare.Queues.Queue("Queue");
+                const source = yield* Cloudflare.KV.Namespace("Source");
+                return yield* Cloudflare.Queues.Subscription("ForeignEvents", {
+                  source,
+                  events: ["namespace.created"],
+                  queueId: queue.queueId,
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(result)).toBe(true);
+          if (Exit.isFailure(result))
+            expect(Cause.pretty(result.cause)).toContain(
+              "SubscriptionAlreadyExists",
+            );
+          yield* stack.destroy();
+          const observed = yield* queues.getSubscription({
+            accountId: owner.subscription.accountId,
+            subscriptionId: owner.subscription.subscriptionId,
+          });
+          expect(observed.destination.queueId).toBe(owner.queue.queueId);
+          expect(observed.name).toBe(owner.subscription.name);
+          yield* host.destroy();
+        }).pipe(
+          Effect.ensuring(
+            stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie),
+          ),
+        );
+      },
+      { timeout: 120_000, exclusive: true },
+    );
+  },
+);
 
-describe("subscription cleanup", () => {
-  unitTest.effect("returns successful cleanup results", () =>
-    Effect.gen(function* () {
-      const cleanup = makeSubscriptionCleanup();
-      expect(yield* cleanup(Effect.succeed(42))).toBe(42);
-    }),
-  );
-
-  unitTest.effect("preserves cleanup failures", () =>
-    Effect.gen(function* () {
-      const cleanup = makeSubscriptionCleanup();
-      const result = yield* cleanup(
-        Effect.fail(new Error("delete failed")),
-      ).pipe(Effect.exit);
-      expect(Exit.isFailure(result)).toBe(true);
-      if (Exit.isFailure(result))
-        expect(Cause.pretty(result.cause)).toContain("delete failed");
-    }),
-  );
-
-  unitTest.effect("bounds a stalled release inside scope finalization", () =>
-    Effect.gen(function* () {
-      const cleanup = makeSubscriptionCleanup();
-      const fiber = yield* Effect.acquireRelease(Effect.void, () =>
-        cleanup(Effect.never),
-      ).pipe(
-        Effect.scoped,
-        Effect.exit,
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("5 seconds");
-      const result = yield* Fiber.join(fiber);
-      expect(Exit.isFailure(result)).toBe(true);
-      if (Exit.isFailure(result))
-        expect(Cause.pretty(result.cause)).toContain("TimeoutError");
-    }),
-  );
-
-  unitTest.effect(
-    "shares one deadline across releases and stops starting work when exhausted",
-    () =>
+describe(
+  "subscription cleanup",
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:queue", "local"],
+  },
+  () => {
+    unitTest.effect("returns successful cleanup results", () =>
       Effect.gen(function* () {
         const cleanup = makeSubscriptionCleanup();
-        yield* cleanup(Effect.void);
-        yield* TestClock.adjust("19 seconds");
-        const fiber = yield* cleanup(Effect.never).pipe(
+        expect(yield* cleanup(Effect.succeed(42))).toBe(42);
+      }),
+    );
+
+    unitTest.effect("preserves cleanup failures", () =>
+      Effect.gen(function* () {
+        const cleanup = makeSubscriptionCleanup();
+        const result = yield* cleanup(
+          Effect.fail(new Error("delete failed")),
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(result)).toBe(true);
+        if (Exit.isFailure(result))
+          expect(Cause.pretty(result.cause)).toContain("delete failed");
+      }),
+    );
+
+    unitTest.effect("bounds a stalled release inside scope finalization", () =>
+      Effect.gen(function* () {
+        const cleanup = makeSubscriptionCleanup();
+        const fiber = yield* Effect.acquireRelease(Effect.void, () =>
+          cleanup(Effect.never),
+        ).pipe(
+          Effect.scoped,
           Effect.exit,
           Effect.forkChild({ startImmediately: true }),
         );
-        yield* TestClock.adjust("1 second");
-        expect(Exit.isFailure(yield* Fiber.join(fiber))).toBe(true);
-        let started = false;
-        const result = yield* cleanup(
-          Effect.sync(() => {
-            started = true;
-          }),
-        ).pipe(Effect.exit);
+        yield* TestClock.adjust("5 seconds");
+        const result = yield* Fiber.join(fiber);
         expect(Exit.isFailure(result)).toBe(true);
-        expect(started).toBe(false);
         if (Exit.isFailure(result))
-          expect(Cause.pretty(result.cause)).toContain(
-            "Subscription cleanup deadline exceeded",
-          );
+          expect(Cause.pretty(result.cause)).toContain("TimeoutError");
       }),
-  );
-});
+    );
+
+    unitTest.effect(
+      "shares one deadline across releases and stops starting work when exhausted",
+      () =>
+        Effect.gen(function* () {
+          const cleanup = makeSubscriptionCleanup();
+          yield* cleanup(Effect.void);
+          yield* TestClock.adjust("19 seconds");
+          const fiber = yield* cleanup(Effect.never).pipe(
+            Effect.exit,
+            Effect.forkChild({ startImmediately: true }),
+          );
+          yield* TestClock.adjust("1 second");
+          expect(Exit.isFailure(yield* Fiber.join(fiber))).toBe(true);
+          let started = false;
+          const result = yield* cleanup(
+            Effect.sync(() => {
+              started = true;
+            }),
+          ).pipe(Effect.exit);
+          expect(Exit.isFailure(result)).toBe(true);
+          expect(started).toBe(false);
+          if (Exit.isFailure(result))
+            expect(Cause.pretty(result.cause)).toContain(
+              "Subscription cleanup deadline exceeded",
+            );
+        }),
+    );
+  },
+);
 
 const expected = {
   source: "vectorize" as const,
@@ -751,207 +802,216 @@ const event: SubscriptionEvent = {
   payload: { name: expected.identity },
 };
 
-describe("subscription event identity", () => {
-  unitTest(
-    "an early event from the current subscription does not establish settled routing",
-    () => {
-      expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [{ identity: expected.identity, createdAt: 49_000 }],
-          {
-            ...expected,
-            readyAfter: 60_000,
-          },
-        ),
-      ).toBe(false);
-    },
-  );
-
-  unitTest(
-    "an early probe delivered later cannot substitute for a fresh probe",
-    () => {
-      expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [
-            { identity: expected.identity, createdAt: 49_000 },
-            { identity: "fresh-probe", createdAt: 61_000 },
-          ],
-          { ...expected, readyAfter: 60_000 },
-        ),
-      ).toBe(false);
-    },
-  );
-
-  unitTest(
-    "a fresh matching probe establishes readiness after the propagation interval",
-    () => {
-      expect(
-        hasReadySubscriptionEvent(
-          [event],
-          [{ identity: expected.identity, createdAt: 61_000 }],
-          {
-            ...expected,
-            readyAfter: 60_000,
-          },
-        ),
-      ).toBe(true);
-    },
-  );
-
-  unitTest("matches the exact Vectorize event envelope", () => {
-    const decoded = Schema.decodeUnknownSync(SubscriptionEvent)(
-      JSON.stringify(event),
-    );
-    expect(matchesSubscriptionEvent(decoded, expected)).toBe(true);
-  });
-
-  unitTest(
-    "an index name containing the subscription id does not prove subscription identity",
-    () => {
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...event,
-            metadata: { ...event.metadata, eventSubscriptionId: "other" },
-          },
-          expected,
-        ),
-      ).toBe(false);
-    },
-  );
-
-  unitTest("a readiness probe cannot satisfy a distinct final index", () => {
-    expect(
-      matchesSubscriptionEvent(event, {
-        ...expected,
-        identity: "final-index",
-      }),
-    ).toBe(false);
-  });
-
-  unitTest("matches the whole resource name, not a substring", () => {
-    expect(
-      matchesSubscriptionEvent(
-        {
-          ...event,
-          payload: { name: `${expected.identity}-other` },
-        },
-        expected,
-      ),
-    ).toBe(false);
-  });
-
-  unitTest(
-    "rejects another account even when its name contains the expected account",
-    () => {
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...event,
-            metadata: { ...event.metadata, accountId: "other" },
-            payload: { name: expected.identity, id: expected.accountId },
-          },
-          expected,
-        ),
-      ).toBe(false);
-    },
-  );
-
-  unitTest("requires the exact event type and product source", () => {
-    expect(
-      matchesSubscriptionEvent(
-        { ...event, type: `${event.type}.other` },
-        expected,
-      ),
-    ).toBe(false);
-    expect(
-      matchesSubscriptionEvent({ ...event, source: { type: "r2" } }, expected),
-    ).toBe(false);
-  });
-
-  unitTest(
-    "matches an Images upload by exact payload id and subscription",
-    () => {
-      const image = {
-        ...event,
-        type: "cf.images.image.uploaded",
-        source: { type: "images" },
-        payload: { id: "subscription-final" },
-      };
-      const target = {
-        ...expected,
-        source: "images" as const,
-        type: "image.uploaded",
-        identity: "subscription-final",
-      };
-      expect(matchesSubscriptionEvent(image, target)).toBe(true);
-      expect(
-        matchesSubscriptionEvent(
-          { ...image, payload: { id: "subscription-probe-0" } },
-          target,
-        ),
-      ).toBe(false);
-      expect(
-        matchesSubscriptionEvent(
-          {
-            ...image,
-            metadata: {
-              ...image.metadata,
-              eventSubscriptionId: "old-subscription",
+describe(
+  "subscription event identity",
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:queue", "local"],
+  },
+  () => {
+    unitTest(
+      "an early event from the current subscription does not establish settled routing",
+      () => {
+        expect(
+          hasReadySubscriptionEvent(
+            [event],
+            [{ identity: expected.identity, createdAt: 49_000 }],
+            {
+              ...expected,
+              readyAfter: 60_000,
             },
-          },
-          target,
-        ),
-      ).toBe(false);
-      expect(
-        matchesSubscriptionEvent(
-          { ...image, payload: { name: target.identity } },
-          target,
-        ),
-      ).toBe(false);
-    },
-  );
+          ),
+        ).toBe(false);
+      },
+    );
 
-  unitTest(
-    "matches KV ids and R2 names in their documented payload fields",
-    () => {
+    unitTest(
+      "an early probe delivered later cannot substitute for a fresh probe",
+      () => {
+        expect(
+          hasReadySubscriptionEvent(
+            [event],
+            [
+              { identity: expected.identity, createdAt: 49_000 },
+              { identity: "fresh-probe", createdAt: 61_000 },
+            ],
+            { ...expected, readyAfter: 60_000 },
+          ),
+        ).toBe(false);
+      },
+    );
+
+    unitTest(
+      "a fresh matching probe establishes readiness after the propagation interval",
+      () => {
+        expect(
+          hasReadySubscriptionEvent(
+            [event],
+            [{ identity: expected.identity, createdAt: 61_000 }],
+            {
+              ...expected,
+              readyAfter: 60_000,
+            },
+          ),
+        ).toBe(true);
+      },
+    );
+
+    unitTest("matches the exact Vectorize event envelope", () => {
+      const decoded = Schema.decodeUnknownSync(SubscriptionEvent)(
+        JSON.stringify(event),
+      );
+      expect(matchesSubscriptionEvent(decoded, expected)).toBe(true);
+    });
+
+    unitTest(
+      "an index name containing the subscription id does not prove subscription identity",
+      () => {
+        expect(
+          matchesSubscriptionEvent(
+            {
+              ...event,
+              metadata: { ...event.metadata, eventSubscriptionId: "other" },
+            },
+            expected,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    unitTest("a readiness probe cannot satisfy a distinct final index", () => {
+      expect(
+        matchesSubscriptionEvent(event, {
+          ...expected,
+          identity: "final-index",
+        }),
+      ).toBe(false);
+    });
+
+    unitTest("matches the whole resource name, not a substring", () => {
       expect(
         matchesSubscriptionEvent(
           {
             ...event,
-            type: "cf.kv.namespace.created",
-            source: { type: "kv" },
-            payload: { id: "namespace-id", name: "namespace-name" },
+            payload: { name: `${expected.identity}-other` },
           },
-          {
-            ...expected,
-            source: "kv",
-            type: "namespace.created",
-            identity: "namespace-id",
-          },
+          expected,
         ),
-      ).toBe(true);
+      ).toBe(false);
+    });
+
+    unitTest(
+      "rejects another account even when its name contains the expected account",
+      () => {
+        expect(
+          matchesSubscriptionEvent(
+            {
+              ...event,
+              metadata: { ...event.metadata, accountId: "other" },
+              payload: { name: expected.identity, id: expected.accountId },
+            },
+            expected,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    unitTest("requires the exact event type and product source", () => {
       expect(
         matchesSubscriptionEvent(
-          {
-            ...event,
-            type: "cf.r2.bucket.created",
-            source: { type: "r2" },
-            payload: { name: "bucket-name" },
-          },
-          {
-            ...expected,
-            source: "r2",
-            type: "bucket.created",
-            identity: "bucket-name",
-          },
+          { ...event, type: `${event.type}.other` },
+          expected,
         ),
-      ).toBe(true);
-    },
-  );
-});
+      ).toBe(false);
+      expect(
+        matchesSubscriptionEvent(
+          { ...event, source: { type: "r2" } },
+          expected,
+        ),
+      ).toBe(false);
+    });
+
+    unitTest(
+      "matches an Images upload by exact payload id and subscription",
+      () => {
+        const image = {
+          ...event,
+          type: "cf.images.image.uploaded",
+          source: { type: "images" },
+          payload: { id: "subscription-final" },
+        };
+        const target = {
+          ...expected,
+          source: "images" as const,
+          type: "image.uploaded",
+          identity: "subscription-final",
+        };
+        expect(matchesSubscriptionEvent(image, target)).toBe(true);
+        expect(
+          matchesSubscriptionEvent(
+            { ...image, payload: { id: "subscription-probe-0" } },
+            target,
+          ),
+        ).toBe(false);
+        expect(
+          matchesSubscriptionEvent(
+            {
+              ...image,
+              metadata: {
+                ...image.metadata,
+                eventSubscriptionId: "old-subscription",
+              },
+            },
+            target,
+          ),
+        ).toBe(false);
+        expect(
+          matchesSubscriptionEvent(
+            { ...image, payload: { name: target.identity } },
+            target,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    unitTest(
+      "matches KV ids and R2 names in their documented payload fields",
+      () => {
+        expect(
+          matchesSubscriptionEvent(
+            {
+              ...event,
+              type: "cf.kv.namespace.created",
+              source: { type: "kv" },
+              payload: { id: "namespace-id", name: "namespace-name" },
+            },
+            {
+              ...expected,
+              source: "kv",
+              type: "namespace.created",
+              identity: "namespace-id",
+            },
+          ),
+        ).toBe(true);
+        expect(
+          matchesSubscriptionEvent(
+            {
+              ...event,
+              type: "cf.r2.bucket.created",
+              source: { type: "r2" },
+              payload: { name: "bucket-name" },
+            },
+            {
+              ...expected,
+              source: "r2",
+              type: "bucket.created",
+              identity: "bucket-name",
+            },
+          ),
+        ).toBe(true);
+      },
+    );
+  },
+);
 
 // Native routing experiments are opt-in; control-plane reads are not delivery barriers.
 for (const change of ["replacement", "update", "paused-update"] as const) {
@@ -1230,6 +1290,15 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
             ),
         ),
       ),
-    { timeout: 120_000, exclusive: true },
+    {
+      tags: [
+        "provider:cloudflare",
+        "provider:cloudflare:queue",
+        "provider:cloudflare:vectorize",
+        "live",
+      ],
+      timeout: 120_000,
+      exclusive: true,
+    },
   );
 }

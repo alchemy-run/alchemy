@@ -758,15 +758,33 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
 }
 
 /** Change this grouping to experiment with larger or smaller reference pages. */
-function referenceLocation(outputRelative: string) {
+function referenceLocation(outputRelative: string, product: string) {
   const parts = normalizeSlashes(outputRelative)
     .replace(/\.md$/, "")
     .split("/");
-  const group = parts.length > 2 ? parts.slice(0, 2) : [parts[0], "reference"];
+  // Flat providers declare service-sized pages with @product instead of folders.
+  const group =
+    parts.length > 2
+      ? parts.slice(0, 2)
+      : product
+        ? [
+            parts[0],
+            "reference",
+            product
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, ""),
+          ]
+        : [parts[0], "reference"];
   const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
   return {
     outputRelative: `${group.join("/")}.md`,
-    title: parts.length > 2 ? group.join(".") : parts[0],
+    title:
+      parts.length > 2
+        ? group.join(".")
+        : product
+          ? `${parts[0]}.${product}`
+          : parts[0],
     resourceTitle: title,
     link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
   };
@@ -797,12 +815,6 @@ function nestResourceHeadings(markdown: string, resource: string): string {
 
 /** Providers shown first in the sidebar; the rest follow alphabetically. */
 const PROVIDER_ORDER = ["AWS", "Cloudflare"];
-
-/**
- * Uncategorized providers with at most this many pages render as a flat
- * resource list instead of per-service folders (see buildProvidersSidebar).
- */
-const FLAT_PROVIDER_MAX_PAGES = 16;
 
 interface SidebarLeaf {
   label: string;
@@ -838,45 +850,14 @@ function orderedKeys(keys: string[], order: string[]): string[] {
   return [...ranked, ...rest];
 }
 
-/**
- * Build sidebar items for one set of pages sharing a provider+category:
- * every product is its own collapsible folder containing its resource
- * pages, mirroring how Cloudflare's API reference gives each product its
- * own section — even single-page products like D1 or Organization — so
- * the grouping is uniform.
- *
- * Grouping is by resolved product LABEL (`@product`, falling back to the
- * service dir name), not by directory: two directories declaring the same
- * product merge into one group instead of rendering duplicate siblings.
- *
- * A group that would hold exactly one page named the same as the group
- * (a flat provider dir where the label falls back to the resource name,
- * e.g. "Certificate > Certificate") carries no information — collapse it
- * to a plain leaf. Genuine single-page products keep their folder (the
- * label differs, e.g. Cloudflare's "D1 > Database").
- */
+/** The sidebar lists documents; resource anchors live in the page's TOC. */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
-  const byLabelKey = new Map<string, PageEntry[]>();
-  for (const p of pages) {
-    const key = p.product || p.service || p.resource;
-    if (!byLabelKey.has(key)) byLabelKey.set(key, []);
-    byLabelKey.get(key)!.push(p);
-  }
-  const items: SidebarItem[] = [];
-  for (const [label, productPages] of byLabelKey) {
-    if (productPages.length === 1 && productPages[0].resource === label) {
-      items.push({ label, link: productPages[0].link });
-      continue;
-    }
-    items.push({
-      label,
-      collapsed: true,
-      items: productPages
-        .map((p) => ({ label: p.resource, link: p.link }))
-        .sort(byLabel),
-    });
-  }
-  return items.sort(byLabel);
+  return pages
+    .map((page) => ({
+      label: page.product || page.service || page.provider,
+      link: page.link,
+    }))
+    .sort(byLabel);
 }
 
 function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
@@ -888,57 +869,23 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
 
   const providers: SidebarGroup[] = [];
   for (const provider of orderedKeys([...byProvider.keys()], PROVIDER_ORDER)) {
-    const pages = byProvider.get(provider)!;
+    const byPage = new Map<string, PageEntry[]>();
+    for (const entry of byProvider.get(provider)!) {
+      const link = entry.link.split("#")[0];
+      if (!byPage.has(link)) byPage.set(link, []);
+      byPage.get(link)!.push(entry);
+    }
+    const pages = [...byPage].map(([link, resources]) => ({
+      ...resources[0],
+      link,
+      product: resources.every(
+        (resource) => resource.product === resources[0].product,
+      )
+        ? resources[0].product
+        : "",
+    }));
 
-    // `@category` is per-file; a documented file that omits it must not fall
-    // out of its service's category and render a duplicate service group at
-    // the provider root. Inherit the category any sibling page of the same
-    // service dir declares.
-    const categoryByService = new Map<string, string>();
-    for (const p of pages) {
-      if (p.service && p.category && !categoryByService.has(p.service)) {
-        categoryByService.set(p.service, p.category);
-      }
-    }
-
-    const categorized = new Map<string, PageEntry[]>();
-    const uncategorized: PageEntry[] = [];
-    for (const p of pages) {
-      const category = p.category || categoryByService.get(p.service) || "";
-      if (category) {
-        if (!categorized.has(category)) categorized.set(category, []);
-        categorized.get(category)!.push(p);
-      } else {
-        uncategorized.push(p);
-      }
-    }
-
-    const items: SidebarItem[] = [];
-    for (const cat of [...categorized.keys()].sort((a, b) =>
-      a.localeCompare(b),
-    )) {
-      items.push({
-        label: cat,
-        collapsed: true,
-        items: buildServiceItems(categorized.get(cat)!),
-      });
-    }
-    if (categorized.size === 0 && pages.length <= FLAT_PROVIDER_MAX_PAGES) {
-      // Small uncategorized providers (Neon, Planetscale, Axiom, GitHub, …)
-      // render as a flat resource list — per-service folders around one or
-      // two pages ("Branch > Branch") are redundant nesting, and prefixed
-      // resource names (MySQLBranch/PostgresBranch) already carry the
-      // grouping information.
-      items.push(
-        ...uncategorized
-          .map((p) => ({ label: p.resource, link: p.link }))
-          .sort(byLabel),
-      );
-    } else {
-      // Pages without a category fall back to service grouping directly under
-      // the provider (this is how AWS renders until it gets categorized).
-      items.push(...buildServiceItems(uncategorized));
-    }
+    const items = buildServiceItems(pages);
 
     providers.push({ label: provider, collapsed: true, items });
   }
@@ -978,7 +925,8 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
-  const pending: { outputRelative: string; doc: PageDoc }[] = [];
+  const pending: { outputRelative: string; product: string; doc: PageDoc }[] =
+    [];
   let written = 0;
   const redirects: Record<string, string> = {};
   const anchors = new Set<string>();
@@ -1039,12 +987,12 @@ async function main() {
         provides: primary.doc.provides,
         peers: primary.doc.peers,
       };
-      pending.push({ outputRelative, doc });
+      pending.push({ outputRelative, product: primary.product, doc });
 
       const exportNames = exportedNames(sourceFile);
 
       const segments = normalizeSlashes(outputRelative).split("/");
-      const location = referenceLocation(outputRelative);
+      const location = referenceLocation(outputRelative, primary.product);
       const oldLink = `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`;
       if (anchors.has(location.link)) {
         throw new Error(`Duplicate reference anchor: ${location.link}`);
@@ -1069,7 +1017,7 @@ async function main() {
   const resolverFor = makeLinkResolverFactory(pageEntries);
   const groups = new Map<string, { title: string; sections: string[] }>();
   for (const page of pending) {
-    const location = referenceLocation(page.outputRelative);
+    const location = referenceLocation(page.outputRelative, page.product);
     const resolve = resolverFor(
       normalizeSlashes(path.dirname(page.outputRelative)),
     );

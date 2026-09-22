@@ -21,7 +21,7 @@ import * as Layer from "effect/Layer";
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without
 // forcing the user to `Effect.orDie`. See
 // https://github.com/alchemy-run/alchemy/issues/479
-describe("Alchemy.Stack error channel", () => {
+describe("Alchemy.Stack error channel", { tags: ["unit", "local"] }, () => {
   it("allows ConfigError in the stack body", () => {
     // A stack body that reads from `effect/Config` fails with `ConfigError`.
     // Before #479 this required `Effect.orDie`; now it type-checks directly.
@@ -62,7 +62,7 @@ describe("Alchemy.Stack error channel", () => {
   });
 });
 
-describe("Alchemy.Stack runtime metadata", () => {
+describe("Alchemy.Stack runtime metadata", { tags: ["unit", "local"] }, () => {
   it("exposes stackName, providers, and state on a configured stack", () => {
     const providers = Layer.empty;
     const state = State.inMemoryState();
@@ -114,7 +114,7 @@ describe("Alchemy.Stack runtime metadata", () => {
   });
 });
 
-describe("Test.make configured stack", () => {
+describe("Test.make configured stack", { tags: ["unit", "local"] }, () => {
   const store = State.InMemoryService();
   const configured = Alchemy.Stack(
     "TestMetadataStack",
@@ -161,7 +161,7 @@ describe("Test.make configured stack", () => {
   );
 });
 
-describe("filtered deployment API", () => {
+describe("filtered deployment API", { tags: ["unit", "local"] }, () => {
   const store = State.InMemoryService();
   const state = Layer.succeed(State.State, store);
   const providers = TestLayers();

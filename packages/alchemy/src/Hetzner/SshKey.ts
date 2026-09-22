@@ -83,6 +83,7 @@ export type SshKey = Resource<
  * ```
  *
  * @resource
+ * @product Server
  */
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
