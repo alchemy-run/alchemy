@@ -86,6 +86,9 @@
       "path": "./examples/cloudflare-git-service/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-better-auth/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {
@@ -119,6 +122,12 @@
       "path": "./examples/aws-rds/tsconfig.json"
     },
     {
+      "path": "./examples/aws-aurora-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-dsql-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-static-site/tsconfig.json"
     },
     {
@@ -150,6 +159,12 @@
     },
     {
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-neon-prisma/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
@@ -388,6 +403,20 @@
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
+    { "path": "./examples/neon/tsconfig.json" },
+    { "path": "./examples/neon-website-astro/tsconfig.json" },
+    { "path": "./examples/neon-website-foldkit/tsconfig.json" },
+    { "path": "./examples/neon-website-nextjs/tsconfig.json" },
+    { "path": "./examples/neon-website-nuxt/tsconfig.json" },
+    { "path": "./examples/neon-website-octane/tsconfig.json" },
+    { "path": "./examples/neon-website-react-router/tsconfig.json" },
+    { "path": "./examples/neon-website-solidstart/tsconfig.json" },
+    { "path": "./examples/neon-website-static/tsconfig.json" },
+    { "path": "./examples/neon-website-sveltekit/tsconfig.json" },
+    { "path": "./examples/neon-website-tanstack-start/tsconfig.json" },
+    { "path": "./examples/neon-website-vite/tsconfig.json" },
+    { "path": "./examples/neon-website-vocs/tsconfig.json" },
+    { "path": "./examples/neon-website-waku/tsconfig.json" },
     {
       "path": "./benchmark/container/tsconfig.json"
     }

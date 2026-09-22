@@ -507,19 +507,44 @@ it.effect(
     }),
 );
 
-it.effect("resolves the profile from env files and --profile overrides", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const file = yield* fs.makeTempFileScoped();
-    yield* fs.writeFileString(file, "ALCHEMY_PROFILE=from-env-file\n");
+it.effect(
+  "preserves CLI and explicit env-file precedence over the process profile",
+  () =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.ALCHEMY_PROFILE;
+          delete process.env.ALCHEMY_PROFILE;
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) delete process.env.ALCHEMY_PROFILE;
+            else process.env.ALCHEMY_PROFILE = previous;
+          }),
+      );
+      const fs = yield* FileSystem.FileSystem;
+      const file = yield* fs.makeTempFileScoped();
+      yield* fs.writeFileString(file, "ALCHEMY_PROFILE=from-env-file\n");
 
-    expect(yield* resolveProfileName(Option.some(file), undefined)).toBe(
-      "from-env-file",
-    );
-    expect(yield* resolveProfileName(Option.some(file), "from-cli")).toBe(
-      "from-cli",
-    );
-  }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
+      expect(yield* resolveProfileName(Option.some(file), undefined)).toBe(
+        "from-env-file",
+      );
+      expect(yield* resolveProfileName(Option.some(file), "from-cli")).toBe(
+        "from-cli",
+      );
+
+      yield* Effect.sync(() => {
+        process.env.ALCHEMY_PROFILE = "from-process";
+      });
+      expect(yield* resolveProfileName(Option.some(file), undefined)).toBe(
+        "from-env-file",
+      );
+      expect(yield* resolveProfileName(Option.some(file), "from-cli")).toBe(
+        "from-cli",
+      );
+    }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
+  { exclusive: true },
 );
 
 it.live(

@@ -2378,6 +2378,11 @@ export const LiveWorkerProvider = () =>
           return yield* readAssets(config);
         }
 
+        // Framework sources supply the directory; routing-only config has no files to read.
+        if (typeof assets === "object" && assets.directory === undefined) {
+          return undefined;
+        }
+
         // Handle string path or AssetsProps
         return yield* readAssets(
           typeof assets === "string" ? { directory: assets } : assets,
@@ -2908,7 +2913,7 @@ export const LiveWorkerProvider = () =>
         const subdomain = yield* workers
           .getScriptSubdomain({ accountId, scriptName })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),
@@ -4390,7 +4395,7 @@ export const LiveWorkerProvider = () =>
             scriptName: name,
           })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),
