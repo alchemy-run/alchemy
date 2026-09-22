@@ -4,8 +4,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { AuthError } from "../../Auth/AuthProvider.ts";
-import { silentConsole } from "../../AWS/AuthProvider.ts";
+import { getAccountId, silentConsole } from "../../AWS/AuthProvider.ts";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
@@ -22,15 +21,10 @@ export interface AwsTarget extends Target {
 }
 
 const environment = Effect.fn(function* (target: AwsTarget) {
-  const ssoProfile = yield* Auth.loadProfile(target.profile);
-  if (!ssoProfile.sso_account_id) {
-    return yield* Effect.fail(
-      new AuthError({
-        message: `AWS SSO profile '${target.profile}' is missing sso_account_id`,
-      }),
-    );
-  }
-  const region = target.region ?? ssoProfile.region ?? "us-east-1";
+  // SSO (`sso_account_id`) or console-login (`login_session`) profiles;
+  // distilled resolves both.
+  const profile = yield* Auth.loadProfile(target.profile);
+  const region = target.region ?? profile.region ?? "us-east-1";
   // The credentials effect runs later, inside the built layer, where these
   // services are no longer in context — capture them here so the route's
   // requirements stay visible in its type.
@@ -38,23 +32,28 @@ const environment = Effect.fn(function* (target: AwsTarget) {
     yield* Effect.context<
       Effect.Services<ReturnType<typeof Auth.loadProfileCredentials>>
     >();
+  const credentials = Auth.loadProfileCredentials(target.profile).pipe(
+    Effect.provideService(EffectConsole.Console, silentConsole),
+    Effect.provide(credentialServices),
+  );
+  // A console-login profile records no account id; ask STS.
+  const accountId =
+    profile.sso_account_id ??
+    (yield* Effect.flatMap(credentials, getAccountId));
   const aws = Layer.provideMerge(
     Layer.mergeAll(AWSRegion.fromEnvironment, AWSCredentials.fromEnvironment),
     Layer.succeed(
       AWSEnvironment,
       Effect.succeed({
-        accountId: ssoProfile.sso_account_id,
+        accountId,
         region,
-        credentials: Auth.loadProfileCredentials(target.profile).pipe(
-          Effect.provideService(EffectConsole.Console, silentConsole),
-          Effect.provide(credentialServices),
-        ),
+        credentials,
         profile: target.profile,
       }),
     ),
   );
   return {
-    accountId: ssoProfile.sso_account_id,
+    accountId,
     region,
     layer: Layer.provide(
       aws,
