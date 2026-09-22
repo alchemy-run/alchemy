@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Connect Alchemy to AWS with SSO, stored access keys, or CI environment credentials.
+description: Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
@@ -56,15 +56,26 @@ authentication method. The choice is saved to your **`default`**
 command; a deploy with nothing configured fails with that exact
 command to run. Authentication changes only through the `profile` command.
 
-There are two local profile methods:
+There are three local profile methods:
 
 ### SSO (recommended)
 
 Alchemy runs `aws sso login --profile <name>` for you and loads
 credentials from the AWS SSO cache. You pick which profile from
 `~/.aws/config` to use; the account ID and region come from that
-profile. When the SSO session expires, run
-`alchemy profile edit --reconfigure AWS` to refresh it.
+profile. Use this when your org signs in through IAM Identity
+Center. When the SSO session expires, run
+`alchemy profile refresh` to refresh it.
+
+### Console login
+
+Alchemy runs `aws login --profile <name>` (AWS CLI v2.32+) and
+loads credentials from the console-login session that command
+writes to `~/.aws/config` (`login_session`). Use this when you
+sign into the AWS Management Console as a root user, IAM user,
+or through IAM federation — the same identity, without long-lived
+access keys. When the session expires, run `alchemy profile refresh`
+to refresh it.
 
 ### Stored access keys
 
@@ -92,7 +103,7 @@ The region is required. The account ID is taken from
 ## Managing credentials
 
 Re-run the setup at any time (e.g. to switch from stored keys to
-SSO, or to configure a separate `prod` profile):
+SSO or console login, or to configure a separate `prod` profile):
 
 ```sh
 alchemy profile edit --reconfigure AWS
