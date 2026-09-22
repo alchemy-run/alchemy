@@ -243,6 +243,63 @@ describe.sequential("multi-container bluegreen protocol", () => {
     { timeout: 10_000 },
   );
 
+  it.live(
+    "dependency ordering and empty optional fields do not replace a generation",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* multiContainerClient();
+        const dependencies = [
+          { name: "api", condition: "started" as const },
+          { name: "metrics", condition: "started" as const },
+        ];
+        const before = {
+          ...initialConfig,
+          containers: [
+            { name: "worker", image: pins.worker, depends_on: dependencies },
+            { name: "api", image: pins.api },
+            { name: "metrics", image: pins.api },
+          ],
+        };
+        const first = yield* reconcileWith(before).pipe(
+          withControlledClient(fixture.client),
+        );
+        const eventCount = fixture.events.length;
+        const equivalent = {
+          ...before,
+          containers: before.containers.map((container) => ({
+            ...container,
+            env: {},
+            healthchecks: [],
+            depends_on: container.depends_on
+              ? [...container.depends_on].reverse()
+              : [],
+          })),
+        };
+        const second = yield* reconcileWith(equivalent).pipe(
+          withControlledClient(fixture.client),
+        );
+        expect(second.machineIds).toEqual(first.machineIds);
+        expect(mutations(fixture.events.slice(eventCount))).toEqual([]);
+        const changed = {
+          ...equivalent,
+          containers: equivalent.containers.map((container) => ({
+            ...container,
+            depends_on: container.depends_on.map((dependency) => ({
+              ...dependency,
+              condition: "healthy" as const,
+            })),
+          })),
+        };
+        const third = yield* reconcileWith(changed).pipe(
+          withControlledClient(fixture.client),
+        );
+        expect(
+          third.machineIds.some((id) => first.machineIds.includes(id)),
+        ).toBe(false);
+      }),
+    { timeout: 10_000 },
+  );
+
   for (const protocol of [undefined, "1"] as const) {
     for (const retainGeneration of [true, false]) {
       it.live(

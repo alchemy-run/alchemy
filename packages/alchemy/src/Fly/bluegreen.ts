@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
 import { sha256Object } from "../Util/sha256.ts";
+import { canonicalContainers } from "./MachineContainers.ts";
 import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 import {
   applyImageSet,
@@ -207,9 +208,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
     config: containerMode
       ? {
           ...config,
-          containers: [...(config.containers ?? [])].sort((a, b) =>
-            (a.name ?? "").localeCompare(b.name ?? ""),
-          ),
+          containers: canonicalContainers(config.containers),
         }
       : config,
     count: input.count,
