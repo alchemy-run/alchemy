@@ -397,6 +397,74 @@ describe
       );
 
       test.provider(
+        "role with replication is created with the attribute and replaced when it changes",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const { database, role1 } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const database = yield* Planetscale.PostgresDatabase(
+                  "Database",
+                  {
+                    clusterSize: "PS_10",
+                    arch: "arm",
+                  },
+                );
+                const role1 = yield* Planetscale.PostgresRole(
+                  "RoleReplication",
+                  {
+                    database,
+                    inheritedRoles: ["postgres"],
+                    withReplication: true,
+                  },
+                );
+
+                return { database, role1 };
+              }),
+            );
+
+            expect(role1).toMatchObject({
+              id: expect.any(String),
+              inheritedRoles: ["postgres"],
+              withReplication: true,
+            });
+
+            const { role2 } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const database = yield* Planetscale.PostgresDatabase(
+                  "Database",
+                  {
+                    clusterSize: "PS_10",
+                    arch: "arm",
+                  },
+                );
+                const role2 = yield* Planetscale.PostgresRole(
+                  "RoleReplication",
+                  {
+                    database,
+                    inheritedRoles: ["postgres"],
+                  },
+                );
+
+                return { role2 };
+              }),
+            );
+
+            expect(role2).toMatchObject({ withReplication: false });
+            expect(role2.id).not.toEqual(role1.id);
+
+            yield* stack.destroy();
+
+            yield* waitForDatabaseToBeDeleted(
+              database.name,
+              database.organization,
+            );
+          }).pipe(logLevel),
+        5_000_000,
+      );
+
+      test.provider(
         "role gets replaced when properties change",
         (stack) =>
           Effect.gen(function* () {
