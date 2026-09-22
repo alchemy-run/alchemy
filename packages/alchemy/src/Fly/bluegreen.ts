@@ -13,9 +13,11 @@ import {
   pinsFromConfig,
   sameImageSet,
   validObservedImageSet,
-  validProtocol2RecoveryMetadata,
-  validProtocol2Generation,
 } from "./DeploymentImages.ts";
+import {
+  classifyDeploymentState,
+  validProtocol2Generation,
+} from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import {
   autostopMode,
@@ -249,38 +251,11 @@ export const reconcileBlueGreen = Effect.fn(function* (
     );
   }
   for (const machine of owned) {
-    const protocol = machine.config?.metadata?.[keys.protocol];
-    if (protocol !== undefined && protocol !== "1" && protocol !== "2")
-      return yield* ambiguous(
-        `Unknown deployment metadata protocol on ${machine.id}.`,
-      );
-    if (protocol === "2" && !validProtocol2RecoveryMetadata(machine))
-      return yield* ambiguous(
-        `Invalid protocol-2 recovery metadata on ${machine.id}.`,
-      );
-    if (
-      protocol !== "2" &&
-      machine.config?.metadata?.[keys.containerImageSet] !== undefined
-    )
-      return yield* ambiguous(
-        `Contradictory container image metadata on ${machine.id}.`,
-      );
-    if (
-      (protocol === "1" || protocol === "2") &&
-      (!Number.isSafeInteger(replicaIndexOf(machine)) ||
-        String(replicaIndexOf(machine)) !==
-          machine.config?.metadata?.[keys.replica] ||
-        ![
-          "candidate",
-          "promoting",
-          "validating",
-          "active",
-          "retiring",
-        ].includes(machine.config?.metadata?.[keys.phase] ?? ""))
-    ) {
-      return yield* ambiguous(`Invalid recovery metadata on ${machine.id}.`);
-    }
+    const state = classifyDeploymentState(machine);
+    if (state.protocol === "invalid")
+      return yield* ambiguous(`Machine ${machine.id}: ${state.reason}`);
   }
+
   const idleAllowed =
     (config.services?.length ?? 0) > 0 &&
     config.services!.every(

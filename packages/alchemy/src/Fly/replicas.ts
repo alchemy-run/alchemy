@@ -21,7 +21,10 @@ import {
   type MachineCheck,
 } from "./Deployment.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
-import { validProtocol2Generation } from "./DeploymentImages.ts";
+import {
+  classifyDeploymentState,
+  validProtocol2Generation,
+} from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
@@ -1575,6 +1578,12 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       const count = Number(
         group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
       );
+      if (
+        group.some(
+          (machine) => classifyDeploymentState(machine).protocol === "invalid",
+        )
+      )
+        return false;
       const protocol2 = group.some(
         (machine) =>
           machine.config?.metadata?.[alchemyMetadataKeys.protocol] === "2",
@@ -1612,8 +1621,8 @@ export const observeReplicaSet = Effect.fn(function* (input: {
         Number(a[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0),
     );
   const legacy = (groups.get(undefined) ?? []).filter((machine) => {
-    const protocol = machine.config?.metadata?.[alchemyMetadataKeys.protocol];
-    return protocol === undefined || protocol === "1";
+    const { protocol } = classifyDeploymentState(machine);
+    return protocol === "legacy" || protocol === "1";
   });
   const listed = (committed[0]?.[1] ?? legacy).sort(
     (a, b) => replicaIndexOf(a) - replicaIndexOf(b),

@@ -29,6 +29,26 @@ const mutations = (events: Array<{ method: string; path: string }>) =>
     (event) => event.method !== "GET" && !event.path.endsWith("/lease"),
   );
 
+const observe = (machineIds: readonly string[]) =>
+  observeReplicaSet({
+    appName,
+    id: "Worker",
+    type: "Fly.Machine",
+    fqn: metadata[keys.fqn],
+    resourceInstanceId: metadata[keys.instance],
+    machineIds,
+    baseName: metadata[keys.baseName],
+  }).pipe(
+    Effect.provideService(Stack, {
+      name: appName,
+      stage: "pure",
+      resources: {},
+      bindings: {},
+      actions: {},
+    }),
+    Effect.provideService(Stage, "pure"),
+  );
+
 describe.sequential("multi-container bluegreen protocol", () => {
   it.live(
     "creates two checked replicas with complete immutable image metadata and reuses them",
@@ -222,6 +242,50 @@ describe.sequential("multi-container bluegreen protocol", () => {
       }),
     { timeout: 10_000 },
   );
+
+  for (const protocol of [undefined, "1"] as const) {
+    for (const retainGeneration of [true, false]) {
+      it.live(
+        `missing/downgraded protocol ${protocol} cannot hide container recovery state (generation=${retainGeneration})`,
+        () =>
+          Effect.gen(function* () {
+            const fixture = yield* multiContainerClient();
+            const committed = yield* reconcile.pipe(
+              withControlledClient(fixture.client),
+            );
+            for (const machine of fixture.machines.values()) {
+              const changed = { ...machine.config?.metadata };
+              if (protocol === undefined) delete changed[keys.protocol];
+              else changed[keys.protocol] = protocol;
+              if (!retainGeneration) delete changed[keys.generation];
+              fixture.machines.set(machine.id!, {
+                ...machine,
+                config: { ...machine.config, metadata: changed },
+              });
+            }
+            const observed = yield* observe(committed.machineIds).pipe(
+              withControlledClient(fixture.client),
+            );
+            expect(observed?.rolloutPending).toBe(true);
+            expect(observed?.machineIds).toEqual([]);
+            const before = fixture.events.length;
+            const result = yield* reconcile.pipe(
+              withControlledClient(fixture.client),
+              Effect.result,
+            );
+            expect(Result.isFailure(result)).toBe(true);
+            if (Result.isFailure(result)) {
+              expect(result.failure).toBeInstanceOf(
+                DeploymentRecoveryAmbiguous,
+              );
+            }
+            expect(fixture.machines.size).toBe(2);
+            expect(mutations(fixture.events.slice(before))).toEqual([]);
+          }),
+        { timeout: 10_000 },
+      );
+    }
+  }
 
   for (const damaged of [keys.generation, keys.count, keys.role] as const) {
     it.live(
