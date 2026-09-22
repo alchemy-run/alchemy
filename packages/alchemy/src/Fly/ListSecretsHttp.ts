@@ -21,6 +21,7 @@ import { makeHttpAppBinding } from "./SecretHttp.ts";
  * ```
  *
  * @layer
+ * @product Secret
  * @provides Fly.ListSecrets
  */
 export const ListSecretsHttp = Layer.effect(

@@ -126,6 +126,7 @@ export interface Function extends Resource<
  * ```
  *
  * @resource
+ * @product Function
  */
 export const Function: Platform<
   Function,

@@ -42,6 +42,7 @@ export interface AuthTrustedDomain extends Resource<
  * ```
  *
  * @resource
+ * @product Auth
  */
 export const AuthTrustedDomain = Resource<AuthTrustedDomain>(
   "Neon.AuthTrustedDomain",

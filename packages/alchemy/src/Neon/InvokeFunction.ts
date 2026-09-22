@@ -29,6 +29,7 @@ export class InvokeFunctionError extends Data.TaggedError(
  * ```
  *
  * @binding
+ * @product Function
  */
 export interface InvokeFunction extends Binding.Service<
   InvokeFunction,

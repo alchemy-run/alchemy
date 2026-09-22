@@ -22,6 +22,7 @@ import { InvokeFunction, InvokeFunctionError } from "./InvokeFunction.ts";
  * ```
  *
  * @layer
+ * @product Function
  * @provides Neon.InvokeFunction
  */
 export const InvokeFunctionHttp = Layer.effect(

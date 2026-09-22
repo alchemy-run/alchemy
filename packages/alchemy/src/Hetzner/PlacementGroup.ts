@@ -112,6 +112,7 @@ export type PlacementGroup = Resource<
  * ```
  *
  * @resource
+ * @product Server
  */
 export const PlacementGroup = Resource<PlacementGroup>(
   "Hetzner.PlacementGroup",

@@ -20,18 +20,6 @@ interface Props {
 
 const { sublist, nested } = Astro.props;
 
-// A service group links to its shared page; categories spanning pages stay toggles.
-const servicePages = new Map(sublist.flatMap((entry) => {
-  if (entry.type !== "group") return [];
-  const pages = new Set(entry.entries.map((item) =>
-    item.type === "link" && item.href.startsWith("/providers/")
-      ? item.href.split("#")[0]
-      : undefined,
-  ));
-  const [page] = pages;
-  return pages.size === 1 && page ? [[entry, page] as const] : [];
-}));
-
 const isCurrentDeep = (entries: SidebarEntry[]): boolean =>
   entries.some((entry) =>
     entry.type === "link" ? entry.isCurrent : isCurrentDeep(entry.entries),
@@ -57,8 +45,7 @@ const nextGroupIndex = () => {
         {entry.type === "link" ? (
           <a
             href={entry.href}
-            aria-current={!entry.href.includes("#") && entry.isCurrent && "page"}
-            data-reference-link={entry.href.startsWith("/providers/") && entry.href.includes("#") || undefined}
+            aria-current={entry.isCurrent && "page"}
             class:list={[{ large: !nested }, entry.attrs.class]}
             {...entry.attrs}
           >
@@ -72,7 +59,7 @@ const nextGroupIndex = () => {
             )}
           </a>
         ) : (
-          <details open={servicePages.get(entry) === Astro.url.pathname.replace(/\/$/, "") || isCurrentDeep(entry.entries) || !entry.collapsed}>
+          <details open={isCurrentDeep(entry.entries) || !entry.collapsed}>
             <sl-sidebar-restore data-index={nextGroupIndex()} />
             <summary>
               <div class="group-label">
@@ -86,11 +73,7 @@ const nextGroupIndex = () => {
                     set:html={sidebarGroupIcon(entry.label)}
                   />
                 )}
-                {servicePages.has(entry) ? (
-                  <a class="large reference-group-link" href={`${servicePages.get(entry)}#_top`} data-reference-group>{entry.label}</a>
-                ) : (
-                  <span class="large">{entry.label}</span>
-                )}
+                <span class="large">{entry.label}</span>
                 {entry.badge && (
                   <Badge
                     variant={entry.badge.variant}
@@ -193,9 +176,9 @@ const nextGroupIndex = () => {
     color: var(--sl-color-white);
   }
 
-  :is([aria-current="page"], [aria-current="location"]),
-  :is([aria-current="page"], [aria-current="location"]):hover,
-  :is([aria-current="page"], [aria-current="location"]):focus {
+  [aria-current="page"],
+  [aria-current="page"]:hover,
+  [aria-current="page"]:focus {
     font-weight: 600;
     color: var(--sl-color-text-invert);
     background-color: var(--sl-color-text-accent);

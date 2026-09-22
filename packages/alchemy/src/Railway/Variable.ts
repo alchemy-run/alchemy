@@ -278,6 +278,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * ```
  *
  * @resource
+ * @product Service
  */
 export const Variable: typeof VariableResource = Object.assign(
   (
