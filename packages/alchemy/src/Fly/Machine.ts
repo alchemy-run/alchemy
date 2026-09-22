@@ -236,8 +236,6 @@ export interface MachineContainer {
   cmd?: string[];
   /** Entrypoint override. */
   entrypoint?: string[];
-  /** Exec override. */
-  exec?: string[];
   /** Per-container environment variables; Fly applies these over Machine env. */
   env?: Record<string, string>;
   /** Other named containers that must reach a startup condition first. */

@@ -266,3 +266,21 @@ it.effect(
       Effect.provideService(Stage, "pure"),
     ),
 );
+
+it.effect(
+  "rejects container exec overrides that Fly accepts without executing",
+  () =>
+    Effect.gen(function* () {
+      const props = {
+        containers: [{ name: "api", image: "example/api:v1", exec: ["serve"] }],
+      };
+      const result = yield* validateMachineContainers(props).pipe(
+        Effect.result,
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("Fly.InvalidMachineContainers");
+        expect(result.failure.message).toContain("cmd and entrypoint");
+      }
+    }),
+);

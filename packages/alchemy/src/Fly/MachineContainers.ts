@@ -59,6 +59,12 @@ export const validateMachineContainers = (
           message: "Every container needs a nonempty name and image.",
         }),
       );
+    if ("exec" in container && container.exec !== undefined)
+      return Effect.fail(
+        new InvalidMachineContainers({
+          message: `Container ${container.name}: use cmd and entrypoint; native container exec overrides are not supported.`,
+        }),
+      );
     if (names.has(container.name))
       return Effect.fail(
         new InvalidMachineContainers({
@@ -90,7 +96,6 @@ export const toFlyContainers = (
     image: container.image,
     cmd: container.cmd,
     entrypoint: container.entrypoint,
-    exec: container.exec,
     env: container.env,
     depends_on: container.dependsOn?.map(({ name, condition }) => ({
       name,
@@ -125,7 +130,6 @@ const normalized = (containers: FlyContainerConfig[] | undefined) =>
       image: container.image,
       cmd: container.cmd,
       entrypoint: container.entrypoint,
-      exec: container.exec,
       env: Object.fromEntries(
         Object.entries(container.env ?? {}).filter(
           ([, value]) => value !== undefined,

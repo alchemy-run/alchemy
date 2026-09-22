@@ -41,7 +41,7 @@ makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 
 ## Run named containers
 
-Use `containers` for a group that shares one Machine. Each named container has its own image and can set `cmd`, `entrypoint`, `exec`, `env`, startup `dependsOn`, and Pilot `healthChecks`. Check intervals and timeouts are numeric seconds. A dependency condition can be `started`, `healthy`, or `exited_successfully`.
+Use `containers` for a group that shares one Machine. Each named container has its own image and can set `cmd`, `entrypoint`, `env`, startup `dependsOn`, and Pilot `healthChecks`. Use `cmd` and `entrypoint` to override startup; container `exec` overrides are not supported. Existing single-image `init.exec` is unchanged. Check intervals and timeouts are numeric seconds. A dependency condition can be `started`, `healthy`, or `exited_successfully`.
 
 ```typescript
 const preview = yield* Fly.Machine("Preview", {
