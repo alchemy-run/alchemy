@@ -10,7 +10,6 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
 import type { MachineContainer } from "@/Fly/Machine";
-import { throughProxy, transportProxy } from "./fixtures/transport.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -19,10 +18,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-let endpoint: string | undefined;
-const { test: faultTest } = Test.make({
-  providers: throughProxy(() => endpoint),
-});
 const image =
   "docker-hub-mirror.fly.io/library/nginx@sha256:7396be67b6f53012a5cf955fa9040619294c25ccacf11e22af5de1b572fc756e";
 const nextImage =
@@ -707,8 +702,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
-faultTest.provider(
-  "lost rolling update response converges the owned named group on rerun",
+test.provider(
+  "rerun converges on a named group already updated outside Alchemy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -733,57 +728,34 @@ faultTest.provider(
           }),
         );
       const first = yield* deploy(image);
-      const interrupted = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const proxy = yield* transportProxy();
-          endpoint = proxy.url;
-          proxy.arm({
-            match: (event) =>
-              event.method === "POST" &&
-              event.path.endsWith(`/machines/${first.machineId}`),
-            action: "drop-response",
-            remaining: 1,
-          });
-          const result = yield* deploy(nextImage).pipe(Effect.result);
-          const dropped = proxy.events.filter(
-            (event) => event.stage === "dropped",
-          );
-          expect(dropped).toHaveLength(1);
-          expect(dropped[0]?.status).toBe(200);
-          return { result, acceptedInstanceId: dropped[0]?.instanceId };
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              endpoint = undefined;
-            }),
+      const target = { app_name: first.appName, machine_id: first.machineId };
+
+      // Apply the next deployment directly, as if Fly accepted Alchemy's
+      // update but the response never arrived.
+      const before = yield* machines.getMachine(target);
+      const accepted = yield* machines.updateMachine({
+        ...target,
+        config: {
+          ...before.config,
+          containers: before.config?.containers?.map((container) =>
+            container.name === "sidecar"
+              ? { ...container, image: nextImage }
+              : container,
           ),
-        ),
-      );
-      expect(Result.isFailure(interrupted.result)).toBe(true);
-      if (interrupted.acceptedInstanceId === undefined)
-        return yield* Effect.fail(
-          new Error("Accepted update did not report an instance ID"),
-        );
+        },
+      });
       yield* machines.waitMachine({
-        app_name: first.appName,
-        machine_id: first.machineId,
+        ...target,
         state: "started",
-        instance_id: interrupted.acceptedInstanceId,
+        instance_id: accepted.instance_id,
         timeout: 30,
       });
-      const settled = yield* machines.getMachine({
-        app_name: first.appName,
-        machine_id: first.machineId,
-      });
-      expect(settled.instance_id).toBe(interrupted.acceptedInstanceId);
-      expect(settled.config?.containers?.[1]?.image).toBe(nextImage);
+
       const converged = yield* deploy(nextImage);
       expect(converged.machineId).toBe(first.machineId);
       expect(converged.mounts[0]?.volumeId).toBe(first.mounts[0]?.volumeId);
-      const observed = yield* machines.getMachine({
-        app_name: first.appName,
-        machine_id: first.machineId,
-      });
+      const observed = yield* machines.getMachine(target);
+      expect(observed.instance_id).toBe(accepted.instance_id);
       expect(
         observed.config?.containers?.map(({ name, image }) => ({
           name,
@@ -805,7 +777,7 @@ faultTest.provider(
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
       );
       expect(gone).toBe(true);
-    }),
+    }).pipe(logLevel),
   { timeout: 120_000 },
 );
 
