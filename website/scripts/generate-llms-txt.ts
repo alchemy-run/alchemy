@@ -4,7 +4,7 @@
  * pulled from each page's frontmatter.
  *
  * `llms.txt` covers the guides and concept docs and links to
- * `llms-full.txt`, which additionally lists every generated per-resource
+ * `llms-full.txt`, which additionally lists every generated service-level
  * API reference page (the Providers section) and is much larger.
  *
  * Run with: `bun scripts/generate-llms-txt.ts`
@@ -543,7 +543,7 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const PROVIDERS_INTRO_BASE = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags.`;
+const PROVIDERS_INTRO_BASE = `Service-level API reference, generated from JSDoc on the source \`.ts\` files via \`bun scripts/generate-api-reference.ts\`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.`;
 
 const PROVIDERS_INTRO = `${PROVIDERS_INTRO_BASE} Grouped by cloud below.`;
 
@@ -587,13 +587,13 @@ const HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The per-resource API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
+This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The service-level API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
 
 const FULL_HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every per-resource API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
+This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every service-level API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
 
 function parseFrontmatter(source: string): Record<string, string> {
   if (!source.startsWith("---")) return {};
@@ -734,7 +734,7 @@ async function main() {
   const fullSizeKb = Math.round(Buffer.byteLength(fullBody, "utf8") / 1024);
   const referenceSection = [
     `## API reference`,
-    `${PROVIDERS_INTRO_BASE}\n\nThe per-resource pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
+    `${PROVIDERS_INTRO_BASE}\n\nThe service-level pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
   ];
 
   const body = [HEADER, ...sections, ...referenceSection].join("\n\n") + "\n";

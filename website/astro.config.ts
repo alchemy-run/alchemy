@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
+import { rewriteReferenceLinks } from "./src/reference-links.ts";
+import { referenceRedirects } from "./plugins/reference-redirects.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
@@ -163,7 +165,10 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.copyFile(full, target);
+              await fs.writeFile(
+                target,
+                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
+              );
             }),
           );
         }
@@ -197,6 +202,7 @@ export default defineConfig({
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
+    referenceRedirects(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),

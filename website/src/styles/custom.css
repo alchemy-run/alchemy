@@ -1071,7 +1071,9 @@ header.header {
 }
 
 /* Active page: left accent bar + tint, mockup-style. */
-#starlight__sidebar .sidebar-content a[aria-current="page"] {
+#starlight__sidebar
+  .sidebar-content
+  a:is([aria-current="page"], [aria-current="location"]) {
   background: var(--alc-accent-12);
   color: var(--alc-accent-deep);
   border-inline-start-color: var(--alc-accent-deep);

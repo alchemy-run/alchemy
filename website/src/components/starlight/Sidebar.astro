@@ -21,3 +21,31 @@ const { sidebar } = Astro.locals.starlightRoute;
 <div class="md:sl-hidden">
   <MobileMenuFooter />
 </div>
+
+<script>
+  function updateReferenceSelection() {
+    const currentPath = window.location.pathname.replace(/\/$/, "");
+    const links = [...document.querySelectorAll<HTMLAnchorElement>("a[data-reference-link]")];
+    // Example headings extend the resource's anchor; prefer the longest match.
+    const selected = links.filter((link) => {
+      const target = new URL(link.href);
+      return target.pathname.replace(/\/$/, "") === currentPath &&
+        (target.hash === window.location.hash || window.location.hash.startsWith(`${target.hash}-`));
+    }).sort((a, b) => b.hash.length - a.hash.length)[0];
+    for (const link of links) {
+      if (link === selected) {
+        link.setAttribute("aria-current", "location");
+        let parent = link.parentElement;
+        while (parent) {
+          if (parent instanceof HTMLDetailsElement) parent.open = true;
+          parent = parent.parentElement;
+        }
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    }
+  }
+  updateReferenceSelection();
+  window.addEventListener("hashchange", updateReferenceSelection);
+  document.addEventListener("astro:page-load", updateReferenceSelection);
+</script>
