@@ -2,6 +2,7 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 import * as Fly from "@/Fly";
 import type { MachineContainer } from "@/Fly/Machine";
@@ -72,17 +73,26 @@ test.provider.skipIf(orgSlug === undefined)(
         { name: "web", condition: "healthy" },
       ]);
 
-      const connected = yield* machines.execMachine({
-        ...target,
-        container: "sidecar",
-        command: [
-          "sh",
-          "-c",
-          "wget -qO- http://127.0.0.1:80/ | grep -q 'Welcome to nginx' && printf connected",
-        ],
-        timeout: 10,
-      });
+      const connected = yield* machines
+        .execMachine({
+          ...target,
+          container: "sidecar",
+          command: [
+            "sh",
+            "-c",
+            "wget -qO- http://127.0.0.1:80/ | grep -q 'Welcome to nginx' && printf connected",
+          ],
+          timeout: 10,
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            times: 8,
+            until: (result) => result.stdout?.includes("connected") === true,
+          }),
+        );
       expect(connected.stdout).toContain("connected");
+      expect(connected.exit_code).toBe(0);
       const environment = yield* machines.execMachine({
         ...target,
         container: "sidecar",
@@ -90,6 +100,7 @@ test.provider.skipIf(orgSlug === undefined)(
         timeout: 10,
       });
       expect(environment.stdout).toContain("machine|sidecar");
+      expect(environment.exit_code).toBe(0);
       const written = yield* machines.execMachine({
         ...target,
         container: "web",
