@@ -96,6 +96,9 @@ jobs:
       - name: Test Fly Machine configuration
         run: timeout 240 pnpm test test/Fly/MachineContainers.test.ts test/Fly/Deployment.test.ts test/Fly/DeploymentImages.test.ts test/Fly/MultiContainerBlueGreen.test.ts --retry 0
 
+      - name: Test Fly single-image deployment compatibility
+        run: timeout 240 pnpm test test/Fly/BlueGreen.test.ts -t 'protocol branches|pure readiness|R02 predecessor policy' --retry 0
+
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc
 
