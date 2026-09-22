@@ -75,11 +75,11 @@ interface ProcessHandle {
  * Environment variable holding extra V8 flags for every workerd process this
  * package spawns, separated by whitespace. workerd runs V8 with its default
  * heap limit (about 1.4 GB), which a large application's dev module graph
- * can exhaust after a few hours of edits. `WORKERD_V8_FLAGS=--max-old-space-size=4096`
- * raises that limit. Flags from the config come first, so they win when V8
+ * can exhaust after a few hours of edits. `ALCHEMY_WORKERD_V8_FLAGS=--max-old-space-size=4096`
+ * raises that limit. Flags from the config come last, so they win when V8
  * sees the same flag twice.
  */
-export const V8_FLAGS_ENV = "WORKERD_V8_FLAGS";
+export const V8_FLAGS_ENV = "ALCHEMY_WORKERD_V8_FLAGS";
 
 /** Splits the value of {@link V8_FLAGS_ENV} into individual flags. */
 export const parseV8Flags = (value: string | undefined): Array<string> =>
@@ -88,7 +88,7 @@ export const parseV8Flags = (value: string | undefined): Array<string> =>
 const withV8Flags = (config: Config, flags: Array<string>): Config =>
   flags.length === 0
     ? config
-    : { ...config, v8Flags: [...(config.v8Flags ?? []), ...flags] };
+    : { ...config, v8Flags: [...flags, ...(config.v8Flags ?? [])] };
 
 const make = (
   spawn: (
