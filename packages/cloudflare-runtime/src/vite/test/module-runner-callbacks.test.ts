@@ -1,9 +1,13 @@
-import { makeCallbackRegistry } from "../module-runner/callbacks.shared.ts";
-import { describe, expect, test } from "vitest";
+import { CallbackRegistry } from "../module-runner/module-runner.worker.ts";
+import { describe, expect, test, vi } from "vitest";
+
+vi.mock("cloudflare:workers", () => ({
+  DurableObject: class {},
+}));
 
 describe("module runner callback registry", () => {
   test("hands the result back and forgets the entry", async () => {
-    const registry = makeCallbackRegistry();
+    const registry = new CallbackRegistry();
     const namespace = { default: "module" };
     const result = await registry.run(
       (id) => registry.execute(id),
@@ -14,7 +18,7 @@ describe("module runner callback registry", () => {
   });
 
   test("forgets the entry when the callback fails", async () => {
-    const registry = makeCallbackRegistry();
+    const registry = new CallbackRegistry();
     await expect(
       registry.run(
         (id) => registry.execute(id),
@@ -27,7 +31,7 @@ describe("module runner callback registry", () => {
   });
 
   test("forgets the entry when the callback never runs", async () => {
-    const registry = makeCallbackRegistry();
+    const registry = new CallbackRegistry();
     await expect(
       registry.run(
         async () => {
@@ -40,7 +44,7 @@ describe("module runner callback registry", () => {
   });
 
   test("keeps concurrent callbacks apart", async () => {
-    const registry = makeCallbackRegistry();
+    const registry = new CallbackRegistry();
     const results = await Promise.all(
       [1, 2, 3].map((value) =>
         registry.run(
@@ -54,7 +58,7 @@ describe("module runner callback registry", () => {
   });
 
   test("rejects an unknown id", async () => {
-    const registry = makeCallbackRegistry();
+    const registry = new CallbackRegistry();
     await expect(registry.execute(42)).rejects.toThrow(
       "No pending callback with id 42",
     );

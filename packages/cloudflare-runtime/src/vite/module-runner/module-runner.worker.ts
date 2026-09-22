@@ -10,7 +10,6 @@ import {
   INIT_PATH,
   REQUEST_EXPORT_TYPES_EVENT,
 } from "./constants.shared.ts";
-import { makeCallbackRegistry } from "./callbacks.shared.ts";
 import { stripInternalEnv, type Env } from "./env.worker.ts";
 
 declare global {
@@ -21,7 +20,60 @@ declare global {
   ) => Promise<unknown>;
 }
 
-const callbacks = makeCallbackRegistry();
+/**
+ * Module imports have to run inside the module runner Durable Object's
+ * `IoContext`, but they are requested from other contexts (a Worker request,
+ * a dynamic `import()`). The requesting side registers the callback here,
+ * asks the object to run it over RPC by id, and reads the result by id once
+ * the RPC returns. Both sides share this module because they share one V8
+ * isolate.
+ *
+ * Every entry is removed once the caller has read its result, whether the
+ * callback succeeded or failed. A result is a module namespace, and a
+ * namespace keeps every module it (transitively) imported alive. Retaining
+ * the results would pin each previous module graph after an HMR update or a
+ * full runner reload until the isolate ran out of heap.
+ */
+export class CallbackRegistry {
+  private nextId = 0;
+  private readonly pending = new Map<number, () => Promise<unknown>>();
+  private readonly results = new Map<number, unknown>();
+
+  /**
+   * Registers `callback` and asks `execute` to run it under its id. Resolves
+   * with the callback's result once `execute` returns.
+   */
+  async run<T>(
+    execute: (id: number) => Promise<void>,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    const id = this.nextId++;
+    this.pending.set(id, callback);
+    try {
+      await execute(id);
+      return this.results.get(id) as T;
+    } finally {
+      this.pending.delete(id);
+      this.results.delete(id);
+    }
+  }
+
+  /** Runs the callback registered under `id` and stores its result. */
+  async execute(id: number): Promise<void> {
+    const callback = this.pending.get(id);
+    if (!callback) {
+      throw new Error(`No pending callback with id ${id}`);
+    }
+    this.results.set(id, await callback());
+  }
+
+  /** Entries still registered. Zero whenever no `run` is in flight. */
+  get size(): number {
+    return this.pending.size + this.results.size;
+  }
+}
+
+const callbacks = new CallbackRegistry();
 
 /** Runs `callback` inside the module runner Durable Object's `IoContext`. */
 const runInModuleRunner = <T>(
