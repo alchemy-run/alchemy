@@ -4,13 +4,17 @@ import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import RequireNodeBuiltinsWorker from "./fixtures/require-node-builtins/worker.ts";
+import WorkflowValidationWorker from "./fixtures/workflow-exports/effect-worker.ts";
 
 const decode = (content: string | Uint8Array<ArrayBufferLike>) =>
   typeof content === "string"
@@ -36,6 +40,38 @@ const writeFixture = Effect.fn(function* (files: Record<string, string>) {
 });
 
 layer(NodeServices.layer)("WorkerBundle", (it) => {
+  it.effect("adds Workflow export checks to external Worker bundles", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const root = yield* writeFixture({
+        "package.json": "{}",
+        "worker.mjs": [
+          `export class GuideWorkflow {}`,
+          `export default { fetch: () => new Response("ok") };`,
+        ].join("\n"),
+      });
+
+      const bundler = yield* WorkerBundle;
+      const output = yield* bundler.build({
+        id: "external-effect-workflow",
+        main: path.join(root, "worker.mjs"),
+        compatibility: { date: "2026-03-17", flags: [] },
+        entry: {
+          kind: "external",
+          workflowClassNames: ["GuideWorkflow"],
+        },
+        stack: { name: "worker-bundle-test", stage: "test" },
+        extraOptions: undefined,
+      });
+
+      const bundle = output.files.map((file) => decode(file.content)).join();
+      expect(bundle).toContain(
+        "is configured as a Workflow but does not extend cloudflare:workers WorkflowEntrypoint",
+      );
+      expect(bundle).toContain("Import and yield the Effect Worker class");
+    }),
+  );
+
   // Regression test for #880: CJS dependencies (like `pg`) that
   // `require("events")` must have those requires converted into ESM imports
   // of the workerd-provided Node builtins. Left unconverted, rolldown emits
@@ -414,3 +450,159 @@ describe("integration", () => {
     { timeout: 180_000 },
   );
 });
+
+const workflowMain = (file: string) =>
+  new URL(`./fixtures/workflow-exports/${file}`, import.meta.url).href;
+
+const assertWorkflow = Effect.fn(function* (url: string) {
+  const ready = yield* Test.getWhenReady(url, { times: 6 });
+  expect(yield* ready.text).toBe("workflow-export-ready");
+  const client = yield* HttpClient.HttpClient;
+  const started = yield* client.post(`${url}/start`);
+  if (started.status !== 200) {
+    return yield* Effect.fail(
+      new Error(
+        `Workflow start failed (${started.status}): ${yield* started.text}`,
+      ),
+    );
+  }
+  const { instanceId } = yield* started.json.pipe(
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(Schema.Struct({ instanceId: Schema.String })),
+    ),
+  );
+  const status = yield* client.get(`${url}/status/${instanceId}`).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({
+          status: Schema.String,
+          output: Schema.optional(
+            Schema.NullOr(Schema.Struct({ value: Schema.String })),
+          ),
+          error: Schema.optional(Schema.Unknown),
+        }),
+      ),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 10,
+      until: (result) =>
+        ["complete", "errored", "terminated"].includes(result.status),
+    }),
+  );
+  expect(status).toMatchObject({
+    status: "complete",
+    output: { value: "workflow-export-ok" },
+  });
+});
+
+for (const dev of [true, false]) {
+  describe(`Workflow export validation (${dev ? "local" : "live"})`, () => {
+    const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+
+    for (const { label, main, className } of [
+      {
+        label: "Effect-native",
+        main: "effect-worker.ts",
+        className: "ValidationWorkflow",
+      },
+      { label: "missing", main: "native.ts", className: "MissingWorkflow" },
+    ]) {
+      test.provider(
+        `rejects ${label} Workflow exports through the external Worker API`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const deploy = stack.deploy(
+              Cloudflare.Worker("InvalidWorkflowWorker", {
+                main: workflowMain(main),
+                env: { VALIDATION_WORKFLOW: Cloudflare.Workflow(className) },
+              }),
+            );
+            let message: string;
+            if (dev) {
+              const worker = yield* deploy;
+              const client = yield* HttpClient.HttpClient;
+              // Trigger startup without invoking the invalid Workflow.
+              const response = yield* client.get(worker.url!);
+              message = yield* response.text;
+              expect(response.status).toBe(502);
+            } else {
+              const result = yield* deploy.pipe(Effect.exit);
+              expect(Exit.isFailure(result)).toBe(true);
+              if (Exit.isSuccess(result)) return;
+              message = Cause.pretty(result.cause);
+            }
+            expect(message).toContain(className);
+            expect(message).toContain("is configured as a Workflow");
+            expect(message).toContain(
+              "Import and yield the Effect Worker class",
+            );
+            yield* stack.destroy();
+          }),
+        { timeout: 120_000 },
+      );
+    }
+
+    for (const main of ["native.ts", "native-only.ts"]) {
+      test.provider(
+        `runs native and cross-script Workflows from ${main}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const Host = Cloudflare.Worker("WorkflowHost", {
+              main: workflowMain(main),
+              env: {
+                VALIDATION_WORKFLOW: Cloudflare.Workflow("ValidationWorkflow"),
+              },
+            });
+            const host = yield* stack.deploy(Host);
+            if (dev) {
+              // Local hosts start lazily on their first request.
+              const client = yield* HttpClient.HttpClient;
+              yield* client.get(host.url!);
+            }
+            const deployed = yield* stack.deploy(
+              Effect.gen(function* () {
+                const host = yield* Host;
+                const consumer = yield* Cloudflare.Worker("WorkflowConsumer", {
+                  main: workflowMain("client.ts"),
+                  env: {
+                    VALIDATION_WORKFLOW: Cloudflare.Workflow(
+                      "ValidationWorkflow",
+                      {
+                        scriptName: host.workerName,
+                      },
+                    ),
+                  },
+                });
+                return { host, consumer };
+              }),
+            );
+            yield* assertWorkflow(deployed.consumer.url!);
+            if (main === "native.ts") yield* assertWorkflow(deployed.host.url!);
+            yield* stack.destroy();
+          }),
+        { timeout: 120_000 },
+      );
+    }
+
+    test.provider(
+      "runs Effect-native Workflow exports through the Effect Worker API",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const worker = yield* WorkflowValidationWorker;
+              return { worker };
+            }),
+          );
+          yield* assertWorkflow(deployed.worker.url!);
+          yield* stack.destroy();
+        }),
+      { timeout: 120_000 },
+    );
+  });
+}

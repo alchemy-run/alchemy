@@ -2519,6 +2519,14 @@ export const Worker: ResourceClassLike<Worker> &
             };
         };
     };
+    /**
+     * Create an external Worker from a standard Cloudflare module.
+     *
+     * `main` does not install Effect entrypoint bridges. Configured JavaScript
+     * and TypeScript Workflow exports must extend `WorkflowEntrypoint` from
+     * `cloudflare:workers`. To deploy an Effect Worker module, import and yield
+     * its Worker class from the stack instead.
+     */
     <
       const Bindings extends WorkerBindingProps = {},
       const Assets extends WorkerAssetsConfig | undefined = undefined,
