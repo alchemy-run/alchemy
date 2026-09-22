@@ -92,6 +92,8 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * ports again. The URL returned by `start` stays valid. Connections into
    * the old process are gone, so a caller that keeps any (such as the Vite
    * module runner sockets) reconnects here.
+   * Automatic recovery is limited to three restarts within a rolling minute,
+   * with backoff between attempts. A failed replacement stops recovery.
    */
   readonly onRestart?: (exit: WorkerdExit) => void;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;

@@ -151,18 +151,18 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           await environment.connect(address);
         }
       };
-      // The runtime replaces a crashed workerd on the same ports (see
-      // `RuntimeWorker.onRestart`), so the proxy target below stays valid;
-      // only the module runner sockets into the old process need replacing.
+      // Match Cloudflare's Vite plugin: rebuild the dev server's environments,
+      // hot channels and module runners after the runtime recovers. Framework
+      // state may still refer to the crashed process even with the same ports.
       const onRuntimeRestart = () => {
         server.config.logger.warn(
-          "The Worker runtime restarted, reconnecting the module runner.",
+          "The Worker runtime recovered after a crash; restarting the Vite dev server.",
           { timestamp: true },
         );
         if (!handle) return;
-        connect(handle.address).catch((error: unknown) => {
+        void server.restart().catch((error: unknown) => {
           server.config.logger.error(
-            `Failed to reconnect to the restarted Worker runtime: ${String(error)}`,
+            `Failed to restart the Vite dev server after Worker recovery: ${String(error)}`,
             {
               error: error instanceof Error ? error : undefined,
               timestamp: true,
