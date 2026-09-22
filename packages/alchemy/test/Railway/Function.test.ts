@@ -1,6 +1,10 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import {
+  activeReplicaRegions,
+  serviceRegionPlacement,
+} from "@/Railway/ServiceRegion.ts";
 import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -333,4 +337,78 @@ test.provider.skip(
     ],
     timeout: 120_000,
   },
+);
+
+const placedRegions = (config: unknown, serviceId: string) =>
+  activeReplicaRegions(serviceRegionPlacement(config, serviceId)).map(
+    (row) => row.region,
+  );
+
+test.provider(
+  "pin a function to a region and move it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const region = "europe-west4-drams3a";
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const ping = yield* Railway.Function("FnRegion", {
+            project,
+            environment,
+            source: `console.log("tick");`,
+            http: false,
+            region,
+          });
+          return { ping };
+        }),
+      );
+
+      expect(created.ping.region).toEqual(region);
+      const createdConfig = yield* railway.environment(
+        {
+          id: created.ping.environmentId,
+          projectId: created.ping.projectId,
+        },
+        { config: { where: { decryptVariables: false } } },
+      );
+      expect(
+        placedRegions(createdConfig.config, created.ping.serviceId),
+      ).toEqual([region]);
+
+      const moved = "us-west2";
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const ping = yield* Railway.Function("FnRegion", {
+            project,
+            environment,
+            source: `console.log("tick");`,
+            http: false,
+            region: moved,
+          });
+          return { ping };
+        }),
+      );
+
+      expect(updated.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(updated.ping.region).toEqual(moved);
+      const updatedConfig = yield* railway.environment(
+        {
+          id: updated.ping.environmentId,
+          projectId: updated.ping.projectId,
+        },
+        { config: { where: { decryptVariables: false } } },
+      );
+      expect(
+        placedRegions(updatedConfig.config, updated.ping.serviceId),
+      ).toEqual([moved]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.ping.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

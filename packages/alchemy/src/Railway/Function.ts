@@ -25,6 +25,7 @@ import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import {
   assertHostDisk,
   type MountSpec,
@@ -64,6 +65,7 @@ const selection = {
 const attributeInstanceSelection = {
   source: { image: true },
   region: true,
+  numReplicas: true,
   sleepApplication: true,
   latestDeployment: { id: true, status: true },
   cronSchedule: true,
@@ -192,8 +194,11 @@ export interface FunctionProps<
    */
   sleepApplication?: boolean;
   /**
-   * Region for the service instance (`us-west2`, `us-east4`, …). If
-   * omitted, Railway picks the default. Updates in place.
+   * Region the function runs in (`us-west2`, `europe-west4-drams3a`, …).
+   * Railway places replicas with `deploy.multiRegionConfig`. Omit this
+   * and the current placement is left alone (the workspace default on
+   * first create). Updating it moves the replicas in place and keeps
+   * the current replica count.
    */
   region?: string;
   /**
@@ -239,7 +244,10 @@ export type Function<Env extends Record<string, any> = Record<string, any>> =
       cronSchedule: string | undefined;
       /** Observed `sleepApplication`. */
       sleepApplication: boolean | undefined;
-      /** Observed region, if Railway reported one. */
+      /**
+       * Region the function is placed in. Set when
+       * `deploy.multiRegionConfig` has replicas in exactly one region.
+       */
       region: string | undefined;
       /** Port published on the generated service domain. */
       port: number | undefined;
@@ -908,6 +916,7 @@ const toAttrs = (input: {
   port: number | undefined;
   codeHash: string;
   rpcToken: string;
+  region: string | undefined;
 }): Function["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -917,7 +926,7 @@ const toAttrs = (input: {
   runtime: FUNCTION_RUNTIME_NAME,
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   sleepApplication: input.instance?.sleepApplication ?? undefined,
-  region: input.instance?.region ?? undefined,
+  region: input.region,
   port: input.port ?? input.domain?.targetPort,
   dnsName: `${input.service.name}.railway.internal`,
   rpcToken: input.rpcToken,
@@ -960,13 +969,6 @@ const instanceSettingsDelta = (input: {
     instance?.sleepApplication !== input.props.sleepApplication
   ) {
     delta.sleepApplication = input.props.sleepApplication;
-    changed = true;
-  }
-  if (
-    input.props.region !== undefined &&
-    (instance?.region ?? undefined) !== input.props.region
-  ) {
-    delta.region = input.props.region;
     changed = true;
   }
   return changed ? delta : undefined;
@@ -1055,6 +1057,15 @@ export const FunctionProvider = () =>
             resolvedEnvId.length > 0
               ? yield* getInstance(resolvedEnvId, found.id)
               : undefined;
+          const region =
+            resolvedEnvId.length > 0
+              ? yield* readServiceRegion({
+                  environmentId: resolvedEnvId,
+                  projectId: resolvedProjectId,
+                  serviceId: found.id,
+                  legacy: instance?.region,
+                })
+              : undefined;
           const attrs = toAttrs({
             service: found,
             instance,
@@ -1065,6 +1076,7 @@ export const FunctionProvider = () =>
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
+            region,
           });
           if (output !== undefined) return attrs;
           return matchesAlchemyPhysicalName(found.name)
@@ -1110,6 +1122,7 @@ export const FunctionProvider = () =>
                           port: undefined,
                           codeHash: "",
                           rpcToken: "",
+                          region: instance.region ?? undefined,
                         }),
                       ];
                     }),
@@ -1284,6 +1297,20 @@ export const FunctionProvider = () =>
               (yield* getInstance(environmentId, current.id)) ?? instance;
           }
 
+          // Pin `deploy.multiRegionConfig` before the build, then again after,
+          // in case the deploy wrote the workspace default back.
+          const serviceId = current.id;
+          const placeRegion = () =>
+            syncServiceRegion({
+              environmentId,
+              projectId,
+              serviceId,
+              region: props.region,
+              legacy: instance?.region,
+              fallbackReplicas: instance?.numReplicas,
+            });
+          let region = yield* placeRegion();
+
           const envChanged = yield* syncEnv({
             projectId,
             environmentId,
@@ -1343,6 +1370,8 @@ export const FunctionProvider = () =>
             }
           }
 
+          region = yield* placeRegion();
+
           return toAttrs({
             service: current,
             instance,
@@ -1353,6 +1382,7 @@ export const FunctionProvider = () =>
             port,
             codeHash,
             rpcToken,
+            region,
           });
         }),
 
