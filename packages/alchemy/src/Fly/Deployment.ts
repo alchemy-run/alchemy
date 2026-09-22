@@ -124,6 +124,9 @@ export const validateDeployment = (
   if (mounted)
     message =
       "Blue/green deployments cannot attach volumes, including MountVolume bindings.";
+  else if (config.containers !== undefined)
+    message =
+      "Blue/green deployments of multi-container Machines are not supported yet.";
   else if (skipLaunch || config.auto_destroy || config.restart?.policy === "no")
     message = "Blue/green deployments require a persistent, launched Machine.";
   else if (
