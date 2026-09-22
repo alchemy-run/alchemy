@@ -11,21 +11,11 @@ Run your stack in development mode with hot reloading. Resources are deployed to
 
 ## How it works
 
-`dev` watches the stack's imports through `alchemy/bin/exec`. Node reloads the stack in the exec process; Bun starts a fresh exec process after each stack change. The supervisor and local provider sidecar survive these reloads.
+`dev` re-runs your stack under `bun --watch` (or `node --watch` with type-stripping flags on supported Node versions) via `alchemy/bin/exec`.
 
 `--yes` and dev mode are implied, so approval prompts never appear.
 
 A failed apply keeps dev alive so healthy resources keep serving — fix the error and save to redeploy.
-
-## Repeated invocations
-
-One supervisor owns each **canonical stack entrypoint path and resolved stage** in your local Alchemy home (`~/.alchemy`, or `$ALCHEMY_HOME`). Relative paths and symlinks to the same entrypoint share ownership. Different entrypoints or stages remain independent, even if their stack declarations use the same name.
-
-Running the same invocation again prints the owner's PID and exits successfully without starting another exec process or sidecar. The session may still be starting; this message does not assert that its resources are healthy. The original terminal retains control: stop it with Ctrl+C before starting a replacement.
-
-A repeated invocation with a different working directory, profile, environment-file selection, `--force`, or include/exclude filters fails with a conflict message. Explicit `--env-file .env` counts as a different selection because it gives dotenv values precedence over process environment variables. Filter order and duplicate filters preserve the same selection. Ownership records store only option metadata; environment-file contents and credentials remain private. Changes to environment-file contents are outside the ownership check.
-
-Ownership is released after child cleanup. A later invocation can recover a record whose owner PID is known to have exited. An unreadable or corrupt record, or uncertain PID liveness, stops the invocation with an error.
 
 ## Flags
 
