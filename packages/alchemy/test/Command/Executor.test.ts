@@ -41,7 +41,7 @@ test(
       expect(notes).toEqual(expect.arrayContaining(["hello", "warning"]));
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -66,7 +66,7 @@ test(
       expect(error.message).toContain("exited with code 7");
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -130,7 +130,7 @@ test(
       expect(alive).toBe(false);
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test(
@@ -202,5 +202,5 @@ test(
       expect(collisionNotes.join("\n")).not.toContain(markerCollision);
     }),
   ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local"], timeout: 30_000 },
 );

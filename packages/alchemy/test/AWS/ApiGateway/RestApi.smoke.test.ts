@@ -126,5 +126,13 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       yield* assertRestApiDeleted(out.restApiId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:apigateway",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

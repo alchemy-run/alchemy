@@ -165,7 +165,10 @@ test.provider(
       const gone = yield* waitUntilGone(created.appName, created.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -263,7 +266,10 @@ test.provider(
         "gone",
       );
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -323,7 +329,10 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.appName, replaced.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -360,7 +369,10 @@ test.provider(
       const gone = yield* waitUntilGone(deployed.appName, deployed.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -414,7 +426,10 @@ test.provider(
         expect(yield* waitUntilGone(app.appName, machine.id!)).toBe("gone");
       }
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -536,5 +551,8 @@ test.provider(
         expect(gone).toEqual("gone");
       }
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 180_000,
+  },
 );

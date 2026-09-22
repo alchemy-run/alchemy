@@ -32,23 +32,26 @@ import { messageForCapabilities } from "@/Util/interactive.ts";
 
 const FAKE_PROVIDER = "FakeAuthProvider";
 
-it.effect("selects guidance from injected interaction capabilities", () =>
-  Effect.gen(function* () {
-    expect(
-      yield* messageForCapabilities(
-        Effect.succeed({ input: true }),
-        "interactive",
-        "plain",
-      ),
-    ).toBe("interactive");
-    expect(
-      yield* messageForCapabilities(
-        Effect.succeed({ input: false }),
-        "interactive",
-        "plain",
-      ),
-    ).toBe("plain");
-  }),
+it.effect(
+  "selects guidance from injected interaction capabilities",
+  () =>
+    Effect.gen(function* () {
+      expect(
+        yield* messageForCapabilities(
+          Effect.succeed({ input: true }),
+          "interactive",
+          "plain",
+        ),
+      ).toBe("interactive");
+      expect(
+        yield* messageForCapabilities(
+          Effect.succeed({ input: false }),
+          "interactive",
+          "plain",
+        ),
+      ).toBe("plain");
+    }),
+  { tags: ["unit", "local"] },
 );
 
 // Records whether the lock-wrapped `configure` was ever entered. A missing
@@ -147,7 +150,7 @@ it.live(
         expect(state.configureCalls).toBe(0);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -173,7 +176,7 @@ it.live(
         expect(state.configureCalls).toBe(0);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -198,7 +201,7 @@ it.live(
         expect(selection).toEqual({ name: "default", source: "default" });
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -246,7 +249,7 @@ it.live(
         expect(yield* fs.exists(configFilePath())).toBe(false);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -298,7 +301,7 @@ it.live(
         ).toHaveLength(1);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -332,7 +335,7 @@ it.live(
         expect(yield* fs.exists(configFilePath())).toBe(true);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -368,7 +371,7 @@ it.live(
         ).toBe(true);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -398,7 +401,7 @@ it.live(
         ).toBe(true);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -450,50 +453,56 @@ it.live(
         );
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
-it.effect("accepts portable profile names", () =>
-  Effect.gen(function* () {
-    expect(yield* validateProfileName("production-admin")).toBe(
-      "production-admin",
-    );
-    expect(yield* validateProfileName("team.prod_2")).toBe("team.prod_2");
-  }),
+it.effect(
+  "accepts portable profile names",
+  () =>
+    Effect.gen(function* () {
+      expect(yield* validateProfileName("production-admin")).toBe(
+        "production-admin",
+      );
+      expect(yield* validateProfileName("team.prod_2")).toBe("team.prod_2");
+    }),
+  { tags: ["unit", "local"] },
 );
 
-it.effect("lets custom providers refine metadata and values", () =>
-  Effect.gen(function* () {
-    const CustomProfile = makeProviderProfileSchema(
-      "Acme",
-      Schema.Struct({ team: Schema.String }),
-      Schema.Union([
-        Schema.Struct({
-          method: Schema.Literal("token"),
-          token: Schema.String,
+it.effect(
+  "lets custom providers refine metadata and values",
+  () =>
+    Effect.gen(function* () {
+      const CustomProfile = makeProviderProfileSchema(
+        "Acme",
+        Schema.Struct({ team: Schema.String }),
+        Schema.Union([
+          Schema.Struct({
+            method: Schema.Literal("token"),
+            token: Schema.String,
+          }),
+          Schema.Struct({
+            method: Schema.Literal("oauth"),
+            access: Schema.String,
+            refresh: Schema.String,
+            scopes: Schema.Array(Schema.String),
+          }),
+        ]),
+      );
+      expect(
+        yield* Schema.decodeUnknownEffect(CustomProfile)({
+          format: PROFILE_FORMAT,
+          provider: "Acme",
+          metadata: { team: "platform" },
+          values: { method: "token", token: "secret" },
         }),
-        Schema.Struct({
-          method: Schema.Literal("oauth"),
-          access: Schema.String,
-          refresh: Schema.String,
-          scopes: Schema.Array(Schema.String),
-        }),
-      ]),
-    );
-    expect(
-      yield* Schema.decodeUnknownEffect(CustomProfile)({
+      ).toEqual({
         format: PROFILE_FORMAT,
         provider: "Acme",
         metadata: { team: "platform" },
         values: { method: "token", token: "secret" },
-      }),
-    ).toEqual({
-      format: PROFILE_FORMAT,
-      provider: "Acme",
-      metadata: { team: "platform" },
-      values: { method: "token", token: "secret" },
-    });
-  }),
+      });
+    }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -505,6 +514,7 @@ it.effect(
         expect(error).toBeInstanceOf(ProfileError);
       }
     }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -544,7 +554,7 @@ it.effect(
         "from-cli",
       );
     }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -593,7 +603,7 @@ it.live(
       ),
     );
   },
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -609,7 +619,7 @@ it.live(
       // the process environment, `.env`, and `--env-file` alike.
       { FAKE_ENV_TOKEN: "from-env" },
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -627,7 +637,7 @@ it.live(
       }),
       { ALCHEMY_PROFILE: "default", FAKE_ENV_TOKEN: "from-env" },
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -650,7 +660,7 @@ it.live(
       }),
       { FAKE_ENV_TOKEN: "from-env" },
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -666,7 +676,7 @@ it.live(
       }),
       { CI: true, ALCHEMY_PROFILE: "default" },
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -697,5 +707,5 @@ it.live(
         expect((error as AuthError).message).toContain("--reconfigure");
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );

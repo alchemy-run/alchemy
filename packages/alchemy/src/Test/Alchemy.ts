@@ -14,6 +14,8 @@ import {
   registerHook,
   registerTest,
   retryOf,
+  tagsOf,
+  optInTagsOf,
   timeoutOf,
   type TestOptions,
 } from "alchemy-test";
@@ -152,6 +154,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       exclusive: exclusiveOf(opts),
       retry: retryOf(opts),
       timeout: timeoutOf(opts),
+      tags: tagsOf(opts),
+      optInTags: optInTagsOf(opts),
       body: mode === "skip" || mode === "todo" ? undefined : () => wrap(eff),
     });
 
@@ -203,7 +207,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     mode: "run" | "skip",
   ) => {
     // Captured at registration (module evaluation during collection) — the
-    // AsyncLocalStorage file context is gone by the time the body runs.
+    // collection context is gone by the time the body runs.
     const file = currentFile();
     registerTest({
       name,
@@ -211,6 +215,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       exclusive: exclusiveOf(opts),
       retry: retryOf(opts),
       timeout: timeoutOf(opts),
+      tags: tagsOf(opts),
+      optInTags: optInTagsOf(opts),
       body: mode === "skip" ? undefined : () => wrapProvider(name, fn, file),
     });
   };
@@ -287,9 +293,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // registration to a microtask so it runs AFTER any user-registered
   // `afterAll` (including `destroy(Stack)`); the runner executes afterAll
   // hooks in registration order, and file collection flushes microtasks
-  // before sealing the file's suite tree. (Files are collected in parallel,
-  // but the microtask carries the AsyncLocalStorage context of this file's
-  // import, so the hook lands on the right suite.)
+  // before sealing the file's suite tree and advancing to the next file.
   const closeAll = sidecar
     ? Effect.andThen(closeScope, sidecar.close)
     : closeScope;

@@ -75,5 +75,17 @@ test.skipIf(!enabled)(
     const now = yield* Effect.sync(() => Date.now());
     expect(Date.parse(body.notAfter!)).toBeGreaterThan(now);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "provider:zerossl",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

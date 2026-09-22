@@ -137,7 +137,15 @@ test.skipIf(!WFP_ENABLED)(
     const { platformUrl, userWorkerName } = yield* stack;
     yield* assertDispatch(platformUrl, userWorkerName);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workersforplatforms",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // Async platform worker: binds the namespace via `env: { DISPATCH }` + InferEnv.
@@ -147,7 +155,15 @@ test.skipIf(!WFP_ENABLED)(
     const { asyncPlatformUrl, userWorkerName } = yield* stack;
     yield* assertDispatch(asyncPlatformUrl, userWorkerName);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workersforplatforms",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 test.skipIf(!WFP_ENABLED)(
@@ -170,5 +186,13 @@ test.skipIf(!WFP_ENABLED)(
       );
     expect(res.status).toBeGreaterThanOrEqual(400);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workersforplatforms",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

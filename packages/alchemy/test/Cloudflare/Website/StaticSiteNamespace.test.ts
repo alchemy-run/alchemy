@@ -59,6 +59,15 @@ test(
     // itself and `Cache` stays where the caller declared it.
     expect(keys).toEqual(["Cache", "Site", "Site/Build"]);
   }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:website",
+      "local",
+    ],
+  },
 );
 
 test(
@@ -84,6 +93,14 @@ test(
     expect(resources["Site"]?.FormerFqns).toEqual(["Site/Worker"]);
     expect(resources["App/Nested"]?.FormerFqns).toEqual(["App/Nested/Worker"]);
   }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:website",
+      "local",
+    ],
+  },
 );
 
 test(
@@ -100,6 +117,15 @@ test(
     );
     expect(keys).toEqual(["Cache", "Site"]);
   }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:website",
+      "local",
+    ],
+  },
 );
 
 test(
@@ -119,6 +145,14 @@ test(
       },
     });
   }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:website",
+      "local",
+    ],
+  },
 );
 
 class WebsiteRoot extends Context.Service<WebsiteRoot, string>()(
@@ -193,4 +227,12 @@ test(
       });
     }
   }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:website",
+      "local",
+    ],
+  },
 );

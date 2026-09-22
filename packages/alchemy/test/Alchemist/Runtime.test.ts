@@ -2,7 +2,7 @@ import * as Alchemist from "@/Alchemist";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
-describe("Alchemist runtime", () => {
+describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
   test("provides every service required by the programmatic stack API", () => {
     const deploy = Effect.gen(function* () {
       const snapshot = yield* Alchemist.Stack.plan({

@@ -81,7 +81,15 @@ test(
     expect(typeof text).toBe("string");
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -102,7 +110,15 @@ test(
     expect(body.count).toBeGreaterThan(0);
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -138,7 +154,15 @@ test(
     expect(body.usage.outputTokens).toBeGreaterThan(0);
     expect(body.finishReason).toBe("stop");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -170,7 +194,15 @@ test(
     expect(typeof text).toBe("string");
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -196,7 +228,15 @@ test(
     expect(body.count).toBeGreaterThan(0);
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -235,5 +275,13 @@ test(
     expect(text.length).toBeGreaterThan(0);
     expect(finish).toBeDefined();
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

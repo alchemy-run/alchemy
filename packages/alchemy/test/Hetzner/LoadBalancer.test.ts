@@ -221,7 +221,17 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.lb.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:loadbalancer",
+      "provider:hetzner:network",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -268,5 +278,13 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:loadbalancer",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

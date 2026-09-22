@@ -264,7 +264,16 @@ test.provider(
       Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
       logLevel,
     ),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:privatenetwork",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -467,5 +476,14 @@ test.provider(
           ),
       );
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:privatenetwork",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

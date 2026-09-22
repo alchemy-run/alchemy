@@ -188,5 +188,20 @@ test.skipIf(!hasHetznerCreds)(
     expect(body.path).toEqual(VOLUME_PATH);
     expect(body.text).toEqual(MARKER);
   }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:firewall",
+      "provider:hetzner:loadbalancer",
+      "provider:hetzner:mountvolume",
+      "provider:hetzner:recordset",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "provider:hetzner:volume",
+      "provider:hetzner:zone",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );

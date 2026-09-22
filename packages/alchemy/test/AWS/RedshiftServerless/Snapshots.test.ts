@@ -29,6 +29,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:redshiftserverless", "live"] },
 );
 
 test.provider(
@@ -42,6 +43,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:redshiftserverless", "live"] },
 );
 
 const SNAPSHOT_NAME = "alchemy-test-rssnap-snapshot";
@@ -54,6 +56,14 @@ let baseUrl: string;
 // in afterAll.
 describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
   "RedshiftServerless Snapshot Bindings",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:redshiftserverless",
+      "live",
+    ],
+  },
   () => {
     beforeAll(
       Effect.gen(function* () {

@@ -116,7 +116,7 @@ it.live(
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -136,7 +136,7 @@ it.live(
         expect(scoped.accountId).toBe(DEFAULT_ACCOUNT);
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.live(
@@ -165,5 +165,5 @@ it.live(
         expect((missing as AuthError).message).toContain("profile 'default'");
       }),
     ),
-  { exclusive: true },
+  { tags: ["unit", "local"], exclusive: true },
 );

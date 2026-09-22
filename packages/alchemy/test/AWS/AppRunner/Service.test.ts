@@ -30,6 +30,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:apprunner", "live"] },
 );
 
 // The provider's delete already waits until the service is gone, so this
@@ -168,7 +169,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertConfigGone("alchemy-test-svc-asc");
     }),
   // create (~3-5 min) + delete (~2-3 min), one sequential test.
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apprunner", "live"],
+    timeout: 900_000,
+  },
 );
 
 // The `retainLogGroups` opt-out: destroying the service leaves the two
@@ -218,5 +222,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(yield* observeLogGroups(logGroupNames)).toEqual([false, false]);
     }),
   // create (~3-5 min) + delete (~2-3 min), one sequential test.
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apprunner", "live"],
+    timeout: 900_000,
+  },
 );

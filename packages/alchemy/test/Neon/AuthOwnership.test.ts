@@ -193,6 +193,14 @@ test.provider(
         Layer.mergeAll(AuthProvider(), AuthTrustedDomainProvider()),
       ),
     ),
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:authtrusteddomain",
+      "live",
+    ],
+  },
 );
 
 test.provider(
@@ -376,6 +384,16 @@ test.provider(
         ),
       ),
     ),
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:authoauthprovider",
+      "provider:neon:authtrusteddomain",
+      "provider:neon:dataapi",
+      "live",
+    ],
+  },
 );
 
 test(
@@ -396,6 +414,7 @@ test(
       ),
     ).toEqual([]);
   }),
+  { tags: ["unit", "provider:neon", "provider:neon:auth", "local"] },
 );
 
 test.provider(
@@ -452,7 +471,16 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 interface PreviewScope extends Resource<
@@ -556,7 +584,10 @@ retryTest.provider(
       Effect.provideService(HttpClient.HttpClient, http),
     );
   },
-  { timeout: 10_000 },
+  {
+    tags: ["unit", "provider:neon", "provider:neon:auth", "local"],
+    timeout: 10_000,
+  },
 );
 
 const { test: previewTest } = Test.make({
@@ -708,7 +739,16 @@ previewTest.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -748,5 +788,15 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:authtrusteddomain",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
