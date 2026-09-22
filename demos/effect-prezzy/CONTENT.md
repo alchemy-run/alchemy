@@ -150,6 +150,7 @@ end. The scene-by-scene checkpoints will be cut from it.
 | `app/alchemy.run.ts` | Stack with the Api Worker and the Dashboard website |
 | `app/src/Links.ts` | `Links` service contract, `LinkNotFound` (8, 18) |
 | `app/src/LinksKV.ts` | KV-backed `Links` Layer (8) |
+| `app/src/LinksDynamo.ts` | DynamoDB-backed `Links` Layer (13) |
 | `app/src/Queues.ts` | `Jobs` and `Clicks` queues and message types (10, 14) |
 | `app/src/unfurl.ts` | Page-title fetch with timeout and retry (10) |
 | `app/src/LinkRoom.ts` | Durable Object: count, RPC, WebSocket push (15, 16) |
@@ -157,26 +158,29 @@ end. The scene-by-scene checkpoints will be cut from it.
 | `app/src/Api.ts` | Worker: consumers, cron, HttpApi, redirect, live route |
 | `app/web/` | React dashboard with the typed client and live counts (19) |
 
-Verified on a real deploy: creating and bulk-importing links, previews
-filled in by the Jobs consumer, redirects, click counts arriving through
-the Clicks queue into each `LinkRoom`, WebSocket pushes on every click,
-the typed 404 from `HttpApi`, and the dashboard creating a link and
-updating counts live.
+Verified on a real deploy (`--profile testing`): creating links, bulk
+import through `QueueSink`, previews filled in by the Jobs consumer,
+redirects, click counts arriving through the Clicks queue into each
+`LinkRoom`, WebSocket pushes on every click, the typed 404 from `HttpApi`,
+and the dashboard creating a link and updating counts live. With
+`LinksKV`, new links and previews took up to a minute to show up
+(scene 12); with `LinksDynamo` they appear as soon as the job finishes.
 
-Two scenes still use stand-ins until the product PRs land:
+The app uses the two product changes below from a local merge of their
+branches, so it runs ahead of `main` until they land.
 
-- Scene 13 keeps `LinksKV`; `LinksDynamo` needs DynamoDB bindings on
-  Worker hosts.
-- Scenes 11 and 17 send batches with `WriteQueue.sendBatch` inside
-  `Stream.runForEachArray`; they switch to `Stream.run(QueueSink(Jobs))`.
+Keep the table's logical id different from the KV namespace's
+(`LinksTable` vs `Links`). Reusing `Links` for a resource of a different
+type makes `alchemy deploy` crash in `DynamoDB.Table`'s `diff`
+(`olds` is undefined), an engine bug to fix separately.
 
 ## Product work this plan depends on
 
 - `Cloudflare.Queues.QueueSink`: an Effect `Sink` over `sendBatch`
-  (scenes 11, 17). In progress on its own PR.
-- DynamoDB HTTP bindings on Cloudflare Worker hosts (scene 13). Today only
-  S3 and Lambda invoke mint the cross-cloud identity. In progress on its
-  own PR.
+  (scenes 11, 17). [#1781](https://github.com/alchemy-run/alchemy/pull/1781),
+  draft while one flaky live-test run is investigated.
+- DynamoDB HTTP bindings on Cloudflare Worker hosts (scene 13).
+  [#1782](https://github.com/alchemy-run/alchemy/pull/1782).
 - Quieter `alchemy deploy` output: the Cloudflare Worker provider logs
   internal steps at Info level, which clutters every recorded deploy.
 

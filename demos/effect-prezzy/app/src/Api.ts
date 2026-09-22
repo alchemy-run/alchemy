@@ -10,7 +10,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import LinkRoom from "./LinkRoom.ts";
 import { Links, type Link } from "./Links.ts";
-import { LinksKV } from "./LinksKV.ts";
+import { LinksDynamo } from "./LinksDynamo.ts";
 import { Clicks, Jobs, type ClickEvent, type UnfurlJob } from "./Queues.ts";
 import { ShortyApi } from "./ShortyApi.ts";
 import { unfurl } from "./unfurl.ts";
@@ -26,15 +26,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const jobsQueue = yield* Jobs;
     const clicksQueue = yield* Clicks;
     const jobs = yield* Cloudflare.Queues.WriteQueue(jobsQueue);
+    const jobsSink = yield* Cloudflare.Queues.QueueSink(jobsQueue);
     const clicks = yield* Cloudflare.Queues.WriteQueue(clicksQueue);
 
+    // Every chunk of the stream becomes one sendBatch call.
     const enqueueUnfurls = (stream: Stream.Stream<UnfurlJob>) =>
-      stream.pipe(
-        Stream.rechunk(100),
-        Stream.runForEachArray((batch) =>
-          jobs.sendBatch(batch.map((job) => ({ body: job }))),
-        ),
-      );
+      stream.pipe(Stream.rechunk(100), Stream.run(jobsSink));
 
     const withClicks = (link: Link) =>
       rooms
@@ -176,8 +173,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        LinksKV,
+        LinksDynamo,
         Cloudflare.Queues.WriteQueueBinding,
+        Cloudflare.Queues.QueueSinkBinding,
         Cloudflare.Queues.EventSourceLive,
         Cloudflare.Workers.CronEventSourceLive,
         FetchHttpClient.layer,
