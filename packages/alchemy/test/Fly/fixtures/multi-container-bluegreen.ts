@@ -119,6 +119,7 @@ export interface JournalEvent {
 export const multiContainerClient = (
   options: {
     failOnce?: "create-response" | "uncordon" | "active" | "delete";
+    failOnNth?: number;
     staleAfterUpdate?: boolean;
   } = {},
 ) =>
@@ -129,6 +130,8 @@ export const multiContainerClient = (
     let nextVersion = 0;
     let failed = false;
     let armed = options.failOnce;
+    let failOnNth = options.failOnNth ?? 1;
+    let matches = 0;
     let afterActive:
       | ((machines: Map<string, machines.Machine>) => void)
       | undefined;
@@ -137,12 +140,16 @@ export const multiContainerClient = (
     ) => {
       afterActive = callback;
     };
-    const arm = (boundary: typeof options.failOnce) => {
+    const arm = (boundary: typeof options.failOnce, occurrence = 1) => {
       armed = boundary;
+      failOnNth = occurrence;
+      matches = 0;
       failed = false;
     };
     const fail = (boundary: typeof options.failOnce) => {
       if (armed !== boundary || failed) return false;
+      matches++;
+      if (matches !== failOnNth) return false;
       failed = true;
       return true;
     };

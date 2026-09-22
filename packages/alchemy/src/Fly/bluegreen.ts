@@ -14,6 +14,7 @@ import {
   sameImageSet,
   validObservedImageSet,
   validProtocol2RecoveryMetadata,
+  validProtocol2Generation,
 } from "./DeploymentImages.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import {
@@ -367,21 +368,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
       (group.some(
         (machine) => machine.config?.metadata?.[keys.protocol] === "2",
       ) &&
-        group.some(
-          (machine) =>
-            machine.config?.metadata?.[keys.protocol] !== "2" ||
-            !validProtocol2RecoveryMetadata(machine) ||
-            machine.config?.metadata?.[keys.count] !==
-              group[0]?.config?.metadata?.[keys.count] ||
-            machine.config?.metadata?.[keys.roles] !==
-              group[0]?.config?.metadata?.[keys.roles] ||
-            machine.config?.metadata?.[keys.workload] !==
-              group[0]?.config?.metadata?.[keys.workload] ||
-            !sameImageSet(
-              pinsFromConfig(machine.config),
-              pinsFromConfig(group[0]?.config),
-            ),
-        ))
+        !validProtocol2Generation(group))
     ) {
       return yield* ambiguous(
         "Owned generations have ambiguous sequence/lineage metadata; preserving all capacity.",

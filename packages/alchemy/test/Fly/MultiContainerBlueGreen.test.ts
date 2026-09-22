@@ -294,6 +294,95 @@ describe.sequential("multi-container bluegreen protocol", () => {
     );
   }
 
+  for (const damaged of [keys.workload, keys.sequence, keys.roles] as const) {
+    it.live(
+      `observer rejects inconsistent protocol-2 ${damaged}`,
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* multiContainerClient();
+          const committed = yield* reconcile.pipe(
+            withControlledClient(fixture.client),
+          );
+          const machine = [...fixture.machines.values()][1]!;
+          const changed = { ...machine.config?.metadata };
+          if (damaged === keys.roles) {
+            changed[keys.roles] = "idle,run";
+            changed[keys.role] = "run";
+          } else {
+            changed[damaged] =
+              damaged === keys.sequence ? "2" : "different-valid-workload";
+          }
+          fixture.machines.set(machine.id!, {
+            ...machine,
+            config: { ...machine.config, metadata: changed },
+          });
+          const observed = yield* observeReplicaSet({
+            appName,
+            id: "Worker",
+            type: "Fly.Machine",
+            fqn: metadata[keys.fqn],
+            resourceInstanceId: metadata[keys.instance],
+            machineIds: committed.machineIds,
+            baseName: metadata[keys.baseName],
+          }).pipe(
+            withControlledClient(fixture.client),
+            Effect.provideService(Stack, {
+              name: appName,
+              stage: "pure",
+              resources: {},
+              bindings: {},
+              actions: {},
+            }),
+            Effect.provideService(Stage, "pure"),
+          );
+          expect(observed?.rolloutPending).toBe(true);
+          expect(observed?.machineIds).toEqual([]);
+        }),
+      { timeout: 10_000 },
+    );
+  }
+
+  it.live(
+    "observer excludes unknown protocol with no generation from legacy fallback",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* multiContainerClient();
+        const committed = yield* reconcile.pipe(
+          withControlledClient(fixture.client),
+        );
+        const machine = [...fixture.machines.values()][0]!;
+        const changed = { ...machine.config?.metadata };
+        changed[keys.protocol] = "future";
+        delete changed[keys.generation];
+        fixture.machines.set(machine.id!, {
+          ...machine,
+          config: { ...machine.config, metadata: changed },
+        });
+        const observed = yield* observeReplicaSet({
+          appName,
+          id: "Worker",
+          type: "Fly.Machine",
+          fqn: metadata[keys.fqn],
+          resourceInstanceId: metadata[keys.instance],
+          machineIds: committed.machineIds,
+          baseName: metadata[keys.baseName],
+        }).pipe(
+          withControlledClient(fixture.client),
+          Effect.provideService(Stack, {
+            name: appName,
+            stage: "pure",
+            resources: {},
+            bindings: {},
+            actions: {},
+          }),
+          Effect.provideService(Stage, "pure"),
+        );
+        expect(observed?.rolloutPending).toBe(true);
+        expect(observed?.machineIds).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
   it.live(
     "a lost create response is recovered by name without a duplicate group",
     () =>
@@ -332,7 +421,7 @@ describe.sequential("multi-container bluegreen protocol", () => {
           const original = yield* reconcile.pipe(
             withControlledClient(fixture.client),
           );
-          fixture.arm(boundary);
+          fixture.arm(boundary, 2);
           const interrupted = yield* reconcileWith(replacementConfig).pipe(
             withControlledClient(fixture.client),
             Effect.result,
@@ -342,6 +431,22 @@ describe.sequential("multi-container bluegreen protocol", () => {
             fixture.machines.has(id),
           );
           expect(survivors.length).toBeGreaterThan(0);
+          const candidates = [...fixture.machines.values()].filter(
+            (machine) => !original.machineIds.includes(machine.id!),
+          );
+          expect(candidates).toHaveLength(2);
+          if (boundary === "uncordon")
+            expect(
+              candidates.filter((machine) => machine.cordoned === false),
+            ).toHaveLength(1);
+          if (boundary === "active")
+            expect(
+              candidates.filter(
+                (machine) =>
+                  machine.config?.metadata?.[keys.phase] === "active",
+              ),
+            ).toHaveLength(1);
+          if (boundary === "delete") expect(survivors).toHaveLength(1);
           const final = yield* reconcileWith(replacementConfig).pipe(
             withControlledClient(fixture.client),
           );

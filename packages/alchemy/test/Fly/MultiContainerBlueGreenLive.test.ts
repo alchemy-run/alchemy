@@ -64,6 +64,7 @@ const deploy = (
   count: number,
   reversed = false,
   badHealth = false,
+  strategy: "rolling" | "bluegreen" = "bluegreen",
 ) =>
   stack.deploy(
     Effect.gen(function* () {
@@ -84,8 +85,8 @@ const deploy = (
           },
         },
         deploy: {
-          strategy: "bluegreen",
-          healthTimeout: badHealth ? "15 seconds" : "60 seconds",
+          strategy,
+          healthTimeout: badHealth ? "15 seconds" : "30 seconds",
         },
         shutdown: { signal: "SIGTERM", timeout: "1 second" },
       });
@@ -138,6 +139,65 @@ test.provider.skipIf(orgSlug === undefined)(
       );
       yield* stack.destroy();
       expect(yield* appGone(first.appName)).toBe(true);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(orgSlug === undefined)(
+  "named group transitions from rolling to blue/green and back",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const rolling = yield* deploy(
+        stack,
+        firstImage,
+        1,
+        false,
+        false,
+        "rolling",
+      );
+      const promoted = yield* deploy(stack, firstImage, 1);
+      expect(promoted.machineId).not.toBe(rolling.machineId);
+      const promotedMachine = yield* machines.getMachine({
+        app_name: promoted.appName,
+        machine_id: promoted.machineId,
+      });
+      expect(
+        promotedMachine.config?.metadata?.["alchemy.deployment-protocol"],
+      ).toBe("2");
+      expect(
+        promotedMachine.config?.containers?.map(({ name, image }) => ({
+          name,
+          image,
+        })),
+      ).toEqual([
+        { name: "web", image: firstImage },
+        { name: "sidecar", image: firstImage },
+      ]);
+      const optedOut = yield* deploy(
+        stack,
+        firstImage,
+        1,
+        false,
+        false,
+        "rolling",
+      );
+      expect(optedOut.machineId).toBe(promoted.machineId);
+      const live = yield* machines.getMachine({
+        app_name: optedOut.appName,
+        machine_id: optedOut.machineId,
+      });
+      expect(
+        live.config?.metadata?.["alchemy.deployment-protocol"],
+      ).toBeUndefined();
+      expect(
+        live.config?.containers?.map(({ name, image }) => ({ name, image })),
+      ).toEqual([
+        { name: "web", image: firstImage },
+        { name: "sidecar", image: firstImage },
+      ]);
+      yield* stack.destroy();
+      expect(yield* appGone(rolling.appName)).toBe(true);
     }),
   { timeout: 120_000 },
 );

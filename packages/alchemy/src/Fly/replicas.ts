@@ -21,11 +21,7 @@ import {
   type MachineCheck,
 } from "./Deployment.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
-import {
-  pinsFromConfig,
-  sameImageSet,
-  validProtocol2RecoveryMetadata,
-} from "./DeploymentImages.ts";
+import { validProtocol2Generation } from "./DeploymentImages.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
@@ -1583,19 +1579,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
         (machine) =>
           machine.config?.metadata?.[alchemyMetadataKeys.protocol] === "2",
       );
-      if (
-        protocol2 &&
-        group.some(
-          (machine) =>
-            machine.config?.metadata?.[alchemyMetadataKeys.protocol] !== "2" ||
-            !validProtocol2RecoveryMetadata(machine) ||
-            !sameImageSet(
-              pinsFromConfig(machine.config),
-              pinsFromConfig(group[0]?.config),
-            ),
-        )
-      )
-        return false;
+      if (protocol2 && !validProtocol2Generation(group)) return false;
       return (
         Number.isSafeInteger(count) &&
         count > 0 &&

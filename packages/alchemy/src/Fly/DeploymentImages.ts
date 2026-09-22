@@ -1,7 +1,4 @@
-import type {
-  FlyMachineConfig,
-  Machine,
-} from "@distilled.cloud/fly-io/machines";
+import type { FlyMachineConfig } from "@distilled.cloud/fly-io/machines";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { alchemyMetadataKeys as keys } from "./Metadata.ts";
@@ -133,4 +130,34 @@ export const validProtocol2RecoveryMetadata = (machine: {
     ) &&
     ["true", "false"].includes(recorded?.[keys.restored] ?? "")
   );
+};
+
+/** A partial protocol-2 generation is valid only when every member agrees on its identity. */
+export const validProtocol2Generation = (
+  group: readonly { config?: FlyMachineConfig }[],
+): boolean => {
+  const first = group[0]?.config?.metadata;
+  if (!first || group.length === 0) return false;
+  const indices = new Set<string>();
+  for (const machine of group) {
+    const metadata = machine.config?.metadata;
+    const replica = metadata?.[keys.replica];
+    if (
+      !validProtocol2RecoveryMetadata(machine) ||
+      metadata?.[keys.generation] !== first[keys.generation] ||
+      metadata?.[keys.count] !== first[keys.count] ||
+      metadata?.[keys.sequence] !== first[keys.sequence] ||
+      metadata?.[keys.workload] !== first[keys.workload] ||
+      metadata?.[keys.roles] !== first[keys.roles] ||
+      replica === undefined ||
+      indices.has(replica) ||
+      !sameImageSet(
+        pinsFromConfig(machine.config),
+        pinsFromConfig(group[0]?.config),
+      )
+    )
+      return false;
+    indices.add(replica);
+  }
+  return true;
 };
