@@ -15,12 +15,13 @@ import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { Service } from "../ECS/Service.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Function } from "../Lambda/Function.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import {
+  certificateDnsPropsOf,
   normalizeWebsiteDomain,
+  websiteDnsOf,
   type SsrSiteRouteTargets,
   type WebsiteInvalidationProps,
   type WebsiteStandaloneDomainProps,
@@ -76,8 +77,9 @@ export interface SsrSiteProps {
    */
   server: SsrSiteServerOrigin;
   /**
-   * Optional custom domain managed through Route 53. A string is shorthand
-   * for `{ name }`; `null` explicitly clears a previously set domain.
+   * Optional custom domain (Route 53 by default; see `dns`). A string is
+   * shorthand for `{ name }`; `null` explicitly clears a previously set
+   * domain.
    */
   domain?: string | WebsiteStandaloneDomainProps | null;
   /**
@@ -207,6 +209,22 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  *
+ * **Example:** SSR Site With A Cloudflare Domain
+ * ```typescript
+ * // Certificate validation and the CNAME to CloudFront go through the
+ * // Cloudflare zone. Requires `Cloudflare.providers()` in the stack.
+ * const site = yield* SsrSite("App", {
+ *   server: {
+ *     type: "ecs",
+ *     service: webService,
+ *   },
+ *   domain: {
+ *     name: "app.example.com",
+ *     dns: Cloudflare.DNS.Adapter(),
+ *   },
+ * });
+ * ```
+ *
  * ### Router Composition
  * **Example:** Route Through An Existing Router
  * ```typescript
@@ -315,7 +333,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               ...(domain.aliases ?? []),
               ...(domain.redirects ?? []),
             ],
-            hostedZoneId: domain.hostedZoneId,
+            ...certificateDnsPropsOf(domain),
             tags: props.tags,
           });
 
@@ -404,8 +422,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       });
     }
 
+    const dns = websiteDnsOf(domain);
     const records =
-      domain && domain.dns !== false
+      domain && dns
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -413,13 +432,12 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               ...(domain.redirects ?? []),
             ],
             (name, index) =>
-              Route53Record(`AliasRecord${index + 1}`, {
-                // Optional — the Record provider infers the most specific
-                // public zone containing `name` when omitted.
-                hostedZoneId: domain.hostedZoneId,
+              // Route 53 infers the most specific public zone containing
+              // `name` when no `hostedZoneId` is set; Cloudflare infers the
+              // zone.
+              dns.alias(`AliasRecord${index + 1}`, {
                 name,
-                type: "A",
-                aliasTarget: {
+                target: {
                   hostedZoneId: distribution.hostedZoneId,
                   dnsName: distribution.domainName,
                 },

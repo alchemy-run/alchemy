@@ -1,6 +1,12 @@
 export * from "./Arn.ts";
 export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
+export type {
+  DnsAdapter,
+  DnsAliasSet,
+  DnsAliasSetBinding,
+  DnsAliasTarget,
+} from "./DnsAdapter.ts";
 export * from "./Environment.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
