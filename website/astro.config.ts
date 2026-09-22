@@ -15,7 +15,7 @@ import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
- * hub's "Resources" group and its reference URLs belong to the hub tab
+ * hub's "API Reference" group and its reference URLs belong to the hub tab
  * (see docs-tabs.ts). The Reference tab is a directory — its sidebar is
  * just the list of providers, each linking to its hub.
  */
@@ -45,11 +45,10 @@ function providersSidebarEntry() {
 }
 
 /**
- * A cloud hub's "Resources" section: that provider's slice of the generated
- * reference tree below Guides, expanded one level (categories/services show,
- * everything inside them stays collapsed) so each hub is self-sufficient.
+ * A cloud hub's "API Reference" section: that provider's slice of the generated
+ * alphabetical list of reference pages below Guides.
  * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
- * them all and gets one merged Resources group.
+ * them all and gets one merged API Reference group.
  *
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
@@ -72,7 +71,7 @@ function providerResourcesEntry(...providers: string[]) {
           collapsed: true,
           items: entryItems(provider),
         }));
-  return { label: "Resources", collapsed: false, items };
+  return { label: "API Reference", collapsed: false, items };
 }
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {

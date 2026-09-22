@@ -190,6 +190,7 @@ export type CustomDomain = Resource<
  * ```
  *
  * @resource
+ * @product Networking
  */
 export const CustomDomain = Resource<CustomDomain>("Railway.CustomDomain");
 

@@ -73,6 +73,7 @@ export interface OrganizationApiKey extends Resource<
  * restriction whenever possible. The secret output is `key.key`, a Redacted value.
  *
  * @resource
+ * @product Organization
  */
 export const OrganizationApiKey = Resource<OrganizationApiKey>(
   "Neon.OrganizationApiKey",

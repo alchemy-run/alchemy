@@ -191,6 +191,7 @@ export type Network = Resource<
  * ```
  *
  * @resource
+ * @product Network
  */
 export const Network = Resource<Network>("Hetzner.Network");
 

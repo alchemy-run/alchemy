@@ -53,6 +53,7 @@ export interface CustomDomain extends Resource<
  * ```
  *
  * @resource
+ * @product Function
  */
 export const CustomDomain = Resource<CustomDomain>("Neon.CustomDomain");
 export class FunctionDomainConflict extends Data.TaggedError(

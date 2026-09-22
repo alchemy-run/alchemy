@@ -83,6 +83,7 @@ export interface DataApi extends Resource<
  * ```
  *
  * @resource
+ * @product Data API
  */
 export const DataApi = Resource<DataApi>("Neon.DataApi");
 

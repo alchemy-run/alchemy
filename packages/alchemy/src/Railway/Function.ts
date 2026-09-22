@@ -505,6 +505,7 @@ const resolveFunctionProps = (
  * ```
  *
  * @resource
+ * @product Function
  */
 export const Function: Platform<
   Function,

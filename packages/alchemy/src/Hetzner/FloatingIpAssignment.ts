@@ -110,6 +110,7 @@ export type FloatingIpAssignment = Resource<
  * ```
  *
  * @resource
+ * @product IP Address
  */
 export const FloatingIpAssignment = Resource<FloatingIpAssignment>(
   "Hetzner.FloatingIpAssignment",

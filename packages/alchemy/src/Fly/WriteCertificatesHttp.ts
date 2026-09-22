@@ -27,6 +27,7 @@ import {
  * ```
  *
  * @layer
+ * @product Certificate
  * @provides Fly.WriteCertificates
  */
 export const WriteCertificatesHttp = Layer.effect(

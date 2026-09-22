@@ -63,6 +63,7 @@ export interface OrganizationSpendingLimit extends Resource<
  * ```
  *
  * @resource
+ * @product Organization
  */
 export const OrganizationSpendingLimit = Resource<OrganizationSpendingLimit>(
   "Neon.OrganizationSpendingLimit",
