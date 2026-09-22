@@ -7,6 +7,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -36,6 +37,51 @@ const latestDeployment = Effect.fn(function* (scriptName: string) {
 });
 
 describe.concurrent("Cloudflare.Worker version", () => {
+  for (const traffic of [undefined, 100] as const) {
+    test.provider(
+      `full deployment preserves annotations with traffic ${traffic ?? "omitted"}`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          // Check both the initial upload and an update to the same script.
+          for (const tag of ["v1.0.0", "v1.0.1"]) {
+            const message = `Release ${tag}`;
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("AnnotatedWorker", {
+                script: script(tag),
+                version: { traffic, tag, message },
+              }),
+            );
+            const { deployment, version } = yield* Effect.gen(function* () {
+              const deployment = yield* latestDeployment(worker.workerName);
+              const version = yield* workers.getScriptScriptAndVersionSetting({
+                accountId,
+                scriptName: worker.workerName,
+              });
+              return { deployment, version };
+            }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                times: 10,
+                until: ({ version }) =>
+                  version.annotations?.workersTag === tag &&
+                  version.annotations?.workersMessage === message,
+              }),
+            );
+            expect(deployment?.versions).toHaveLength(1);
+            expect(deployment?.versions[0].percentage).toEqual(100);
+            expect(version.annotations?.workersTag).toEqual(tag);
+            expect(version.annotations?.workersMessage).toEqual(message);
+          }
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+  }
+
   test.provider(
     "preview version of a parent worker, promoted to a canary, then released",
     (stack) =>

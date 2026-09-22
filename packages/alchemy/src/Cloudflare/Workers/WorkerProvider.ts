@@ -4163,6 +4163,12 @@ export const LiveWorkerProvider = () =>
           news.streamingTailConsumers,
         );
         const metadata: workers.PutScriptRequest["metadata"] = {
+          annotations: news.version
+            ? {
+                workersMessage: news.version.message,
+                workersTag: news.version.tag,
+              }
+            : undefined,
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
