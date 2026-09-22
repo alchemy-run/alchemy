@@ -2459,7 +2459,7 @@ describe.sequential(
       count: number,
       floor = 0,
       mixed = false,
-    ): Partial<Omit<MachineProps, "app">> => ({
+    ): Partial<Omit<Extract<MachineProps, { image: string }>, "app">> => ({
       count,
       deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
       services: [
@@ -5189,7 +5189,9 @@ describe.sequential(
                     file,
                     proxy,
                   );
-                  const props: Partial<Omit<MachineProps, "app">> = {
+                  const props: Partial<
+                    Omit<Extract<MachineProps, { image: string }>, "app">
+                  > = {
                     init: {
                       exec: [
                         "/bin/sh",
@@ -7604,7 +7606,9 @@ describe.sequential(
                   "trap 'if [ -f /slow-drain ]; then sleep 60; fi; exit 0' TERM; nginx -g 'daemon off;' & while :; do sleep 1 & wait $!; done",
                 ],
               },
-            } satisfies Partial<Omit<MachineProps, "app">>;
+            } satisfies Partial<
+              Omit<Extract<MachineProps, { image: string }>, "app">
+            >;
             const initial = yield* deployWorker(stack, "one", props);
             const [fastId, slowId] = [...initial.machineIds].sort();
             expect(initial.machineIds).toHaveLength(2);
@@ -10282,7 +10286,9 @@ describe.sequential(
   () => {
     let endpoint: string | undefined;
     const { test } = Test.make({ providers: throughProxy(() => endpoint) });
-    const invalid: Array<[string, Partial<MachineProps>]> = [
+    const invalid: Array<
+      [string, Partial<Extract<MachineProps, { image: string }>>]
+    > = [
       ["direct volume", { mounts: [{ path: "/data", sizeGb: 1 }] }],
       ["skipLaunch", { skipLaunch: true }],
       ["autoDestroy", { autoDestroy: true }],

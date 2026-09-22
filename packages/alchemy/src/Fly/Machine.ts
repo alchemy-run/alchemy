@@ -9,9 +9,13 @@ import type {
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+
+import type { Input } from "../Input.ts";
+import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
+import type { Providers } from "./Providers.ts";
+
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
-import type { Input } from "../Input.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
 import {
@@ -23,12 +27,15 @@ import {
 } from "./Deployment.ts";
 import { toEnvRecord } from "./hosted.ts";
 import {
+  sameContainerWorkload,
+  toFlyContainers,
+  validateMachineContainers,
+} from "./MachineContainers.ts";
+import {
   createFlyResourceName,
   diffMachineMetadata,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
-import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
 import {
   deleteReplicaSet,
   listReplicaSets,
@@ -172,7 +179,72 @@ export interface MachineService {
 
 export type MachineMount = DiskSpec;
 
-export interface MachineProps {
+/** Startup dependency on another named container in the same Machine. */
+export interface MachineContainerDependency {
+  /** Name of another container in this Machine. */
+  name: string;
+  /** Startup condition Fly waits for. */
+  condition?: "started" | "healthy" | "exited_successfully";
+}
+
+/** A native Pilot health check; timing fields are numeric seconds. */
+export interface MachineContainerHealthCheck {
+  /** Optional check name, unique within this container. */
+  name?: string;
+  /** Whether the check gates readiness or liveness. */
+  kind?: "readiness" | "liveness";
+  /** Seconds between checks. */
+  interval?: number;
+  /** Seconds before a check times out. */
+  timeout?: number;
+  /** Seconds after startup before checks begin. */
+  gracePeriod?: number;
+  /** Consecutive successes required to become healthy. */
+  successThreshold?: number;
+  /** Consecutive failures required to become unhealthy. */
+  failureThreshold?: number;
+  /** HTTP probe. Configure exactly one of HTTP, TCP, or exec. */
+  http?: {
+    /** Container-local port. */
+    port: number;
+    /** Request path. */
+    path?: string;
+    /** Request method. */
+    method?: string;
+    /** Request scheme. */
+    scheme?: "http" | "https";
+    /** Additional request headers. */
+    headers?: Array<{ name: string; values: string[] }>;
+    /** Hostname for TLS certificate verification. */
+    tlsServerName?: string;
+    /** Skip TLS certificate verification. */
+    tlsSkipVerify?: boolean;
+  };
+  /** TCP connection probe. */
+  tcp?: { port: number };
+  /** Process execution probe. */
+  exec?: { command: string[] };
+}
+
+/** One named container in a Machine replica. */
+export interface MachineContainer {
+  /** Stable name identifying this container within the group. */
+  name: string;
+  /** Docker image reference. Rolling deployments accept tags or digests. */
+  image: string;
+  /** Command override. */
+  cmd?: string[];
+  /** Entrypoint override. */
+  entrypoint?: string[];
+  /** Per-container environment variables; Fly applies these over Machine env. */
+  env?: Record<string, string>;
+  /** Other named containers that must reach a startup condition first. */
+  dependsOn?: MachineContainerDependency[];
+  /** Native Pilot checks for this container. Deployment readiness is configured separately. */
+  healthChecks?: MachineContainerHealthCheck[];
+}
+
+export interface MachinePropsBase {
   /** Deployment strategy and readiness deadline. Defaults to in-place rolling updates. */
   deploy?: MachineDeploy;
   /** Graceful process shutdown. Defaults to SIGTERM / 30 seconds when blue/green is enabled. */
@@ -207,11 +279,6 @@ export interface MachineProps {
    */
   count?: number;
   /**
-   * Docker image reference. Rolling updates modify the existing Machines;
-   * blue/green creates replacements. Use immutable tags or digests.
-   */
-  image: string;
-  /**
    * Guest size. Defaults to shared-cpu-1x 256 MB.
    */
   guest?: MachineGuest;
@@ -229,10 +296,6 @@ export interface MachineProps {
    * from `MountVolume` bindings.
    */
   mounts?: MachineMount[];
-  /**
-   * Init overrides (`cmd`, `entrypoint`, `exec`, swap, TTY).
-   */
-  init?: MachineInit;
   /**
    * User metadata. Alchemy ownership keys (`alchemy.stack` /
    * `alchemy.stage` / `alchemy.id` / `alchemy.type` /
@@ -263,6 +326,21 @@ export interface MachineProps {
    */
   minSecretsVersion?: number;
 }
+
+export type MachineProps =
+  | (MachinePropsBase & {
+      /** Docker image reference. Rolling updates change the existing Machines. */
+      image: string;
+      containers?: never;
+      /** Process init overrides for a single-image Machine. */
+      init?: MachineInit;
+    })
+  | (MachinePropsBase & {
+      /** Named containers run together in every Machine replica. */
+      containers: MachineContainer[];
+      image?: never;
+      init?: never;
+    });
 
 export type MachineImageRef = {
   registry?: string;
@@ -316,11 +394,11 @@ export type Machine = Resource<
 >;
 
 /**
- * A Fly.Machine is a Firecracker VM running a container image.
+ * A Fly.Machine is a Firecracker VM running one image or a named container group.
  *
- * Prefer a {@link Service} when the program is Effect. A Service is
- * effectful, supports bindings, and scales with `count`. Alchemy builds
- * and pushes the image. Use `Fly.Machine` when you already have an image.
+ * Prefer a {@link Service} when the program is Effect. A Service is effectful, supports bindings,
+ * and scales with `count`. Alchemy builds and pushes the image. Use `Fly.Machine` when you already
+ * have an image.
  *
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
@@ -358,6 +436,23 @@ export type Machine = Resource<
  * :::caution[Changing `app` replaces the Machine]
  * The new App gets a new Machine. The old one is deleted.
  * :::
+ *
+ * ### Run named containers
+ * Each replica contains the entire group. Container checks and dependencies
+ * control Pilot startup; configure Machine or service checks for deployment
+ * readiness. Rolling updates can restart the entire group when one image
+ * changes. Blue/green for named containers is not supported yet.
+ *
+ * **Example:** API and worker
+ * ```typescript
+ * const preview = yield* Fly.Machine("Preview", {
+ *   app: Site,
+ *   containers: [
+ *     { name: "api", image: apiImage, healthChecks: [{ http: { port: 3000, path: "/health" } }] },
+ *     { name: "worker", image: workerImage, dependsOn: [{ name: "api", condition: "healthy" }] },
+ *   ],
+ * });
+ * ```
  *
  * ### A stable name
  * Machine names are unique per App. Omit `name` and Alchemy generates
@@ -850,21 +945,16 @@ const toFlyRestart = (restart: MachineRestart): FlyMachineRestart => ({
 const desiredEnv = (
   props: MachineProps,
   bindingEnv: Record<string, any>,
-): Record<string, string> => ({
-  ...toEnv(props.env),
-  ...toEnv(bindingEnv),
-});
+): Record<string, string> => ({ ...toEnv(props.env), ...toEnv(bindingEnv) });
 
 const desiredMetadata = (
   props: MachineProps,
   alchemy: Record<string, string>,
-): Record<string, string> => ({
-  ...(props.metadata ?? {}),
-  ...alchemy,
-});
+): Record<string, string> => ({ ...(props.metadata ?? {}), ...alchemy });
 
 const buildConfig = (input: {
-  image: string;
+  image: string | undefined;
+  containers: FlyMachineConfig["containers"];
   guest: FlyMachineGuest;
   env: Record<string, string>;
   services: FlyMachineService[] | undefined;
@@ -875,6 +965,7 @@ const buildConfig = (input: {
   init: FlyMachineInit | undefined;
 }): FlyMachineConfig => ({
   image: input.image,
+  containers: input.containers,
   guest: input.guest,
   env: Object.keys(input.env).length > 0 ? input.env : undefined,
   services:
@@ -967,7 +1058,8 @@ const metadataChanged = (
 const configDrifted = (
   machine: FlyMachine,
   desired: {
-    image: string;
+    image: string | undefined;
+    containers: FlyMachineConfig["containers"];
     guest: FlyMachineGuest;
     env: Record<string, string>;
     services: FlyMachineService[] | undefined;
@@ -980,7 +1072,11 @@ const configDrifted = (
 ) => {
   const config = machine.config;
   return (
-    !sameImage(machine, desired.image) ||
+    (desired.containers !== undefined
+      ? !sameContainerWorkload(config, desired.containers)
+      : desired.image === undefined ||
+        !sameImage(machine, desired.image) ||
+        (config?.containers?.length ?? 0) > 0) ||
     !sameGuest(config?.guest, desired.guest) ||
     !sameEnv(config?.env, desired.env) ||
     !sameServices(config?.services, desired.services) ||
@@ -1025,6 +1121,16 @@ export const MachineProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined) return;
       if ("app" in news) {
+        const imageMode = {
+          image: news.image,
+          containers: news.containers,
+          init: news.init,
+        };
+        const imageModeResolved =
+          isResolved<Pick<MachineProps, "image" | "containers" | "init">>(
+            imageMode,
+          );
+        if (imageModeResolved) yield* validateMachineContainers(imageMode);
         const settings: Input<
           Pick<
             MachineProps,
@@ -1036,6 +1142,7 @@ export const MachineProvider = () =>
             | "skipLaunch"
             | "autoDestroy"
             | "restart"
+            | "containers"
           >
         > = {
           deploy: news.deploy,
@@ -1046,8 +1153,10 @@ export const MachineProvider = () =>
           skipLaunch: news.skipLaunch,
           autoDestroy: news.autoDestroy,
           restart: news.restart,
+          containers: news.containers,
         };
         if (
+          imageModeResolved &&
           isResolved<
             Pick<
               MachineProps,
@@ -1059,6 +1168,7 @@ export const MachineProvider = () =>
               | "skipLaunch"
               | "autoDestroy"
               | "restart"
+              | "containers"
             >
           >(settings)
         ) {
@@ -1069,6 +1179,10 @@ export const MachineProvider = () =>
               checks: settings.checks,
               auto_destroy: settings.autoDestroy,
               restart: settings.restart,
+              containers:
+                settings.containers === undefined
+                  ? undefined
+                  : toFlyContainers(settings.containers),
             },
             (settings.mounts?.length ?? 0) > 0,
             settings.skipLaunch,
@@ -1079,6 +1193,7 @@ export const MachineProvider = () =>
         return output?.rolloutPending
           ? { action: "update" as const }
           : undefined;
+      yield* validateMachineContainers(news);
       if (output === undefined) return undefined;
       const desiredAppName = appNameOf(news.app);
       const appChanged =
@@ -1134,6 +1249,7 @@ export const MachineProvider = () =>
       bindings,
     }) {
       const props = news;
+      yield* validateMachineContainers(props);
       const policy = yield* deploymentPolicy(props.deploy, props.shutdown);
       const appName = appNameOf(props.app) ?? output?.appName;
       if (appName === undefined) {
@@ -1156,6 +1272,10 @@ export const MachineProvider = () =>
       const services = props.services?.map(toFlyService);
       const restart = props.restart ? toFlyRestart(props.restart) : undefined;
       const init = props.init ? toFlyInit(props.init) : undefined;
+      const containers =
+        props.containers === undefined
+          ? undefined
+          : toFlyContainers(props.containers);
 
       const set = yield* reconcileReplicas({
         id,
@@ -1178,6 +1298,7 @@ export const MachineProvider = () =>
         configDrifted: (machine, desired) =>
           configDrifted(machine, {
             image: props.image,
+            containers,
             guest,
             env,
             services,
@@ -1190,6 +1311,7 @@ export const MachineProvider = () =>
         buildConfig: ({ mounts, metadata }) =>
           buildConfig({
             image: props.image,
+            containers,
             guest,
             env,
             services,
@@ -1202,10 +1324,7 @@ export const MachineProvider = () =>
       }).pipe(
         Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
           Effect.fail(
-            new MachineNotCreated({
-              name: error.name,
-              appName: error.appName,
-            }),
+            new MachineNotCreated({ name: error.name, appName: error.appName }),
           ),
         ),
       );
