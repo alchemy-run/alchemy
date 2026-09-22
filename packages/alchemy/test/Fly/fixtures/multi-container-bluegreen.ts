@@ -118,7 +118,12 @@ export interface JournalEvent {
 }
 export const multiContainerClient = (
   options: {
-    failOnce?: "create-response" | "uncordon" | "active" | "delete";
+    failOnce?:
+      | "create-response"
+      | "restore-response"
+      | "uncordon"
+      | "active"
+      | "delete";
     failOnNth?: number;
     staleAfterUpdate?: boolean;
   } = {},
@@ -284,7 +289,13 @@ export const multiContainerClient = (
                   })),
             };
             machinesById.set(machineId, updated);
-            return reply(request, updated);
+            return fail("restore-response")
+              ? reply(
+                  request,
+                  { error: "controlled lost restoration response" },
+                  504,
+                )
+              : reply(request, updated);
           }
           if (request.method === "DELETE" && !action) {
             if (fail("delete"))

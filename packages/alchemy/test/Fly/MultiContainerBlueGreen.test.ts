@@ -221,6 +221,55 @@ describe.sequential("multi-container bluegreen protocol", () => {
   );
 
   it.live(
+    "resumes an accepted service restoration after its response is lost",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* multiContainerClient({
+          failOnce: "restore-response",
+        });
+        const first = yield* reconcileWith(serviceConfig).pipe(
+          withControlledClient(fixture.client),
+          Effect.result,
+        );
+        expect(Result.isFailure(first)).toBe(true);
+        const ids = [...fixture.machines.keys()].sort();
+        expect(ids).toHaveLength(2);
+        const restored = [...fixture.machines.values()].find(
+          (machine) => machine.config?.metadata?.[keys.role] === "run",
+        );
+        expect(restored?.config?.metadata?.[keys.restored]).toBe("true");
+        expect(restored?.config?.metadata?.[keys.phase]).not.toBe("active");
+        const observed = yield* observe(ids).pipe(
+          withControlledClient(fixture.client),
+        );
+        expect(observed?.rolloutPending).toBe(true);
+        const before = fixture.events.length;
+        const recovered = yield* reconcileWith(serviceConfig).pipe(
+          withControlledClient(fixture.client),
+        );
+        expect([...recovered.machineIds].sort()).toEqual(ids);
+        const run = fixture.machines.get(restored!.id!);
+        expect(run?.config?.metadata?.[keys.checkedInstance]).toBe(
+          run?.instance_id,
+        );
+        expect(run?.config?.metadata?.[keys.phase]).toBe("active");
+        expect(run?.config?.metadata?.[keys.containerImageSet]).toBe(imageSet);
+        expect(run?.config?.services?.[0]?.autostop).toBe("stop");
+        expect(
+          fixture.events
+            .slice(before)
+            .filter(
+              (event) =>
+                event.method === "POST" &&
+                (event.path.endsWith("/machines") ||
+                  event.path.endsWith(`/machines/${run?.id}`)),
+            ),
+        ).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  it.live(
     "does not commit restored service config without checks for the new instance",
     () =>
       Effect.gen(function* () {
