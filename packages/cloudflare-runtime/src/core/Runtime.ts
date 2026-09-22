@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import * as Docker from "./Docker.ts";
 import type * as Globals from "./globals/Globals.ts";
@@ -17,6 +19,7 @@ import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
 import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
+import type * as WorkerdConfig from "./workerd/Config.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
 export class Runtime extends Context.Service<
@@ -211,64 +214,107 @@ export const RuntimeLive = Layer.effect(
             concurrency: "unbounded",
           },
         );
-        const ports = yield* workerd.serve(
+        const sockets: Array<WorkerdConfig.Socket> = [
           {
-            sockets: [
-              {
-                name: SOCKET_USER_ENTRY,
-                address: "127.0.0.1:0",
-                service: { name: config.entry ?? SERVICE_USER_WORKER },
-              },
-              ...config.sockets,
-            ],
-            services: [
-              {
-                name: SERVICE_USER_WORKER,
-                worker: {
-                  compatibilityDate: worker.compatibilityDate,
-                  compatibilityFlags: worker.compatibilityFlags,
-                  bindings,
-                  modules: worker.modules.map(moduleToWorkerd),
-                  durableObjectNamespaces: worker.durableObjectNamespaces?.map(
-                    (namespace) => {
-                      const imageName = imageNames.get(namespace.className);
-                      return {
-                        className: namespace.className,
-                        enableSql: namespace.sql,
-                        uniqueKey:
-                          namespace.uniqueKey ??
-                          defaultDurableObjectUniqueKey(
-                            worker.name,
-                            namespace.className,
-                          ),
-                        ephemeralLocal: namespace.ephemeralLocal,
-                        container: imageName ? { imageName } : undefined,
-                      };
+            name: SOCKET_USER_ENTRY,
+            address: "127.0.0.1:0",
+            service: { name: config.entry ?? SERVICE_USER_WORKER },
+          },
+          ...config.sockets,
+        ];
+        const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        /**
+         * Serves the Worker. `pinned` reuses the ports of a previous process,
+         * so a replacement is reachable through the same URL, proxy target
+         * and registry entry as the process it replaces.
+         */
+        const serveWorker = (pinned?: Workerd.WorkerdPorts) =>
+          workerd.serve(
+            {
+              sockets: pinned ? sockets.map(pinSocket(pinned)) : sockets,
+              services: [
+                {
+                  name: SERVICE_USER_WORKER,
+                  worker: {
+                    compatibilityDate: worker.compatibilityDate,
+                    compatibilityFlags: worker.compatibilityFlags,
+                    bindings,
+                    modules: worker.modules.map(moduleToWorkerd),
+                    durableObjectNamespaces:
+                      worker.durableObjectNamespaces?.map((namespace) => {
+                        const imageName = imageNames.get(namespace.className);
+                        return {
+                          className: namespace.className,
+                          enableSql: namespace.sql,
+                          uniqueKey:
+                            namespace.uniqueKey ??
+                            defaultDurableObjectUniqueKey(
+                              worker.name,
+                              namespace.className,
+                            ),
+                          ephemeralLocal: namespace.ephemeralLocal,
+                          container: imageName ? { imageName } : undefined,
+                        };
+                      }),
+                    durableObjectStorage: {
+                      localDisk: storage.name,
                     },
-                  ),
-                  durableObjectStorage: {
-                    localDisk: storage.name,
+                    containerEngine,
+                    tails,
+                    streamingTails,
+                    ...config.userWorker,
+                    ...worker.unsafe,
                   },
-                  containerEngine,
-                  tails,
-                  streamingTails,
-                  ...config.userWorker,
-                  ...worker.unsafe,
                 },
+                ...config.services,
+              ],
+              extensions: config.extensions,
+            },
+            {
+              "debug-port": `127.0.0.1:${pinned?.[SOCKET_DEBUG_PORT] ?? 0}`,
+              ...(worker.logging?.verbose ? { verbose: true } : undefined),
+            },
+            {
+              onOutput: worker.logging?.onOutput,
+              onExit: (exit) => {
+                Queue.offerUnsafe(exits, exit);
               },
-              ...config.services,
-            ],
-            extensions: config.extensions,
-          },
-          {
-            "debug-port": "127.0.0.1:0",
-            ...(worker.logging?.verbose ? { verbose: true } : undefined),
-          },
-          { onOutput: worker.logging?.onOutput },
-        );
+            },
+          );
+        const ports = yield* serveWorker();
         yield* context.start(ports);
+        // A process that dies after startup (V8 aborting on heap exhaustion
+        // is the common case) is replaced on the same ports. Without this
+        // every request fails until the whole dev session is restarted.
+        yield* Effect.gen(function* () {
+          while (true) {
+            const exit = yield* Queue.take(exits);
+            yield* Effect.logWarning(
+              `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
+            );
+            const restarted = yield* serveWorker(ports).pipe(Effect.result);
+            if (Result.isFailure(restarted)) {
+              yield* Effect.logError(
+                `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
+              );
+              return;
+            }
+            worker.onRestart?.(exit);
+          }
+        }).pipe(Effect.forkScoped);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
       }),
     });
   }),
 );
+
+const SOCKET_DEBUG_PORT = "debug-port";
+
+const pinSocket =
+  (ports: Workerd.WorkerdPorts) =>
+  (socket: WorkerdConfig.Socket): WorkerdConfig.Socket => {
+    const port = socket.name === undefined ? undefined : ports[socket.name];
+    return port === undefined
+      ? socket
+      : { ...socket, address: `127.0.0.1:${port}` };
+  };

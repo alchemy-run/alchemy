@@ -151,12 +151,32 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           await environment.connect(address);
         }
       };
+      // The runtime replaces a crashed workerd on the same ports (see
+      // `RuntimeWorker.onRestart`), so the proxy target below stays valid;
+      // only the module runner sockets into the old process need replacing.
+      const onRuntimeRestart = () => {
+        server.config.logger.warn(
+          "The Worker runtime restarted, reconnecting the module runner.",
+          { timestamp: true },
+        );
+        if (!handle) return;
+        connect(handle.address).catch((error: unknown) => {
+          server.config.logger.error(
+            `Failed to reconnect to the restarted Worker runtime: ${String(error)}`,
+            {
+              error: error instanceof Error ? error : undefined,
+              timestamp: true,
+            },
+          );
+        });
+      };
       handle ??= await startServer(
         options,
         entryEnvironment,
         server,
         options.context ?? context!,
         exportTypes,
+        onRuntimeRestart,
       );
       await connect(handle.address);
       let address = handle.address;
@@ -183,6 +203,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           server,
           options.context ?? context!,
           exportTypes,
+          onRuntimeRestart,
         );
         await connect(handle.address);
         address = handle.address;
