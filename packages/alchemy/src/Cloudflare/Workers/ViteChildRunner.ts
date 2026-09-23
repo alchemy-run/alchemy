@@ -1,4 +1,7 @@
-import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
+import {
+  layerRuntime,
+  registerHttpServer,
+} from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stdio from "effect/Stdio";
@@ -118,15 +121,21 @@ const program = Effect.scoped(
             }),
           ),
           Effect.flatMap((handle) =>
-            handle.mode === "server"
-              ? Effect.succeed(handle.url.toString())
-              : Effect.fail(
-                  new SourceProviderError({
-                    provider: source.descriptor.provider,
-                    message:
-                      "A source declared devMode 'server' but returned a bundle-mode dev handle.",
-                  }),
-                ),
+            Effect.gen(function* () {
+              if (handle.mode !== "server") {
+                return yield* new SourceProviderError({
+                  provider: source.descriptor.provider,
+                  message:
+                    "A source declared devMode 'server' but returned a bundle-mode dev handle.",
+                });
+              }
+              if (handle.serviceBinding === "http") {
+                yield* registerHttpServer(config.worker.name, handle.url).pipe(
+                  Effect.provideContext(runtimeContext),
+                );
+              }
+              return handle.url.toString();
+            }),
           ),
         )
       : yield* Vite.viteDev(
