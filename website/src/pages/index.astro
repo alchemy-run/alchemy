@@ -8,6 +8,7 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import HeroDeployTerminal from "../components/marketing-islands/HeroDeployTerminal.tsx";
+import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import HeroCodeBlock from "../components/marketing/HeroCodeBlock.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
@@ -72,20 +73,24 @@ test("PUT + GET round-trips through R2", Effect.gen(function* () {
   expect(yield* res.text).toBe("hi!");
 }));`;
 
-const OTEL_SRC = `// Effect emits OpenTelemetry. The exporter is a Layer.
-const requestsTotal = Metric.counter("requests_total");
+const OTEL_SRC = `const requestsTotal = Metric.counter("requests_total");
+
+// any OTLP endpoint: Axiom, Datadog, Honeycomb, a collector…
+const Otel = Alchemy.Telemetry.layerOtlp({
+  url: "https://otlp.example.com",
+});
 
 export default Cloudflare.Worker(
   "Api",
+  { main: import.meta.url },
   Effect.gen(function* () {
     yield* Effect.logInfo("request received");
     yield* Metric.increment(requestsTotal);
     return { fetch: handler };
-  }).pipe(Effect.provide(Otel)),     // ← Axiom, Datadog, OTLP …
+  }).pipe(Effect.provide(Otel)),
 );`;
 
-const DASH_SRC = `// dashboards and alarms, next to the workers they watch
-export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
+const DASH_SRC = `export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
   widgets: [
     Widget.line({ title: "p99 latency", metric: api.metrics.p99 }),
     Widget.line({ title: "requests/s", metric: api.metrics.rps }),
@@ -144,6 +149,9 @@ const PROVIDERS = [
   <!-- ───────────────── HERO ───────────────── -->
   <section class="alc-hero v2-hero" style="padding:20px 32px 16px;">
     <HeroBgGraph />
+    <button type="button" class="v2-motion-toggle" id="motion-toggle" aria-pressed="false">
+      <span class="v2-motion-toggle__label">Pause motion</span>
+    </button>
     <div class="v2-hero__grid">
       <div class="v2-hero__copy">
         <div class="alc-hero__inner">
@@ -156,7 +164,7 @@ const PROVIDERS = [
           >
             Reach for the better primitives.
           </h1>
-          <h2
+          <p
             data-copy
             class="alc-hero__subtitle"
             id="hero-sub"
@@ -164,7 +172,7 @@ const PROVIDERS = [
           >
             Snap together cloud resources and let Alchemy take care of the wiring
             so you can focus on your product.
-          </h2>
+          </p>
           <div class="alc-hero__cta">
             <Button variant="primary" icon="arrow" href="/getting-started">
               <span data-copy>Start your project</span>
@@ -232,6 +240,26 @@ const PROVIDERS = [
   </div>
   </div>
 
+  <script>
+    // WCAG 2.2.2: the hero rings and the provider marquee move on their
+    // own, so offer a way to stop them. Remembered across visits.
+    const KEY = "alc-motion-paused";
+    const btn = document.getElementById("motion-toggle")!;
+    const label = btn.querySelector(".v2-motion-toggle__label")!;
+    const apply = (paused: boolean) => {
+      document.documentElement.classList.toggle("alc-motion-paused", paused);
+      btn.setAttribute("aria-pressed", String(paused));
+      label.textContent = paused ? "Play motion" : "Pause motion";
+      window.dispatchEvent(new Event("alc-motion-change"));
+    };
+    apply(localStorage.getItem(KEY) === "1");
+    btn.addEventListener("click", () => {
+      const paused = !document.documentElement.classList.contains("alc-motion-paused");
+      localStorage.setItem(KEY, paused ? "1" : "0");
+      apply(paused);
+    });
+  </script>
+
   <div class="v2-scroll-hint" id="scroll-hint" aria-hidden="true">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
   </div>
@@ -251,7 +279,7 @@ const PROVIDERS = [
   </script>
 
   <!-- ───────────────── THE FULL PICTURE ───────────────── -->
-  <section class="v2-section v2-overview">
+  <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>The full picture</h2>
       <p class="v2-lede" data-copy>
@@ -272,7 +300,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── DEV ───────────────── -->
-  <section class="v2-section v2-feature">
+  <AlchemicalDivider variant="triangle" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Run your entire stack locally</h2>
       <p class="v2-lede" data-copy>
@@ -286,7 +315,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── TESTING ───────────────── -->
-  <section class="v2-section v2-feature">
+  <AlchemicalDivider variant="square" class="v2-divider" />
+  <section class="v2-section v2-pat-3 v2-feature">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Run tests against real infrastructre</h2>
       <p class="v2-lede" data-copy>
@@ -300,7 +330,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── PLAN & DEPLOY ───────────────── -->
-  <section class="v2-section v2-feature">
+  <AlchemicalDivider variant="pentagon" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Dry run before you deploy</h2>
       <p class="v2-lede" data-copy>
@@ -314,14 +345,12 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── OBSERVABILITY ───────────────── -->
-  <section class="v2-section v2-feature">
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5 v2-feature">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Observability ships with the resources.</h2>
+      <h2 class="v2-h2" data-copy>Wired for observability</h2>
       <p class="v2-lede" data-copy>
-        Effect emits logs, spans, and metrics by default — the exporter is a
-        Layer, so Axiom, Datadog, or any OTLP endpoint is a one-line swap.
-        Dashboards and alarms are declared next to the workers they watch,
-        and deploy and destroy with them.
+        Alchemy has logs, spans, and metrics set up by default. The exporter is an Effect Layer so changing providers is a 1 line swap, whether its Axiom, Datadog, or any other OTLP endpoint.<br>Dashboards and alarms are resources themselve so you can define them right next to the resources they are responsible for.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
@@ -331,7 +360,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── GET STARTED ───────────────── -->
-  <section class="v2-section v2-section--last">
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
@@ -380,6 +410,34 @@ const PROVIDERS = [
   }
   .v2-fold > .v2-hero > .v2-hero__grid {
     width: 100%;
+  }
+  .v2-motion-toggle {
+    position: absolute;
+    right: 20px;
+    top: 12px;
+    z-index: 3;
+    padding: 4px 10px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--alc-bg) 70%, transparent);
+    color: var(--alc-fg-3);
+    font: 500 12px var(--alc-font-sans);
+    cursor: pointer;
+    min-height: 24px;
+  }
+  .v2-motion-toggle:hover {
+    color: var(--alc-fg-1);
+    border-color: var(--alc-hairline-3);
+  }
+  .v2-motion-toggle:focus-visible {
+    outline: 2px solid var(--alc-accent);
+    outline-offset: 2px;
+  }
+  /* Nothing moves under reduced motion, so the control isn't needed. */
+  @media (prefers-reduced-motion: reduce) {
+    .v2-motion-toggle {
+      display: none;
+    }
   }
   .v2-scroll-hint {
     position: fixed;
@@ -523,9 +581,9 @@ const PROVIDERS = [
        centered on the headline + subtitle. */
     background: radial-gradient(
       closest-side at 50% 62%,
-      color-mix(in srgb, var(--alc-bg) 94%, transparent) 0%,
-      color-mix(in srgb, var(--alc-bg) 86%, transparent) 45%,
-      color-mix(in srgb, var(--alc-bg) 50%, transparent) 75%,
+      color-mix(in srgb, var(--alc-bg) 98%, transparent) 0%,
+      color-mix(in srgb, var(--alc-bg) 94%, transparent) 50%,
+      color-mix(in srgb, var(--alc-bg) 68%, transparent) 78%,
       transparent 100%
     );
   }
@@ -588,7 +646,9 @@ const PROVIDERS = [
     width: max-content;
     animation: v2-marquee-scroll 72s linear infinite;
   }
-  .v2-marquee:hover .v2-marquee__track {
+  .v2-marquee:hover .v2-marquee__track,
+  .v2-marquee:focus-within .v2-marquee__track,
+  :global(html.alc-motion-paused) .v2-marquee__track {
     animation-play-state: paused;
   }
   .v2-marquee__group {
@@ -661,7 +721,46 @@ const PROVIDERS = [
   /* ---------- sections ---------- */
   .v2-section {
     padding: 80px 32px;
-    border-top: 1px solid var(--alc-hairline);
+  }
+  /* Sections are separated by the original site's geometric dividers:
+     triangle → square → pentagon → hexagon → heptagon, down the page. */
+  :global(.v2-divider) {
+    margin: 0 auto;
+  }
+  /* A very faint, static echo of the hero's ring geometry behind each
+     section, alternating sides. Masked so it takes the theme's text color. */
+  .v2-section {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .v2-section::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -380px;
+    z-index: -1;
+    width: 1000px;
+    height: 1000px;
+    translate: 0 -50%;
+    pointer-events: none;
+    background: var(--alc-fg-1);
+    opacity: 0.045;
+    mask: var(--pattern) center / contain no-repeat;
+    -webkit-mask: var(--pattern) center / contain no-repeat;
+  }
+  /* A different Sri Yantra motif per section. */
+  .v2-pat-1 { --pattern: url("/patterns/yantra-1.svg"); }
+  .v2-pat-2 { --pattern: url("/patterns/yantra-2.svg"); }
+  .v2-pat-3 { --pattern: url("/patterns/yantra-3.svg"); }
+  .v2-pat-4 { --pattern: url("/patterns/yantra-4.svg"); }
+  .v2-pat-5 { --pattern: url("/patterns/yantra-5.svg"); }
+  .v2-pat-6 { --pattern: url("/patterns/yantra-6.svg"); }
+  .v2-pat-2::before,
+  .v2-pat-4::before,
+  .v2-pat-6::before {
+    right: auto;
+    left: -380px;
   }
   .v2-section--last {
     padding-bottom: 96px;

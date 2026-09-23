@@ -235,6 +235,8 @@ interface MarkdownState {
   base?: string;
   /** Unsaved source kept after a failed save. */
   draft?: string;
+  /** The page as served when editing started, to tell when it's rebuilt. */
+  servedAtFocus?: Promise<string>;
 }
 const sections = new WeakMap<HTMLElement, MarkdownState>();
 /** Elements that are themselves a single markdown block. */
@@ -267,9 +269,10 @@ const fetchPage = () =>
   fetch(location.href, { cache: "no-store" })
     .then((res) => (res.ok ? res.text() : ""))
     .catch(() => "");
-const needsReload = () => {
+/** `before`: the page as served before the edit, when already fetched. */
+const needsReload = (before?: Promise<string>) => {
   reloadPending = true;
-  servedBefore ??= fetchPage();
+  servedBefore ??= before ?? fetchPage();
 };
 const busy = () =>
   document.querySelector("[data-copy-editing], [data-copy-draft]") !== null;
@@ -392,6 +395,7 @@ const enterSource = async (el: HTMLElement) => {
     }
     state.base = body.source;
     state.rendered = el.innerHTML;
+    state.servedAtFocus = fetchPage();
   }
   if (document.activeElement !== el) {
     delete el.dataset.copyEditing;
@@ -456,8 +460,12 @@ const leaveSource = async (el: HTMLElement) => {
     if (only?.tagName === el.tagName && rest.length === 0) {
       el.innerHTML = only.innerHTML;
     } else {
-      el.innerHTML = preview;
-      needsReload();
+      // Now several blocks (e.g. a paragraph and a list): show them in its
+      // place, then reload once the page is rebuilt so every block gets an id.
+      notify(`Saved to ${result.file}`);
+      el.replaceWith(template.content);
+      needsReload(state.servedAtFocus);
+      return;
     }
   } else {
     el.innerHTML = preview;

@@ -322,6 +322,8 @@ export default function PRLifecycle() {
                 key={s.id}
                 type="button"
                 role="tab"
+                id={`prf-tab-${s.id}`}
+                aria-controls="prf-panel"
                 aria-selected={i === step}
                 tabIndex={i === step ? 0 : -1}
                 className={`prf-tab ${i === step ? "is-active" : i < step ? "is-done" : ""}`}
@@ -368,7 +370,12 @@ export default function PRLifecycle() {
           </button>
         </div>
 
-        <div className="prf-stage">
+        <div
+          className="prf-stage"
+          id="prf-panel"
+          role="tabpanel"
+          aria-labelledby={`prf-tab-${id}`}
+        >
           <div className="prf-side">
             <PullRequest
               id={id}
@@ -431,7 +438,7 @@ function StatusIcon({ status }: { status: Status }) {
   const spin = useSpin(status === "running");
   if (status === "success")
     return (
-      <span className="prf-si prf-si--ok" aria-label="passed">
+      <span className="prf-si prf-si--ok" role="img" aria-label="passed">
         <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden>
           <path
             d="M3.5 8.5l3 3 6-7"
@@ -446,11 +453,13 @@ function StatusIcon({ status }: { status: Status }) {
     );
   if (status === "running")
     return (
-      <span className="prf-si prf-si--run" aria-label="running">
+      <span className="prf-si prf-si--run" role="img" aria-label="running">
         {spin}
       </span>
     );
-  return <span className="prf-si prf-si--queued" aria-label="queued" />;
+  return (
+    <span className="prf-si prf-si--queued" role="img" aria-label="queued" />
+  );
 }
 
 /** Animates height between 0 and auto. */

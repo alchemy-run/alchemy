@@ -16,6 +16,7 @@ const cols: FooterCol[] = [
     links: [
       { label: "Docs", href: "/getting-started" },
       { label: "Tutorial", href: "/cloudflare/tutorial/part-1" },
+      { label: "Effect", href: "https://effect.website" },
       // todo(sam): create an /examples landing page (or sidebar entry)
       // and re-enable: { label: "Examples", href: "/examples" }
       // todo(sam): create /providers/index.md that lists every provider
@@ -54,13 +55,13 @@ const cols: FooterCol[] = [
 ---
 
 <footer class="alc-footer">
-  <div class="alc-footer__grid">
+  <div class="alc-footer__grid" style={`--footer-cols:${cols.length}`}>
     <div>
       <Logo />
       <p class="alc-footer__tag">
         Infrastructure as Effects. A single, type-safe TypeScript program for your cloud.
       </p>
-      <div class="alc-footer__copy">Apache-2.0 · © 2026</div>
+      <div class="alc-footer__copy">Apache-2.0 · © 2026 Functionless, Inc.</div>
     </div>
     {cols.map((col) => (
       <div>
@@ -85,12 +86,15 @@ const cols: FooterCol[] = [
     max-width: 1152px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
-    gap: 40px;
+    /* Brand on the left, link columns sized to their content and pinned to
+       the right edge, so the footer spans the same width as the page. */
+    grid-template-columns: minmax(0, 1fr) repeat(var(--footer-cols), max-content);
+    column-gap: clamp(48px, 8vw, 120px);
+    row-gap: 40px;
   }
   @media (max-width: 880px) {
     .alc-footer__grid {
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: repeat(var(--footer-cols), minmax(0, 1fr));
       gap: 28px 24px;
     }
     .alc-footer__grid > :first-child {
@@ -109,6 +113,7 @@ const cols: FooterCol[] = [
     .alc-footer__grid { grid-template-columns: 1fr; }
   }
   .alc-footer__tag {
+    max-width: 380px;
     font-family: var(--alc-font-sans);
     font-size: 13px;
     line-height: 1.6;
