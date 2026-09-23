@@ -8,6 +8,10 @@
  * live checks, which this env would redirect onto the emulator.
  *
  * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
+ * `--list` prints selected files without starting tests or touching Floci.
+ * `--external` uses an existing server without Docker fallback or state reset.
+ * `--dry-run` prints the resolved command without starting tests or touching Floci.
+ * Shared state is preserved unless `--reset-shared` is explicitly passed.
  */
 import { Glob } from "bun";
 import { preferLocalFlociImage } from "./floci-image.ts";
@@ -21,6 +25,12 @@ const providersFile = join(alchemyRoot, "src/AWS/Providers.ts");
 
 const extraDirs: Record<string, ReadonlyArray<string>> = {
   SecretsManager: ["Secret"],
+};
+
+// The other Organizations suites require a pre-existing management account or
+// the live-only Account provider. Keep automatic discovery on the local fixture.
+const serviceSuites: Record<string, ReadonlyArray<string>> = {
+  Organizations: ["Organization.test.ts"],
 };
 
 const dualizedServices = (): string[] => {
@@ -47,9 +57,29 @@ const flagsWithValue = new Set([
 
 const flags: string[] = [];
 const paths: string[] = [];
+let listOnly = false;
+let dryRun = false;
+let resetShared = false;
+let external = process.env.ALCHEMY_FLOCI_EXTERNAL === "1";
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
+  if (arg === "--external") {
+    external = true;
+    continue;
+  }
+  if (arg === "--dry-run") {
+    dryRun = true;
+    continue;
+  }
+  if (arg === "--reset-shared") {
+    resetShared = true;
+    continue;
+  }
+  if (arg === "--list") {
+    listOnly = true;
+    continue;
+  }
   if (arg.startsWith("-")) {
     flags.push(arg);
     if (
@@ -65,7 +95,11 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const allowedRoots = dualizedServices()
-  .map((service) => join(awsTestRoot, service))
+  .flatMap((service) =>
+    (serviceSuites[service] ?? [""]).map((suite) =>
+      join(awsTestRoot, service, suite),
+    ),
+  )
   .filter((dir) => existsSync(dir));
 
 if (allowedRoots.length === 0) {
@@ -93,59 +127,91 @@ for (const root of requestedRoots) {
   }
 }
 
+if (listOnly) {
+  console.log([...new Set(files)].sort().join("\n"));
+  process.exit(0);
+}
+
+const fail = (message: string): never => {
+  console.error(`test:aws:floci: ${message}`);
+  process.exit(1);
+};
+
+if (resetShared && (external || process.env.ALCHEMY_FLOCI_NO_RESET)) {
+  fail("--reset-shared conflicts with --external or ALCHEMY_FLOCI_NO_RESET");
+}
+
+// Local providers currently use this gateway regardless of SDK overrides.
+const endpointError =
+  "AWS_ENDPOINT_URL must be http://localhost:4566; isolated gateways are not supported yet";
+const endpointValue = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+if (!URL.canParse(endpointValue)) fail(endpointError);
+const endpoint = new URL(endpointValue);
+if (
+  endpoint.protocol !== "http:" ||
+  !["localhost", "127.0.0.1"].includes(endpoint.hostname) ||
+  endpoint.port !== "4566" ||
+  endpoint.pathname !== "/" ||
+  endpoint.search ||
+  endpoint.hash ||
+  endpoint.username ||
+  endpoint.password
+) {
+  fail(endpointError);
+}
+
+const hasFlag = (...names: string[]) =>
+  flags.some((flag) =>
+    names.some((name) => flag === name || flag.startsWith(`${name}=`)),
+  );
+if (!hasFlag("--profile")) flags.unshift("--profile", "testing");
+if (!hasFlag("--concurrency", "-c")) flags.unshift("--concurrency", "4");
+const command = ["bun", "alchemy-test", ...new Set(files.sort()), ...flags];
+if (dryRun) {
+  console.log(
+    JSON.stringify({
+      command,
+      cwd: alchemyRoot,
+      external,
+      resetShared,
+      endpoint: "http://localhost:4566",
+    }),
+  );
+  process.exit(0);
+}
+
 process.env.ALCHEMY_TEST_DEV = "1";
-
-preferLocalFlociImage("test:aws:floci");
-
-if (!flags.includes("--profile")) {
-  flags.unshift("--profile", "testing");
-}
-if (!flags.includes("--concurrency") && !flags.includes("-c")) {
-  // Every concurrent file deploys real stacks against the LOCAL emulator —
-  // in-process deploys, the shared sidecar child, and a Docker container per
-  // Lambda cold start all scale with this number. 64 (tuned while the env
-  // bug made this script run against live AWS, where concurrency is free)
-  // ballooned to ~60GB RSS on a full-suite run; 12 was ~4.5GB but too slow.
-  // 32 matches the live-suite sweet spot from AGENTS.md.
-  flags.unshift("--concurrency", "32");
+process.env.AWS_ENDPOINT_URL = "http://localhost:4566";
+if (external) {
+  process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
+  console.log(
+    "test:aws:floci: using the existing Floci server (no Docker fallback)",
+  );
+} else {
+  preferLocalFlociImage("test:aws:floci");
 }
 
-// The emulator container outlives any single run, so orphaned rows survive
-// into the next one — and a hard kill (machine death, SIGKILL) skips every
-// finalizer and `afterAll`, so orphans are routine rather than exceptional.
-// They do not just linger; they actively break later runs: a fixed-name
-// fixture collides (`DuplicateLoadBalancerName`), and a Glue table whose S3
-// location was deleted fails unrelated Athena queries, because the query
-// engine resolves the whole catalog.
-//
-// This is the emulator's counterpart to the `pnpm nuke` + `state clear` step
-// that precedes a live-cloud suite run (see AGENTS.md, "The convergence
-// loop"). Set `ALCHEMY_FLOCI_NO_RESET=1` to keep state across runs while
-// iterating on a single suite.
-if (!process.env.ALCHEMY_FLOCI_NO_RESET) {
-  const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+if (resetShared) {
   try {
-    const res = await fetch(`${endpoint}/_floci/state/reset`, {
+    const res = await fetch("http://localhost:4566/_floci/state/reset", {
       method: "POST",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(5_000),
     });
-    console.log(
-      res.ok
-        ? `test:aws:floci: reset emulator state (${endpoint})`
-        : `test:aws:floci: emulator state reset returned ${res.status}; continuing`,
-    );
+    if (!res.ok)
+      fail(
+        `emulator state reset returned ${res.status}; tests were not started`,
+      );
+    console.log("test:aws:floci: reset shared emulator state");
   } catch (error) {
-    // Not fatal: the emulator may simply not be up yet, in which case
-    // `ensureFloci` starts a fresh one during the run — which is clean anyway.
-    console.log(
-      `test:aws:floci: could not reset emulator state (${
-        error instanceof Error ? error.message : String(error)
-      }); continuing`,
+    fail(
+      `could not reset emulator state: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
     );
   }
+} else {
+  console.log("test:aws:floci: preserving shared emulator state");
 }
 
-const proc = Bun.spawn(["bun", "alchemy-test", ...files.sort(), ...flags], {
+const proc = Bun.spawn(command, {
   cwd: alchemyRoot,
   // Bun.spawn's default env is a snapshot taken at process start, so the
   // `process.env.ALCHEMY_TEST_DEV` mutations above never reach the child

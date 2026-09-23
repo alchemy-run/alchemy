@@ -18,7 +18,7 @@ import { flociServices } from "../AWS/Local/FlociServices.ts";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
-import { provideFreshArtifactStore } from "../Artifacts.ts";
+import { ArtifactStore, provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -195,12 +195,35 @@ export interface SidecarHandle {
 }
 
 interface SidecarSingleton {
-  readonly lazy: Layer.Layer<RpcProviderProxy.RpcProviderProxy>;
+  readonly real: ReturnType<typeof sidecarProxy>;
+  readonly memoMap: Layer.MemoMap;
   readonly scope: Scope.Closeable;
+  proxy?: RpcProviderProxy.RpcProviderProxy["Service"];
   refs: number;
 }
 
 const sidecarSingletons = new Map<string, SidecarSingleton>();
+
+/** Payload-free counts; observing them never starts the singleton. */
+export const sidecarDiagnostics = Effect.gen(function* () {
+  const instances = [...sidecarSingletons.values()];
+  const counts = { sessions: 0, testSessions: 0, owners: 0, connections: 0 };
+  for (const instance of instances) {
+    if (instance.proxy === undefined) continue;
+    const current = yield* instance.proxy.diagnostics;
+    counts.sessions += current.sessions;
+    counts.testSessions += current.testSessions;
+    counts.owners += current.owners;
+    counts.connections += current.connections;
+  }
+  return {
+    singletons: instances.length,
+    reservations: instances.reduce((sum, instance) => sum + instance.refs, 0),
+    started: instances.filter((instance) => instance.proxy !== undefined)
+      .length,
+    ...counts,
+  };
+});
 
 export const makeSidecarHandle = <ROut = any>(
   options: MakeOptions<ROut>,
@@ -209,58 +232,108 @@ export const makeSidecarHandle = <ROut = any>(
   const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
   let singleton = sidecarSingletons.get(key);
   if (singleton === undefined) {
-    const scope = Scope.makeUnsafe("sequential");
-    const memoMap = Layer.makeMemoMapUnsafe();
-    const real = sidecarProxy(options);
-    const lazy = Layer.effect(
-      RpcProviderProxy.RpcProviderProxy,
-      Effect.gen(function* () {
-        // Capture the ambient platform context (provided by `toEffect`) so
-        // the deferred spawner build can run inside a provider's `get`
-        // without leaking platform requirements onto the RpcProviderProxy
-        // interface. Omit Scope: that key is the calling file's sharedScope
-        // (closed in afterAll). Merging it in would pin the process-wide
-        // spawner HTTP server to a file that exits while others still need
-        // it. Provide the sidecar singleton scope instead.
-        const ambient = Context.omit(Scope.Scope)(
-          yield* Effect.context<never>(),
-        );
-        const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
-          Effect.map((built) =>
-            Context.get(built, RpcProviderProxy.RpcProviderProxy),
-          ),
-          Effect.provideContext(ambient as Context.Context<any>),
-          Scope.provide(scope),
-          Effect.orDie,
-        );
-        return RpcProviderProxy.RpcProviderProxy.of({
-          get: (providersUrl, providerName) =>
-            Effect.flatMap(realProxy, (proxy) =>
-              proxy.get(providersUrl, providerName),
-            ),
-        });
-      }),
-    );
-    singleton = { lazy, scope, refs: 0 };
+    singleton = {
+      real: sidecarProxy(options),
+      memoMap: Layer.makeMemoMapUnsafe(),
+      scope: Scope.makeUnsafe("sequential"),
+      refs: 0,
+    };
     sidecarSingletons.set(key, singleton);
   }
   singleton.refs += 1;
-  const instance = singleton;
-  let closed = false;
-  return {
-    provide: (eff) => Effect.provide(eff, instance.lazy),
-    close: Effect.suspend(() => {
-      // Idempotent per handle: destroy(Stack) and the fallback afterAll can
-      // both run it without double-decrementing.
-      if (closed) return Effect.void;
-      closed = true;
-      instance.refs -= 1;
-      if (instance.refs > 0) return Effect.void;
-      if (sidecarSingletons.get(key) === instance) {
-        sidecarSingletons.delete(key);
+  let runtime:
+    | {
+        instance: SidecarSingleton;
+        owner: RpcProviderProxy.SessionOwner;
+        contexts: Set<{ ambient?: Context.Context<any> }>;
       }
-      return Scope.close(instance.scope, Exit.void);
-    }).pipe(Effect.ignore),
+    | undefined = {
+    instance: singleton,
+    owner: RpcProviderProxy.makeSessionOwner(),
+    contexts: new Set(),
+  };
+  const lazy = Layer.effect(
+    RpcProviderProxy.RpcProviderProxy,
+    Effect.gen(function* () {
+      if (runtime === undefined) {
+        return yield* Effect.die("Test sidecar handle is closed");
+      }
+      // Never pin the singleton to a file's scope, artifacts, or layer builds.
+      const context = {
+        ambient: Context.omit(
+          Scope.Scope,
+          ArtifactStore,
+          Layer.CurrentMemoMap,
+        )(yield* Effect.context<never>()) as Context.Context<any> | undefined,
+      };
+      if (runtime === undefined) {
+        return yield* Effect.die("Test sidecar handle is closed");
+      }
+      runtime.contexts.add(context);
+      return RpcProviderProxy.RpcProviderProxy.of({
+        diagnostics: Effect.suspend(
+          () =>
+            runtime?.instance.proxy?.diagnostics ??
+            Effect.succeed({
+              sessions: 0,
+              testSessions: 0,
+              owners: 0,
+              connections: 0,
+            }),
+        ),
+        serverDiagnostics: Effect.suspend(
+          () =>
+            runtime?.instance.proxy?.serverDiagnostics ??
+            Effect.succeed(undefined),
+        ),
+        get: Effect.fn(function* (providersUrl, providerName) {
+          if (runtime === undefined) {
+            return yield* Effect.die("Test sidecar handle is closed");
+          }
+          const { instance, owner } = runtime;
+          let proxy = instance.proxy;
+          if (proxy === undefined) {
+            const built = yield* Layer.buildWithMemoMap(
+              instance.real,
+              instance.memoMap,
+              instance.scope,
+            ).pipe(
+              Effect.provideContext(context.ambient!),
+              Scope.provide(instance.scope),
+              Effect.orDie,
+            );
+            proxy = Context.get(built, RpcProviderProxy.RpcProviderProxy);
+            instance.proxy = proxy;
+          }
+          context.ambient = undefined;
+          runtime?.contexts.delete(context);
+          // A handle may have closed while the singleton was building.
+          return yield* proxy.get(providersUrl, providerName, owner);
+        }),
+      });
+    }),
+  );
+  return {
+    provide: (eff) => Effect.provide(eff, lazy),
+    close: Effect.suspend(() => {
+      if (runtime === undefined) return Effect.void;
+      const { instance, owner, contexts } = runtime;
+      runtime = undefined;
+      for (const context of contexts) context.ambient = undefined;
+      contexts.clear();
+      return RpcProviderProxy.closeSessionOwner(owner).pipe(
+        Effect.ensuring(
+          Effect.suspend(() => {
+            instance.refs -= 1;
+            if (instance.refs > 0) return Effect.void;
+            if (sidecarSingletons.get(key) === instance)
+              sidecarSingletons.delete(key);
+            instance.proxy = undefined;
+            return Scope.close(instance.scope, Exit.void);
+          }),
+        ),
+      );
+    }).pipe(Effect.uninterruptible, Effect.ignore),
   };
 };
 

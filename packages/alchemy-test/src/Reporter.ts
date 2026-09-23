@@ -11,7 +11,7 @@ import type { LogEntry } from "./Model.ts";
 export type TestStatus = "pass" | "fail" | "skip" | "todo";
 
 export interface TestMeta {
-  /** Stable id: `<file> > <describe chain> > <name>`. */
+  /** Unique test identity, stable across retries; use titlePath for display. */
   readonly id: string;
   readonly file: string;
   readonly titlePath: ReadonlyArray<string>;

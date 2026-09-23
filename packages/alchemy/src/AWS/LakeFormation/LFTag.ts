@@ -1,7 +1,7 @@
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { havePropsChanged, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -120,7 +120,13 @@ export const LFTagProvider = () =>
           if ((news.catalogId ?? undefined) !== (olds.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // tagValues → update
+          if (havePropsChanged(olds.tagValues, news.tagValues)) {
+            // `tagKey` is unchanged, but consumers that reference it (e.g. an
+            // LFTagAssociation assigning a newly added value) depend on the
+            // new values existing. Withholding it from `stables` makes them
+            // wait for this update instead of racing it.
+            return { action: "update", stables: ["catalogId"] } as const;
+          }
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {

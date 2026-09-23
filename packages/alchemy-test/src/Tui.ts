@@ -832,10 +832,13 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     renderList();
   };
 
+  const previewContent = (entry: Entry): string =>
+    `${detailContent(state, entry)}\nOutput previews are bounded. Full log: ${logFile}\n`;
+
   /** Re-render the open detail pane (no-op when its content is unchanged). */
   const refreshDetail = (): void => {
     if (detailEntry === undefined) return;
-    const raw = detailContent(state, detailEntry);
+    const raw = previewContent(detailEntry);
     if (raw === detailRaw) return;
     detailRaw = raw;
     detailText.content = stringToStyledText(raw);
@@ -843,7 +846,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
 
   const openDetail = (entry: Entry): void => {
     detailEntry = entry;
-    detailRaw = detailContent(state, entry);
+    detailRaw = previewContent(entry);
     detailText.content = stringToStyledText(detailRaw);
     state.detailOpen = true;
     list.visible = false;

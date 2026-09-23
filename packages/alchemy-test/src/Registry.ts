@@ -33,8 +33,8 @@ const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
 export const collect = async (
   file: string,
   f: () => Promise<void>,
+  root: FileSuite = makeFileSuite(file),
 ): Promise<FileSuite> => {
-  const root = makeFileSuite(file);
   await storage.run({ current: root }, f);
   return root;
 };
@@ -51,6 +51,12 @@ const currentContext = (): FileContext => {
 };
 
 export const currentSuite = (): Suite => currentContext().current;
+
+export const currentFileSuite = (): FileSuite => {
+  let suite = currentSuite();
+  while (suite.parent !== undefined) suite = suite.parent;
+  return suite as FileSuite;
+};
 
 /**
  * The file currently being collected (path relative to the run root, e.g.

@@ -6,6 +6,7 @@ import * as Exit from "effect/Exit";
 import { flow } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as NodeUtil from "node:util";
 import * as Output from "../Output.ts";
@@ -64,16 +65,17 @@ export type RpcUnwrapped<T> =
 export const wrapRpcHandlers = <T extends Record<string, any>>(
   handlers: T,
   streamKeys?: Array<keyof T>,
+  registerCall?: Effect.Effect<void, never, Scope.Scope>,
 ): RpcWrapped<T> => {
   return Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
       typeof value === "function"
         ? streamKeys?.includes(key)
-          ? wrapRpcStreamHandler(value)
-          : wrapRpcEffectHandler(value)
+          ? wrapRpcStreamHandler(value, registerCall)
+          : wrapRpcEffectHandler(value, registerCall)
         : typeof value === "object" && value !== null && !Array.isArray(value)
-          ? wrapRpcHandlers(value)
+          ? wrapRpcHandlers(value, undefined, registerCall)
           : value,
     ]),
   ) as RpcWrapped<T>;
@@ -101,10 +103,18 @@ const serializeError = Schema.encodeSync(Schema.Defect());
 
 const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcEffectHandler<Args, Success, Error>,
+  registerCall?: Effect.Effect<void, never, Scope.Scope>,
 ): RpcWrappedEffectHandler<Args, Success, Error> =>
   flow(
     (args) => deserializeRpcArgs(args) as Args,
-    (args) => handler(...args),
+    (args) =>
+      registerCall === undefined
+        ? handler(...args)
+        : Effect.scoped(
+            registerCall.pipe(
+              Effect.andThen(Effect.suspend(() => handler(...args))),
+            ),
+          ),
     Effect.exit,
     Effect.map((exit): RpcSerializedExit<Success, Error> => {
       if (exit._tag === "Success") {
@@ -139,10 +149,14 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
 
 const wrapRpcStreamHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcStreamHandler<Args, Success, Error>,
+  registerCall?: Effect.Effect<void, never, Scope.Scope>,
 ): RpcWrappedStreamHandler<Args, Success, Error> =>
   flow(
     (args) => deserializeRpcArgs(args) as Args,
-    (args) => handler(...args),
+    (args) =>
+      registerCall === undefined
+        ? handler(...args)
+        : Stream.unwrap(registerCall.pipe(Effect.map(() => handler(...args)))),
     (stream) => Stream.toReadableStream(stream),
   );
 

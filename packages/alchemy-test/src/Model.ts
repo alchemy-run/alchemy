@@ -77,6 +77,8 @@ export interface Suite {
 export interface FileSuite extends Suite {
   /** Path relative to the run root, e.g. `test/Cloudflare/R2/Bucket.test.ts`. */
   readonly file: string;
+  /** Framework resources, disposed even when user hooks are skipped. */
+  readonly cleanups: Array<Hook>;
 }
 
 export const makeSuite = (
@@ -99,6 +101,7 @@ export const makeSuite = (
 export const makeFileSuite = (file: string): FileSuite => ({
   ...makeSuite(file, undefined),
   file,
+  cleanups: [],
 });
 
 /** Full title path from the file root down to (and including) this node. */

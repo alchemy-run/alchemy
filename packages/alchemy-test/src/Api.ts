@@ -13,7 +13,7 @@ import * as TestConsole from "effect/testing/TestConsole";
 
 import type { Hook, Mode, TestBody } from "./Model.ts";
 import { makeSuite } from "./Model.ts";
-import { currentSuite, withSuite } from "./Registry.ts";
+import { currentFileSuite, currentSuite, withSuite } from "./Registry.ts";
 
 // ---------------------------------------------------------------------------
 // Shared option handling (vitest accepts `number | { timeout?: number, ... }`)
@@ -459,6 +459,11 @@ export const test: TestFn = it;
 
 export type HookKind = "beforeAll" | "afterAll" | "beforeEach" | "afterEach";
 
+/** Framework cleanup after user teardown, including files with no runnable tests. */
+export const registerFileCleanup = (hook: Hook): void => {
+  currentFileSuite().cleanups.push(hook);
+};
+
 /** Low-level hook registration with an Effect body — used by adapters. */
 export const registerHook = (kind: HookKind, hook: Hook): void => {
   currentSuite()[kind].push(hook);
@@ -547,10 +552,12 @@ export const layer =
     });
 
     const register = (): void => {
-      registerHook("afterAll", {
+      const cleanup: Hook = {
         body: () => Scope.close(scope, Exit.void),
         timeout: options?.timeout,
-      });
+      };
+      registerHook("afterAll", cleanup);
+      registerFileCleanup(cleanup);
       const f = (args.length === 1 ? args[0] : args[1]) as (
         it: LayerMethods<R>,
       ) => void;
