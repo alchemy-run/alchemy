@@ -4,7 +4,7 @@
  * pulled from each page's frontmatter.
  *
  * `llms.txt` covers the guides and concept docs and links to
- * `llms-full.txt`, which additionally lists every generated per-resource
+ * `llms-full.txt`, which additionally lists every generated service-level
  * API reference page (the Providers section) and is much larger.
  *
  * Run with: `bun scripts/generate-llms-txt.ts`
@@ -321,6 +321,10 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Fly — SQL",
+    pages: { slugs: ["fly/data/postgres", "fly/data/drizzle-postgres"] },
+  },
+  {
     heading: "Fly — Frontend",
     pages: { directory: "fly/frontend" },
   },
@@ -333,6 +337,10 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Hetzner — SQL",
+    pages: { slugs: ["hetzner/data/drizzle-postgres"] },
+  },
+  {
     heading: "Hetzner — Frontend",
     pages: { directory: "hetzner/frontend" },
   },
@@ -342,6 +350,28 @@ const SECTIONS: Section[] = [
       "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
     pages: {
       slugs: ["railway/index", "railway/setup"],
+    },
+  },
+  {
+    heading: "Railway — SQL",
+    pages: {
+      slugs: [
+        "railway/data/postgres",
+        "railway/data/mysql",
+        "railway/data/drizzle-postgres",
+        "railway/data/drizzle-mysql",
+      ],
+    },
+  },
+  {
+    heading: "Prisma — SQL",
+    pages: {
+      slugs: [
+        "prisma/data/postgres",
+        "prisma/data/branches",
+        "prisma/data/connections",
+        "prisma/data/drizzle-postgres",
+      ],
     },
   },
   {
@@ -369,11 +399,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Neon",
     intro:
-      "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
+      "Neon backend resources: Postgres branches, Functions, private object storage, managed Auth, Data API, AI Gateway and Website adapters. The upload tutorial combines native and Effect handlers with authenticated browser uploads.",
     pages: {
       slugs: [
         "neon/index",
         "neon/setup",
+        "neon/governance",
+        "neon/guides/ai-gateway",
+        "neon/guides/production-auth",
+        "neon/guides/private-networking",
+        "neon/guides/custom-domains",
+        "neon/guides/state-recovery",
+        "neon/tutorial/index",
+        "neon/tutorial/backend",
+        "neon/tutorial/functions",
+        "neon/tutorial/frontend",
+        "neon/tutorial/previews",
         "neon/data/branching",
         "neon/data/connections",
         "neon/data/migrations",
@@ -472,17 +513,23 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
+      "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
     pages: {
       slugs: [
         "sql/index",
+        "sql/databases",
         "sql/effect-sql/postgres",
+        "sql/effect-sql/mysql",
         "sql/effect-sql/d1",
         "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
         "sql/drizzle/postgres",
+        "sql/drizzle/mysql",
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
+        "sql/prisma/postgres",
+        "sql/prisma/contracts",
+        "sql/prisma/migrations",
       ],
     },
   },
@@ -496,7 +543,7 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const PROVIDERS_INTRO_BASE = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags.`;
+const PROVIDERS_INTRO_BASE = `Service-level API reference, generated from JSDoc on the source \`.ts\` files via \`bun scripts/generate-api-reference.ts\`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.`;
 
 const PROVIDERS_INTRO = `${PROVIDERS_INTRO_BASE} Grouped by cloud below.`;
 
@@ -540,13 +587,13 @@ const HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The per-resource API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
+This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The service-level API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
 
 const FULL_HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every per-resource API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
+This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every service-level API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
 
 function parseFrontmatter(source: string): Record<string, string> {
   if (!source.startsWith("---")) return {};
@@ -687,7 +734,7 @@ async function main() {
   const fullSizeKb = Math.round(Buffer.byteLength(fullBody, "utf8") / 1024);
   const referenceSection = [
     `## API reference`,
-    `${PROVIDERS_INTRO_BASE}\n\nThe per-resource pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
+    `${PROVIDERS_INTRO_BASE}\n\nThe service-level pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
   ];
 
   const body = [HEADER, ...sections, ...referenceSection].join("\n\n") + "\n";

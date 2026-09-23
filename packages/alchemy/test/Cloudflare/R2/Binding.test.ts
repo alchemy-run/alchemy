@@ -262,7 +262,15 @@ test(
     const out = yield* stack;
     yield* exercise("bind", out.writeBinding, out.readBinding, true);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // The ReadWrite worker round-trips a key by itself over the native binding.
@@ -277,7 +285,15 @@ test(
       true,
     );
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // A `put` given an Effect `Stream` goes through a `FixedLengthStream`, and
@@ -316,7 +332,15 @@ test(
       false,
     );
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // ── Scoped HTTP API token ── same matrix over the `*BucketHttp` clients
@@ -327,7 +351,15 @@ test(
     const out = yield* stack;
     yield* exercise("http", out.writeHttp, out.readHttp, false);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 test(
@@ -336,5 +368,13 @@ test(
     const out = yield* stack;
     yield* exercise("rw-http", out.readWriteHttp, out.readWriteHttp, false);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

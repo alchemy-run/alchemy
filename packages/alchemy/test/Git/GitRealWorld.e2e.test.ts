@@ -343,5 +343,13 @@ test.skipIf(skipHuge)(
       (yield* mustSh(tmp, `cd src && git rev-parse HEAD`)).stdout,
     );
   }).pipe(logLevel),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

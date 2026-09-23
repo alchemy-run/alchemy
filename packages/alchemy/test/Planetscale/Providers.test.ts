@@ -57,4 +57,5 @@ it.live(
       Effect.scoped,
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:planetscale", "local"] },
 );

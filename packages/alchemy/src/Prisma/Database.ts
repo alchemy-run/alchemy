@@ -282,6 +282,7 @@ export interface Database extends Resource<
  * ```
  *
  * @resource
+ * @product Postgres
  */
 export const Database = Resource<Database>("Prisma.Database");
 

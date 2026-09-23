@@ -137,7 +137,7 @@ test.provider(
       const gone = yield* waitUntilBucketGone(created.addOnId, created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -175,7 +175,7 @@ test.provider(
       const gone = yield* waitUntilBucketGone(replaced.addOnId, replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -257,7 +257,18 @@ test.provider(
       const appGone = yield* waitUntilAppGone(out.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:bucket",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const sanitizeReplaceName = (name: string): string => {

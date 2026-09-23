@@ -63,4 +63,5 @@ it.live(
         ),
       ),
     ),
+  { tags: ["unit", "provider:aws", "local"] },
 );

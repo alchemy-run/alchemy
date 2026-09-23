@@ -10,7 +10,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
 import {
@@ -331,7 +331,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      if (!plan.output) {
+      if (plan.selectedFqns !== undefined || !plan.output) {
         return undefined;
       }
 
@@ -606,6 +606,7 @@ const executeNode = (
         // store kinds consistent with the comparison in `havePropsChanged`.
         value: {
           ...value,
+          adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
           props: stripUnresolved(value.props),
           bindings: stripUnresolved(value.bindings),
           namespace,
@@ -748,13 +749,13 @@ const executeNode = (
           `removal policy ${node.state.removalPolicy} → ${node.resource.RemovalPolicy}`,
         );
       }
-      yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
         props: node.state.props,
         bindings: node.state.bindings ?? [],
         instanceId: node.state.instanceId,
       });
+      yield* signalReadyStable;
       return;
     }
 
@@ -781,6 +782,7 @@ const executeNode = (
           bindings: excludeDeletedBindings(node.bindings),
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
         });
         return id;
       } else if (node.action === "replace") {
@@ -840,6 +842,7 @@ const executeNode = (
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
+            adoptionBlocked: node.adoptionBlocked,
           });
         }
 
@@ -891,6 +894,7 @@ const executeNode = (
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
+            adoptionBlocked: node.adoptionBlocked,
           });
           yield* storeAndSignal({
             output: attr,
@@ -920,6 +924,60 @@ const executeNode = (
         const bindingOutputs = excludeDeletedBindings(
           yield* Output.evaluate(node.bindings, outputs),
         );
+
+        if (attr === undefined && node.deferredAdoption && node.provider.read) {
+          const checkpoint = () =>
+            commit<CreatingResourceState>({
+              status: "creating",
+              fqn,
+              logicalId,
+              instanceId,
+              resourceType: node.resource.Type,
+              props: news,
+              attr,
+              providerVersion: node.provider.version ?? 0,
+              bindings: bindingOutputs,
+              downstream: node.downstream,
+              removalPolicy: node.resource.RemovalPolicy,
+              providerMode: node.mode,
+              adoptionBlocked: node.adoptionBlocked,
+            });
+          // Refusal or interruption must retain identity, never foreign attributes.
+          yield* checkpoint();
+          const observed = yield* node.provider
+            .read({
+              id: logicalId,
+              fqn,
+              instanceId,
+              olds: news,
+              output: undefined,
+            })
+            .pipe(
+              instrumentLifecycle(
+                "read",
+                fqn,
+                node.resource.Type,
+                logicalId,
+                instanceId,
+              ),
+            );
+          if (observed !== undefined) {
+            if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
+              return yield* new OwnedBySomeoneElse({
+                message:
+                  `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
+                  "it exists in the cloud but is not owned by this " +
+                  "stack/stage/logical-id. Re-run with `--adopt` (or " +
+                  "wrap the effect in `adopt(true)`) to take it over.",
+                resourceType: node.resource.Type,
+                logicalId,
+              });
+            }
+            attr = stripUnowned(observed);
+            // A creating checkpoint retains olds: undefined on retry.
+            yield* checkpoint();
+          }
+        }
 
         attr = yield* node.provider
           .reconcile({
@@ -1524,23 +1582,33 @@ const executeActionNode = (
     const signalReady = Deferred.succeed(ready[fqn], void 0);
     const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
-    if (node.action === "noop") {
-      tracker[fqn] = {
-        output: node.state.output,
-        props: { __input: node.state.input },
-        bindings: [],
-        instanceId: fqn,
-      };
-      yield* signalReady;
-      yield* signalReadyStable;
-      terminalStatuses.set(fqn, {
-        fqn,
-        id: logicalId,
-        type: task.Type,
-        status: "skipped",
+    const skip = (state: RanActionState) =>
+      Effect.gen(function* () {
+        if (!sameSet(state.downstream ?? [], node.downstream)) {
+          yield* commit<RanActionState>({
+            ...state,
+            downstream: node.downstream,
+          });
+        }
+        tracker[fqn] = {
+          output: state.output,
+          props: { __input: state.input },
+          bindings: [],
+          instanceId: fqn,
+        };
+        yield* signalReady;
+        yield* signalReadyStable;
+        terminalStatuses.set(fqn, {
+          fqn,
+          id: logicalId,
+          type: task.Type,
+          status: "skipped",
+        });
+        yield* report("skipped");
       });
-      yield* report("skipped");
-      return;
+
+    if (node.action === "noop") {
+      return yield* skip(node.state);
     }
 
     // ── run ──
@@ -1561,6 +1629,15 @@ const executeActionNode = (
     const outputs = getOutputs();
     const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
     const inputHashValue = yield* hashInput(resolvedInput);
+
+    // Inputs unknown during planning may resolve to the last successful input.
+    if (
+      !node.forced &&
+      node.state?.status === "ran" &&
+      node.state.inputHash === inputHashValue
+    ) {
+      return yield* skip(node.state);
+    }
 
     yield* commit<RunningActionState>({
       kind: "action",
@@ -1774,6 +1851,7 @@ const converge = Effect.fn(function* (
           namespace,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
         } as UpdatedResourceState,
       });
 
@@ -2051,6 +2129,9 @@ const collectGarbage = Effect.fn(function* (
               providerMode: node.old.providerMode,
             };
 
+        const adoptionBlocked = isDeleteNode(node)
+          ? node.state.adoptionBlocked
+          : node.old.adoptionBlocked;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2066,6 +2147,11 @@ const collectGarbage = Effect.fn(function* (
             // plain data, never unresolved Output exprs or Effect leaves.
             value: {
               ...value,
+              adoptionBlocked:
+                value.adoptionBlocked ??
+                (isDeleteNode(node)
+                  ? node.state.adoptionBlocked
+                  : node.adoptionBlocked),
               props: stripUnresolved(value.props),
               bindings: stripUnresolved(value.bindings),
               namespace,
@@ -2214,7 +2300,13 @@ const collectGarbage = Effect.fn(function* (
             //                      foreign resource; drop our state and say so
             //   - undefined      → nothing exists; dropping state is safe
             if (attr === undefined && !retainOldGeneration) {
-              if (provider.read) {
+              if (adoptionBlocked === "migrated-fqn") {
+                yield* scopedSession.note(
+                  "Skipping recovery of a reused FQN: a lookup could find its " +
+                    "migrated predecessor. Any interrupted new physical " +
+                    "resource must be identified and cleaned up manually.",
+                );
+              } else if (provider.read) {
                 const recovered = yield* provider
                   .read({
                     id: logicalId,
@@ -2286,6 +2378,7 @@ const collectGarbage = Effect.fn(function* (
                 bindings: excludeDeletedBindings(node.bindings),
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
+                adoptionBlocked,
               });
             }
 
@@ -2387,7 +2480,12 @@ const collectGarbage = Effect.fn(function* (
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    })).filter((replaced) => !unresolved.has(replaced.fqn));
+    })).filter(
+      (replaced) =>
+        !unresolved.has(replaced.fqn) &&
+        (plan.selectedFqns === undefined ||
+          plan.selectedFqns.has(replaced.fqn)),
+    );
     const deletionGraph: Record<
       string,
       Delete | ReplacementResourceState | undefined

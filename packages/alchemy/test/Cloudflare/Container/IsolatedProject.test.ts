@@ -88,7 +88,15 @@ test(
     const pong = yield* fetchReady(new URL("/ping", url), "pong");
     expect(pong).toContain("pong");
   }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 test(
@@ -101,5 +109,13 @@ test(
     );
     expect(hello).toContain("hello from isolated project");
   }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

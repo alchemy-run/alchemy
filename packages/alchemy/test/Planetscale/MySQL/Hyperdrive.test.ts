@@ -89,42 +89,55 @@ const expectWidgetRoundTrip = (baseUrl: string, widget: Widget) =>
     expect(finalBody.widgets.some((w) => w.id === widget.id)).toBe(false);
   });
 
-describe.skipIf(!process.env.PLANETSCALE_TEST).sequential("Hyperdrive", () => {
-  /**
-   * End-to-end: deploy a {@link Planetscale.MySQLDatabase} + branch (which
-   * applies the fixture migrations) + password, point a
-   * {@link Cloudflare.Hyperdrive.Connection} at the password's origin, and
-   * exercise the Drizzle Effect MySQL client over real MySQL via a Worker.
-   *
-   * Validates that:
-   *   - migrations applied from the fixtures dir produce the expected table
-   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.MySQL(...)` produces
-   *     a working Effect-native client at runtime (text protocol +
-   *     eval-free row parsers by default on workerd)
-   *   - INSERT / SELECT / DELETE round-trip through Hyperdrive to PlanetScale
-   */
-  test.provider(
-    "MySQLBranch + Hyperdrive + Drizzle round-trips through a Worker",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+describe.skipIf(!process.env.PLANETSCALE_TEST).sequential(
+  "Hyperdrive",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:planetscale",
+      "provider:planetscale:mysql",
+      "live",
+    ],
+  },
+  () => {
+    /**
+     * End-to-end: deploy a {@link Planetscale.MySQLDatabase} + branch (which
+     * applies the fixture migrations) + password, point a
+     * {@link Cloudflare.Hyperdrive.Connection} at the password's origin, and
+     * exercise the Drizzle Effect MySQL client over real MySQL via a Worker.
+     *
+     * Validates that:
+     *   - migrations applied from the fixtures dir produce the expected table
+     *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.MySQL(...)` produces
+     *     a working Effect-native client at runtime (text protocol +
+     *     eval-free row parsers by default on workerd)
+     *   - INSERT / SELECT / DELETE round-trip through Hyperdrive to PlanetScale
+     */
+    test.provider(
+      "MySQLBranch + Hyperdrive + Drizzle round-trips through a Worker",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
 
-        const { hyperdrive, worker } = yield* stack.deploy(
-          Effect.gen(function* () {
-            yield* PlanetscaleDb;
-            const hyperdrive = yield* Hyperdrive;
-            const worker = yield* MySQLHyperdriveWorker;
-            return { hyperdrive, worker };
-          }),
-        );
+          const { hyperdrive, worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* PlanetscaleDb;
+              const hyperdrive = yield* Hyperdrive;
+              const worker = yield* MySQLHyperdriveWorker;
+              return { hyperdrive, worker };
+            }),
+          );
 
-        expect(worker.url).toBeTypeOf("string");
-        expect(hyperdrive.origin).toMatchObject({ port: 3306 });
-        const baseUrl = (worker.url as string).replace(/\/+$/, "");
-        yield* expectWidgetRoundTrip(baseUrl, { id: 1, name: "alpha" });
+          expect(worker.url).toBeTypeOf("string");
+          expect(hyperdrive.origin).toMatchObject({ port: 3306 });
+          const baseUrl = (worker.url as string).replace(/\/+$/, "");
+          yield* expectWidgetRoundTrip(baseUrl, { id: 1, name: "alpha" });
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
-    { timeout: 900_000 },
-  );
-});
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+  },
+);

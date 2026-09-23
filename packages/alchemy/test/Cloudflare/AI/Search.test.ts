@@ -109,7 +109,15 @@ test.provider(
 
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 // A web-crawler source crawls a seed URL and needs no service token, so the
@@ -177,5 +185,13 @@ test.provider(
 
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
