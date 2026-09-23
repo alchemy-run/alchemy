@@ -6,7 +6,7 @@ description: How alchemy plans, applies, replaces, and destroys resources, and h
 import Terminal from "../../../components/Terminal.astro";
 import DAG from "../../../components/DAG.astro";
 
-Every [Resource](/infrastructure-as-code/resource) goes through the same lifecycle:
+Every [Resource](/infrastructure-as-code/resource) goes through the same lifecycle of
 **plan → reconcile → (replace) → delete**. The plan classifies each
 resource as create, update, replace, delete, or no-op. The provider
 implements one `reconcile` function that converges the cloud's actual

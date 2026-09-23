@@ -126,7 +126,7 @@ cd frontend && alchemy deploy --stage sam
 
 The backend must be deployed to the stage first. Otherwise the frontend's
 plan fails with `InvalidReferenceError` because there are no persisted
-outputs to read. Destroy in reverse order: frontend first, then backend.
+outputs to read. Destroy in reverse order, with the frontend first and then the backend.
 
 Each `alchemy.run.ts` runs from its own package directory, so relative paths
 (`main`, `rootDir`) resolve against the package. The

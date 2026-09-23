@@ -36,7 +36,7 @@ what it listens to.
 ## What one call wires
 
 In traditional IaC, running code when a message lands takes three
-pieces: permission to receive and delete messages, a mapping that tells
+pieces, which are permission to receive and delete messages, a mapping that tells
 the queue to invoke the Function, and a handler that unpacks the raw
 event:
 
@@ -201,7 +201,7 @@ export default Cloudflare.Worker(
 ```
 
 At deploy time the cron expression is attached to the Worker. At runtime
-the `scheduled` listener is registered. GitHub works the same way:
+the `scheduled` listener is registered. GitHub works the same way.
 `consumeRepositoryEvents` creates a repository webhook pointing at the
 Worker's URL, and the runtime listener verifies each delivery's HMAC
 signature before calling your handler.
@@ -233,11 +233,11 @@ of consuming them locally:
 yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toQueue(queue);
 ```
 
-Each source has its own guide. On AWS: [SQS](/aws/messaging/sqs),
+Each source has its own guide. On AWS, see [SQS](/aws/messaging/sqs),
 [Kinesis](/aws/messaging/kinesis),
 [DynamoDB Streams](/aws/messaging/dynamodb-streams),
 [S3 Events](/aws/messaging/s3-events), [SNS](/aws/messaging/sns), and
-[EventBridge](/aws/messaging/eventbridge). On Cloudflare:
+[EventBridge](/aws/messaging/eventbridge). On Cloudflare, see
 [Queues](/cloudflare/messaging/queues), [Cron](/cloudflare/messaging/cron),
 and [GitHub Events](/cloudflare/messaging/github-events).
 

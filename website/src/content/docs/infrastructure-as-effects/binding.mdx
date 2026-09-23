@@ -34,7 +34,7 @@ export default AWS.Lambda.Function(
 `yield* GetItem(Jobs)` is the binding. `getItem` is the client.
 `GetItemHttp` is the implementation.
 
-A Function that reads a table needs three things: permission to call
+A Function that reads a table needs three things. It needs permission to call
 the API, the table's name at runtime, and a client to call it with. In
 traditional IaC those live in three places. A policy sits in the
 infrastructure code. An environment variable carries the name between
@@ -143,7 +143,7 @@ export default Cloudflare.Worker(
 ```
 
 Cloudflare has no IAM. `ReadWriteBucketBinding` registers a native
-`r2_bucket` binding on the Worker. The access level is in the name:
+`r2_bucket` binding on the Worker. The access level is in the name, such as
 `ReadBucket`, `WriteBucket`, or `ReadWriteBucket`.
 
 The contract is a `Binding.Service`. It names the capability and the
