@@ -17,6 +17,7 @@ packages:
   - website
   - packages/*
   - examples/*
+  - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*
   - benchmark/*
