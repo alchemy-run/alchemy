@@ -35,8 +35,10 @@
  *   the signature is checked.
  * - CORS is always permissive, so browser uploads from a dev frontend work.
  *
- * workerd never answers `100 Continue`: clients sending
- * `Expect: 100-continue` (the AWS SDK v3 default for bodies) hang.
+ * workerd never answers `100 Continue`. Through the dev proxy
+ * (`proxy/WorkerProxy.ts`) clients sending `Expect: 100-continue` (the AWS
+ * SDK v3 in Node, for bodies of 2 MB or more) get one from the proxy;
+ * connecting to workerd's own port directly, they wait out their timeout.
  */
 import { XMLBuilder, XMLParser, XMLValidator } from "fast-xml-parser";
 import {

@@ -180,17 +180,15 @@ export const Uploads = Cloudflare.R2.Bucket("Uploads", {
 });
 ```
 
-## Local development limits
+## Local development
 
 The local endpoint rejects expired and tampered URLs like R2 does,
 and objects uploaded through it are visible to the Worker's own R2
-bindings. A bucket piped through `Alchemy.remote()` uses real R2 in
-dev. Two gaps remain:
+bindings. S3 clients such as the AWS SDK work against it too. A
+bucket piped through `Alchemy.remote()` uses real R2 in dev.
 
-- It never answers `Expect: 100-continue`, which some S3 SDKs send on
-  uploads. Presigned URLs used from `fetch` or a browser are
-  unaffected.
-- Presigned POST (HTML form) uploads aren't supported. Use `PUT`.
+R2 doesn't support presigned POST (HTML form) uploads, locally or
+deployed. Use presigned `PUT` URLs.
 
 ## Where next
 
