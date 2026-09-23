@@ -1,9 +1,9 @@
 import { defineScene, edit } from "../capture/scene.ts";
 
 export default defineScene({
-  title: "Deploy a website",
+  title: "A Stack and a website",
   chapter: "00-website",
-  notes: "Chapter 0: declare a Stack with one Vite website and deploy it.",
+  notes: "Chapter 0: declare a Stack with one Vite website and run it locally with alchemy dev.",
   async run(s) {
     await s.sync({ except: ["alchemy.run.ts"] });
 
@@ -31,35 +31,31 @@ export default defineScene({
       "alchemy.run.ts",
       "Add the Vite website as a resource",
       edit.after(stack(11), stack(12, 15)),
-      "Cloudflare.Website.Vite builds the Vite app and serves it from a Cloudflare Worker. dev pins the port alchemy dev will use later.",
+      "Cloudflare.Website.Vite builds the Vite app and serves it from a Cloudflare Worker. dev pins the port alchemy dev serves it on.",
     );
     await s.editor.patch(
       "alchemy.run.ts",
       "Output the website's URL",
       edit.after(stack(15), stack(16, 17)),
-      "Whatever the Stack returns is its output: printed after every deploy.",
+      "Whatever the Stack returns is its output: printed by alchemy dev and after every deploy.",
     );
 
-    s.step("Deploy it with alchemy deploy", "alchemy deploy plans the change, asks to confirm, then applies it.");
-    const url = await s.terminal(async (t) => {
-      await t.type("deploy", "alchemy deploy");
-      await t.waitFor("deploy", /Deploy\?/, { timeout: 120_000 });
-      await t.sleep(1200);
-      await t.key("deploy", "Enter");
-      const text = await t.waitFor("deploy", /Stack deployed[\s\S]*❯\s*$/, { timeout: 300_000 });
-      await t.sleep(1500);
-      const found = text.match(/https:\/\/shorty-web-[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev/)?.[0];
-      if (!found) throw new Error("deployed URL not found in the terminal output");
-      return found;
+    s.step(
+      "Run the Stack locally with alchemy dev",
+      "alchemy dev runs the whole Stack on this machine and hot-reloads it on every save. It stays up in its own tab while we build; nothing is deployed until the end.",
+    );
+    await s.terminal(async (t) => {
+      await t.type("dev", "alchemy dev");
+      await t.waitDev();
+      await t.sleep(1000);
     });
-    s.state.web = url;
 
-    s.step("One resource, deployed to Cloudflare", "The architecture: a single Worker serving the site, running in the cloud.");
-    await s.diagram({ stage: `live_${process.env.USER}`, nodes: ["Web"] });
+    s.step("One resource, running locally", "The architecture so far: a single website, running in alchemy dev's local simulator.");
+    await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Web"] });
     s.pause(1);
 
-    s.step("The website is live");
-    await s.browser.open(url, { waitFor: /Your links/ });
+    s.step("The website, served by alchemy dev");
+    await s.browser.open("http://localhost:5173", { waitFor: /Your links/ });
     s.pause(1.5);
   },
 });

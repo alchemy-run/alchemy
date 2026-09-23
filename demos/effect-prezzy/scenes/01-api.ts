@@ -16,23 +16,6 @@ export default defineScene({
       ],
     });
 
-    s.step(
-      "Our Stack so far: one website",
-      "Where we left off: alchemy.run.ts declares the Stack with a single Vite website.",
-    );
-    await s.editor.open("alchemy.run.ts");
-    s.pause(1);
-
-    s.step(
-      "Run the whole Stack locally with alchemy dev",
-      "alchemy dev runs the whole stack locally and hot-reloads it on every save. It stays up in its own tab for the rest of the talk.",
-    );
-    await s.terminal(async (t) => {
-      await t.type("dev", "alchemy dev");
-      await t.waitDev();
-      await t.sleep(1000);
-    });
-
     // src/Link.ts: the domain.
     const link = await s.chapterLines("src/Link.ts");
     await s.editor.patch(

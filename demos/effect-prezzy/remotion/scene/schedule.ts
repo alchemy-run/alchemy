@@ -92,7 +92,8 @@ export const schedule = async (
   let app: AppId = firstBeat ? appOf(firstBeat, "editor") : "editor";
   for (const beat of capture.beats) {
     const next = appOf(beat, app);
-    const switchFrames = next === app ? 0 : TIMING.switch;
+    // Windows cut straight to the next one: no switch animation.
+    const switchFrames = 0;
     const segment: Segment = {
       beat,
       from: frame,

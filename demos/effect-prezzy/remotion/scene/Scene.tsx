@@ -9,7 +9,7 @@ import {
 } from "remotion";
 import { VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
-import { AppSwitcher, MenuBar, Wallpaper } from "./Desktop.tsx";
+import { MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Browser } from "./Browser.tsx";
 import { Diagram } from "./Diagram.tsx";
 import { Editor } from "./Editor.tsx";
@@ -95,18 +95,6 @@ export const Scene = ({ capture, plan }: SceneProps) => {
 
   const segment = segmentAt(plan.segments, frame);
   const focused: AppId = segment?.app ?? "editor";
-  const local = segment ? frame - segment.from : 0;
-  const switching = segment !== undefined && segment.switchFrames > 0 && local < segment.switchFrames;
-  // The target window comes forward once the switcher has picked it.
-  const raise = switching
-    ? interpolate(local, [TIMING.switchOverlay, TIMING.switchOverlay + TIMING.raise], [0, 1], {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      })
-    : 1;
-  const front: AppId = switching && raise === 0 ? segment.previous : focused;
-  const behind: AppId | undefined = switching && raise > 0 ? segment.previous : undefined;
-
   const windows: Record<AppId, ReactNode> = {
     editor: <Editor capture={capture} plan={plan} frame={frame} />,
     terminal: <Terminal capture={capture} plan={plan} frame={frame} fps={fps} />,
@@ -117,25 +105,9 @@ export const Scene = ({ capture, plan }: SceneProps) => {
   return (
     <AbsoluteFill>
       <Wallpaper />
-      <MenuBar app={switching && raise < 0.5 ? segment.previous : focused} />
-      {behind ? <AbsoluteFill>{windows[behind]}</AbsoluteFill> : null}
-      <AbsoluteFill
-        style={
-          behind
-            ? { opacity: raise, transform: `scale(${0.985 + 0.015 * raise})` }
-            : undefined
-        }
-      >
-        {windows[front]}
-      </AbsoluteFill>
-      {switching ? (
-        <AppSwitcher
-          frame={local}
-          duration={TIMING.switchOverlay}
-          from={segment.previous}
-          to={segment.app}
-        />
-      ) : null}
+      <MenuBar app={focused} />
+      <AbsoluteFill>{windows[focused]}</AbsoluteFill>
+
       {(() => {
         const caption = captionAt(plan, frame);
         return caption ? <Caption key={caption.text} {...caption} /> : null;

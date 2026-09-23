@@ -38,7 +38,7 @@ export const deck: DeckItem[] = [
     },
     seconds: 2.5,
   },
-  ...chapter(0, "00-website", "Deploy a website", "Cloudflare.Website.Vite and alchemy deploy"),
+  ...chapter(0, "00-website", "A Stack and a website", "Declare the Stack, run it with alchemy dev"),
   ...chapter(1, "01-api", "An Effectful Worker", "An HttpApi served by a Worker, called by a typed client"),
   ...chapter(2, "02-d1", "Store links in D1", "A database, its migrations, and a binding"),
   ...chapter(3, "03-tests", "Test against the real cloud", "Deploy a copy, assert, destroy"),
@@ -47,6 +47,7 @@ export const deck: DeckItem[] = [
   ...chapter(6, "06-layers-neon", "Storage as a Layer", "Swap D1 for Neon Postgres behind Hyperdrive"),
   ...chapter(7, "07-telemetry", "OpenTelemetry", "Spans and logs to Axiom"),
   ...chapter(8, "08-dashboard", "Dashboards as code", "An Axiom dashboard next to the code it observes"),
+  ...chapter(9, "09-deploy", "Ship it", "Built with alchemy dev, proven by tests, deployed once"),
   {
     kind: "slide",
     id: "recap",

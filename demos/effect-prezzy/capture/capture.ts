@@ -579,9 +579,9 @@ const teardown = async () => {
   if (args.keep) return;
   // Give `alchemy dev` a moment to exit, then remove what the talk created.
   await Bun.sleep(2_000);
-  for (const stage of [`dev_${process.env.USER}`, undefined]) {
-    console.log(`● destroying ${stage ?? "the live"} stage`);
-    const cmd = ["alchemy", "destroy", "--yes", "--profile", profile, ...(stage ? ["--stage", stage] : [])];
+  for (const stage of [`dev_${process.env.USER}`, "prod"]) {
+    console.log(`● destroying the ${stage} stage`);
+    const cmd = ["alchemy", "destroy", "--yes", "--profile", profile, "--stage", stage];
     const proc = Bun.spawn(cmd, {
       cwd: dir,
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, CI: "" },
