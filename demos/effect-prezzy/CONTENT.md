@@ -1,194 +1,439 @@
-# Content plan: building "Shorty" with Alchemy
+# Content plan: Shorty, from zero to production
 
-One app, built live from an empty folder: a link shortener with link
-previews and live click analytics. Every feature is added because the app
-needs it, and each step introduces one Alchemy or Effect idea.
+A link shortener with live click counts, built from an empty folder. Each
+chapter adds one concept, and each chapter runs the same loop, so the
+viewer watches the code, the running app, the architecture and the tests
+evolve together.
 
-The talk is about Effect on Cloudflare: Workers, Durable Objects, event
-sources, sinks and Layers. The Vite website comes last as a dashboard.
+## The screen
 
-## The app
-
-```
-browser ─► Api Worker (Effect)
-            ├─ POST /links ──────► Links service (Layer: KV → DynamoDB)
-            │        └──────────► Jobs Queue ─► unfurl job (fetch title, retry)
-            ├─ POST /links/import ─ Stream ─► QueueSink(Jobs)
-            ├─ GET /:code ───────► 302 + click event ─► Clicks Queue
-            │                        Clicks consumer (Stream, grouped) ─► LinkRoom DO
-            ├─ GET /links/:code/live ── WebSocket ─► LinkRoom DO (hibernatable)
-            └─ cron hourly ──────► stale previews ─ Stream ─► QueueSink(Jobs)
-Dashboard (Website.Vite) ─► HttpApi typed client + live WebSockets
-```
-
-| Need in the app | Alchemy / Effect feature |
+| Window | What runs there |
 | --- | --- |
-| Serve an HTTP API | Worker, Effectful Constructor, phases |
-| Store links | Resource + Binding (KV) |
-| Hide storage behind a service | Layer that owns its infrastructure |
-| Read-after-write links (KV is eventually consistent) | Swap the Layer to DynamoDB (cross-cloud) |
-| Fetch page titles without blocking the request | Queue producer + `consumeQueueMessages` (background job) |
-| Import many links at once | `QueueSink`: Stream → Sink with batching |
-| Count clicks without slowing redirects | Clicks Queue as an event source, processed as a Stream |
-| Live click counts per link | Durable Object, storage, hibernatable WebSockets |
-| Refresh stale previews | Cron event source feeding the same sink |
-| A typed public API | Effect `HttpApi` + derived client |
-| A UI | `Cloudflare.Website.Vite` |
+| VS Code | The chapter's edit, typed from the real diff |
+| Terminal, top pane | `alchemy dev`, started once in chapter 1 and never stopped. It hot-reloads the Worker, the Durable Object, the queue consumer and the Vite site on every save |
+| Terminal, bottom pane | `pnpm test` after every change (deploy → assert → destroy against real infrastructure), plus the odd `curl` |
+| Browser | The dashboard served by `alchemy dev` (`localhost`) |
+| Diagram | Resources and Bindings, generated from Alchemy's state, with each Binding expandable to the grant it produced |
 
-## Act 0: Why Alchemy (slides)
+## The loop, every chapter
 
-1. **Title.**
-2. **Infrastructure as Code, in Effect.** The one-file R2 Bucket + Worker
-   from *What is Alchemy*, beside the traditional two-file version
-   (`env.Uploads` + a separate handler).
-3. **What we'll build.** The architecture diagram above.
+1. **Code.** Type the change in VS Code.
+2. **Dev.** The top pane shows `alchemy dev` picking the change up; the
+   browser (or a `curl`) shows the new behaviour straight away.
+3. **Diagram.** New Resources and Bindings animate in. The new Binding
+   expands to its grant (a native binding, a secret, a token scope).
+   Nodes carry a `local` or `cloud` badge: under `alchemy dev`, Workers,
+   Durable Objects, D1 and Queues run in local simulators, while Neon
+   and Axiom have no emulator and deploy for real into the `dev_$USER`
+   stage.
+4. **Test.** `pnpm test` in the bottom pane deploys a full copy of the
+   stack to `test_$USER` (the plan is printed), runs the assertions
+   against it, and destroys it. The diagram shows the `test_$USER` copy
+   appear beside `dev_$USER` and fade out when it's destroyed.
 
-## Act 1: A Stack and a Worker
+`alchemy deploy` appears twice: chapter 0 (the first deploy) and the
+finale (`--stage prod`).
 
-4. **Hello, Worker.** Editor: `alchemy.run.ts` (Stack, providers, state)
-   and `src/Api.ts` whose constructor returns `fetch`. Terminal:
-   `alchemy deploy` (plan, confirm, URL). Browser: "hello".
-5. **Two phases** (slide). The outer Effect runs at deploy time and at
-   cold start; `fetch` runs per request. `RuntimeContext` marks
-   request-only code. Stages: `dev_$USER` vs `--stage prod`.
+The diagram is generated from the state files (the demo uses
+`Alchemy.localState()`, so they sit in `.alchemy/state/`), so it always
+matches what's deployed. Each host resource's state already records its
+bindings and the grants they produced, e.g. from the previous reference
+app:
 
-## Act 2: Bindings
+```jsonc
+// .alchemy/state/Shorty/<stage>/Api.json → bindings
+{ "sid": "LinkRoom", "data": { "bindings": [{ "type": "durable_object_namespace", "className": "LinkRoom" }] } }
+{ "sid": "Clicks",   "data": { "bindings": [{ "type": "queue", "name": "Clicks", "queueName": "shorty-clicks-…" }] } }
+```
 
-6. **Store links in KV.** `Links = KV.Namespace("Links")` next to the
-   Worker; `yield* Cloudflare.KV.ReadWriteNamespace(Links)`;
-   `POST /links` returns a code, `GET /:code` redirects. Terminal: plan
-   shows `+ Links`, `~ Api`; `curl` creates a link and follows the
-   redirect. Point: the binding is the typed client; nothing is wired
-   through `env` by hand.
-7. **Errors are values.** `Effect.catchTag` on the KV error, a
-   `LinkNotFound` tagged error returned as a 404, `Effect.retry` with a
-   schedule.
+Nodes are resources, edges are `bindings[].sid`, edge details are the
+binding data, and local resources are recognisable by their `dev:` ids.
 
-## Act 3: Infrastructure as Layers
+## Chapter 0: Deploy a website
 
-8. **A `Links` service.** `class Links extends Context.Service` with
-   `create` / `get` / `list` / `setPreview`. `LinksKV` is a Layer that
-   owns the namespace and its binding. The Worker becomes `yield* Links`
-   + `Effect.provide(LinksKV)`. Terminal: deploy shows no changes, proving
-   the refactor moved no infrastructure.
-9. **The types hold the boundary.** Calling `links.get` in the outer
-   Effect is a compile error (`RuntimeContext`); so is providing a
-   Layer the host can't satisfy.
+```ts
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "Shorty",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const web = yield* Cloudflare.Website.Vite("Web", { rootDir: "./web" });
+    return { web: web.url };
+  }),
+);
+```
 
-## Act 4: Background jobs with Queues
+- **Deploy:** `alchemy deploy` → `+ Web` → the `workers.dev` URL.
+- **Browser:** the dashboard shell: an empty list and "API offline".
+- **Diagram:** `[Web]`, no bindings.
+- **Concepts:** Stack, Resource, Output, stage, state.
 
-10. **Unfurl links in the background.** `POST /links` now enqueues
-    `{ code, url }` on a `Jobs` Queue with `WriteQueue` and returns
-    immediately. `consumeQueueMessages(Jobs, stream => …)` fetches the
-    page with `HttpClient`, extracts the `<title>`, and saves the preview
-    through `Links`. `Effect.timeout` + `Effect.retry`; a failing batch is
-    redelivered and eventually dead-lettered. Terminal:
-    `alchemy logs --tail` shows the job running after `curl` returns.
-11. **Bulk import with a Sink.** `POST /links/import` takes many URLs:
-    `Stream.fromIterable(urls).pipe(Stream.mapEffect(links.create),
-    Stream.map(toJob), Stream.run(jobsSink))` with
-    `yield* Cloudflare.Queues.QueueSink(Jobs)`. One `sendBatch` per chunk;
-    `Stream.rechunk` controls batch size. Point: source → transform →
-    sink is one expression.
-12. **KV is eventually consistent.** The logs say the job stored the
-    preview, but `GET /links/:code` still shows none, and a new link is
-    missing from `GET /links` for up to a few minutes. (Seen on every real
-    deploy while building the reference app.) Links need read-after-write
-    consistency.
-13. **Swap the Layer to DynamoDB.** `LinksDynamo` owns an
-    `AWS.DynamoDB.Table` and binds `GetItem` (with `ConsistentRead`) /
-    `PutItem` / `Scan`. One `Effect.provide` line changes; the Stack adds
-    `AWS.providers()`. Terminal (`--profile testing`): the plan adds the
-    table plus the IAM user, key and role the Worker assumes, and removes
-    the KV namespace. Nothing else in the Worker changes. Browser: the
-    preview now appears as soon as the job finishes.
+## Chapter 1: An Effectful Worker with an API
 
-## Act 5: Durable Objects and live clicks
+```ts
+// src/ShortyApi.ts: one value, served by the Worker and called by the UI and the tests
+export class LinksGroup extends HttpApiGroup.make("links")
+  .add(HttpApiEndpoint.post("create", "/links", { payload: Schema.Struct({ url: Schema.String }), success: Link }))
+  .add(HttpApiEndpoint.get("list", "/links", { success: Schema.Array(Link) }))
+  .add(HttpApiEndpoint.get("get", "/links/:code", { params: Code, success: Link, error: LinkNotFound })) {}
+export class ShortyApi extends HttpApi.make("ShortyApi").add(LinksGroup) {}
+```
 
-14. **Count clicks off the hot path.** The redirect sends a click event to
-    a `Clicks` Queue. The consumer receives each batch as a `Stream`,
-    folds them into a count per link (`Stream.runFold`), and records one
-    increment per link per batch.
-15. **One Durable Object per link.** `LinkRoom` keeps its count in
-    transactional storage and exposes typed RPC methods (`record(n)`,
-    `clicks()`). The consumer calls `rooms.getByName(code).record(n)`.
-    Point: RPC between Worker and Durable Object is typed with no schema.
-16. **Live counts over hibernatable WebSockets.**
-    `GET /links/:code/live` forwards to the room's `fetch`, which calls
-    `Cloudflare.upgrade()`; `record` broadcasts the new count to
-    `state.getWebSockets()`. Idle rooms hibernate and keep their sockets.
-    Browser: a live counter; clicking the short link in another tab makes
-    it tick.
-17. **Refresh stale previews on a schedule.**
-    `Cloudflare.Workers.cron("0 * * * *", …)` lists links whose preview
-    is older than a day and runs them into the same `QueueSink(Jobs)`.
-    Same pipeline, different trigger. Code + plan only.
+```ts
+// src/Api.ts
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // Construction phase: runs at deploy time and at cold start
+    const links = new Map<string, Link>(); // per isolate, on purpose; chapter 2 fixes it
+    const handlers = HttpApiBuilder.group(ShortyApi, "links", (h) =>
+      h.handle("create", ({ payload }) => /* … */)
+       .handle("list", () => Effect.succeed([...links.values()]))
+       .handle("get", ({ params }) => /* … or LinkNotFound */));
+    return {
+      // Runtime phase: runs per request
+      fetch: yield* HttpRouter.toHttpEffect(
+        HttpApiBuilder.layer(ShortyApi).pipe(
+          Layer.provide(handlers), Layer.provide(Http.Platform), Layer.provide(HttpRouter.cors()),
+        ),
+      ),
+    };
+  }),
+) {}
+```
 
-## Act 6: Ship the API and the site
+```diff
+  // alchemy.run.ts
++ const api = yield* Api;
+  const web = yield* Cloudflare.Website.Vite("Web", {
+    rootDir: "./web",
++   env: { VITE_API_URL: api.url },   // an Output flowing into the build
+  });
+```
 
-18. **A typed HTTP API.** Replace hand-written routing with an Effect
-    `HttpApi` (`Link`, `LinkNotFound`, `createLink`, `getLink`,
-    `listLinks`, `importLinks`). Same handlers, now schema-validated, with
-    a client derived from the same value.
-19. **The dashboard.** `Cloudflare.Website.Vite("Dashboard", { env: {
-    VITE_API_URL: api.url } })`: a React page that lists links with
-    previews, creates links through the typed client, and opens a live
-    WebSocket per link. Browser finale: create a link, click it in
-    another tab, watch the count and the preview appear.
-20. **Recap** (slide): Stack → Runtime → Bindings → Layers → Queues
-    (sources and sinks) → Durable Objects → API + Website, with doc links.
-    `alchemy destroy` runs off camera.
+```ts
+// web/src/client.ts: typed client from the same value, no codegen
+export const client = HttpApiClient.make(ShortyApi, { baseUrl: import.meta.env.VITE_API_URL });
+```
 
-## Reference app
+- **Dev:** start `alchemy dev` in the top pane; it stays up for the rest
+  of the talk. Create a link in the browser at `localhost`.
+- **Diagram:** `Web ──VITE_API_URL──▶ Api` (a reference, not a binding).
+- **Slide:** Construction vs Runtime phase.
 
-`app/` is the finished app (the state after scene 19), built and
-deployed against the `testing` account to prove the plan works end to
-end. The scene-by-scene checkpoints will be cut from it.
+## Chapter 2: Store links in D1
 
-| File | Scenes |
-| --- | --- |
-| `app/alchemy.run.ts` | Stack with the Api Worker and the Dashboard website |
-| `app/src/Links.ts` | `Links` service contract, `LinkNotFound` (8, 18) |
-| `app/src/LinksKV.ts` | KV-backed `Links` Layer (8) |
-| `app/src/LinksDynamo.ts` | DynamoDB-backed `Links` Layer (13) |
-| `app/src/Queues.ts` | `Jobs` and `Clicks` queues and message types (10, 14) |
-| `app/src/unfurl.ts` | Page-title fetch with timeout and retry (10) |
-| `app/src/LinkRoom.ts` | Durable Object: count, RPC, WebSocket push (15, 16) |
-| `app/src/ShortyApi.ts` | `HttpApi` schema shared with the dashboard (18) |
-| `app/src/Api.ts` | Worker: consumers, cron, HttpApi, redirect, live route |
-| `app/web/` | React dashboard with the typed client and live counts (19) |
+```sql
+-- migrations/0001_links.sql (runs on SQLite now and on Postgres in chapter 6)
+CREATE TABLE links (code TEXT PRIMARY KEY, url TEXT NOT NULL, created_at BIGINT NOT NULL);
+```
 
-Verified on a real deploy (`--profile testing`): creating links, bulk
-import through `QueueSink`, previews filled in by the Jobs consumer,
-redirects, click counts arriving through the Clicks queue into each
-`LinkRoom`, WebSocket pushes on every click, the typed 404 from `HttpApi`,
-and the dashboard creating a link and updating counts live. With
-`LinksKV`, new links and previews took up to a few minutes to show up
-(scene 12); with `LinksDynamo` they appear as soon as the job finishes.
+```ts
+// src/Db.ts
+export const Db = Cloudflare.D1.Database("Db", { migrations: "./migrations" });
+```
 
-The app uses the two product changes below from a local merge of their
-branches, so it runs ahead of `main` until they land.
+```diff
+  Effect.gen(function* () {
++   const d1 = yield* Cloudflare.D1.QueryDatabase(Db);  // the Binding
++   const sql = yield* SQL.D1(d1);                       // Effect SQL on top
+    const handlers = HttpApiBuilder.group(ShortyApi, "links", (h) =>
+      h.handle("create", ({ payload }) =>
++       sql<Link>`INSERT INTO links (code, url, created_at)
++                 VALUES (${newCode()}, ${payload.url}, ${Date.now()}) RETURNING *`.pipe(/* … */))
+      /* list, get */);
++   // GET /:code → 302
+- }),
++ }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
+```
 
-Keep the table's logical id different from the KV namespace's
-(`LinksTable` vs `Links`). Reusing `Links` for a resource of a different
-type makes `alchemy deploy` crash in `DynamoDB.Table`'s `diff`
-(`olds` is undefined), an engine bug to fix separately.
+- **Dev:** the top pane applies `0001_links.sql` to the local D1; links
+  now survive reloads; `curl -I localhost:1337/<code>` shows the `302`.
+- **Diagram:** `Api ──d1──▶ Db [local]`. The grant: `{ type: "d1", name: "Db" }`,
+  this one database and no account token.
 
-## Product work this plan depends on
+## Chapter 3: Test it against the real cloud
 
-- `Cloudflare.Queues.QueueSink`: an Effect `Sink` over `sendBatch`
-  (scenes 11, 17). [#1781](https://github.com/alchemy-run/alchemy/pull/1781),
-  draft while one flaky live-test run is investigated.
-- DynamoDB HTTP bindings on Cloudflare Worker hosts (scene 13).
-  [#1782](https://github.com/alchemy-run/alchemy/pull/1782).
-- Quieter `alchemy deploy` output: the Cloudflare Worker provider logs
-  internal steps at Info level, which clutters every recorded deploy.
+```ts
+// test/api.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Alchemy.localState(),
+});
+const stack = beforeAll(deploy(Stack));   // a full copy in stage test_$USER
+afterAll(destroy(Stack));                 // gone again afterwards
 
-## Tooling this plan depends on
+test("create, get, redirect", Effect.gen(function* () {
+  const { api } = yield* stack;
+  const client = yield* HttpApiClient.make(ShortyApi, { baseUrl: api }); // the same typed client
+  const link = yield* client.links.create({ payload: { url: "https://effect.website" } });
+  expect((yield* client.links.get({ params: { code: link.code } })).url).toBe("https://effect.website");
+  const missing = yield* client.links.get({ params: { code: "nope" } }).pipe(Effect.flip);
+  expect(missing._tag).toBe("LinkNotFound"); // a typed error, across HTTP
+}));
+```
 
-- Live browser capture (scenes 16, 19): record the page as video.
-- A split terminal (scenes 10, 14): `alchemy logs --tail` beside `curl`.
-- Editor diagnostics (scene 9): red squiggles captured from `tsc`.
-- Slide layouts for code and diagrams (scenes 2, 3, 5, 20).
-- Code checkpoints: each scene's end state lives as real files so every
-  step type-checks and deploys on its own.
+- **Test:** `pnpm test`: the plan for `test_sam` (`+ Db`, `+ Api`, `+ Web`),
+  the apply, the green assertions, the destroy. From here on every
+  chapter ends with `pnpm test`.
+- **Diagram:** a `test_sam` copy appears beside `dev_sam`, all nodes
+  `cloud`, and fades out on destroy.
+- **Point:** `alchemy dev` is for trying it; `pnpm test` proves it on
+  the real infrastructure.
+
+## Chapter 4: Durable Objects and hibernatable WebSockets
+
+```ts
+// src/LinkRoom.ts: one instance per link
+export default class LinkRoom extends Cloudflare.DurableObject<LinkRoom>()(
+  "LinkRoom",
+  Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+    return Effect.gen(function* () {
+      let clicks = (yield* state.storage.get<number>("clicks")) ?? 0;
+      return {
+        record: Effect.fn(function* (n: number) {
+          clicks += n;
+          yield* state.storage.put("clicks", clicks);
+          for (const ws of yield* state.getWebSockets()) yield* ws.send(JSON.stringify({ clicks }));
+          return clicks;
+        }),
+        fetch: Effect.gen(function* () {           // hibernatable: sockets outlive eviction
+          const [response, socket] = yield* Cloudflare.upgrade();
+          yield* socket.send(JSON.stringify({ clicks }));
+          return response;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+```diff
++ const rooms = yield* LinkRoom;
+  // GET /:code
++ yield* rooms.getByName(link.code).record(1);         // typed RPC, no schema
+  // GET /links/:code/live
++ return yield* rooms.getByName(code).fetch(request);  // hand the socket to the room
+```
+
+```ts
+// web: a live counter per row
+new WebSocket(`${WS_URL}/links/${code}/live`).onmessage = (e) => setClicks(JSON.parse(e.data).clicks);
+
+// test: a click is pushed to an open socket
+test("clicks are pushed live", Effect.gen(function* () {
+  // open ws → GET /:code → the next message is { clicks: 1 }
+}));
+```
+
+- **Dev:** the browser counter ticks as the short link is opened in
+  another tab.
+- **Diagram:** `Api ──durable_object_namespace──▶ LinkRoom ×N`, plus
+  `Browser ⇄ LinkRoom` (WebSocket). The grant: the namespace binding
+  and its class migration.
+
+## Chapter 5: A Queue, so redirects stay fast
+
+```ts
+export const Clicks = Cloudflare.Queues.Queue("Clicks");
+```
+
+```diff
++ const clicks = yield* Cloudflare.Queues.WriteQueue(Clicks);
++ yield* Cloudflare.Queues.consumeQueueMessages<ClickEvent>(Clicks,
++   { batchSize: 100, maxWaitTime: "1 second", retryDelay: "3 seconds" },
++   (events) => events.pipe(
++     Stream.runFold(() => new Map<string, number>(),
++       (counts, { body }) => counts.set(body.code, (counts.get(body.code) ?? 0) + 1)),
++     Effect.flatMap((counts) => Effect.forEach(counts,
++       ([code, n]) => rooms.getByName(code).record(n),
++       { concurrency: "unbounded", discard: true }))));
+  // GET /:code
+- yield* rooms.getByName(link.code).record(1);
++ yield* clicks.send({ code: link.code, at: Date.now() });   // off the hot path
+```
+
+- **Dev:** the local broker batches; the top pane logs each batch; the
+  browser counter jumps by batch.
+- **Diagram:** `Api ──queue──▶ Clicks ──consumer──▶ Api ──▶ LinkRoom`, a
+  cycle Alchemy resolves. Grants: the producer binding and the
+  `Consumer` resource.
+- **Test:** ten `GET /:code` → poll until `clicks` is 10.
+- **Aside:** `retryDelay` covers batches delivered while a fresh deploy
+  is still rolling out (found while building #1781).
+
+## Chapter 6: Storage as a Layer, with Neon as the alternative
+
+```ts
+// src/Links.ts: the contract the Worker depends on
+export class Links extends Context.Service<Links, {
+  create(url: string): Effect.Effect<Link, LinkStoreError, Alchemy.RuntimeContext>;
+  get(code: string): Effect.Effect<Link, LinkNotFound | LinkStoreError, Alchemy.RuntimeContext>;
+  list(): Effect.Effect<Link[], LinkStoreError, Alchemy.RuntimeContext>;
+}>()("Links") {}
+
+// one implementation, written against Effect's generic SqlClient
+export const LinksSql = Layer.effect(Links, Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const insert = SqlSchema.single({ Request: NewLink, Result: Link,
+    execute: (l) => sql`INSERT INTO links ${sql.insert(l)} RETURNING *` });
+  return { create: (url) => insert({ code: newCode(), url, created_at: Date.now() }), /* … */ };
+}));
+```
+
+```ts
+// src/Storage.ts: each storage Layer owns its infrastructure
+export const D1Storage = Layer.unwrap(Effect.gen(function* () {
+  return SQL.D1Layer(yield* Cloudflare.D1.QueryDatabase(Db));
+})).pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding));
+
+export const NeonStorage = Layer.unwrap(Effect.gen(function* () {
+  const db = yield* Neon.Project("Postgres", { migrations: "./migrations" }); // same SQL files
+  const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", {
+    origin: db.origin,            // deployed: Hyperdrive pools Neon's direct endpoint
+    dev: db.pooledOrigin,         // alchemy dev: straight to Neon's own pooler
+    caching: { disabled: true },  // links must be read-after-write
+  });
+  const conn = yield* Cloudflare.Hyperdrive.Connect(pool);
+  return Postgres.PostgresLayer({ url: conn.connectionString });
+})).pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));
+```
+
+```diff
+  // src/Api.ts
+- }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
++ }).pipe(Effect.provide(LinksSql.pipe(Layer.provide(NeonStorage)))),
+  // alchemy.run.ts
+- providers: Cloudflare.providers(),
++ providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
+```
+
+- **Dev:** the top pane creates a real Neon project and branch in
+  `dev_sam` (no Neon emulator) and applies the migration; the local
+  Worker talks to it. The browser behaves exactly as before.
+- **Diagram:** `Api ──hyperdrive──▶ Pool ──▶ Neon Main [cloud] ◀── Db [cloud]`,
+  `Db [local D1]` removed. Grant: the Hyperdrive binding, with the
+  connection string delivered as a secret and never in plan output.
+- **Test:** the chapter 3–5 suite, unchanged, passes on Neon. The
+  unchanged tests are the proof that the swap is behaviour-preserving.
+- **Note:** `SqlSchema` decodes rows through `Link`, so D1's numbers and
+  Postgres's `bigint` for `created_at` both decode to the same type.
+
+## Chapter 7: OpenTelemetry to Axiom
+
+```ts
+// src/Observability.ts: names include the stage so dev, test and prod never collide
+export const Observability = Effect.gen(function* () {
+  const { stage } = yield* Stack;
+  const traces = yield* Axiom.Dataset("Traces", { name: `shorty-${stage}-traces`, kind: "otel:traces:v1" });
+  const logs = yield* Axiom.Dataset("Logs", { name: `shorty-${stage}-logs`, kind: "otel:logs:v1" });
+  const ingest = yield* Axiom.ApiToken("Ingest", {
+    name: `shorty-${stage}-ingest`,
+    datasetCapabilities: {                   // can write these two datasets and nothing else
+      [traces.name]: { ingest: ["create"] },
+      [logs.name]: { ingest: ["create"] },
+    },
+  });
+  return { traces, logs, ingest };
+});
+```
+
+```ts
+// the exporter is a Layer built from those resources
+export const Telemetry = Layer.unwrap(Effect.gen(function* () {
+  const { traces, logs, ingest } = yield* Observability;
+  return Axiom.Telemetry({ token: ingest, traces, logs });
+}));
+```
+
+```diff
+  }).pipe(Effect.provide(Layer.mergeAll(
+    LinksSql.pipe(Layer.provide(NeonStorage)),
++   Telemetry,
+  ))),
+
+  // spans come from code that is already Effect
+- create: (url) => insert(/* … */),
++ create: Effect.fn("links.create")(function* (url) { /* … */ }),
+```
+
+- **Dev:** click around in the browser, then open Axiom's trace view:
+  `GET /:code` → `links.get` → SQL → queue send, and separately the
+  consumer → `LinkRoom.record`.
+- **Diagram:** `Api ──otlp──▶ Traces, Logs [cloud]`, `Ingest` as a
+  secret binding. Grant: the token's `datasetCapabilities`.
+- **Test:** optional: query Axiom until the test's own request span
+  arrives.
+
+## Chapter 8: A dashboard as code
+
+```ts
+yield* Axiom.Dashboard("Shorty", {
+  dashboard: {
+    name: `Shorty (${stage})`, owner: "", schemaVersion: 2, refreshTime: 15,
+    timeWindowStart: "qr-now-30m", timeWindowEnd: "qr-now",
+    charts: [
+      { id: "rps", name: "Requests / route", type: "TimeSeries",
+        query: { apl: `['${traces.name}'] | where kind == 'server' | summarize count() by bin_auto(_time), name` } },
+      { id: "p95", name: "p95 latency", type: "Statistic",
+        query: { apl: `['${traces.name}'] | summarize percentile(duration, 95)` } },
+      { id: "clicks", name: "Clicks / link", type: "Table",
+        query: { apl: `['${traces.name}'] | where name == 'LinkRoom.record' | summarize sum(toint(['attributes.n'])) by tostring(['attributes.code'])` } },
+      { id: "errors", name: "Errors", type: "TimeSeries",
+        query: { apl: `['${traces.name}'] | where error == true | summarize count() by bin_auto(_time)` } },
+    ],
+    layout: [/* 2 × 2 grid */],
+  },
+});
+```
+
+- **Dev:** a small load loop in the bottom pane; the Axiom dashboard
+  fills in live in the browser.
+- **Diagram:** `Shorty dashboard ──reads──▶ Traces`: the architecture now
+  includes how the service is observed.
+
+## Finale: production
+
+```sh
+alchemy deploy --stage prod
+```
+
+The whole diagram, panned back through each chapter's version, then the
+`prod` copy appearing beside `dev_sam`: the same program, a second
+complete environment. `alchemy destroy` runs off camera.
+
+## Build status
+
+All nine chapters are built in `chapters/` (see its README). Each one
+type-checks and was run under `alchemy dev`; chapters 3–8 pass
+`pnpm test` against the `testing` account (deploy, assert, destroy in
+17–62 s). Things learned while building:
+
+- Hyperdrive caches query results by default, so a link created and
+  then listed came back missing. Chapter 6 turns caching off; that is a
+  good on-camera aside.
+- `created_at` is ISO text so the same migration and queries run on D1
+  and Postgres.
+- Axiom accepts stage names like `dev_samgoodwin` in dataset names, and
+  telemetry exports from a local Worker under `alchemy dev`.
+- `Axiom.Dataset.name` is a deploy-time Output, so the dashboard builds
+  its query strings from the stage instead.
+- The dashboard's dev port is pinned (`dev: { port: 5173 }`) so the API
+  always lands on `localhost:1337`.
+- Right after a fresh deploy, requests and queue batches can briefly hit
+  the placeholder Worker. Tests retry cold-start responses
+  (`Test.executeWhenReady`), and the consumer uses `maxRetries: 10` with
+  `retryDelay: "3 seconds"` so no click is dropped.
+
+## Tooling this plan needs
+
+- The diagram renderer (Remotion, auto layout, `local`/`cloud` badges,
+  expandable grants), driven by the state files after each save.
+- A terminal window with two panes (tmux): `alchemy dev` on top, tests
+  below.
+- Live browser recording (WebSocket counters, Axiom charts).
+- `pnpm test` output captured in the terminal clip.
+- One saved code checkpoint per chapter, each of which type-checks,
+  runs under `alchemy dev` and passes `pnpm test`.

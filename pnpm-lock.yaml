@@ -680,6 +680,12 @@ importers:
 
   demos/effect-prezzy:
     dependencies:
+      '@effect/sql-d1':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
       '@remotion/bundler':
         specifier: 'catalog:'
         version: 4.0.526(@swc/helpers@0.5.23)(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.26)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -695,6 +701,9 @@ importers:
       diff:
         specifier: 'catalog:'
         version: 9.0.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
       react:
         specifier: 'catalog:'
         version: 19.3.0

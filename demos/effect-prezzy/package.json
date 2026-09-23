@@ -12,11 +12,14 @@
     "tcut": "bunx bun@1.4.2 ../../submodules/tcut/packages/tcut/src/cli.ts"
   },
   "dependencies": {
+    "@effect/sql-d1": "catalog:",
+    "@effect/sql-pg": "catalog:",
     "@remotion/bundler": "catalog:",
     "@remotion/cli": "catalog:",
     "@remotion/google-fonts": "catalog:",
     "@remotion/renderer": "catalog:",
     "diff": "catalog:",
+    "pg": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "remotion": "catalog:",
