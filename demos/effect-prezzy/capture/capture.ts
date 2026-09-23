@@ -269,8 +269,9 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         async type(pane, command) {
           await showTab(pane);
           await t.sleep("300ms");
-          await t.type(command);
-          await t.sleep("250ms");
+          // The whole command appears at once; typing it out only slows the talk down.
+          await t.paste(command);
+          await t.sleep("400ms");
           await t.enter();
         },
         async key(pane, key) {

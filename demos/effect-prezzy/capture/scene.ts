@@ -3,7 +3,7 @@ import type { AppId, TerminalTab as Pane } from "../shared/types.ts";
 export type { Pane };
 
 export interface Term {
-  /** Type a command into a tab (character by character) and press Enter. */
+  /** Enter a command into a tab (it appears at once) and press Enter. */
   type(pane: Pane, command: string): Promise<void>;
   /** Press a key in a tab, e.g. `Enter`. */
   key(pane: Pane, key: string): Promise<void>;
