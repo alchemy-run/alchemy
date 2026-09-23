@@ -74,10 +74,22 @@ await fetch(url, {
 });
 ```
 
-Both functions take `key` and `expiresIn` (seconds, 900 by default,
-7 days at most). `contentType` is the header an uploader must send,
-or the type a download is served with. `PresignGetObject` also takes
-`contentDisposition`, for example `attachment; filename="report.pdf"`.
+Both functions accept a few options:
+
+```typescript
+yield* presignPut({
+  key: "avatars/me.png",
+  expiresIn: 300, // seconds, 900 by default, 7 days at most
+  contentType: "image/png", // the uploader must send this header
+});
+
+yield* presignGet({
+  key: "reports/2026-09.pdf",
+  expiresIn: 60,
+  contentType: "application/pdf", // served with this Content-Type
+  contentDisposition: 'attachment; filename="report.pdf"', // force a download
+});
+```
 
 ## Async Workers
 
