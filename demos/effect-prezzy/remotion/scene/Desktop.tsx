@@ -186,15 +186,6 @@ const AppIcon = ({ app, size }: { app: AppId; size: number }) => {
     );
   }
   return (
-      <svg width={size} height={size} viewBox="0 0 100 100">
-        <rect width="100" height="100" rx={radius} fill="#2b2b2b" />
-        <rect x="6" y="6" width="88" height="88" rx={radius - 4} fill="#111" />
-        <path d="M24 36 L40 50 L24 64" stroke="#e6e6e6" strokeWidth="7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M46 66 H70" stroke="#e6e6e6" strokeWidth="7" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
     <svg width={size} height={size} viewBox="0 0 100 100">
       <rect width="100" height="100" rx={radius} fill="#f4f4f4" />
       <circle cx="50" cy="50" r="34" fill="#db4437" />
