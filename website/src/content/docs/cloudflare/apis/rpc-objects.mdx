@@ -67,6 +67,48 @@ export default class Caller extends Cloudflare.Worker<Caller>()(
 { "first": 1, "rest": [2, 3, 4] }
 ```
 
+## Return a session from a Durable Object
+
+```typescript title="rooms.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+
+export class Rooms extends Cloudflare.DurableObject<Rooms>()(
+  "Rooms",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const total = yield* Ref.make(0);
+      return {
+        openSession: Effect.fn(function* () {
+          const mine = yield* Ref.make(0);
+          return {
+            visit: () =>
+              Effect.all({
+                mine: Ref.updateAndGet(mine, (n) => n + 1),
+                total: Ref.updateAndGet(total, (n) => n + 1),
+              }),
+          } satisfies RpcObject;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+```typescript title="caller.ts"
+const rooms = yield* Rooms;
+
+// inside fetch
+const session = yield* rooms.getByName("lobby").openSession();
+yield* session.visit();
+const visits = yield* session.visit();
+// { mine: 2, total: 2 } on the first request
+```
+
+The session lives inside the `lobby` instance. `mine` starts at zero for each session; `total` is shared by every session on the instance.
+
 ## Data and streams
 
 ### Native values
@@ -187,28 +229,33 @@ openCounter: Effect.fn(function* () {
 
 The factory's finalizers run when the caller's scope closes, not when `openCounter()` returns.
 
-### Capture services in the factory
+### Use bindings in methods
 
-```typescript
-import * as Context from "effect/Context";
+```typescript title="notes-service.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
 
-class CounterLabel extends Context.Service<
-  CounterLabel,
-  { readonly text: string }
->()("CounterLabel") {}
+const Notes = Cloudflare.KV.Namespace("Notes");
+
+export default class NotesService extends Cloudflare.Worker<NotesService>()(
+  "NotesService",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return {
+      openNotebook: (user: string) =>
+        Effect.succeed({
+          read: (key: string) => kv.get(`${user}/${key}`),
+          write: (key: string, value: string) =>
+            kv.put(`${user}/${key}`, value),
+        } satisfies RpcObject),
+    };
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+) {}
 ```
 
-```typescript
-openCounter: Effect.fn(function* () {
-  const label = yield* CounterLabel;
-
-  return {
-    label: () => Effect.succeed(label.text),
-  } satisfies RpcObject;
-}, Effect.provideService(CounterLabel, { text: "Visits" })),
-```
-
-The factory resolves `CounterLabel`; the returned method closes over its value. Returned `Effect` and `Stream` methods may require `Scope`, but no other services.
+Returned methods may require `Scope` and `RuntimeContext`, so binding clients like `kv.get` work directly. Resolve any other service in the Worker's init or the factory and close over it.
 
 :::note
 RPC objects are temporary: they do not survive an isolate restart or Durable Object eviction. They work through native Worker and Durable Object bindings, not Container HTTP RPC, schema-based Effect RPC, or browser WebSocket clients.

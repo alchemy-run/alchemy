@@ -53,6 +53,16 @@ export const makeApi = Effect.gen(function* () {
         Effect.succeed(value[key]),
       scalar: (value: number) => Effect.succeed(value + 1),
       forwarded: () => stats.record(),
+      runtime: () =>
+        Effect.gen(function* () {
+          return (yield* RuntimeContext).Type;
+        }),
+      runtimeValues: () =>
+        Stream.fromEffect(
+          Effect.gen(function* () {
+            return (yield* RuntimeContext).Type;
+          }),
+        ),
       ping,
       reject: () =>
         Effect.fail(

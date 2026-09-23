@@ -4,7 +4,7 @@ import { makeRpcStub } from "@/Cloudflare/Workers/Rpc.ts";
 import { Service } from "@/Docker/Service.ts";
 import type { Rpc, RpcObject, ValidateRpcObject } from "@/Rpc.ts";
 import type { ValidateRpcShape } from "@/RpcObject.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -50,6 +50,13 @@ const methods = {
   scoped: () => Effect.as(Effect.scope, "scoped" as const),
   scopedValues: () =>
     Stream.fromEffect(Effect.as(Effect.scope, "scoped" as const)),
+  contextual: (): Effect.Effect<"contextual", never, RuntimeContext> =>
+    Effect.succeed("contextual"),
+  contextualValues: (): Stream.Stream<
+    "contextual",
+    never,
+    RuntimeContext | Scope
+  > => Stream.make("contextual"),
 } satisfies RpcObject;
 
 const returned = {
@@ -193,6 +200,13 @@ const checkMethods = (client: typeof methods) => {
   const scoped: Effect.Effect<"scoped", never, Scope> = client.scoped();
   const scopedValues: Stream.Stream<"scoped", never, Scope> =
     client.scopedValues();
+  const contextual: Effect.Effect<"contextual", never, RuntimeContext> =
+    client.contextual();
+  const contextualValues: Stream.Stream<
+    "contextual",
+    never,
+    RuntimeContext | Scope
+  > = client.contextualValues();
   // @ts-expect-error Generic correlation excludes keys absent from the value.
   client.select({ count: 42 }, "missing");
   // @ts-expect-error Stream methods preserve the same key/value correlation.
@@ -220,6 +234,8 @@ const checkMethods = (client: typeof methods) => {
     failedValues,
     scoped,
     scopedValues,
+    contextual,
+    contextualValues,
   };
 };
 
@@ -410,6 +426,16 @@ missingStream satisfies RpcObject;
 sync satisfies RpcObject;
 // @ts-expect-error The optional constraint rejects Promise methods.
 promise satisfies RpcObject;
+
+const missingWithRuntime = {
+  read: () =>
+    Effect.gen(function* () {
+      yield* RuntimeContext;
+      return yield* MissingService;
+    }),
+};
+// @ts-expect-error RuntimeContext does not admit other unresolved services.
+missingWithRuntime satisfies RpcObject;
 
 export type _MissingRejected = Assert<
   Equal<ValidateRpcObject<typeof missing>, never>

@@ -218,6 +218,19 @@ describe.concurrent.each([
     );
 
     test(
+      `${transport}: returned methods run with the host RuntimeContext`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        expect(yield* call(url, "runtime-context")).toEqual({
+          value: "Cloudflare.Worker",
+          values: ["Cloudflare.Worker"],
+        });
+        yield* closed(url, idFor("runtime-context"));
+      }),
+      options,
+    );
+
+    test(
       `${transport}: pure factories use the event scope and preserve generic/correlated values`,
       Effect.gen(function* () {
         const { url } = yield* stack;

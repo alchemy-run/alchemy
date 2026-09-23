@@ -1,10 +1,19 @@
 import type * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
+import type { RuntimeContext } from "./RuntimeContext.ts";
+
+/**
+ * Services a returned RPC method may require. Methods run inside the host
+ * Worker or Durable Object, which provides both; other services must be
+ * resolved by the factory and closed over.
+ */
+export type RpcObjectServices = Scope | RuntimeContext;
 
 /**
  * An optional `satisfies` constraint for an Effect-native returned RPC object.
- * Methods may use the calling event's Scope, but must close over other services.
+ * Methods may use the calling event's Scope and the host's RuntimeContext
+ * (binding clients), but must close over other services.
  * Use this as a constraint, not a client annotation: the inferred object retains
  * its exact keys, generic methods, overloads, and typed failures.
  *
@@ -16,8 +25,8 @@ export interface RpcObject {
   readonly [method: string]: (
     ...args: never[]
   ) =>
-    | Effect.Effect<unknown, unknown, Scope>
-    | Stream.Stream<unknown, unknown, Scope>;
+    | Effect.Effect<unknown, unknown, RpcObjectServices>
+    | Stream.Stream<unknown, unknown, RpcObjectServices>;
 }
 
 /**
@@ -114,7 +123,7 @@ type ValidMethodResult<Result, Seen> =
     : Result extends
           | Effect.Effect<infer Value, any, infer Req>
           | Stream.Stream<infer Value, any, infer Req>
-      ? [Req] extends [Scope]
+      ? [Req] extends [RpcObjectServices]
         ? ValidReturnedValue<Value, Seen>
         : false
       : false;

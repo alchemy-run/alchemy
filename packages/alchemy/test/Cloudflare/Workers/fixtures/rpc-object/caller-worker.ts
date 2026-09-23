@@ -154,6 +154,16 @@ export default class RpcObjectCaller extends Cloudflare.Worker<RpcObjectCaller>(
         }).pipe(Effect.scoped);
       }
 
+      if (scenario === "runtime-context") {
+        return yield* Effect.gen(function* () {
+          const object = yield* target.open(id);
+          return {
+            value: yield* object.runtime(),
+            values: yield* object.runtimeValues().pipe(Stream.runCollect),
+          };
+        }).pipe(Effect.scoped);
+      }
+
       if (scenario === "pure") {
         // The factory has no Scope requirement; the Worker event owns its stub.
         const object = yield* target.pure();
