@@ -41,7 +41,12 @@ const captionAt = (plan: SceneSchedule, frame: number) => {
   let caption: { text: string; since: number } | undefined;
   for (const segment of plan.segments) {
     if (segment.from > frame) break;
-    if (segment.beat.kind === "caption") caption = { text: segment.beat.text, since: frame - segment.from };
+    const { beat } = segment;
+    // Every step's title is its caption; an explicit caption beat overrides it.
+    if (beat.kind === "step" || beat.kind === "caption") {
+      const text = beat.kind === "step" ? beat.title : beat.text;
+      if (caption?.text !== text) caption = { text, since: frame - segment.from };
+    }
   }
   return caption;
 };

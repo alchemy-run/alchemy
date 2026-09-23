@@ -16,9 +16,15 @@ export default defineScene({
       ],
     });
 
-    s.caption("Run the whole stack locally with alchemy dev");
     s.step(
-      "Start alchemy dev",
+      "Our Stack so far: one website",
+      "Where we left off: alchemy.run.ts declares the Stack with a single Vite website.",
+    );
+    await s.editor.open("alchemy.run.ts");
+    s.pause(1);
+
+    s.step(
+      "Run the whole Stack locally with alchemy dev",
       "alchemy dev runs the whole stack locally and hot-reloads it on every save. It stays up in its own tab for the rest of the talk.",
     );
     await s.terminal(async (t) => {
@@ -29,67 +35,62 @@ export default defineScene({
 
     // src/Link.ts: the domain.
     const link = await s.chapterLines("src/Link.ts");
-    s.caption("Model the data with Effect Schema");
     await s.editor.patch(
       "src/Link.ts",
-      "A Link is a Schema",
+      "Model a link with Effect Schema",
       edit.set(link(1, 8)),
       "The data type is an Effect Schema: one definition gives us the TypeScript type, validation, and JSON encoding.",
     );
     await s.editor.patch(
       "src/Link.ts",
-      "A typed LinkNotFound error",
+      "Declare a typed LinkNotFound error",
       edit.append(`\n${link(10, 15)}`),
       "Errors are values too. httpApiStatus: 404 means this error travels over HTTP as a typed 404 and comes back out as the same tagged error on the client.",
     );
-    await s.editor.patch("src/Link.ts", "Short, URL-safe codes", edit.append(`\n${link(17, 21)}`));
+    await s.editor.patch("src/Link.ts", "Generate short, URL-safe codes", edit.append(`\n${link(17, 21)}`));
 
     // src/ShortyApi.ts: the contract.
     const api = await s.chapterLines("src/ShortyApi.ts");
-    s.caption("Describe the API once, as a typed value");
-    await s.editor.patch("src/ShortyApi.ts", "Import HttpApi", edit.set(api(1, 5)));
+    await s.editor.patch("src/ShortyApi.ts", "Import Effect's HttpApi", edit.set(api(1, 5)));
     await s.editor.patch(
       "src/ShortyApi.ts",
-      "An endpoint to create a link",
+      "Declare an endpoint to create a link",
       edit.append(`\n${api(7, 12)}  ) {}\n`),
       "An HttpApi group: each endpoint declares its method, path, payload, success and error schemas.",
     );
     await s.editor.patch(
       "src/ShortyApi.ts",
-      "List and get, with a typed 404",
+      "Add list and get, with a typed 404",
       edit.replace("  ) {}\n", api(13, 21)),
     );
     await s.editor.patch(
       "src/ShortyApi.ts",
-      "One value for server, client and tests",
+      "One API value for the server, client and tests",
       edit.append(`\n${api(23, 24)}`),
       "ShortyApi is a plain value. The Worker implements it, the dashboard derives a client from it, and the tests will use that same client.",
     );
 
     // src/Api.ts: the Worker.
     const worker = await s.chapterLines("src/Api.ts");
-    s.caption("Implement it in a Cloudflare Worker");
     await s.editor.patch("src/Api.ts", "Import Cloudflare and Effect", edit.set(worker(1) + worker(3)));
     await s.editor.patch(
       "src/Api.ts",
-      "Declare the Worker",
+      "Declare a Cloudflare Worker",
       edit.append(`\n${worker(10, 13)}${worker(42, 43)}`),
       "A Worker is a class. Its body is an Effect: this outer part is the construction phase. It runs at deploy time, to discover the Worker's infrastructure, and at cold start.",
     );
-    s.caption("Construction phase: runs at deploy time and cold start");
     await s.editor.patch(
       "src/Api.ts",
-      "Construction phase: an in-memory store",
+      "Construction phase: create an in-memory store",
       edit.all(
         edit.after('import * as Effect from "effect/Effect";\n', 'import type { Link } from "./Link.ts";\n'),
         edit.after(worker(13), worker(14, 15)),
       ),
       "A Map that lives in this isolate. It's deliberately naive: a deploy or a second isolate loses it. Chapter 2 fixes that.",
     );
-    s.caption("Handle each endpoint, fully typed");
     await s.editor.patch(
       "src/Api.ts",
-      "Handle create",
+      "Implement the create endpoint",
       edit.all(
         edit.after('import * as Effect from "effect/Effect";\n', worker(6)),
         edit.replace('import type { Link } from "./Link.ts";\n', `import { newCode, type Link } from "./Link.ts";\n${worker(8)}`),
@@ -99,14 +100,13 @@ export default defineScene({
     );
     await s.editor.patch(
       "src/Api.ts",
-      "Handle list and get",
+      "Implement list and get",
       edit.all(
         edit.replace("import { newCode, type Link }", "import { LinkNotFound, newCode, type Link }"),
         edit.after(worker(24, 25), worker(26, 30)),
       ),
       "get fails with LinkNotFound: the compiler checks it's one of the endpoint's declared errors.",
     );
-    s.caption("Runtime phase: serve the API on every request");
     await s.editor.patch(
       "src/Api.ts",
       "Runtime phase: serve the API from fetch",
@@ -119,52 +119,46 @@ export default defineScene({
     );
 
     // alchemy.run.ts: add the Worker to the Stack.
-    s.caption("Add the Worker to the Stack");
     await s.editor.patch(
       "alchemy.run.ts",
-      "Add the Api to the Stack",
+      "Add the Worker to the Stack",
       edit.all(
         edit.after('import * as Effect from "effect/Effect";\n', 'import Api from "./src/Api.ts";\n'),
         edit.before("    const web = yield*", "    const api = yield* Api;\n"),
       ),
       "yield* Api adds the Worker to the Stack.",
     );
-    s.caption("alchemy dev reloads: the Worker is running");
-    s.step("The Api joins the architecture", "alchemy dev reloaded: a second local Worker, next to the website.");
+    s.step("alchemy dev reloads: the Worker is running", "alchemy dev reloaded: a second local Worker, next to the website.");
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"] });
     s.pause(0.5);
-    s.caption("Connect the website to the API");
     await s.editor.patch(
       "alchemy.run.ts",
-      "Output the API's URL",
+      "Output the API's URL from the Stack",
       edit.replace("return { web: web.url };", "return { api: api.url.as<string>(), web: web.url };"),
       "The Stack's return value is its outputs: printed after every deploy, and handed to the tests.",
     );
     await s.editor.patch(
       "alchemy.run.ts",
-      "Pass its URL to the website build",
+      "Pass the API's URL to the website build",
       edit.after("      dev: { port: 5173 },\n", "      env: { VITE_API_URL: api.url.as<string>() },\n"),
       "api.url is an Output: a value known once the Worker exists. Alchemy orders the deploy so the website is built with it.",
     );
-    s.caption("The website now references the API's URL");
     s.step(
-      "The website now depends on the Api",
+      "The website now references the API",
       "That one line is an edge in the architecture: Web references Api's URL through an Output. It's a reference, not a binding: no permissions are granted.",
     );
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"], edges: ["Web->Api"] });
     s.pause(0.5);
 
     // The dashboard.
-    s.caption("Call the API from the dashboard with a typed client");
-    await s.editor.show("web/src/client.ts", "A typed client, derived from ShortyApi");
-    await s.editor.show("web/src/main.tsx", "The dashboard lists and creates links");
+    await s.editor.show("web/src/client.ts", "Derive a typed client from the same API");
+    await s.editor.show("web/src/main.tsx", "List and create links from the dashboard");
 
-    s.caption("Try it in the browser");
-    s.step("Open the dashboard", "The dashboard served by alchemy dev, talking to the local Worker.");
+    s.step("Open the dashboard in the browser", "The dashboard served by alchemy dev, talking to the local Worker.");
     await s.browser.open("http://localhost:5173", { waitFor: /No links yet/ });
     s.pause(0.5);
 
-    s.step("Shorten a link", "Create a link from the UI: the typed client calls create on the Worker.");
+    s.step("Shorten a link from the UI", "Create a link from the UI: the typed client calls create on the Worker.");
     await s.browser.fill("form input", "https://effect.website");
     await s.browser.click("form button", { waitFor: /effect\.website/ });
     s.pause(1);

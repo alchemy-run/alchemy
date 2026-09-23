@@ -42,14 +42,14 @@ export interface SceneContext {
    * patches that end exactly at the real code.
    */
   chapterLines(file: string): Promise<(from: number, to?: number) => string>;
-  /** Set the caption at the bottom of the screen; it stays until the next caption. */
+  /** Override the caption at the bottom of the screen (by default each step's title is its caption). */
   caption(text: string): void;
-  /** Start a new presenter step; it plays when the presenter presses →. */
+  /** Start a new presenter step; it plays when the presenter presses →. Its title is shown as the caption. */
   step(title: string, notes?: string): void;
   editor: {
     /** Open a file in a tab (or switch to its tab). */
     open(file: string): Promise<void>;
-    /** One edit to a file, as its own presenter step, shown as a green/red diff. */
+    /** One edit to a file, as its own presenter step, shown as a green/red diff. `title` is its caption. */
     patch(file: string, title: string, edit: Edit, notes?: string): Promise<void>;
     /** The file's whole change to the chapter's version, as one patch step. */
     show(file: string, title?: string): Promise<void>;
