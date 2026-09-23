@@ -1,38 +1,45 @@
 ---
 title: Container images
-description: Choose where a Deployment or Job's container image comes from — a registry reference, your own Dockerfile, or a bundled Effect program — and what each cluster supports.
+description: Choose where a Deployment or Job's container image comes from and where built images are pushed. Sources are a registry reference, your own Dockerfile, or a bundled Effect program.
 ---
 
 Every [Deployment](/kubernetes/workloads/deployments) and
 [Job](/kubernetes/workloads/jobs) runs exactly one image source, set
 flat on its props:
 
-| Source              | Props                                   | What runs                                                  |
-| ------------------- | --------------------------------------- | ---------------------------------------------------------- |
-| Registry reference  | `image`                                 | A pre-built image such as `nginx:1.27`                     |
-| Your Dockerfile     | `context`, optional `dockerfile`        | An image built from your Dockerfile                        |
-| Effect program      | `main`, optional `handler` and `build`  | Your Effect program, bundled into a generated image        |
+- **Registry reference.** `image` runs a pre-built image such as
+  `nginx:1.27`.
+- **Your Dockerfile.** `context` runs an image built from your
+  Dockerfile. `dockerfile` is optional.
+- **Effect program.** `main` runs your Effect program, bundled into a
+  generated image. `handler` and `build` are optional.
 
 If several are present, `main` wins, then `image`, then
-`context`/`dockerfile`. (With `main`, `image` means something else —
-see [Bundle an Effect program](#bundle-an-effect-program).)
+`context`/`dockerfile`. With `main`, `image` means something else.
+See [Bundle an Effect program](#bundle-an-effect-program).
 
-## What each cluster supports
+## Where built images go
 
-Building an image means pushing it somewhere the cluster can pull
-from, and that registry comes from the cluster's
-[adapter](/kubernetes/concepts/cluster-adapters):
+`image` references are pulled by the cluster's nodes as written.
+`context` and `main` images are built on the deploying machine with
+Docker and pushed to a registry the nodes can pull from:
 
-| Source    | EKS (`AWS.EKS.Cluster`)                          | Any other cluster                    |
-| --------- | ------------------------------------------------ | ------------------------------------ |
-| `image`   | Mirrored into a per-workload ECR repository      | Used as written; the nodes pull it   |
-| `context` | Built locally and pushed to ECR                  | Not supported                        |
-| `main`    | Bundled, built, and pushed to ECR                | Not supported                        |
+- **[`Kubernetes.LocalCluster`](/kubernetes/clusters/local).** Images
+  go to its built-in local registry.
+- **A connection with a `registry`.** Images go to
+  `<server>/<name>:<hash>` in that registry. See
+  [Container registries](/kubernetes/clusters/registries).
+- **[Amazon EKS](/kubernetes/clusters/eks).** Each workload gets a
+  private ECR repository. EKS also mirrors `image` references into
+  it.
 
-On a cluster without a registry, a `main` or `context` workload
-fails with *this cluster has no managed image registry*. Build and
-push the image yourself and pass the result as `image` — see
-[Build your own image for any cluster](#build-your-own-image-for-any-cluster).
+Without any of these, a `main` or `context` workload fails before
+anything is applied, with a message asking for a `registry`.
+
+Images are tagged with a hash of their content. For `main`, that's
+the bundled program and generated Dockerfile. For `context`, it's the
+build context and Dockerfile. A deploy with unchanged content builds
+nothing.
 
 ## Run a registry image
 
@@ -45,15 +52,14 @@ const cache = yield* Kubernetes.Deployment("Cache", {
 });
 ```
 
-Alchemy decides whether to update from the reference string and the
-target platform. Re-pushing the same tag doesn't redeploy anything,
-so pin a version (or a digest, `repo@sha256:…`) and change it to
-roll out a new image. On EKS the pinned image is copied into ECR once
-per change.
+Alchemy decides whether to update from the reference string.
+Re-pushing the same tag doesn't redeploy anything. Pin a version or a
+digest such as `repo@sha256:…`, and change it to roll out a new
+image.
 
 ## Build your Dockerfile
 
-On EKS, point `context` at a directory with a Dockerfile:
+Point `context` at a directory with a Dockerfile:
 
 ```typescript
 const legacy = yield* Kubernetes.Deployment("Legacy", {
@@ -63,11 +69,10 @@ const legacy = yield* Kubernetes.Deployment("Legacy", {
 });
 ```
 
-`dockerfile` defaults to `${context}/Dockerfile`; pass a path
-(relative to the directory you deploy from) to use another one.
-Alchemy hashes the build context and the Dockerfile, so editing any
-file in the context triggers a rebuild and a rollout on the next
-deploy. Building uses the local Docker CLI.
+`dockerfile` defaults to `${context}/Dockerfile`. To use another one,
+pass a path relative to the directory you deploy from.
+Editing any file in the context triggers a rebuild and a rollout on
+the next deploy.
 
 ## Bundle an Effect program
 
@@ -86,72 +91,47 @@ export default Kubernetes.Deployment(
 );
 ```
 
-Alchemy bundles the module with rolldown, wraps it in a generated
-entrypoint (an HTTP server for a Deployment, a run-to-completion
-program for a Job), and builds an image from a generated Dockerfile.
-The related props:
+Alchemy bundles the module with rolldown and wraps it in a generated
+entrypoint. For a Deployment the entrypoint is an HTTP server, and
+for a Job it's a run-to-completion program. Alchemy then builds an
+image from a generated Dockerfile. The generated entrypoint imports
+`@effect/platform-bun`, so install it alongside `alchemy` and
+`effect`. The related props are:
 
-- **`handler`** — the named export to run. Defaults to `"default"`.
-- **`image`** — the base image of the generated Dockerfile. Defaults
-  to `oven/bun:1`; any image that can run Bun works.
-- **`dockerfile`** — a base environment Dockerfile (a path, or inline
-  content) when you need system packages.
-- **`build`** — bundler options. Unused code is tree-shaken, and
+- `handler` is the named export to run. It defaults to `"default"`.
+- `image` is the base image of the generated Dockerfile. It defaults
+  to `oven/bun:1`. Any image that can run Bun works.
+- `dockerfile` is a base environment Dockerfile for when you need
+  system packages. It can be a path or inline content.
+- `build` sets bundler options. Unused code is tree-shaken, and
   `effect`, alchemy, and `@distilled.cloud` are marked side-effect
   free so they prune aggressively. Add your own side-effect-free
-  packages with `build: { pure: { packages: ["my-lib"] } }`, or turn
+  packages with `build: { pure: { packages: ["my-lib"] } }`. Turn
   the behavior off with `build: { pure: false }`.
 
-A change to the bundled output triggers a rebuild and a rollout.
+A change to the program, or to anything it imports, triggers a
+rebuild and a rollout.
 
 ## CPU architecture
 
-`architecture` (`"amd64"` by default, or `"arm64"`) sets the platform
-images are built and mirrored for. Match it to your nodes — Graviton
-node pools on EKS need `"arm64"`. Registry images used as written on
-other clusters are pulled by the nodes for their own architecture,
-so prefer multi-architecture images there.
+Built images target the nodes' CPU architecture. Alchemy uses the
+first of these that is set:
 
-## Build your own image for any cluster
+- A workload's own `architecture` prop, either `"amd64"` or
+  `"arm64"`.
+- The connection's `architecture`. `LocalCluster` sets it to your
+  machine's, and you can set it on
+  [`KubeConfig`](/kubernetes/clusters/registries#match-the-node-architecture).
+- `amd64` when neither is set.
 
-On clusters without a registry adapter, build and push with
-[`Docker.Image`](/docker/build-and-push) in the same Stack and pass
-its reference:
-
-```typescript
-import * as Docker from "alchemy/Docker";
-import * as Config from "effect/Config";
-
-const image = yield* Docker.Image("ApiImage", {
-  name: "acme/api",
-  tag: "v1.4.0",
-  build: { context: "./api", platform: "linux/amd64" },
-  registry: {
-    server: "ghcr.io",
-    username: "acme-bot",
-    password: Config.Redacted("GHCR_TOKEN"),
-  },
-});
-
-const api = yield* Kubernetes.Deployment("Api", {
-  cluster,
-  image: image.imageRef,
-  port: 8080,
-});
-```
-
-Add `Docker.providers()` to the Stack's providers. Change `tag` for
-each release so the reference changes and the Deployment rolls out.
-
-For a kind cluster, skip the registry: build the image locally and
-copy it onto the nodes with `kind load docker-image acme/api:dev
---name <cluster>`, then use `image: "acme/api:dev"`. Use a tag other
-than `latest` so Kubernetes doesn't try to pull it from a registry.
+Registry images used as written are pulled by the nodes for their
+own architecture, so prefer multi-architecture images.
 
 ## Pull from a private registry
 
-Nodes need credentials to pull private images. Create an
-image-pull Secret with a [Manifest](/kubernetes/objects/manifests)
+Nodes need credentials to pull private images, whether you pass them
+as `image` or Alchemy pushed them from `main` or `context`. Create
+an image-pull Secret with a [Manifest](/kubernetes/objects/manifests)
 and reference it from the pod template:
 
 ```typescript
@@ -177,14 +157,42 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-On EKS this isn't needed: images are mirrored into ECR, and the
-nodes can pull from it.
+## Build images with Docker.Image
+
+You can manage an image's name and tags yourself, for example to
+publish `acme/api:v1.4.0` for other systems too. Build it with
+[`Docker.Image`](/docker/build-and-push) and pass its reference as
+`image`:
+
+```typescript
+import * as Docker from "alchemy/Docker";
+import * as Config from "effect/Config";
+
+const image = yield* Docker.Image("ApiImage", {
+  name: "acme/api",
+  tag: "v1.4.0",
+  build: { context: "./api", platform: "linux/amd64" },
+  registry: {
+    server: "ghcr.io",
+    username: "acme-bot",
+    password: Config.Redacted("GHCR_TOKEN"),
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: image.imageRef,
+  port: 8080,
+});
+```
+
+Add `Docker.providers()` to the Stack's providers.
 
 ## Where next
 
-- [Managed clusters](/kubernetes/clusters/managed) — the ECR
-  repositories the EKS adapter creates.
-- [Build & push images](/docker/build-and-push) — `Docker.Image` and
-  `Docker.RemoteImage` in depth.
-- [`Deployment` reference](/providers/kubernetes/deployment) — every
-  image source prop.
+- **[Container registries](/kubernetes/clusters/registries).** Add a
+  registry to a connection.
+- **[Jobs & CronJobs](/kubernetes/workloads/jobs).** Run Effect
+  programs to completion.
+- **[`Deployment` reference](/providers/kubernetes/deployment).**
+  Lists every image source prop.

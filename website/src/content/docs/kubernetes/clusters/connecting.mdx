@@ -1,22 +1,28 @@
 ---
 title: Connecting to clusters
-description: Point Kubernetes resources at any cluster with Kubernetes.KubeConfig, a raw Kubernetes.Connection (bearer token, client certificate, or exec plugin), or a managed cluster resource.
+description: Point Kubernetes resources at any cluster with Kubernetes.KubeConfig, a raw Kubernetes.Connection (bearer token, client certificate, or exec plugin), or a cluster resource such as Kubernetes.LocalCluster.
 ---
 
-Every Kubernetes resource — [`Deployment`](/kubernetes/workloads/deployments),
+Every Kubernetes resource takes a `cluster` prop. That includes
+[`Deployment`](/kubernetes/workloads/deployments),
 [`Job`](/kubernetes/workloads/jobs),
 [`Manifest`](/kubernetes/objects/manifests), and
-[`HelmChart`](/kubernetes/objects/helm-charts) — takes a `cluster`
-prop. It accepts three shapes:
+[`HelmChart`](/kubernetes/objects/helm-charts). The prop accepts
+three shapes:
 
-| `cluster` value                     | Use it for                                                        |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `Kubernetes.KubeConfig({ ... })`    | Any cluster in a kubeconfig file: kind, k3s, on-prem, GKE, AKS, EKS |
-| A `Kubernetes.Connection` object    | An API endpoint plus a bearer token, client certificate, or exec plugin |
-| A managed cluster resource          | An `AWS.EKS.Cluster` from the same Stack (see [Managed clusters](/kubernetes/clusters/managed)) |
+- **`Kubernetes.KubeConfig({ ... })`.** Any cluster in a kubeconfig
+  file, such as kind, k3s, on-prem, GKE, AKS, or EKS.
+- **A `Kubernetes.Connection` object.** An API endpoint plus a
+  bearer token, client certificate, or exec plugin.
+- **A cluster resource.** Any resource with a `connection`
+  attribute, such as a [`Kubernetes.LocalCluster`](/kubernetes/clusters/local)
+  or an [EKS cluster](/kubernetes/clusters/eks) from the same Stack.
 
-A connection is plain, serializable data. Nothing is provisioned for
-it and it never appears in a plan. Alchemy stores it on each
+Every form can also say where workloads built from your code are
+pushed, with a [`registry`](/kubernetes/clusters/registries).
+
+`KubeConfig` and `Connection` are plain, serializable data. Nothing
+is provisioned for them and they never appear in a plan. Alchemy stores it on each
 resource's state so `alchemy destroy` can reach the cluster later,
 even after you delete the code that declared it.
 
@@ -36,12 +42,16 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-Both options are optional:
+All options are optional:
 
-- **`path`** — the kubeconfig file. Defaults to the first entry of
+- `path` is the kubeconfig file. It defaults to the first entry of
   `$KUBECONFIG`, then `~/.kube/config`. A leading `~` is expanded.
-- **`context`** — the context to use. Defaults to the file's
+- `context` is the context to use. It defaults to the file's
   `current-context`.
+- `registry` is where `main` and `context` workloads push their
+  images. See [Container registries](/kubernetes/clusters/registries).
+- `architecture` is the nodes' CPU architecture, `"amd64"` or
+  `"arm64"`. It is used as the default image build target.
 
 Name the context explicitly for anything beyond a scratch cluster.
 The current context changes whenever someone runs
@@ -59,11 +69,14 @@ The cloud CLIs write contexts that mint short-lived tokens through
 an `exec` credential plugin. Alchemy runs the plugin before each
 request, so tokens never go stale mid-deploy:
 
-| Cluster | Create the context with                                    | Plugin the context runs         |
-| ------- | ---------------------------------------------------------- | ------------------------------- |
-| EKS     | `aws eks update-kubeconfig --name <cluster>`               | `aws eks get-token`             |
-| GKE     | `gcloud container clusters get-credentials <cluster>`      | `gke-gcloud-auth-plugin`        |
-| AKS     | `az aks get-credentials --name <cluster> --resource-group <group>` | `kubelogin` (Entra ID clusters) |
+- **GKE.** `gcloud container clusters get-credentials <cluster>`
+  writes a context that runs `gke-gcloud-auth-plugin`.
+- **AKS.** `az aks get-credentials --name <cluster> --resource-group
+  <group>` writes the context. Clusters using Microsoft Entra ID also
+  need `kubelogin`.
+- **EKS.** `aws eks update-kubeconfig --name <cluster>` writes a
+  context that runs `aws eks get-token`. See
+  [Amazon EKS](/kubernetes/clusters/eks) for the fuller integration.
 
 The plugin must be installed and logged in wherever you deploy from,
 including CI runners.
@@ -126,13 +139,13 @@ without a kubeconfig file:
 
 ```typescript
 const cluster: Kubernetes.Connection = {
-  endpoint: "https://ABCD1234.gr7.us-west-2.eks.amazonaws.com",
+  endpoint: "https://k8s.internal:6443",
   certificateAuthorityData: caData,
   auth: {
     kind: "exec",
-    command: "aws",
-    args: ["eks", "get-token", "--cluster-name", "prod"],
-    env: { AWS_PROFILE: "prod" },
+    command: "/usr/local/bin/cluster-token",
+    args: ["--cluster", "prod"],
+    env: { TOKEN_PROFILE: "prod" },
   },
 };
 ```
@@ -141,8 +154,8 @@ The plugin is re-run for every request, and a client certificate it
 returns is used for mutual TLS.
 
 `token`, `client-cert`, and `exec` connections need an explicit
-`endpoint`. Only kubeconfig connections and managed cluster
-resources can discover it.
+`endpoint`. Only kubeconfig connections and cluster resources can
+discover it.
 
 ## Credentials in state
 
@@ -177,43 +190,42 @@ for (const [region, cluster] of [
 ## Move a resource to another cluster
 
 Alchemy identifies the target cluster by the connection's `auth`
-descriptor — the kubeconfig path and context, the token or
-certificate, the exec command, or the managed cluster's name.
-Changing it replaces the resource: Alchemy creates it on the new
-cluster, then deletes it from the old one. The `endpoint` and
-certificate authority are not part of that identity, so a managed
-cluster can rotate them without replacing its workloads.
+descriptor. That is the kubeconfig path and context, the token or
+certificate, or the exec command. Changing it replaces the resource.
+Alchemy creates it on the new cluster, then deletes it from the old
+one. The `endpoint`, certificate authority, and `registry` are not
+part of that identity, so they can change without replacing
+workloads.
 
 :::caution[Changing how you reach the same cluster]
 A replacement assumes the old and new connections are different
-clusters. If they reach the **same** cluster — you renamed the
-kubeconfig context, moved the file, rotated a `token` or client
-certificate, or switched from a kubeconfig to a raw connection — the
-new objects have the same names as the old ones, and deleting the
-old generation removes them. The deploy succeeds but the objects are
-gone. Run `alchemy deploy --force` right after such a change to
-apply them again, and prefer kubeconfig or exec connections, whose
-identity doesn't change when credentials rotate.
+clusters. Sometimes they reach the **same** cluster. For example, you
+renamed the kubeconfig context, moved the file, rotated a `token` or
+client certificate, or switched from a kubeconfig to a raw
+connection. Then the new objects have the same names as the old
+ones, and deleting the old generation removes them. The deploy
+succeeds but the objects are gone. Run `alchemy deploy --force` right
+after such a change to apply them again. Prefer kubeconfig or exec
+connections, because their identity doesn't change when credentials
+rotate.
 :::
 
 ## When no adapter is registered
 
-Each `auth.kind` is served by a [cluster adapter](/kubernetes/concepts/cluster-adapters).
+Each `auth.kind` is served by a [cluster adapter](/kubernetes/clusters/cluster-adapters).
 `Kubernetes.providers()` registers `kubeconfig`, `token`,
-`client-cert`, and `exec`. The `aws-eks` kind used by
-`AWS.EKS.Cluster` comes from `AWS.providers()`. If a deploy fails
-with *No Kubernetes cluster adapter is registered for auth kind …*,
-add the provider layer that contributes it:
-
-```typescript
-providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
-```
+`client-cert`, and `exec`. Cloud platforms contribute their own.
+For example, EKS clusters need `AWS.providers()` in the Stack. If a
+deploy fails with *No Kubernetes cluster adapter is registered for
+auth kind …*, add the provider layer that contributes it.
 
 ## Where next
 
-- [Managed clusters](/kubernetes/clusters/managed) — what an
-  `AWS.EKS.Cluster` adds beyond authentication.
-- [How objects are managed](/kubernetes/concepts/object-lifecycle) —
-  what happens when a cluster is unreachable or gone.
-- [`Deployment` reference](/providers/kubernetes/deployment) — the
-  `cluster` prop and every other prop.
+- **[Container registries](/kubernetes/clusters/registries).** Add a
+  registry to a connection.
+- **[Local clusters](/kubernetes/clusters/local).** Run a cluster
+  resource on your machine.
+- **[How objects are managed](/kubernetes/workloads/object-lifecycle).**
+  See what happens when a cluster is unreachable or gone.
+- **[`Deployment` reference](/providers/kubernetes/deployment).** Read
+  about the `cluster` prop and every other prop.

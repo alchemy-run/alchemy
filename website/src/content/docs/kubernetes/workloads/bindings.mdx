@@ -1,14 +1,14 @@
 ---
 title: Configuration & bindings
-description: Pass configuration into Kubernetes workloads with env and Outputs, understand the variables Alchemy sets, and use bindings — environment on any cluster, IAM through EKS Pod Identity.
+description: Pass configuration into Kubernetes workloads with env and Outputs, understand the variables Alchemy sets, keep secrets out of plain text, and use bindings.
 ---
 
 A [Deployment](/kubernetes/workloads/deployments) or
-[Job](/kubernetes/workloads/jobs) receives configuration three ways:
-the `env` prop, variables Alchemy sets for you, and **bindings** —
-capabilities an Effect program requests, such as
-`AWS.DynamoDB.PutItem(table)`, that attach environment variables and
-cloud permissions at deploy time.
+[Job](/kubernetes/workloads/jobs) receives configuration in three
+ways. There is the `env` prop, there are variables Alchemy sets for
+you, and there are **bindings**. A binding is a capability an Effect
+program requests. It attaches environment variables at deploy time,
+and on some platforms it also attaches cloud permissions.
 
 ## Set environment variables
 
@@ -28,22 +28,20 @@ const api = yield* Kubernetes.Deployment("Api", {
 Each key becomes a container environment variable:
 
 - Strings are passed as they are.
-- Other values are JSON-encoded — `FEATURES` above arrives as
+- Other values are JSON-encoded. `FEATURES` above arrives as
   `{"search":true,"beta":false}`.
 - Outputs from other resources (`bucket.bucketName`) resolve at
   deploy time and make the workload depend on that resource.
 
-A changed value re-applies the workload: a Deployment rolls its pods
+A changed value re-applies the workload. A Deployment rolls its pods,
 and a one-shot Job runs again.
 
 ## Variables Alchemy sets
 
-| Variable             | Value                                              |
-| -------------------- | -------------------------------------------------- |
-| `ALCHEMY_STACK_NAME` | The Stack's name                                   |
-| `ALCHEMY_STAGE`      | The stage being deployed                           |
-| `ALCHEMY_PHASE`      | `runtime`                                          |
-| `PORT`               | The Deployment's `port` (Deployments only)         |
+- `ALCHEMY_STACK_NAME` is the Stack's name.
+- `ALCHEMY_STAGE` is the stage being deployed.
+- `ALCHEMY_PHASE` is `runtime`.
+- `PORT` is the Deployment's `port`. Only Deployments set it.
 
 Variables from `env` override these, and these override variables
 from bindings.
@@ -52,9 +50,9 @@ from bindings.
 
 Everything in `env` is written into the Deployment or Job object and
 into Alchemy's state, where anyone who can read either can see it.
-For credentials, store the value in a Kubernetes Secret — a
-[Manifest](/kubernetes/objects/manifests) with `kind: "Secret"` — and
-have the workload read it from the cluster:
+For credentials, store the value in a Kubernetes Secret and have the
+workload read it from the cluster. A Secret is a
+[Manifest](/kubernetes/objects/manifests) with `kind: "Secret"`:
 
 ```typescript
 const dbSecret = yield* Kubernetes.Manifest("DbSecret", {
@@ -73,64 +71,67 @@ volume mount) is a container-level field. `podTemplate` can add the
 pod-level `volumes` entry, but not the container's `volumeMounts`,
 because arrays in `podTemplate` replace the generated container list.
 When a workload needs Secret references, declare the whole
-Deployment as a Manifest. On EKS, prefer a binding such as
-`AWS.SecretsManager.GetSecretValue(secret)`: the workload is granted
-read access to the secret and fetches it at runtime, so the value
-never appears in the pod spec.
+Deployment as a Manifest.
 
 ## Bindings
 
-A binding is a capability a workload's Effect program asks for. The
-binding returns a typed client for the program to call, and registers
-what the workload needs at deploy time:
+A binding is a capability a workload's Effect program asks for. It
+returns a typed client for the program to call, and registers what
+the workload needs at deploy time. Kubernetes workloads accept the
+same binding contract as a Lambda function or an ECS task:
+
+- **`env`.** Environment variables. Every cluster supports these.
+- **Cloud grants.** For example, AWS IAM `policyStatements`. These
+  need a cluster whose platform issues cloud credentials to pods.
+
+Bindings are declared inside the Effect implementation, so they
+apply to workloads built from `main`.
+
+### Bind values from other resources
+
+Inside an Effect program, yield a resource attribute to bind it. You
+get back an Effect that returns the value at runtime:
 
 ```typescript
-const api = yield* Kubernetes.Deployment(
-  "Api",
-  { cluster, main: import.meta.url, port: 3000 },
+const worker = yield* Kubernetes.Job(
+  "Report",
+  { cluster, main: import.meta.url },
   Effect.gen(function* () {
-    const getItem = yield* AWS.DynamoDB.GetItem(table);
+    const reportUrl = yield* api.url;
     return {
-      fetch: Effect.gen(function* () {
-        const item = yield* getItem({ Key: { pk: { S: "home" } } });
-        return yield* HttpServerResponse.json(item.Item ?? {});
-      }).pipe(Effect.orDie),
+      run: Effect.gen(function* () {
+        const url = yield* reportUrl;
+        yield* Effect.log(`reporting to ${url}`);
+      }),
     };
-  }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+  }),
 );
 ```
 
-Kubernetes workloads accept the same binding contract as a Lambda
-function or an ECS task:
+Alchemy resolves `api.url` at deploy time, delivers it to the pod,
+and makes the Job depend on `api`. This works on every cluster, and
+it works for derived values too, such as an `Output.interpolate`
+string. Use the `env` prop for plain configuration, or for images
+that don't run an Effect program.
 
-- **`env`** — environment variables. Every cluster supports these;
-  the binding's values (the table name here) land in the container
-  environment.
-- **Cloud grants** — for example AWS `policyStatements`. These need a
-  cluster adapter with workload identity.
+### Cloud credentials
 
-On [EKS](/kubernetes/clusters/managed#pod-identity), the grants
-become an IAM policy on a role Alchemy creates for the workload's
-ServiceAccount and associates through EKS Pod Identity. The pod
-receives temporary credentials for exactly those actions on exactly
-those resources. Add AWS-managed or customer-managed policies with
-`identity.managedPolicyArns`.
+Bindings to cloud services also grant permissions. One example is
+`AWS.DynamoDB.PutItem(table)`. A cluster may have no way to issue
+cloud credentials to pods. On such a cluster, a deploy that uses one
+of these bindings fails with *bindings carry cloud credential grants
+… but this cluster's platform has no workload-identity adapter*. You
+have two options:
 
-On a cluster without workload identity, a binding that carries cloud
-grants fails the deploy with *bindings carry cloud credential grants
-… but this cluster's platform has no workload-identity adapter*.
-Target a managed cluster, or pass credentials the workload can use
-through `env` and a Secret.
-
-Since bindings are declared inside the Effect implementation, they
-apply to workloads built from `main` — which today means EKS, where
-the registry and identity adapters are both available.
+- Run the workload on a cluster whose platform issues credentials.
+  On [Amazon EKS](/kubernetes/clusters/eks), grants become an IAM
+  role attached through EKS Pod Identity.
+- Give the program credentials yourself, through a Kubernetes Secret
+  and your cloud SDK's standard environment variables.
 
 ## Where next
 
-- [Tutorial part 5](/kubernetes/tutorial/part-5) — an Effect server
-  with a DynamoDB binding on EKS.
-- [Bindings](/infrastructure-as-effects/binding) — how bindings work
-  across Alchemy.
-- [Managed clusters](/kubernetes/clusters/managed) — what Pod
-  Identity provisions.
+- **[Jobs & CronJobs](/kubernetes/workloads/jobs).** Effect programs
+  that read configuration and run to completion.
+- **[Bindings](/infrastructure-as-effects/binding).** How bindings
+  work across Alchemy.

@@ -1,15 +1,14 @@
 ---
 title: Kubernetes
-description: Run containers on any Kubernetes cluster with Alchemy — Deployments, Jobs, raw manifests, and Helm charts declared in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
+description: Run containers and Effect programs on any Kubernetes cluster with Alchemy. Declare Deployments, Jobs, raw manifests, and Helm charts in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
 ---
 
-`alchemy/Kubernetes` manages workloads on **any Kubernetes cluster**:
-a local [kind](https://kind.sigs.k8s.io) cluster, k3s on a VM, an
-on-prem fleet, GKE, AKS, or an [EKS](/aws/compute/eks) cluster
-declared in the same Stack. You describe servers, jobs, and raw
-Kubernetes objects as Resources in TypeScript; Alchemy applies them
-to the cluster with server-side apply, tracks them in state, and
-deletes them on destroy.
+`alchemy/Kubernetes` manages workloads on **any Kubernetes cluster**,
+such as a cluster on your laptop, k3s on a VM, an on-prem fleet, GKE,
+AKS, or EKS. You describe servers, jobs, and raw Kubernetes objects
+as Resources in TypeScript. Alchemy builds your programs into images
+and applies everything to the cluster with server-side apply. It
+tracks everything in state and deletes it on destroy.
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -23,7 +22,9 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const cluster = Kubernetes.KubeConfig({ context: "kind-alchemy" });
+    const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+      name: "alchemy",
+    });
 
     const web = yield* Kubernetes.Deployment("Web", {
       cluster,
@@ -39,96 +40,88 @@ export default Alchemy.Stack(
 );
 ```
 
-New here? [Set up a project and a cluster](/kubernetes/setup), then
-start the [tutorial](/kubernetes/tutorial/part-1).
+`Kubernetes.LocalCluster` starts a cluster on your machine, so you
+can try everything here without a hosted cluster. When you're ready,
+point the same resources at a real one.
+
+New here? Follow [Setup](/kubernetes/setup), then start the
+[tutorial](/kubernetes/tutorial/part-1).
 
 ## Clusters
 
-Every resource takes a `cluster` prop that says where it runs and
-how to authenticate. The cluster itself is not a resource here —
-it's plain connection data.
+Every resource takes a `cluster` prop that says where it runs, how
+to authenticate, and where to push images.
 
-- **[Connecting to clusters](/kubernetes/clusters/connecting)** —
-  `Kubernetes.KubeConfig(...)` for anything `kubectl` can reach
-  (including `exec` credential plugins such as `aws eks get-token`,
-  `kubelogin`, and `gke-gcloud-auth-plugin`), or a raw
-  `Kubernetes.Connection` with a bearer token, client certificate,
-  or exec plugin.
-- **[Managed clusters](/kubernetes/clusters/managed)** — pass an
-  `AWS.EKS.Cluster` resource directly. Its platform adapter adds
-  a container registry (ECR), workload identity (EKS Pod Identity),
-  and internet-facing load balancers.
+- **[Connecting to clusters](/kubernetes/clusters/connecting).** Use
+  `Kubernetes.KubeConfig(...)` for anything `kubectl` can reach, or a
+  raw `Kubernetes.Connection` with a bearer token, client
+  certificate, or exec plugin.
+- **[Container registries](/kubernetes/clusters/registries).**
+  Workloads built from your code are pushed to a registry so the
+  cluster can pull them.
+- **[Local clusters](/kubernetes/clusters/local).**
+  `Kubernetes.LocalCluster` runs a [kind](https://kind.sigs.k8s.io)
+  cluster in Docker with an image registry built in.
+- **[Amazon EKS](/kubernetes/clusters/eks).** Pass an EKS cluster
+  from the same Stack and get ECR images, AWS bindings, and public
+  load balancers.
+- **[Cluster adapters](/kubernetes/clusters/cluster-adapters).** An
+  adapter is the extension point that gives each cluster platform its
+  authentication, registry, and identity behavior.
 
 ## Workloads
 
-- **[Deployments](/kubernetes/workloads/deployments)** — a
-  replicated server: a Kubernetes `Deployment` + `Service` +
-  `ServiceAccount`, with a `url` when the Service is a
-  `LoadBalancer`.
-- **[Jobs & CronJobs](/kubernetes/workloads/jobs)** —
-  run-to-completion work. Set `schedule` and the Job becomes a
-  `CronJob`.
-- **[Container images](/kubernetes/workloads/images)** — every
+- **[Deployments](/kubernetes/workloads/deployments).** A replicated
+  server made of a Kubernetes `Deployment`, `Service`, and
+  `ServiceAccount`. It runs an image or an Effect HTTP server.
+- **[Jobs & CronJobs](/kubernetes/workloads/jobs).**
+  Run-to-completion work, from a container image or an Effect
+  program. Set `schedule` and the Job becomes a `CronJob`.
+- **[Container images](/kubernetes/workloads/images).** Every
   workload runs exactly one of `image` (a registry reference),
   `context` (your Dockerfile), or `main` (a bundled Effect program).
-- **[Configuration & bindings](/kubernetes/workloads/bindings)** —
-  environment variables, values from other resources, and cloud
-  credentials through workload identity.
+- **[Configuration & bindings](/kubernetes/workloads/bindings).**
+  Environment variables, values from other resources, and bindings.
+- **[How objects are managed](/kubernetes/workloads/object-lifecycle).**
+  Server-side apply, apply and delete ordering, pruning, drift, and
+  what triggers a replacement.
 
 ## Objects
 
-- **[Manifests](/kubernetes/objects/manifests)** — apply any single
-  Kubernetes object: Namespaces, ConfigMaps, StatefulSets,
+- **[Manifests](/kubernetes/objects/manifests).** Apply any single
+  Kubernetes object, such as Namespaces, ConfigMaps, StatefulSets,
   Ingresses, and custom resources.
-- **[Helm charts](/kubernetes/objects/helm-charts)** — render a chart
+- **[Helm charts](/kubernetes/objects/helm-charts).** Render a chart
   with the local `helm` CLI and apply its objects as one resource.
-
-## Concepts
-
-- **[How objects are managed](/kubernetes/concepts/object-lifecycle)**
-  — server-side apply, apply and delete ordering, pruning, drift,
-  and what triggers a replacement.
-- **[Cluster adapters](/kubernetes/concepts/cluster-adapters)** — the
-  extension point that gives each cluster platform its
-  authentication, registry, and identity behavior.
-
-## What each cluster supports
-
-The workload resources are the same everywhere. What changes is
-what the cluster's platform adapter provides:
-
-| Capability                                         | Any cluster (kubeconfig, token, client cert, exec) | `AWS.EKS.Cluster`                 |
-| -------------------------------------------------- | -------------------------------------------------- | --------------------------------- |
-| `Deployment` / `Job` with `image`                  | Pulled by the cluster as written                   | Mirrored into a per-workload ECR repository |
-| `Deployment` / `Job` with `main` or `context`      | —                                                  | Built and pushed to ECR           |
-| Environment variables and `env` bindings           | Yes                                                | Yes                               |
-| Cloud credential bindings (IAM)                    | —                                                  | EKS Pod Identity role             |
-| `LoadBalancer` Service `url`                       | Whatever the cluster's load balancer controller assigns | Internet-facing NLB on Auto Mode |
-| `Manifest` and `HelmChart`                         | Yes                                                | Yes                               |
 
 ## What are you building?
 
-| You're building                         | Reach for                                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| An HTTP service from a public image     | [`Deployment`](/kubernetes/workloads/deployments) with `image`                              |
-| An Effect HTTP server with AWS bindings | [`Deployment`](/kubernetes/workloads/deployments) with `main` on [EKS](/kubernetes/clusters/managed) |
-| A database migration or seed step       | [`Job`](/kubernetes/workloads/jobs)                                                         |
-| A nightly batch task                    | [`Job`](/kubernetes/workloads/jobs#run-on-a-schedule) with `schedule`                       |
-| A Namespace, ConfigMap, or Secret       | [`Manifest`](/kubernetes/objects/manifests)                                                 |
-| A StatefulSet, Ingress, or custom resource | [`Manifest`](/kubernetes/objects/manifests)                                              |
-| A cluster add-on (metrics, ingress, operators) | [`HelmChart`](/kubernetes/objects/helm-charts)                                       |
-| Your own Dockerfile on a non-EKS cluster | [`Docker.Image`](/kubernetes/workloads/images#build-your-own-image-for-any-cluster) + `Deployment` |
+- **An HTTP service from a public image.** Use
+  [`Deployment`](/kubernetes/workloads/deployments) with `image`.
+- **An HTTP server written in Effect.** Use
+  [`Deployment`](/kubernetes/workloads/deployments#effect-servers)
+  with `main`.
+- **A database migration, seed, or smoke test.** Use
+  [`Job`](/kubernetes/workloads/jobs).
+- **A nightly batch task.** Use
+  [`Job`](/kubernetes/workloads/jobs#run-on-a-schedule) with
+  `schedule`.
+- **A Namespace, ConfigMap, or Secret.** Use
+  [`Manifest`](/kubernetes/objects/manifests).
+- **A StatefulSet, Ingress, or custom resource.** Use
+  [`Manifest`](/kubernetes/objects/manifests).
+- **A cluster add-on (metrics, ingress, operators).** Use
+  [`HelmChart`](/kubernetes/objects/helm-charts).
 
 ## Where next
 
-- [Setup](/kubernetes/setup) — install Alchemy, create a local
-  cluster with kind, and point Alchemy at it.
-- [Tutorial](/kubernetes/tutorial/part-1) — from an empty directory
-  to a namespaced service, a smoke-test Job, a CronJob, and a Helm
-  chart, then onto EKS with an Effect server.
-- [EKS](/aws/compute/eks) — create the managed cluster these
-  workloads run on in AWS.
-- API reference: [`Deployment`](/providers/kubernetes/deployment),
+- [Setup](/kubernetes/setup) shows how to install Alchemy and connect
+  it to a local or hosted cluster.
+- [Tutorial](/kubernetes/tutorial/part-1) takes you from an empty
+  directory to a local cluster running a service, Effect Jobs, a
+  CronJob, and a Helm chart. It ends on a cluster of your own.
+- API reference for [`LocalCluster`](/providers/kubernetes/localcluster),
+  [`Deployment`](/providers/kubernetes/deployment),
   [`Job`](/providers/kubernetes/job),
   [`Manifest`](/providers/kubernetes/manifest),
   [`HelmChart`](/providers/kubernetes/helmchart).

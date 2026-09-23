@@ -240,6 +240,7 @@ export const makeEksServerBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
@@ -284,19 +285,23 @@ const program = tag.pipe(
     ),
   ),
   Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.effect(
-      Stack,
-      Effect.all([
-        Config.String("ALCHEMY_STACK_NAME"),
-        Config.String("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
+    layer.pipe(Layer.provideMerge(Layer.mergeAll(
+      Layer.effect(
+        Stack,
+        Effect.all([
+          Config.String("ALCHEMY_STACK_NAME"),
+          Config.String("ALCHEMY_STAGE")
+        ]).pipe(
+          Effect.map(([name, stage]) => ({
+            name,
+            stage,
+            bindings: {},
+            resources: {}
+          }))
+        )
+      ),
+      // Module-scope declarations shared with the Stack may read the stage.
+      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
     )),
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
@@ -332,6 +337,7 @@ export const makeEksJobBootstrap =
     `
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
@@ -369,19 +375,23 @@ const program = tag.pipe(
     ),
   ),
   Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.effect(
-      Stack,
-      Effect.all([
-        Config.String("ALCHEMY_STACK_NAME"),
-        Config.String("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
+    layer.pipe(Layer.provideMerge(Layer.mergeAll(
+      Layer.effect(
+        Stack,
+        Effect.all([
+          Config.String("ALCHEMY_STACK_NAME"),
+          Config.String("ALCHEMY_STAGE")
+        ]).pipe(
+          Effect.map(([name, stage]) => ({
+            name,
+            stage,
+            bindings: {},
+            resources: {}
+          }))
+        )
+      ),
+      // Module-scope declarations shared with the Stack may read the stage.
+      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
     )),
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),

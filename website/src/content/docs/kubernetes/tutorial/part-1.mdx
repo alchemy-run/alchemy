@@ -1,6 +1,6 @@
 ---
 title: "Part 1: Your First Deployment"
-description: Create a Stack that targets a local kind cluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
+description: Create a Stack, start a Kubernetes cluster on your machine with Kubernetes.LocalCluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
 sidebar:
   order: 1
 ---
@@ -11,32 +11,23 @@ import { effectVersion } from "../../../../versions";
 
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
 
-In this first part you'll create a Stack, point it at a local
-Kubernetes cluster, and deploy a replicated HTTP service — without
-writing a line of YAML.
+In this first part you'll create a Stack, start a Kubernetes cluster
+on your machine, and deploy a replicated HTTP service. You won't
+write a line of YAML.
+
+The tutorial runs on a local cluster so you can follow it without a
+cloud account. Everything you build works on any Kubernetes cluster.
+[Part 5](/kubernetes/tutorial/part-5) shows how to point it at yours.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 22+
 - [Docker](https://docs.docker.com/get-started/get-docker/),
   [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation),
   and [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 
-:::note[Costs]
-Parts 1–4 run entirely on your machine and cost nothing. Part 5
-moves the program onto Amazon EKS, which is billed by the hour.
-:::
-
-## Create a cluster
-
-Create a single-node cluster named `alchemy`:
-
-```sh
-kind create cluster --name alchemy
-```
-
-kind adds a context named `kind-alchemy` to `~/.kube/config`. That
-context name is how your program will find the cluster.
+kind runs Kubernetes inside Docker containers. Alchemy runs it for
+you, but it must be installed. On macOS, run `brew install kind`.
 
 ## Create a project
 
@@ -78,8 +69,8 @@ Install <code>alchemy@latest</code> and <code>effect@{effectVersion}</code>:
 
 ## Create the Stack
 
-Every Alchemy program starts with a `Stack` — a collection of
-Resources, the providers that manage them, and a state store that
+Every Alchemy program starts with a `Stack`. A Stack is a collection
+of Resources, the providers that manage them, and a state store that
 remembers what was deployed. Create `alchemy.run.ts`:
 
 ```typescript
@@ -104,34 +95,36 @@ export default Alchemy.Stack(
 delete Kubernetes resources. `Alchemy.localState()` keeps state in a
 `.alchemy/` directory next to your code.
 
-## Describe the cluster
+## Start a local cluster
 
-Declare which cluster the resources run on:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
-import * as Effect from "effect/Effect";
-
-+const cluster = Kubernetes.KubeConfig({ context: "kind-alchemy" });
-
-export default Alchemy.Stack(
-```
-
-`Kubernetes.KubeConfig` is a plain value, not a resource: it tells
-Alchemy to authenticate with the `kind-alchemy` context from your
-kubeconfig. Nothing is created and it never appears in a plan.
-
-## Add a Deployment
-
-Declare a replicated HTTP server. This one runs
-[podinfo](https://github.com/stefanprodan/podinfo), a small demo
-service that answers with JSON:
+Declare a cluster as the first resource:
 
 ```diff lang="typescript"
 Effect.gen(function* () {
 -  // resources go here
++  const cluster = yield* Kubernetes.LocalCluster("Cluster", {
++    name: "alchemy",
++  });
+}),
+```
+
+`Kubernetes.LocalCluster` is a resource like any other. Deploying
+creates a [kind](https://kind.sigs.k8s.io) cluster named `alchemy` in
+Docker, and destroying deletes it. It also starts an image registry
+next to the cluster, which you'll use in
+[Part 3](/kubernetes/tutorial/part-3).
+
+## Add a Deployment
+
+Declare a replicated HTTP server on the cluster. This one runs
+[podinfo](https://github.com/stefanprodan/podinfo), a small demo
+service that answers with JSON:
+
+```diff lang="typescript"
+  const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+    name: "alchemy",
+  });
+
 +  const web = yield* Kubernetes.Deployment("Web", {
 +    cluster,
 +    name: "web",
@@ -143,10 +136,14 @@ Effect.gen(function* () {
 }),
 ```
 
+`cluster` tells the Deployment where to run. Every Kubernetes
+resource takes one, and passing the `LocalCluster` makes the
+Deployment depend on it, so Alchemy creates the cluster first.
+
 `"Web"` is the resource's logical ID in your program. `name: "web"`
-is the name of the objects in the cluster; without it Alchemy
-generates one from the stack, stage, and logical ID (like
-`mycluster-web-dev-you-…`). Set it before the first deploy — a
+is the name of the objects in the cluster. Without it, Alchemy
+generates one from the stack, stage, and logical ID, such as
+`mycluster-web-live-you-…`. Set it before the first deploy, because a
 Deployment keeps the name it was created with.
 
 `image` is a registry reference the cluster pulls as written, and
@@ -156,8 +153,8 @@ Deployment keeps the name it was created with.
 
 `serviceType` defaults to `LoadBalancer`, which asks the cluster for
 an external load balancer and waits up to about three minutes for
-one to be assigned. A kind cluster has no load balancer controller,
-so the example sets `serviceType: "ClusterIP"`: the Service gets a
+one to be assigned. A local cluster has no load balancer, so the
+example sets `serviceType: "ClusterIP"`. The Service gets a
 cluster-internal address only, and you'll reach it through
 `kubectl port-forward`.
 
@@ -176,11 +173,15 @@ Return the names you'll need from the command line:
   });
 
 +  return {
++    context: cluster.context,
 +    namespace: web.namespace,
 +    service: web.serviceName,
 +  };
 }),
 ```
+
+`cluster.context` is the kubeconfig context kind created for the
+cluster, which you'll pass to `kubectl`.
 
 ## Deploy
 
@@ -199,30 +200,37 @@ Return the names you'll need from the command line:
   </TabItem>
 </Tabs>
 
-<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
 
+[g]+[/g] [b]Cluster[/b] [d](Kubernetes.LocalCluster)[/d]
 [g]+[/g] [b]Web[/b] [d](Kubernetes.Deployment)[/d]
 
 Proceed?
 ◉ Yes ○ No
+[d]Creating kind cluster alchemy (about 30 seconds)...[/d]
+[d]Starting image registry on localhost:5001...[/d]
+[g]✓[/g] [b]Cluster[/b] [d](Kubernetes.LocalCluster)[/d] [g]created[/g]
 [g]✓[/g] [b]Web[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
 {
+[s2]context: "kind-alchemy",
 [s2]namespace: "default",
 [s2]service: "web",
 }`} />
 
-Alchemy applied three objects to the cluster: a `ServiceAccount`, a
-`Deployment` with two replicas, and a `Service` in front of them.
-The deploy finishes as soon as the API server accepts the objects;
-Kubernetes pulls the image and starts the pods in the background.
+Alchemy created the cluster, then applied three objects to it. They
+are a `ServiceAccount`, a `Deployment` with two replicas, and a
+`Service` in front of them. The deploy finishes as soon as the API server
+accepts the objects. Kubernetes pulls the image and starts the pods
+in the background.
 
 ## Verify it worked
 
-Wait for the rollout, then forward a local port to the Service:
+kind added a `kind-alchemy` context to your kubeconfig. Wait for the
+rollout, then forward a local port to the Service:
 
 ```sh
-kubectl rollout status deployment/web
-kubectl port-forward service/web 9898:9898
+kubectl --context kind-alchemy rollout status deployment/web
+kubectl --context kind-alchemy port-forward service/web 9898:9898
 ```
 
 In a second terminal:
@@ -233,7 +241,7 @@ curl localhost:9898
 
 ```json
 {
-  "hostname": "web-857dfd7659-tm6c7",
+  "hostname": "web-857dfd7659-7pfv2",
   "version": "6.15.0",
   "message": "greetings from podinfo v6.15.0",
   ...
@@ -245,22 +253,23 @@ Run `alchemy deploy` again. Nothing changed, so the plan is empty:
 <Terminal content={`[u]Plan[/u]: [d]no changes[/d]
 
 {
+[s2]context: "kind-alchemy",
 [s2]namespace: "default",
 [s2]service: "web",
 }`} />
 
-This is the core loop: declare resources in code, deploy, and
+This is the core loop. You declare resources in code, deploy, and
 Alchemy works out what changed.
 
 ## Recap
 
 You now have:
 
-- An `alchemy.run.ts` whose resources target the `kind-alchemy`
-  context
+- A Kubernetes cluster on your machine, declared as a resource
 - A two-replica podinfo Deployment behind a `ClusterIP` Service,
   created with no YAML
-- Stack outputs naming the Service and its namespace
+- Stack outputs naming the kubeconfig context, the Service, and its
+  namespace
 
 In [Part 2](/kubernetes/tutorial/part-2), you'll give the app its own
 namespace and configure it with environment variables and resource

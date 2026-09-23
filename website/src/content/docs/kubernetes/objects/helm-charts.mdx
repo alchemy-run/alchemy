@@ -1,6 +1,6 @@
 ---
 title: Helm charts
-description: Install Helm charts with Kubernetes.HelmChart — repository, OCI, and local charts, values, release names, namespaces, CRDs, hooks, and how Alchemy owns the rendered objects instead of a Helm release.
+description: Install Helm charts with Kubernetes.HelmChart. Covers repository, OCI, and local charts, values, release names, namespaces, CRDs, hooks, and how Alchemy owns the rendered objects instead of a Helm release.
 ---
 
 [`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) installs a
@@ -25,16 +25,18 @@ const metricsServer = yield* Kubernetes.HelmChart("MetricsServer", {
 
 Install [`helm`](https://helm.sh/docs/intro/install/) on every
 machine that deploys, including CI runners. Set `HELM_BIN` to use a
-binary that isn't on `PATH`. Helm never connects to the cluster:
-rendering is local, and Alchemy does the applying.
+binary that isn't on `PATH`. Helm never connects to the cluster.
+Rendering is local, and Alchemy does the applying.
 
 ## Chart sources
 
-| Source               | `chart`                                          | Also set   |
-| -------------------- | ------------------------------------------------ | ---------- |
-| Classic repository   | The chart name, e.g. `"metrics-server"`          | `repo`, `version` |
-| OCI registry         | `"oci://ghcr.io/stefanprodan/charts/podinfo"`    | `version`  |
-| Local directory      | A path such as `"./charts/app"`                  | —          |
+- **Classic repository.** Set `chart` to the chart name, for example
+  `"metrics-server"`. Also set `repo` and `version`.
+- **OCI registry.** Set `chart` to an `oci://` reference, for
+  example `"oci://ghcr.io/stefanprodan/charts/podinfo"`. Also set
+  `version`.
+- **Local directory.** Set `chart` to a path such as
+  `"./charts/app"`.
 
 Pin `version` for repository and OCI charts. Without it, Helm
 renders the newest version on each deploy, and what's applied changes
@@ -70,26 +72,27 @@ next deploy.
 The release name is what the chart's templates see as
 `.Release.Name`, and most charts name their objects after it. Without
 `releaseName`, Alchemy generates one from the stack, stage, and
-logical ID (at most 53 characters, Helm's limit). Set it explicitly
-when you want predictable object names.
+logical ID. The generated name is at most 53 characters, which is
+Helm's limit. Set it explicitly when you want predictable object
+names.
 
 `namespace` (default `default`) is `.Release.Namespace`, and Alchemy
 also sets it on any namespaced object the chart leaves without one.
 The namespace must exist, or set `createNamespace: true` to have the
 resource create and own the Namespace object.
 
-Changing `releaseName`, `namespace`, or `cluster` replaces the chart:
+Changing `releaseName`, `namespace`, or `cluster` replaces the chart.
 Alchemy applies the new render, then deletes every object from the
 old one.
 
 :::caution[Objects with fixed names]
-Some charts give objects names that don't include the release name —
-metrics-server's `v1beta1.metrics.k8s.io` APIService, CRDs, webhook
-configurations. When a replacement renders those same objects again,
-deleting the old render removes them. Choose `releaseName` and
-`namespace` before the first deploy. If you do change them, run
-`alchemy deploy --force` afterwards to apply the missing objects
-again.
+Some charts give objects names that don't include the release name.
+Examples are metrics-server's `v1beta1.metrics.k8s.io` APIService,
+CRDs, and webhook configurations. When a replacement renders those
+same objects again, deleting the old render removes them. Choose
+`releaseName` and `namespace` before the first deploy. If you do
+change them, run `alchemy deploy --force` afterwards to apply the
+missing objects again.
 :::
 
 ## CRDs
@@ -103,14 +106,14 @@ managed elsewhere.
 ## Hooks aren't run
 
 The chart is rendered with `--no-hooks`. Objects annotated with
-`helm.sh/hook` — install and upgrade Jobs, test pods — are neither
-applied nor run. A chart that depends on hooks to work correctly
-(for example to run database migrations or generate certificates)
-should be installed with Helm itself.
+`helm.sh/hook` are neither applied nor run. These include install
+and upgrade Jobs and test pods. Some charts depend on hooks to work
+correctly, for example to run database migrations or generate
+certificates. Install those charts with Helm itself.
 
 ## No Helm release
 
-Alchemy doesn't create a Helm release: `helm list` won't show the
+Alchemy doesn't create a Helm release. `helm list` won't show the
 chart, and `helm upgrade` or `helm rollback` don't apply. Alchemy
 records every object it applied and, on each update:
 
@@ -124,20 +127,18 @@ Alchemy, run `helm uninstall` first, then deploy the `HelmChart`.
 
 ## Attributes
 
-| Attribute     | Description                                             |
-| ------------- | ------------------------------------------------------- |
-| `releaseName` | The release name the chart rendered with                |
-| `namespace`   | The namespace the chart rendered into                   |
-| `chart`       | The chart reference                                     |
-| `version`     | The pinned version, if any                              |
-| `objects`     | References to every applied object                      |
-| `connection`  | The cluster connection                                  |
+- `releaseName` is the release name the chart rendered with.
+- `namespace` is the namespace the chart rendered into.
+- `chart` is the chart reference.
+- `version` is the pinned version, if any.
+- `objects` holds references to every applied object.
+- `connection` is the cluster connection.
 
 ## Where next
 
-- [Tutorial part 4](/kubernetes/tutorial/part-4) — install
+- **[Tutorial part 4](/kubernetes/tutorial/part-4).** Install
   metrics-server on a kind cluster.
-- [How objects are managed](/kubernetes/concepts/object-lifecycle) —
-  apply order, pruning, and drift.
-- [`HelmChart` reference](/providers/kubernetes/helmchart) — every
+- **[How objects are managed](/kubernetes/workloads/object-lifecycle).**
+  Apply order, pruning, and drift.
+- **[`HelmChart` reference](/providers/kubernetes/helmchart).** Every
   prop and attribute.

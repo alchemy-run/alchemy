@@ -1480,8 +1480,14 @@ export default defineConfig({
                   link: "/kubernetes/clusters/connecting",
                 },
                 {
-                  label: "Managed clusters",
-                  link: "/kubernetes/clusters/managed",
+                  label: "Container registries",
+                  link: "/kubernetes/clusters/registries",
+                },
+                { label: "Local clusters", link: "/kubernetes/clusters/local" },
+                { label: "Amazon EKS", link: "/kubernetes/clusters/eks" },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/clusters/cluster-adapters",
                 },
               ],
             },
@@ -1504,6 +1510,10 @@ export default defineConfig({
                   label: "Configuration & bindings",
                   link: "/kubernetes/workloads/bindings",
                 },
+                {
+                  label: "How objects are managed",
+                  link: "/kubernetes/workloads/object-lifecycle",
+                },
               ],
             },
             {
@@ -1513,19 +1523,6 @@ export default defineConfig({
                 {
                   label: "Helm charts",
                   link: "/kubernetes/objects/helm-charts",
-                },
-              ],
-            },
-            {
-              label: "Concepts",
-              items: [
-                {
-                  label: "How objects are managed",
-                  link: "/kubernetes/concepts/object-lifecycle",
-                },
-                {
-                  label: "Cluster adapters",
-                  link: "/kubernetes/concepts/cluster-adapters",
                 },
               ],
             },

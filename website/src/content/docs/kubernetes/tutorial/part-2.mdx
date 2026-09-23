@@ -10,15 +10,15 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 In [Part 1](/kubernetes/tutorial/part-1) you deployed podinfo into
 the `default` namespace. Now you'll give the app a namespace of its
-own — declared as a raw Kubernetes object — and configure it from
-your program.
+own, declared as a raw Kubernetes object. Then you'll configure the
+app from your program.
 
 ## Declare a Namespace
 
 Anything that isn't a Deployment or a Job is a
-[`Kubernetes.Manifest`](/kubernetes/objects/manifests): a literal
-Kubernetes object, written exactly as you'd write it in YAML. Add a
-Namespace:
+[`Kubernetes.Manifest`](/kubernetes/objects/manifests). A Manifest is
+a literal Kubernetes object, written exactly as you'd write it in
+YAML. Add a Namespace:
 
 ```diff lang="typescript"
 Effect.gen(function* () {
@@ -35,7 +35,7 @@ Effect.gen(function* () {
 ```
 
 Alchemy applies the object with server-side apply and tracks it like
-any other resource. Any kind works — `ConfigMap`, `Secret`,
+any other resource. Any kind works, such as `ConfigMap`, `Secret`,
 `StatefulSet`, `Ingress`, or a custom resource from a CRD.
 
 ## Move the Deployment into it
@@ -54,9 +54,9 @@ const web = yield* Kubernetes.Deployment("Web", {
 });
 ```
 
-`namespace.name` is an **Output** — a reference to the Manifest's
-attribute that resolves at deploy time. Passing it (instead of the
-string `"my-app"`) makes the Deployment depend on the Namespace, so
+`namespace.name` is an **Output**. It's a reference to the Manifest's
+attribute that resolves at deploy time. Passing it instead of the
+string `"my-app"` makes the Deployment depend on the Namespace, so
 Alchemy creates the Namespace first. Workload resources expect their
 namespace to exist already.
 
@@ -81,8 +81,8 @@ const web = yield* Kubernetes.Deployment("Web", {
 ```
 
 Every key in `env` becomes a container environment variable. Values
-can also be Outputs from other resources — a database URL, a bucket
-name — and Alchemy resolves them before applying.
+can also be Outputs from other resources, such as a database URL or a
+bucket name. Alchemy resolves them before applying.
 
 ## Set resource requests and limits
 
@@ -129,12 +129,13 @@ Proceed?
 [g]✓[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
 [g]✓[/g] [b]Web[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]
 {
+[s2]context: "kind-alchemy",
 [s2]namespace: "my-app",
 [s2]service: "web",
 }`} />
 
 The Namespace is created first. The Deployment update applies its
-objects into `my-app` and deletes the old ones from `default`:
+objects into `my-app` and deletes the old ones from `default`.
 Alchemy records every object it applies, and anything that drops out
 of the desired set is pruned.
 
@@ -143,9 +144,9 @@ of the desired set is pruned.
 The `default` namespace is empty again, and the app runs in `my-app`:
 
 ```sh
-kubectl get deployments --all-namespaces | grep web
-kubectl -n my-app rollout status deployment/web
-kubectl -n my-app port-forward service/web 9898:9898
+kubectl --context kind-alchemy get deployments --all-namespaces | grep web
+kubectl --context kind-alchemy -n my-app rollout status deployment/web
+kubectl --context kind-alchemy -n my-app port-forward service/web 9898:9898
 ```
 
 ```sh

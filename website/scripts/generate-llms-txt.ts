@@ -513,7 +513,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Kubernetes",
     intro:
-      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs, raw manifests, and Helm charts — on any cluster reachable through a kubeconfig, token, client certificate, or exec plugin, with ECR images and Pod Identity on EKS.",
+      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.",
     pages: {
       slugs: [
         "kubernetes/index",
@@ -524,15 +524,17 @@ const SECTIONS: Section[] = [
         "kubernetes/tutorial/part-4",
         "kubernetes/tutorial/part-5",
         "kubernetes/clusters/connecting",
-        "kubernetes/clusters/managed",
+        "kubernetes/clusters/registries",
+        "kubernetes/clusters/local",
+        "kubernetes/clusters/eks",
+        "kubernetes/clusters/cluster-adapters",
         "kubernetes/workloads/deployments",
         "kubernetes/workloads/jobs",
         "kubernetes/workloads/images",
         "kubernetes/workloads/bindings",
+        "kubernetes/workloads/object-lifecycle",
         "kubernetes/objects/manifests",
         "kubernetes/objects/helm-charts",
-        "kubernetes/concepts/object-lifecycle",
-        "kubernetes/concepts/cluster-adapters",
       ],
     },
   },

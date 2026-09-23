@@ -1,6 +1,6 @@
 ---
 title: Cluster adapters
-description: The extension point between Alchemy's cluster-agnostic Kubernetes resources and the platform a cluster runs on — authentication, image registries, workload identity, and load balancer defaults — and how to write your own.
+description: The extension point between Alchemy's cluster-agnostic Kubernetes resources and the platform a cluster runs on. Covers authentication, image registries, workload identity, load balancer defaults, and how to write your own.
 ---
 
 The Kubernetes resources don't know which platform a cluster runs
@@ -8,13 +8,11 @@ on. Everything platform-specific lives in a **cluster adapter**,
 chosen by the `auth.kind` of the resource's
 [connection](/kubernetes/clusters/connecting):
 
-| `auth.kind`   | Adapter registered by    | Capabilities                                       |
-| ------------- | ------------------------ | -------------------------------------------------- |
-| `kubeconfig`  | `Kubernetes.providers()` | Authentication                                     |
-| `token`       | `Kubernetes.providers()` | Authentication                                     |
-| `client-cert` | `Kubernetes.providers()` | Authentication                                     |
-| `exec`        | `Kubernetes.providers()` | Authentication                                     |
-| `aws-eks`     | `AWS.providers()`        | Authentication, registry, identity, entrypoint, load balancer defaults |
+- `kubeconfig`, `token`, `client-cert`, and `exec` are registered by
+  `Kubernetes.providers()`. They handle authentication only.
+- `aws-eks` is registered by `AWS.providers()`. It handles
+  authentication, image registry, workload identity, generated
+  entrypoints, and load balancer defaults.
 
 When a resource runs, Alchemy looks up the adapter for its
 connection's kind among the Stack's provider layers. If none is
@@ -26,16 +24,25 @@ and the provider layer that contributes it.
 An adapter implements `Kubernetes.ClusterAdapterService`. Only
 `connect` is required:
 
-| Member                  | Used for                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `connect`               | Resolve the API endpoint and CA, and return a per-request header mint (so short-lived tokens stay fresh). Fails with `ClusterNotFoundError` when the cluster definitely no longer exists. |
-| `registry`              | Build or mirror workload images into a registry the cluster can pull from. Enables `main` and `context` sources. |
-| `identity`              | Provision cloud credentials for a workload's ServiceAccount and turn binding grants (such as AWS `policyStatements`) into them. |
-| `bootstrap`             | Replace the generated container entrypoints for `main` programs, for example to wire a cloud credential chain. |
-| `loadBalancerDefaults`  | Defaults for `LoadBalancer` Services (`loadBalancerClass`, annotations). User `serviceAnnotations` win. |
+- `connect` resolves the API endpoint and CA, and returns a
+  per-request header mint so short-lived tokens stay fresh. It fails
+  with `ClusterNotFoundError` when the cluster definitely no longer
+  exists.
+- `registry` builds or mirrors workload images into a registry the
+  platform manages. Without it, `main` and `context` sources are
+  pushed to the connection's
+  [`registry`](/kubernetes/clusters/registries).
+- `identity` provisions cloud credentials for a workload's
+  ServiceAccount. It turns binding grants, such as AWS
+  `policyStatements`, into those credentials.
+- `bootstrap` replaces the generated container entrypoints for
+  `main` programs, for example to wire a cloud credential chain.
+- `loadBalancerDefaults` sets defaults for `LoadBalancer` Services,
+  such as `loadBalancerClass` and annotations. Your
+  `serviceAnnotations` win.
 
-Missing members degrade gracefully: without `registry`, only `image`
-sources work; without `identity`, bindings may only carry `env`.
+Missing members degrade gracefully. Without `registry`, only `image`
+sources work. Without `identity`, bindings may only carry `env`.
 
 ## Write an adapter
 
@@ -123,40 +130,46 @@ export default Alchemy.Stack(
 ```
 
 The connection stored in state is `{ kind: "env-token", variable:
-"K8S_TOKEN" }`, so `alchemy destroy` authenticates the same way —
-with whatever `K8S_TOKEN` holds at that time.
+"K8S_TOKEN" }`, so `alchemy destroy` authenticates the same way. It
+uses whatever `K8S_TOKEN` holds at that time.
 
 ## Registries and identity
 
 A platform adapter such as `aws-eks` goes further:
 
-- **`registry.resolve`** receives the workload's image source,
-  target platform, generated entrypoint, and tags, and returns the
-  image URI the pod should run, a content hash, and serializable
-  state (the EKS adapter stores its ECR repository). `registry.hash`
-  computes the same hash at plan time so content changes show up as
-  updates, and `registry.delete` cleans up on destroy.
-- **`identity.reconcile`** receives the workload's namespace,
-  ServiceAccount, bindings, and `identity` options, and returns extra
-  environment variables, ServiceAccount annotations, and state (the
-  EKS adapter stores its IAM role and Pod Identity association).
+- `registry.resolve` receives the workload's image source, target
+  platform, generated entrypoint, and tags. It returns the image URI
+  the pod should run, a content hash, and serializable state. The EKS
+  adapter stores its ECR repository there. `registry.hash` computes
+  the same hash at plan time so content changes show up as updates.
+  `registry.delete` cleans up on destroy.
+- `identity.reconcile` receives the workload's namespace,
+  ServiceAccount, bindings, and `identity` options. It returns extra
+  environment variables, ServiceAccount annotations, and state. The
+  EKS adapter stores its IAM role and Pod Identity association there.
   `identity.delete` removes them, even when the cluster is already
   gone.
 
 Platforms extend the typed surfaces through module augmentation of
-`alchemy/Kubernetes`: `AuthRegistry` for connection kinds,
-`IdentityStateRegistry` and `RegistryStateRegistry` for persisted
-state, `WorkloadIdentityOptions` for the `identity` prop (EKS adds
-`managedPolicyArns`), and `WorkloadServicesRegistry` for services
-available inside the container. The
+`alchemy/Kubernetes`:
+
+- `AuthRegistry` holds connection kinds.
+- `IdentityStateRegistry` and `RegistryStateRegistry` hold persisted
+  state.
+- `WorkloadIdentityOptions` types the `identity` prop. EKS adds
+  `managedPolicyArns`.
+- `WorkloadServicesRegistry` lists services available inside the
+  container.
+
+The
 [EKS adapter source](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/EKS/KubernetesAdapter.ts)
 is the complete reference.
 
 ## Where next
 
-- [Connecting to clusters](/kubernetes/clusters/connecting) — the
+- **[Connecting to clusters](/kubernetes/clusters/connecting).** The
   built-in connection kinds.
-- [Managed clusters](/kubernetes/clusters/managed) — what the EKS
+- **[Amazon EKS](/kubernetes/clusters/eks).** What the EKS
   adapter does in practice.
-- [Layers](/infrastructure-as-effects/layers) — how Layers compose
+- **[Layers](/infrastructure-as-effects/layers).** How Layers compose
   in an Alchemy program.
