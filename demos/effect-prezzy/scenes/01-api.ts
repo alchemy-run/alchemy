@@ -108,9 +108,14 @@ export default defineScene({
       edit.all(
         edit.after('import * as Effect from "effect/Effect";\n', 'import Api from "./src/Api.ts";\n'),
         edit.before("    const web = yield*", "    const api = yield* Api;\n"),
-        edit.replace("return { web: web.url };", "return { api: api.url.as<string>(), web: web.url };"),
       ),
       "yield* Api adds the Worker to the Stack.",
+    );
+    await s.editor.patch(
+      "alchemy.run.ts",
+      "Output the API's URL",
+      edit.replace("return { web: web.url };", "return { api: api.url.as<string>(), web: web.url };"),
+      "The Stack's return value is its outputs: printed after every deploy, and handed to the tests.",
     );
     await s.editor.patch(
       "alchemy.run.ts",
