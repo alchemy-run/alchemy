@@ -309,6 +309,9 @@ catalogs:
     esbuild:
       specifier: ^0.28.1
       version: 0.28.2
+    fast-xml-parser:
+      specifier: ^5.10.1
+      version: 5.10.1
     fflate:
       specifier: ^0.8.3
       version: 0.8.3
@@ -591,7 +594,7 @@ importers:
         version: link:packages/alchemy
       changelogithub:
         specifier: 'catalog:'
-        version: 13.16.1
+        version: 13.16.1(magicast@0.5.4)
       effect:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
@@ -6531,9 +6534,15 @@ importers:
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
+      aws4fetch:
+        specifier: 'catalog:'
+        version: 1.0.20
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
+      fast-xml-parser:
+        specifier: 'catalog:'
+        version: 5.10.1
       heap-js:
         specifier: 'catalog:'
         version: 2.7.1
@@ -31342,22 +31351,6 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
-  '@sveltejs/kit@3.0.0-next.27(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(svelte@5.56.8)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
-    dependencies:
-      '@rolldown/pluginutils': 1.0.1
-      '@standard-schema/spec': 1.1.0
-      '@sveltejs/vite-plugin-svelte': 7.2.0(svelte@5.56.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      cookie: 2.0.1
-      devalue: 5.9.0
-      esm-env: 1.2.2
-      magic-string: 1.2.3
-      mrmime: 2.0.1
-      sirv: 3.0.2
-      svelte: 5.56.8
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
-    optionalDependencies:
-      typescript: 7.0.2
-
   '@sveltejs/kit@3.0.0-next.27(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(svelte@5.56.8)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
@@ -34621,7 +34614,7 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  changelogithub@13.16.1:
+  changelogithub@13.16.1(magicast@0.5.4):
     dependencies:
       ansis: 4.3.1
       c12: 3.3.4(magicast@0.5.4)

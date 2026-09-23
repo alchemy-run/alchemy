@@ -40,6 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
+import { LOCAL_R2_S3_CREDENTIALS } from "../R2/LocalS3.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
@@ -173,9 +174,15 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "r2_bucket":
       // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
       // (R2 has no opaque id — the name is the identity); a real name is a
-      // live bucket the dev worker proxies to.
+      // live bucket the dev worker proxies to. Local buckets are also served
+      // on the Worker's local S3 endpoint, so presigned URLs and S3 clients
+      // work in dev without extra configuration.
       return isLocalId(b.bucketName)
-        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
+        ? R2Bucket.local({
+            binding: b.name,
+            id: b.bucketName,
+            s3Credentials: LOCAL_R2_S3_CREDENTIALS,
+          })
         : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
       return RateLimit.local({
