@@ -93,10 +93,10 @@ yield* presignGet({
 
 ## Async Workers
 
-Async Workers can't use the Effect presign functions, so they sign URLs
-themselves with an S3 client. `S3Credentials` gives that client the S3
-keys and endpoint for the bucket, for both local and deployed runs.
-Declare it on `env`:
+Async Workers sign URLs themselves with an S3 client, which needs S3
+credentials. `S3Credentials` is the easy way to get them: it creates an
+API token scoped to the permissions you ask for and hands the Worker
+its S3 keys. Declare it on `env`:
 
 ```typescript
 // alchemy.run.ts
@@ -146,10 +146,16 @@ export default {
 
 `UPLOADS_S3` is a JSON string holding `endpoint`, `bucketName`,
 `region`, `accessKeyId` and `secretAccessKey`. Deployed, it's a
-secret with credentials derived from the Worker's API token. Under
-`alchemy dev`, it points at the local endpoint with local credentials.
-`access` sets the token's permissions: `"read"`, `"write"`, or
-`"read-write"` (the default).
+secret. Under `alchemy dev`, no token is created and it points at the
+local endpoint with local credentials.
+
+`access` sets the token's permissions:
+
+```typescript
+Cloudflare.R2.S3Credentials(Uploads, { access: "read" }); // downloads only
+Cloudflare.R2.S3Credentials(Uploads, { access: "write" }); // uploads only
+Cloudflare.R2.S3Credentials(Uploads); // "read-write", the default
+```
 
 In an Effect-native Worker, `yield* Cloudflare.R2.S3Credentials(Uploads)`
 gives you the same values for your own S3 client.
