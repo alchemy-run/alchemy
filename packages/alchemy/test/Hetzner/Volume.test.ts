@@ -1,7 +1,7 @@
 import * as Hetzner from "@/Hetzner";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as volumes from "@distilled.cloud/hetzner/volumes";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
-  Services.volumes.getVolume({ id }).pipe(
+  volumes.getVolume({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -54,7 +54,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.serverId).toBeNull();
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.volumes.getVolume({
+      const fetched = yield* volumes.getVolume({
         id: created.id,
       });
       expect(fetched.volume.id).toEqual(created.id);
@@ -81,7 +81,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.size).toEqual(20);
       expect(updated.labels).toMatchObject({ env: "prod", role: "data" });
 
-      const refetched = yield* Services.volumes.getVolume({
+      const refetched = yield* volumes.getVolume({
         id: updated.id,
       });
       expect(refetched.volume.size).toEqual(20);
@@ -138,7 +138,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.location).toEqual("nbg1");
       expect(replaced.serverId).toBeNull();
 
-      const fetched = yield* Services.volumes.getVolume({
+      const fetched = yield* volumes.getVolume({
         id: replaced.id,
       });
       expect(fetched.volume.format).toEqual("xfs");

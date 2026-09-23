@@ -1,7 +1,7 @@
 import * as Hetzner from "@/Hetzner";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as servers from "@distilled.cloud/hetzner/servers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
-  Services.servers.getServer({ id }).pipe(
+  servers.getServer({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -93,7 +93,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.deleteProtection).toEqual(false);
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.servers.getServer({
+      const fetched = yield* servers.getServer({
         id: created.id,
       });
       expect(fetched.server?.id).toEqual(created.id);
@@ -121,7 +121,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.ipv6).toEqual(created.ipv6);
       expect(updated.labels).toMatchObject({ env: "prod", role: "web" });
 
-      const refetched = yield* Services.servers.getServer({
+      const refetched = yield* servers.getServer({
         id: updated.id,
       });
       expect(refetched.server?.id).toEqual(created.id);
@@ -179,7 +179,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.location).toEqual("nbg1");
       expect(replaced.serverType).toEqual("cpx12");
 
-      const fetched = yield* Services.servers.getServer({
+      const fetched = yield* servers.getServer({
         id: replaced.id,
       });
       expect(fetched.server?.image?.name).toEqual("debian-12");
