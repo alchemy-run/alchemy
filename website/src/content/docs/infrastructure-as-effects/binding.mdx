@@ -4,8 +4,8 @@ description: A Binding connects a Resource to a Worker or Lambda. One line decla
 ---
 
 A **Binding** connects a [Resource](/infrastructure-as-code/resource)
-to a Worker, Lambda Function, Container, or Server — any
-[Runtime](/infrastructure-as-effects/runtime). Inside the Runtime's
+to a [Runtime](/infrastructure-as-effects/runtime) such as a Worker,
+Lambda Function, Container, or Server. Inside the Runtime's
 constructor, you yield the resource and get back a typed client:
 
 ```typescript
@@ -36,9 +36,9 @@ export default AWS.Lambda.Function(
 
 A Function that reads a table needs three things: permission to call
 the API, the table's name at runtime, and a client to call it with. In
-traditional IaC those live in three places. A policy in the
-infrastructure code, an environment variable wired between the two, and
-an SDK call in the handler that reads it back:
+traditional IaC those live in three places. A policy sits in the
+infrastructure code. An environment variable carries the name between
+the two. An SDK call in the handler reads it back:
 
 ```typescript
 // infrastructure: grant access and pass the name
@@ -54,9 +54,10 @@ await client.send(
 );
 ```
 
-Nothing checks that they agree. Rename the table, widen the policy,
-forget the env var, and you find out at runtime. The binding is all
-three. Let's follow what that one line produces.
+Nothing checks that they agree. If you rename the table, widen the
+policy, or forget the env var, you find out at runtime. The binding
+covers all three. The sections below follow what that one line
+produces.
 
 ## Permissions
 
@@ -72,8 +73,8 @@ it was bound to:
 }
 ```
 
-Least privilege falls out of the shape. Bind `PutItem` as well and the
-role gains a second statement for `dynamodb:PutItem`, nothing more:
+Least privilege follows from the shape. If you also bind `PutItem`, the role
+gains a second statement for `dynamodb:PutItem` and nothing else:
 
 ```typescript
 const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
@@ -141,12 +142,12 @@ export default Cloudflare.Worker(
 );
 ```
 
-There is no IAM on Cloudflare. `ReadWriteBucketBinding` registers a
-native `r2_bucket` binding on the Worker instead, and the access level
-is in the name: `ReadBucket`, `WriteBucket`, or `ReadWriteBucket`.
+Cloudflare has no IAM. `ReadWriteBucketBinding` registers a native
+`r2_bucket` binding on the Worker. The access level is in the name:
+`ReadBucket`, `WriteBucket`, or `ReadWriteBucket`.
 
 The contract is a `Binding.Service`. It names the capability and the
-client it returns, and nothing about the platform:
+client it returns. It says nothing about the platform:
 
 ```typescript
 export interface ReadWriteBucket extends Binding.Service<
@@ -156,16 +157,16 @@ export interface ReadWriteBucket extends Binding.Service<
 > {}
 ```
 
-So the same contract can be satisfied a different way. Swap the Layer
-and `bucket` calls R2 over HTTP with a scoped API token minted at deploy
-time:
+So a different Layer can satisfy the same contract. Swap the
+Layer and `bucket` calls R2 over HTTP with a scoped API token minted at
+deploy time:
 
 ```diff lang="typescript"
 -  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 +  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp)),
 ```
 
-The handler doesn't change. And a Layer that needs a platform the host
+The handler doesn't change. A Layer that needs a platform the host
 can't supply is a compile error:
 
 ```typescript
@@ -184,9 +185,9 @@ up, so your own services can carry their bindings with them.
 ## Plan-time invokes
 
 A binding can also run before anything is deployed. Terraform calls
-this a data source, Pulumi an invoke. Call it directly and you get back
-an [Output](/infrastructure-as-code/outputs) to pass into resource
-props:
+this a data source. Pulumi calls it an invoke. Call it directly and
+you get back an [Output](/infrastructure-as-code/outputs) to pass into
+resource props:
 
 ```typescript
 // Output<ec2.Image | undefined>
@@ -198,12 +199,12 @@ imageId: AWS.EC2.amazonLinux2023(),
 
 The same capability bound inside a Function with
 `yield* AWS.EC2.GetAmi(...)` still grants its IAM and runs at runtime.
-One contract, both phases.
+One contract covers both phases.
 
 ## Event Sources and Sinks
 
 An [Event Source](/infrastructure-as-effects/event-sources) is a
-Binding that runs an Effect or `Stream` in the background, whenever
+Binding that runs an Effect or `Stream` in the background whenever
 something happens on the resource:
 
 ```typescript
@@ -212,8 +213,8 @@ yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
 );
 ```
 
-A [Sink](/infrastructure-as-effects/sinks) is the converse, a Binding
-you sink a `Stream` into:
+A [Sink](/infrastructure-as-effects/sinks) is the converse. It is a
+Binding you sink a `Stream` into:
 
 ```typescript
 const sink = yield* AWS.SQS.QueueSink(Outbound);
@@ -231,8 +232,8 @@ Effect.provide(Cloudflare.R2.ReadWriteBucketHttp)
 ```
 
 Inside that Layer, the deploy-time work sits behind a guard. The
-**Construction phase** runs twice, and the guard is what tells the two
-runs apart:
+**Construction phase** runs twice. The guard tells the two runs
+apart:
 
 ```typescript
 if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -242,7 +243,7 @@ if (!globalThis.__ALCHEMY_RUNTIME__) {
 // always: return the typed runtime client
 ```
 
-When Alchemy bundles the Runtime it defines that global as `true`, so
+When Alchemy bundles the Runtime, it defines that global as `true`, so
 the bundler drops the whole branch. Only the client ships:
 
 ```typescript
@@ -250,10 +251,10 @@ the bundler drops the whole branch. Only the client ships:
 "globalThis.__ALCHEMY_RUNTIME__": "true"
 ```
 
-The Resource Provider, the code that actually creates the bucket or
-the table, is never imported by the binding at all. Declaring a
-resource only records a requirement for its Provider, and that
-requirement is satisfied once, at the Stack:
+The Resource Provider is the code that creates the bucket or the
+table. The binding never imports it. Declaring a resource only records
+a requirement for its Provider. The Stack satisfies that requirement
+once:
 
 ```typescript
 export default Alchemy.Stack(
@@ -265,16 +266,16 @@ export default Alchemy.Stack(
 );
 ```
 
-This is what lets you declare resources and bindings inside runtime
-code with little to no effect on bundle size. The heavy infrastructure
-code stays at the Stack, and the guard erases the rest.
+This lets you declare resources and bindings inside runtime code with
+little to no effect on bundle size. The heavy infrastructure code stays
+at the Stack. The guard erases the rest.
 [Phases](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard)
 covers the guard in depth.
 
-The granularity pays off twice. Every binding has its own Layer, and
-each Layer carries exactly one client and registers exactly one grant.
-Provide the two you use and you get two clients in the bundle and two
-statements on the role, nothing more:
+The granularity pays off twice. Every binding has its own Layer. Each
+Layer carries exactly one client and registers exactly one grant. If
+you provide the two you use, you get two clients in the bundle and two
+statements on the role, and nothing more:
 
 ```typescript
 Effect.provide(
@@ -290,11 +291,11 @@ environment minimal.
 
 ## Where next
 
-- [Layers](/infrastructure-as-effects/layers) — hide bindings behind a
+- [Layers](/infrastructure-as-effects/layers): hide bindings behind a
   service interface. Next page.
-- [Event Sources](/infrastructure-as-effects/event-sources) — bindings
+- [Event Sources](/infrastructure-as-effects/event-sources): bindings
   that trigger your Function.
-- [Sinks](/infrastructure-as-effects/sinks) — bindings you write
+- [Sinks](/infrastructure-as-effects/sinks): bindings you write
   Streams into.
-- [Circular Bindings](/infrastructure-as-effects/circular-bindings) —
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings):
   two Functions that bind each other.

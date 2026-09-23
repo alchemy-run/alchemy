@@ -1,6 +1,6 @@
 ---
 title: Event Sources
-description: An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
+description: An event source is a binding that runs your Function when something happens on a resource. One call wires the event-source mapping, the permissions, and a typed handler.
 ---
 
 An **Event Source** is a [Binding](/infrastructure-as-effects/binding)
@@ -68,8 +68,8 @@ is the Layer that satisfies it, the same split every binding has
 ## It's a real Effect Stream
 
 `records` is the same `Stream` from any Effect program, so every
-combinator composes. Map table changes to JSON and run them straight
-into a queue:
+combinator composes. This example maps table changes to JSON and runs
+them into a queue:
 
 ```typescript
 const sink = yield* AWS.SQS.QueueSink(Outbound);
@@ -243,10 +243,10 @@ and [GitHub Events](/cloudflare/messaging/github-events).
 
 ## Where next
 
-- [Sinks](/infrastructure-as-effects/sinks) — the write-side dual:
-  resources as Effect `Sink`s, with batching and IAM generated the
-  same way.
-- [Bindings](/infrastructure-as-effects/binding) — the deploy-time
+- [Sinks](/infrastructure-as-effects/sinks) are the write-side dual.
+  They expose resources as Effect `Sink`s, with batching and IAM
+  generated the same way.
+- [Bindings](/infrastructure-as-effects/binding) covers the deploy-time
   mechanics every event source is built on.
-- [Runtime](/infrastructure-as-effects/runtime) —
+- [Runtime](/infrastructure-as-effects/runtime) covers
   the Effectful Constructor these examples live inside.

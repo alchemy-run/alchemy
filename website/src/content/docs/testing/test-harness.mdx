@@ -1,16 +1,16 @@
 ---
 title: Test harness
-description: Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
+description: Reference for alchemy/Test. Covers every helper, hook, and option that Test.make exposes for Bun and Vitest.
 ---
 
 `alchemy/Test/Bun` and `alchemy/Test/Vitest` expose the same
 Effect-aware harness. For the end-to-end walkthrough, see
-[Testing a Stack](/testing/testing-a-stack); for provider-lifecycle
+[Testing a Stack](/testing/testing-a-stack). For provider-lifecycle
 testing, see [Testing Providers](/testing/testing-providers).
 
 ## What Test.make returns
 
-A single call returns a self-contained API for the file:
+One call returns a self-contained API for the file:
 
 ```typescript
 const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
@@ -23,20 +23,21 @@ const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
 | Helper | Purpose |
 |---|---|
 | `test(name, effect)` | Effect-aware test. `HttpClient` and your providers Layer are in scope. |
-| `test.skip` / `test.skipIf` / `test.only` / `test.todo` | Skip / focus / todo modifiers (same shape as `bun.test`). |
+| `test.skip` / `test.skipIf` / `test.only` / `test.todo` | Skip, focus, and todo modifiers (same shape as `bun.test`). |
 | `test.provider(name, fn)` | [Provider-lifecycle test](/testing/testing-providers) against a scratch in-memory stack. |
-| `beforeAll(effect)` | Run an Effect once. Returns a lazy accessor (`yield* result`) usable inside tests. |
+| `beforeAll(effect)` | Run an Effect once. Returns a lazy accessor (`yield* result`) that tests can use. |
 | `beforeEach(effect)` | Run an Effect before every test. |
 | `afterAll(effect)` / `afterAll.skipIf(predicate)` | Cleanup hook with conditional teardown. |
 | `afterEach(effect)` | Run an Effect after every test. |
-| `deploy(Stack, opts?)` | Plan + apply a stack, resolve to its outputs. |
-| `destroy(Stack, opts?)` | Plan + apply against an empty desired state. |
+| `deploy(Stack, opts?)` | Plan and apply a stack, then resolve to its outputs. |
+| `destroy(Stack, opts?)` | Plan and apply against an empty desired state. |
 
 `Test.getWhenReady` / `Test.executeWhenReady` are module-level HTTP
-cold-start helpers, taught in [Testing a Stack](/testing/testing-a-stack).
+cold-start helpers. [Testing a Stack](/testing/testing-a-stack)
+covers them.
 
-`expect` (and `describe`) come from the underlying runner —
-`bun:test` or `@effect/vitest` — directly.
+`expect` and `describe` come directly from the underlying runner,
+`bun:test` or `@effect/vitest`.
 
 ## Test.make options
 
@@ -55,7 +56,7 @@ Test.make({
 ### `providers` (required)
 
 The provider Layer that resolves resource implementations.
-Usually the same one your `Stack` uses:
+It is usually the same one your `Stack` uses:
 
 ```typescript
 providers: Cloudflare.providers(),
@@ -69,9 +70,9 @@ the env-var auth methods registered by each provider.
 
 ### `state`
 
-The state store used by top-level `deploy(Stack)` and
-`destroy(Stack)` (not by `test.provider`). Defaults to
-`localState()` — `.alchemy/` on disk.
+The state store that top-level `deploy(Stack)` and
+`destroy(Stack)` use. `test.provider` does not use it. Defaults to
+`localState()`, which stores state in `.alchemy/` on disk.
 
 ```typescript
 state: Cloudflare.state(),  // R2-backed, survives across CI runners
@@ -80,14 +81,14 @@ state: undefined,  // omit → defaults to localState()
 ```
 
 Persistent state lets `deploy(Stack)` skip recreating unchanged
-resources between runs. The run-against-an-existing-stack pattern
-built on it lives in [Testing a Stack](/testing/testing-a-stack).
+resources between runs. [Testing a Stack](/testing/testing-a-stack)
+covers the run-against-an-existing-stack pattern built on it.
 
 ### `profile`
 
-Override `ALCHEMY_PROFILE` for this file only. Useful for
-pinning tests to a sandbox profile regardless of what's set in
-the environment:
+Override `ALCHEMY_PROFILE` for this file only. Use it to pin
+tests to a sandbox profile regardless of what the environment
+sets:
 
 ```typescript
 Test.make({
@@ -96,14 +97,14 @@ Test.make({
 });
 ```
 
-When omitted, the harness reads `ALCHEMY_PROFILE` from env / `.env`
+When omitted, the harness reads `ALCHEMY_PROFILE` from env or `.env`
 the same way the CLI does.
 
 ### `stage`
 
 Default stage for `deploy(Stack)` / `destroy(Stack)`. Defaults to
 `test_$USER` (e.g. `test_sam`) so two people running the same suite
-against one account don't collide. Override per file, or per call:
+against one account don't collide. Override it per file or per call:
 
 ```typescript
 Test.make({ providers, stage: "ci-pr-42" });
@@ -118,13 +119,13 @@ parallel against the same provider account without colliding.
 
 ### `dev`
 
-Off by default — tests deploy to the real cloud. `dev: true` runs
-the whole file in local-dev mode, the same wiring as
-[`alchemy dev`](/environments/local-development): Cloudflare
+Off by default, so tests deploy to the real cloud. `dev: true` runs
+the whole file in local-dev mode with the same wiring as
+[`alchemy dev`](/environments/local-development). Cloudflare
 Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in
-workerd with local simulators, and AWS Lambda/ECS plus the
-emulated AWS surface run in a local Docker emulator. No cloud
-account is touched for emulated resources.
+workerd with local simulators. AWS Lambda/ECS and the emulated AWS
+surface run in a local Docker emulator. Emulated resources do not
+touch any cloud account.
 
 ```typescript
 Test.make({
@@ -133,48 +134,47 @@ Test.make({
 });
 ```
 
-Everything else in the file is unchanged — `beforeAll(deploy(Stack))`
-boots the stack locally and the outputs (`url`, ids) point at the
+The rest of the file stays the same. `beforeAll(deploy(Stack))`
+boots the stack locally. The outputs (`url`, ids) point at the
 local instances, so the same HTTP assertions run against
 `http://localhost:<port>`. Local resource ids are `dev:`-prefixed,
-which doubles as proof no cloud call ran. `Alchemy.remote()` still
-pins individual resources live, exactly as it does under
-`alchemy dev`.
+which also proves no cloud call ran. `Alchemy.remote()` still
+pins individual resources live, as it does under `alchemy dev`.
 
-When omitted, the flag falls back to the `ALCHEMY_DEV` env var —
-leave it out of the file and set `ALCHEMY_DEV=1` locally to run the
+When omitted, the flag falls back to the `ALCHEMY_DEV` env var.
+Leave it out of the file and set `ALCHEMY_DEV=1` locally to run the
 same suite against emulators while CI runs it live. Separately,
-`ALCHEMY_TEST_DEV=1` **overrides** the option in both directions —
-use it to force an entire existing suite through local providers
+`ALCHEMY_TEST_DEV=1` overrides the option in both directions.
+Use it to force an entire existing suite through local providers
 without editing each `Test.make`.
 
-What each cloud emulates is covered in
 [Cloudflare local development](/cloudflare/local-development) and
-[AWS local development](/aws/local-development); the step-by-step
-walkthrough is [Cloudflare Tutorial Part 4](/cloudflare/tutorial/part-4).
+[AWS local development](/aws/local-development) cover what each
+cloud emulates. The step-by-step walkthrough is
+[Cloudflare Tutorial Part 4](/cloudflare/tutorial/part-4).
 
 ### `adopt`
 
-Engine-level adoption policy for the run, matching the CLI's
+Engine-level adoption policy for the run. It matches the CLI's
 `--adopt` flag. When `true`, a resource with no prior state whose
 physical counterpart already exists in the cloud is adopted via
 `provider.read` instead of failing. Defaults to `false`.
 
 ### `sidecar`
 
-Only meaningful in dev mode, and defaults to the resolved `dev`
-flag: dev tests run local providers behind the same RPC sidecar
+It only applies in dev mode and defaults to the resolved `dev` flag,
+so dev tests run local providers behind the same RPC sidecar
 process the real `alchemy dev` command uses. `sidecar: false` runs
-them in-process instead — useful when debugging provider code,
-since there's no child process between you and the breakpoint.
+them in-process. This helps when debugging provider code, since
+no child process sits between you and the breakpoint.
 
 ## Hooks
 
 ### `beforeAll(effect) → Effect.Effect<A>`
 
-Runs the Effect once before any test in the file. Stores the
-result and returns a lazy accessor — `yield* accessor` inside
-any test or other hook returns the resolved value:
+Runs the Effect once before any test in the file. It stores the
+result and returns a lazy accessor. `yield* accessor` inside any
+test or other hook returns the resolved value:
 
 ```typescript
 const stack = beforeAll(deploy(Stack));
@@ -193,7 +193,7 @@ test(
 );
 ```
 
-Default timeout is **120s**. Override with the second argument:
+The default timeout is 120s. Override it with the second argument:
 
 ```typescript
 beforeAll(deploy(Stack), { timeout: 300_000 });
@@ -201,9 +201,9 @@ beforeAll(deploy(Stack), { timeout: 300_000 });
 
 ### `beforeEach(effect)`
 
-Runs the Effect before every test. No accessor returned — for
-side-effect setup only (truncate a table, reset a feature flag,
-…).
+Runs the Effect before every test. It returns no accessor, so use
+it for side-effect setup only (truncate a table, reset a feature
+flag, …).
 
 ### `afterAll(effect)` and `afterAll.skipIf(predicate)`
 
@@ -216,8 +216,7 @@ afterAll.skipIf(true)(destroy(Stack));             // never (debugging)
 ```
 
 `afterAll.skipIf(true)` short-circuits without registering a
-hook at all — there's no risk of an `Effect` being constructed
-and dropped.
+hook, so an `Effect` is never constructed and then dropped.
 
 ### `afterEach(effect)`
 
@@ -242,8 +241,8 @@ test.only(
 test.todo("backfill once R2 has multipart helper");
 ```
 
-`test.provider` mirrors the same shape (semantics in
-[Testing Providers](/testing/testing-providers)):
+`test.provider` mirrors the same shape. Its semantics are in
+[Testing Providers](/testing/testing-providers):
 
 ```typescript
 test.provider.skip(name, fn);
@@ -251,8 +250,8 @@ test.provider.skipIf(condition)(name, fn);
 ```
 
 :::note[Vitest differences]
-On Vitest, `test.only` is supported but `test.todo` is a stub
-(maps to `it.todo`). `test.skip` / `test.skipIf` work identically.
+On Vitest, `test.only` is supported. `test.todo` is a stub that
+maps to `it.todo`. `test.skip` / `test.skipIf` work identically.
 :::
 
 ## HttpClient is in scope
@@ -274,13 +273,13 @@ test(
 ```
 
 The implementation comes from
-`effect/unstable/http/FetchHttpClient` — same client the CLI
+`effect/unstable/http/FetchHttpClient`, the same client the CLI
 uses. For a full PUT/GET round-trip against a deployed stack,
 see [Testing a Stack → Drive the live URL](/testing/testing-a-stack).
 
 ## Bun vs Vitest
 
-The two adapters expose the **same API**:
+The two adapters expose the same API:
 
 ```diff lang="typescript"
 -import * as Test from "alchemy/Test/Bun";
@@ -296,17 +295,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 - **Bun** uses `bun:test` directly. Every `test(...)` becomes a
   `bun.test(...)` call wrapped with `Effect.runPromise`.
-- **Vitest** uses `@effect/vitest`'s `it.live`, so Effect-aware
-  tests stay first-class. Default hook timeout is the same
-  (120s).
+- **Vitest** uses `@effect/vitest`'s `it.live`, so tests stay
+  Effect-aware. The default hook timeout is the same (120s).
 
-Pick whichever runner your project already uses; nothing in the
-test code changes.
+Pick whichever runner your project already uses. The test code
+does not change.
 
 ## Where next
 
-- [Testing a Stack](/testing/testing-a-stack) — deploy once, drive the live URL, tear down.
-- [Testing Providers](/testing/testing-providers) — exercise create / update / replace / delete with `test.provider`.
-- [Testing](/testing) — the testing overview.
-- [State Store](/state-store) — choosing between `localState()`, `Cloudflare.state()`, and friends.
-- [Profiles](/environments/profiles) — how `ALCHEMY_PROFILE` and the `profile` factory option resolve credentials.
+- [Testing a Stack](/testing/testing-a-stack): deploy once, drive the live URL, tear down.
+- [Testing Providers](/testing/testing-providers): exercise create / update / replace / delete with `test.provider`.
+- [Testing](/testing): the testing overview.
+- [State Store](/state-store): choosing between `localState()`, `Cloudflare.state()`, and friends.
+- [Profiles](/environments/profiles): how `ALCHEMY_PROFILE` and the `profile` factory option resolve credentials.

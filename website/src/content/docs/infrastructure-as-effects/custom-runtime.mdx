@@ -1,20 +1,21 @@
 ---
 title: Custom Runtime
-description: Implement your own Runtime resource on the Platform type — a Provider that provisions the compute and bundles the runtime Effect.
+description: Implement your own Runtime resource on the Platform type. A custom runtime is a Provider that provisions the compute and bundles the runtime Effect.
 ---
 
-Worker, Lambda, and Container cover the common cases. This guide is
-for bringing the [Runtime](/infrastructure-as-effects/runtime)
+Worker, Lambda, and Container cover the common cases. This guide
+shows how to bring the [Runtime](/infrastructure-as-effects/runtime)
 model to a new compute target. A custom runtime is a
-[Provider](/infrastructure-as-code/provider) with two jobs: provision
-the compute infrastructure, and bundle + upload the runtime Effect.
+[Provider](/infrastructure-as-code/provider) with two jobs. It
+provisions the compute infrastructure, and it bundles and uploads the
+runtime Effect.
 
-The running reference is `AWS.ECS.Task`
-([`AWS/ECS/Task.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/ECS/Task.ts))
-— it bundles an inline Effect program, builds a Docker image, and
-registers a Fargate task definition. Every built-in runtime —
-`Cloudflare.Worker`, `AWS.Lambda.Function`, `AWS.EC2.Instance` —
-follows the same two-part shape.
+This guide uses `AWS.ECS.Task` as its example
+([`AWS/ECS/Task.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/ECS/Task.ts)).
+It bundles an inline Effect program, builds a Docker image, and
+registers a Fargate task definition. Every built-in runtime follows
+the same two-part shape, including `Cloudflare.Worker`,
+`AWS.Lambda.Function`, and `AWS.EC2.Instance`.
 
 ## The two halves
 
@@ -32,16 +33,16 @@ export const TaskProvider = () =>
   Provider.effect(Task, Effect.gen(function* () { /* ... */ }));
 ```
 
-`Platform` handles the Effect plumbing — running the user's constructor
-Effect, collecting handlers, wiring [Bindings](/infrastructure-as-effects/binding)
-— so the provider only has to do what every provider does:
+`Platform` handles the Effect plumbing. It runs the user's constructor
+Effect, collects handlers, and wires [Bindings](/infrastructure-as-effects/binding).
+The provider only has to do what every provider does, which is
 reconcile cloud state.
 
 ## Declare the Resource
 
 The Resource contract is a plain `Resource` declaration. The fourth
-type parameter is the **Binding Contract** — the data shape upstream
-capabilities attach to this host:
+type parameter is the **Binding Contract**. It is the data shape that
+upstream capabilities attach to this host:
 
 ```typescript
 export interface Task extends Resource<
@@ -61,9 +62,9 @@ export interface Task extends Resource<
 > {}
 ```
 
-On AWS the contract is env vars + IAM statements; a Cloudflare
-Worker instead accepts `{ bindings: Worker.Binding[] }`. Your
-contract is whatever *your* platform needs from a binding.
+On AWS the contract is env vars and IAM statements. A Cloudflare
+Worker accepts `{ bindings: Worker.Binding[] }`. Your contract is
+whatever your platform needs from a binding.
 
 ## The `Platform` type
 
@@ -82,13 +83,13 @@ export interface Platform<
 | ---------------- | ------------------------------------------------------- | -------------------------------------------------------------- |
 | `Resource`       | `Task`                                                  | The Resource contract above                                     |
 | `Services`       | `Credentials \| Region \| ServerHost \| AWSEnvironment` | Services the runtime provides to the user's constructor Effect        |
-| `MainShape`      | `Main<TaskServices>`                                    | What the constructor Effect may return — `{ fetch?: HttpEffect }`     |
+| `MainShape`      | `Main<TaskServices>`                                    | What the constructor Effect may return: `{ fetch?: HttpEffect }`     |
 | `RuntimeContext` | `TaskRuntimeContext extends HostRuntimeContext`         | The mutable context that collects handlers, env, and exports   |
 
 The value-level factory takes the type string and a
-`createRuntimeContext` hook (plus an optional `onCreate` hook —
-`Cloudflare.Worker` uses it to register child resources for async
-bindings):
+`createRuntimeContext` hook. It also takes an optional `onCreate`
+hook. `Cloudflare.Worker` uses it to register child resources for
+async bindings:
 
 ```typescript
 import { Platform, type Main } from "alchemy";
@@ -124,19 +125,18 @@ export interface BaseRuntimeContext {
 }
 ```
 
-- **`set`** — called during plan when a binding or config lookup
-  captures an `Output`; store it under an env key.
-- **`get`** — called at runtime inside the deployed artifact; read
+- **`set`** is called during plan when a binding or config lookup
+  captures an `Output`. Store the value under an env key.
+- **`get`** is called at runtime inside the deployed artifact. Read
   the same key back from the environment.
-- **`serve`** — receives the user's `fetch` handler (and RPC shape);
-  register it however your platform serves HTTP.
-- **`exports`** — resolves to whatever the bundled entrypoint needs
-  to run — for hosts, a single `program` Effect.
+- **`serve`** receives the user's `fetch` handler and RPC shape.
+  Register it however your platform serves HTTP.
+- **`exports`** resolves to whatever the bundled entrypoint needs
+  to run. For hosts, that is a single `program` Effect.
 
-Server-style platforms don't write this from scratch —
-`createHostRuntimeContext` in
-[`Server/Process.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Server/Process.ts)
-is the shared implementation used by `AWS.ECS.Task` and
+Server-style platforms can reuse `createHostRuntimeContext` in
+[`Server/Process.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Server/Process.ts).
+It is the shared implementation used by `AWS.ECS.Task` and
 `AWS.EC2.Instance`. It folds `run` (background loops) and `serve`
 (HTTP handlers) into one list of runners:
 
@@ -152,9 +152,9 @@ exports: Effect.sync(() => ({
 })),
 ```
 
-After running the constructor Effect, `Platform` hands any returned `fetch`
-handler to `serve`, then folds the context back onto the resource's
-Props — so everything the constructor recorded reaches your provider:
+After it runs the constructor Effect, `Platform` hands any returned `fetch`
+handler to `serve`. It then folds the context back onto the resource's
+Props, so everything the constructor recorded reaches your provider:
 
 ```typescript
 // inside Platform (Platform.ts) — what your provider receives as `news`
@@ -167,11 +167,11 @@ instance.Props = {
 
 ## Implement the Provider
 
-The provider is a standard lifecycle Layer — `reconcile` + `delete`,
-optional `diff`/`read`/`list`. The
+The provider is a standard lifecycle Layer with `reconcile` and `delete`,
+plus optional `diff`/`read`/`list`. The
 [Custom Provider](/infrastructure-as-code/custom-provider) guide covers the
-contract in depth; the runtime-specific part is that `reconcile`
-also **bundles and ships the handler**:
+contract in depth. The runtime-specific part is that `reconcile`
+also bundles and ships the handler:
 
 ```typescript
 reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
@@ -195,14 +195,14 @@ reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
 }),
 ```
 
-Each step is independently idempotent — the same observe → ensure →
+Each step is independently idempotent. The same observe → ensure →
 sync flow works for greenfield creates, updates, and adoption. Don't
-branch on `output === undefined`; see
+branch on `output === undefined`. See
 [Providers › reconcile](/infrastructure-as-code/provider#reconcile).
 
-`delete` tears down everything reconcile created (task definition,
-ECR repository, log group, IAM roles), treating "already gone" as
-success.
+`delete` tears down everything reconcile created: the task
+definition, ECR repository, log group, and IAM roles. It treats
+"already gone" as success.
 
 ## Bundle the handler
 
@@ -219,16 +219,16 @@ const bundleOutput = yield* Bundle.build(
 // bundleOutput.files — entry + chunks; bundleOutput.hash — sha256
 ```
 
-Ship all of `files`, not just the entry — dynamic imports split into
-chunks, and dropping one crashes the artifact at boot. Use `hash` as
-the immutable artifact version (the Task tags its Docker image
-`${repositoryUri}:${hash}`).
+Ship every file in `files`, including the chunks. Dynamic imports split
+into chunks, and a missing chunk crashes the artifact at boot. Use
+`hash` as the immutable artifact version. The Task tags its Docker
+image `${repositoryUri}:${hash}`.
 
-The user's `main` module exports the platform class, not a runnable
-program — so the bundle needs a generated entrypoint.
-`Bundle.virtualEntryPlugin` wraps `main` in a bootstrap that resolves
-the class, pulls `RuntimeContext.exports`, and runs the collected
-program under your platform's Layers:
+The user's `main` module exports the platform class. It does not export
+a runnable program, so the bundle needs a generated entrypoint.
+`Bundle.virtualEntryPlugin` wraps `main` in a bootstrap. The bootstrap
+resolves the class, pulls `RuntimeContext.exports`, and runs the
+collected program under your platform's Layers:
 
 ```typescript
 const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -252,15 +252,15 @@ Effect.runPromise(program);
 
 The bootstrap is the one place the Effect world meets the process
 entrypoint. For the Task it provides a Bun HTTP server bound to
-`PORT` so the `{ fetch }` handler is actually served and `host.run`
-loops stay alive; your platform provides whatever its host needs.
+`PORT`. That server serves the `{ fetch }` handler and keeps `host.run`
+loops alive. Your platform provides whatever its host needs.
 
 ## Honor the phase split
 
-The same constructor Effect runs twice — at plantime to record bindings,
-and at cold start inside the artifact to build live clients. See
-[Phases](/infrastructure-as-effects/phases). Two mechanisms keep the
-two runs honest, and `Bundle.build` wires the first automatically:
+The same constructor Effect runs twice. It runs at plantime to record
+bindings, and at cold start inside the artifact to build live clients.
+See [Phases](/infrastructure-as-effects/phases). Two mechanisms keep
+the two runs separate. `Bundle.build` wires the first one automatically:
 
 ```typescript
 // Bundle.ts — folded into every bundle via rolldown transform.define
@@ -270,11 +270,11 @@ const ALCHEMY_DEFINE = {
 ```
 
 Every `if (!globalThis.__ALCHEMY_RUNTIME__)` guard in a
-`Binding.Service` becomes `if (!true)` in the bundle and is
-dead-code-eliminated — provisioning code never ships.
+`Binding.Service` becomes `if (!true)` in the bundle. The bundler
+removes it as dead code, so provisioning code never ships.
 
-The second is the `ALCHEMY_PHASE` config key. Your provider must set
-it to `"runtime"` in the shipped environment:
+The second mechanism is the `ALCHEMY_PHASE` config key. Your provider
+must set it to `"runtime"` in the shipped environment:
 
 ```typescript
 const alchemyEnv = {
@@ -285,12 +285,12 @@ const alchemyEnv = {
 ```
 
 `Platform` installs a `ConfigProvider` interceptor keyed on this
-phase: at `plan` it captures every config lookup into the
-RuntimeContext via `ctx.set`; at `runtime` the same lookup resolves
-through `ctx.get` — reading back the env var your provider shipped.
-That round-trip is why `set`/`get` must agree on how values are
-encoded (the host context JSON-serializes on `set` and
-`JSON.parse`s on `get`).
+phase. At `plan` it captures every config lookup into the
+RuntimeContext via `ctx.set`. At `runtime` the same lookup resolves
+through `ctx.get`, which reads back the env var your provider shipped.
+Because of this round-trip, `set`/`get` must agree on how values are
+encoded. The host context JSON-serializes on `set` and
+`JSON.parse`s on `get`.
 
 ## Bindings flow through the host
 
@@ -326,15 +326,15 @@ const attachBindings = Effect.fn(function* ({ roleName, policyName, bindings }) 
 });
 ```
 
-Your provider decides what the contract data *means* — here IAM
+Your provider decides what the contract data means. Here IAM
 policies attach to the task role and env vars land in the container
 definition. A binding removed from code arrives with
-`action: "delete"` so you can converge permissions down, not just up.
+`action: "delete"`, so you can remove permissions as well as add them.
 
 ## What users get
 
-The finished runtime reads like any other Function — infrastructure
-props, a constructor Effect, a `{ fetch }` handler:
+The finished runtime reads like any other Function. It has
+infrastructure props, a constructor Effect, and a `{ fetch }` handler:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -357,16 +357,16 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
 ) {}
 ```
 
-Everything on this page sits behind that surface: `Platform` runs
-the constructor Effect and collects `host.run` + `fetch` into
-`exports.program`, and the provider bundles that program into an
-image and reconciles the task definition around it.
+Everything on this page sits behind that surface. `Platform` runs
+the constructor Effect and collects `host.run` and `fetch` into
+`exports.program`. The provider bundles that program into an image
+and reconciles the task definition around it.
 
 ## Where next
 
-- [Runtime](/infrastructure-as-effects/runtime) —
+- [Runtime](/infrastructure-as-effects/runtime) is
   the model this guide implements a new target for.
-- [Custom Provider](/infrastructure-as-code/custom-provider) — the
+- [Custom Provider](/infrastructure-as-code/custom-provider) covers the
   lifecycle contract (`reconcile`, `delete`, `diff`, `read`) in depth.
-- [Phases](/infrastructure-as-effects/phases) — the Construction/Runtime split
+- [Phases](/infrastructure-as-effects/phases) explains the Construction/Runtime split
   your bundle must honor.
