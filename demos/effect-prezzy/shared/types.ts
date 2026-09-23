@@ -9,7 +9,7 @@
 /** Size of the rendered video. Every layout constant derives from it. */
 export const VIDEO = { width: 1920, height: 1080, fps: 30 } as const;
 
-/** One desktop window; all three share the same frame and stack by focus. */
+/** One desktop window; all windows share the same frame and stack by focus. */
 export const WINDOW = { x: 80, y: 64, width: 1760, height: 976 } as const;
 export const TITLE_BAR = 44;
 /** The terminal clip fills the window below its title bar. */
@@ -24,7 +24,37 @@ export const BROWSER_VIEWPORT = {
   height: WINDOW.height - BROWSER_CHROME,
 } as const;
 
-export type AppId = "editor" | "terminal" | "browser";
+export type AppId = "editor" | "terminal" | "diagram" | "browser";
+
+/** The architecture, derived from Alchemy's state files. */
+export interface Graph {
+  /** The stage the graph was read from, e.g. `dev_sam`. */
+  stage: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphNode {
+  id: string;
+  /** Short resource kind, e.g. `Worker`, `D1 Database`. */
+  kind: string;
+  /** Who provides it: drives the node's colour. */
+  provider: "cloudflare" | "neon" | "axiom" | "other";
+  /** `local` under `alchemy dev` simulators, `cloud` when really deployed. */
+  location: "local" | "cloud";
+  /** Layout column, left to right: website → worker → bindings → backing services → dashboards. */
+  tier: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  kind: "binding" | "reference" | "consumer";
+  label: string;
+  /** What the binding granted, as shown in the diagram's side panel. */
+  grant?: string;
+}
 
 export type Beat =
   /** Bring a window to the front (Cmd-Tab). Other beats focus their own window implicitly. */
@@ -33,12 +63,33 @@ export type Beat =
   | { kind: "editor.open"; file: string; content: string }
   /** Type the change from `before` to `after` into an open file (opened first if needed). */
   | { kind: "editor.edit"; file: string; before: string; after: string }
+  /** Delete a file: its tab closes and it leaves the explorer. */
+  | { kind: "editor.delete"; file: string }
   /** Play `[start, end)` seconds of the scene's terminal clip. */
   | { kind: "terminal"; start: number; end: number }
+  /** Show the architecture; `added` nodes and edges animate in. */
+  | { kind: "diagram"; graph: Graph; addedNodes: string[]; addedEdges: string[] }
   /** Type `url` into the address bar and show the captured page. */
   | { kind: "browser"; url: string; title: string; screenshot: string }
+  /** The open page changes in place (live updates). */
+  | { kind: "browser.update"; title: string; screenshot: string }
   /** Hold on the current picture. */
   | { kind: "pause"; seconds: number };
+
+export interface BrowserPage {
+  url: string;
+  title: string;
+  screenshot: string;
+}
+
+/** Window contents when a scene starts or ends. */
+export interface Desk {
+  files: string[];
+  tabs: { file: string; content: string }[];
+  active?: string;
+  browser?: BrowserPage;
+  diagram?: Graph;
+}
 
 export interface SceneCapture {
   id: string;
@@ -46,14 +97,12 @@ export interface SceneCapture {
   notes: string;
   /** Project folder name shown in the explorer and title bars. */
   project: string;
-  /** Every project file (relative paths) that exists when the scene starts. */
-  files: string[];
-  /** Editor tabs already open when the scene starts, with their contents. */
-  editor: { tabs: { file: string; content: string }[]; active?: string };
+  /** Windows when the scene starts. */
+  start: Desk;
+  /** Windows when the scene ends; the next scene starts from here. */
+  end: Desk;
   /** Terminal-only render of the scene's shell session. */
   terminal: { clip: string; duration: number } | undefined;
-  /** Last page shown in the browser before this scene. */
-  browser: { url: string; title: string; screenshot: string } | undefined;
   beats: Beat[];
 }
 

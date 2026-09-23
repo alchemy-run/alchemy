@@ -13,6 +13,13 @@ export const TIMING = {
   editLeadIn: 10,
   editHold: 14,
   typing: { cps: 34, selectFrames: 10, gapFrames: 8 },
+  /** Longest a single edit may take to type; longer inserts type faster. */
+  maxTypingSeconds: 7,
+  /** Base time on the architecture window, plus time per new node or edge. */
+  diagram: 90,
+  diagramPerAdded: 10,
+  diagramMax: 240,
+  browserUpdate: 30,
   /** Click the address bar, paste, press Enter. */
   urlPaste: 14,
   pageLoad: 18,
@@ -48,7 +55,12 @@ const appOf = (beat: Beat, current: AppId): AppId => {
       return beat.app;
     case "editor.open":
     case "editor.edit":
+    case "editor.delete":
       return "editor";
+    case "diagram":
+      return "diagram";
+    case "browser.update":
+      return "browser";
     case "terminal":
       return "terminal";
     case "browser":
@@ -89,8 +101,22 @@ export const schedule = async (
         segment.colors = await highlight(beat.file, beat.content);
         work = TIMING.openTab;
         break;
+      case "editor.delete":
+        work = TIMING.openTab;
+        break;
+      case "diagram":
+        work = Math.min(
+          TIMING.diagramMax,
+          TIMING.diagram + TIMING.diagramPerAdded * (beat.addedNodes.length + beat.addedEdges.length),
+        );
+        break;
+      case "browser.update":
+        work = TIMING.browserUpdate;
+        break;
       case "editor.edit": {
-        const plan = planTyping(beat.before, beat.after, { fps, ...TIMING.typing });
+        const inserted = Math.max(0, beat.after.length - beat.before.length);
+        const cps = Math.max(TIMING.typing.cps, inserted / TIMING.maxTypingSeconds);
+        const plan = planTyping(beat.before, beat.after, { fps, ...TIMING.typing, cps });
         segment.typing = {
           plan,
           before: await highlight(beat.file, beat.before),
@@ -112,7 +138,7 @@ export const schedule = async (
     app = next;
   }
   const initialColors: Record<string, Colors> = {};
-  for (const tab of capture.editor.tabs) {
+  for (const tab of capture.start.tabs) {
     initialColors[tab.file] = await highlight(tab.file, tab.content);
   }
   return { segments, initialColors, durationInFrames: Math.max(1, frame) };

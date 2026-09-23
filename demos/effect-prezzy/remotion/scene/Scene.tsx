@@ -10,6 +10,7 @@ import {
 import { VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { AppSwitcher, MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Browser } from "./Browser.tsx";
+import { Diagram } from "./Diagram.tsx";
 import { Editor } from "./Editor.tsx";
 import { schedule, segmentAt, TIMING, type SceneSchedule } from "./schedule.ts";
 import { Terminal } from "./Terminal.tsx";
@@ -56,6 +57,7 @@ export const Scene = ({ capture, plan }: SceneProps) => {
   const windows: Record<AppId, ReactNode> = {
     editor: <Editor capture={capture} plan={plan} frame={frame} />,
     terminal: <Terminal capture={capture} plan={plan} frame={frame} fps={fps} />,
+    diagram: <Diagram capture={capture} plan={plan} frame={frame} />,
     browser: <Browser capture={capture} plan={plan} frame={frame} />,
   };
 

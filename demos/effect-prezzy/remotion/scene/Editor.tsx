@@ -30,16 +30,28 @@ const editorState = (
   plan: SceneSchedule,
   frame: number,
 ): EditorState => {
-  const files = new Set(capture.files);
-  const tabs = capture.editor.tabs.map((t) => t.file);
-  let active = capture.editor.active;
-  const initial = capture.editor.tabs.find((t) => t.file === active);
+  const files = new Set(capture.start.files);
+  // Start each scene with the few most recent tabs, like closing old ones between chapters.
+  const tabs = capture.start.tabs.map((t) => t.file).slice(-4);
+  let active = capture.start.active;
+  const initial = capture.start.tabs.find((t) => t.file === active);
   let document =
     initial && active ? staticDocument(initial.content, plan.initialColors[active] ?? []) : undefined;
   let typing = false;
   for (const segment of plan.segments) {
     if (segment.from > frame) break;
     const { beat } = segment;
+    if (beat.kind === "editor.delete") {
+      files.delete(beat.file);
+      const at = tabs.indexOf(beat.file);
+      if (at >= 0) tabs.splice(at, 1);
+      if (active === beat.file) {
+        active = tabs.at(-1);
+        document = undefined;
+      }
+      typing = false;
+      continue;
+    }
     if (beat.kind !== "editor.open" && beat.kind !== "editor.edit") continue;
     if (!tabs.includes(beat.file)) tabs.push(beat.file);
     active = beat.file;

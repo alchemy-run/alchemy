@@ -28,15 +28,24 @@ const browserState = (
   frame: number,
 ): BrowserState => {
   let state: BrowserState = {
-    address: capture.browser?.url ?? "",
+    address: capture.start.browser?.url ?? "",
     focused: false,
-    page: capture.browser,
+    page: capture.start.browser,
     progress: undefined,
     reveal: 1,
   };
   for (const segment of plan.segments) {
     if (segment.from > frame) break;
     const { beat } = segment;
+    if (beat.kind === "browser.update" && state.page) {
+      const since = frame - segment.from - segment.switchFrames;
+      state = {
+        ...state,
+        page: { ...state.page, title: beat.title, screenshot: beat.screenshot },
+        reveal: interpolate(since, [0, 4], [0.85, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+      };
+      continue;
+    }
     if (beat.kind !== "browser") continue;
     const local = frame - segment.from - segment.switchFrames;
     const typingFrames = TIMING.urlPaste;

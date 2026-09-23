@@ -7,6 +7,7 @@ import { brand } from "../theme.ts";
 export const APP_NAMES: Record<AppId, string> = {
   editor: "Code",
   terminal: "Terminal",
+  diagram: "Architecture",
   browser: "Google Chrome",
 };
 
@@ -159,6 +160,17 @@ const AppIcon = ({ app, size }: { app: AppId; size: number }) => {
       </svg>
     );
   }
+  if (app === "diagram") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <rect width="100" height="100" rx={radius} fill="#14110d" />
+        <path d="M30 34 L70 50 L30 66" stroke="#a3c473" strokeWidth="4" fill="none" />
+        <rect x="16" y="24" width="28" height="20" rx="5" fill="#f38020" />
+        <rect x="56" y="40" width="28" height="20" rx="5" fill="#a3c473" />
+        <rect x="16" y="56" width="28" height="20" rx="5" fill="#8b7cf6" />
+      </svg>
+    );
+  }
   if (app === "terminal") {
     return (
       <svg width={size} height={size} viewBox="0 0 100 100">
@@ -181,7 +193,7 @@ const AppIcon = ({ app, size }: { app: AppId; size: number }) => {
   );
 };
 
-const SWITCHER_ORDER: AppId[] = ["editor", "terminal", "browser"];
+const SWITCHER_ORDER: AppId[] = ["editor", "terminal", "diagram", "browser"];
 
 /** The Cmd-Tab app switcher, `frame` frames into a switch from `from` to `to`. */
 export const AppSwitcher = ({
