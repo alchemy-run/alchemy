@@ -348,7 +348,7 @@ test.provider(
       expect(output.png).toEqual([137, 80, 78, 71]);
       expect(output.pdf).toEqual([37, 80, 68, 70]);
       expect(output.snapshot.markdown).toContain("Hello local Chrome");
-      expect(output.jsonError).toContain("Alchemy.remote()");
+      expect(output.jsonError).toContain("hosted Browser Rendering service");
       yield* stack.destroy();
     }).pipe(Effect.provide(noCredentials)),
   { tags: ["local", "provider:cloudflare"], timeout: 120_000 },

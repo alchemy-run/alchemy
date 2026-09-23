@@ -1,10 +1,10 @@
-import { Browser as LocalBrowser } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import * as LocalBrowser from "./Browser.ts";
 import puppeteer, { type Page } from "@cloudflare/puppeteer";
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import TurndownService from "turndown";
-import { BrowserError, type BrowserClient } from "./Browser.ts";
+import { BrowserError, type BrowserClient } from "./BrowserClient.shared.ts";
 
 const browserError = (cause: unknown) =>
   new BrowserError({
@@ -13,7 +13,7 @@ const browserError = (cause: unknown) =>
     cause,
   });
 
-/** Action-side quick actions using the runtime's shared Chrome installer and launcher. */
+/** Node-side quick actions using the runtime's shared Chrome installer and launcher. */
 export const makeLocalBrowserClient = (): BrowserClient => {
   const run = <A>(
     options: cf.BrowserRunCommonOptions,
@@ -43,7 +43,7 @@ export const makeLocalBrowserClient = (): BrowserClient => {
           try: async () => {
             if ("browser" in options && options.browser) {
               throw new Error(
-                "Alternate Browser backends require Alchemy.remote().",
+                "Alternate browser backends require the hosted Browser Rendering service.",
               );
             }
             const page = await browser.newPage();
@@ -136,18 +136,16 @@ export const makeLocalBrowserClient = (): BrowserClient => {
     options: cf.BrowserRunScreenshotOptions,
   ) => {
     if (options.scrollPage) {
-      await page.evaluate(async () => {
+      // This code executes in Chrome, whose DOM globals are deliberately
+      // absent from the workerd/Node host's TypeScript environment.
+      await page.evaluate(`(async () => {
         const height = document.body.scrollHeight;
-        for (
-          let y = 0;
-          y < Math.min(height, window.innerHeight * 100);
-          y += window.innerHeight
-        ) {
+        for (let y = 0; y < Math.min(height, window.innerHeight * 100); y += window.innerHeight) {
           window.scrollTo(0, y);
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         window.scrollTo(0, 0);
-      });
+      })()`);
     }
     const target = options.selector
       ? await page.waitForSelector(options.selector)
@@ -163,7 +161,7 @@ export const makeLocalBrowserClient = (): BrowserClient => {
   const unsupported = (operation: string) =>
     Effect.fail(
       new BrowserError({
-        message: `Local Browser ${operation} is unavailable. Use a Worker Browser binding for sessions, or Alchemy.remote() for hosted AI extraction.`,
+        message: `Local Browser ${operation} is unavailable. Use a Worker Browser binding for sessions, or the hosted Browser Rendering service for AI extraction.`,
         cause: new Error("unsupported"),
       }),
     );
@@ -187,12 +185,12 @@ export const makeLocalBrowserClient = (): BrowserClient => {
                       (!options.visibleLinksOnly ||
                         a.getClientRects().length > 0) &&
                       (!options.excludeExternalLinks ||
-                        new URL(a.href).origin === location.origin),
+                        new URL(a.href).origin === options.origin),
                   )
                   .map((a) => a.href),
               ),
             ],
-            options,
+            { ...options, origin: new URL(page.url()).origin },
           ),
           meta,
         ),

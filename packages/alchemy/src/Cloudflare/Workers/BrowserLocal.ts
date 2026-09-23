@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { makeLocalBrowserClient } from "./LocalBrowserClient.ts";
+import { makeLocalBrowserClient } from "@alchemy.run/cloudflare-runtime/core/bindings/browser";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { Browser } from "./Browser.ts";

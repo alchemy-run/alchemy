@@ -6334,9 +6334,6 @@ importers:
       '@alchemy.run/sigil':
         specifier: 'catalog:'
         version: 0.1.0-alpha.1(@types/react@19.3.0)(react-devtools-core@7.0.1)
-      '@cloudflare/puppeteer':
-        specifier: 'catalog:'
-        version: 1.3.0(supports-color@10.2.2)
       '@distilled.cloud/acme':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/acme
@@ -6439,13 +6436,13 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
-      turndown:
-        specifier: ^7.2.4
-        version: 7.2.4
       yaml:
         specifier: 'catalog:'
         version: 2.9.0
     devDependencies:
+      '@cloudflare/puppeteer':
+        specifier: 'catalog:'
+        version: 1.3.0(supports-color@10.2.2)
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
@@ -6542,9 +6539,6 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
-      '@types/turndown':
-        specifier: ^5.0.6
-        version: 5.0.6
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
@@ -6738,6 +6732,12 @@ importers:
 
   packages/cloudflare-runtime:
     dependencies:
+      '@cloudflare/puppeteer':
+        specifier: 'catalog:'
+        version: 1.3.0(supports-color@10.2.2)
+      turndown:
+        specifier: ^7.2.4
+        version: 7.2.4
       '@alchemy.run/node-utils':
         specifier: workspace:*
         version: link:../node-utils
@@ -6775,6 +6775,9 @@ importers:
         specifier: 'catalog:'
         version: 3.4.0
     devDependencies:
+      '@types/turndown':
+        specifier: ^5.0.6
+        version: 5.0.6
       '@cloudflare/vitest-plugin':
         specifier: 'catalog:'
         version: 1.1.2(@cloudflare/workers-types@5.20260918.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))

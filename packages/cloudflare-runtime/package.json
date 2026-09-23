@@ -43,12 +43,14 @@
   },
   "dependencies": {
     "@alchemy.run/node-utils": "workspace:*",
+    "@cloudflare/puppeteer": "catalog:",
     "@cloudflare/unenv-preset": "catalog:",
     "@puppeteer/browsers": "catalog:",
     "capnp-es": "catalog:",
     "magic-string": "catalog:",
     "mime": "catalog:",
     "sharp": "catalog:",
+    "turndown": "^7.2.4",
     "unenv": "catalog:",
     "workerd": "catalog:",
     "yauzl": "catalog:"
@@ -62,6 +64,7 @@
     "@types/bun": "catalog:",
     "@types/http-cache-semantics": "catalog:",
     "@types/node": "catalog:",
+    "@types/turndown": "^5.0.6",
     "@types/ws": "catalog:",
     "capnweb": "catalog:",
     "heap-js": "catalog:",
@@ -151,6 +154,12 @@
       "bun": "./src/core/bindings/assets/Assets.ts",
       "worker": "./src/core/bindings/assets/Assets.ts",
       "import": "./dist/core/node/bindings/assets/Assets.mjs"
+    },
+    "./core/bindings/browser/BrowserClient": {
+      "types": "./dist/core/node/bindings/browser/BrowserClient.shared.d.mts",
+      "bun": "./src/core/bindings/browser/BrowserClient.shared.ts",
+      "worker": "./src/core/bindings/browser/BrowserClient.shared.ts",
+      "import": "./dist/core/node/bindings/browser/BrowserClient.shared.mjs"
     },
     "./core/bindings/browser": {
       "types": "./dist/core/node/bindings/browser/index.d.mts",
