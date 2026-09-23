@@ -9,6 +9,7 @@ export * from "./PresignGetObjectToken.ts";
 export * from "./PresignPutObject.ts";
 export * from "./PresignPutObjectToken.ts";
 export * from "./ReadBucket.ts";
+export * from "./S3Credentials.ts";
 export * from "./ReadBucketBinding.ts";
 export * from "./ReadBucketHttp.ts";
 export * from "./ReadBucketLocal.ts";

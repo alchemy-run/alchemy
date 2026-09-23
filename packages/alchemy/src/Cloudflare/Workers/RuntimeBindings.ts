@@ -40,7 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
-import { LOCAL_R2_S3_CREDENTIALS } from "../R2/LocalS3.ts";
+import { LOCAL_R2_S3_CREDENTIALS, LOCAL_R2_S3_PATH } from "../R2/LocalS3.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
@@ -338,6 +338,29 @@ export const materializeRuntimeBindings = Effect.fn(function* (
       // Lowered here rather than in `toRuntimeBinding` — only the caller
       // knows the worker's own dev-proxy URL.
       workerBindings.push(Text.local(descriptor.name, options.selfUrl!));
+      continue;
+    }
+    if (descriptor.type === "r2_s3_credentials") {
+      // `Cloudflare.R2.S3Credentials` over a `dev:` bucket: credentials for
+      // this Worker's local S3 endpoint (the dev-proxy URL, known only
+      // here), plus a bucket binding so the runtime serves the bucket on
+      // that endpoint.
+      workerBindings.push(
+        Text.local(
+          descriptor.name,
+          JSON.stringify({
+            endpoint: `${options.selfUrl!}${LOCAL_R2_S3_PATH}`,
+            bucketName: descriptor.bucketName,
+            region: "auto",
+            ...LOCAL_R2_S3_CREDENTIALS,
+          }),
+        ),
+        R2Bucket.local({
+          binding: `${descriptor.name}__BUCKET`,
+          id: descriptor.bucketName,
+          s3Credentials: LOCAL_R2_S3_CREDENTIALS,
+        }),
+      );
       continue;
     }
     workerBindings.push(yield* toRuntimeBinding(descriptor, config.devRemote));

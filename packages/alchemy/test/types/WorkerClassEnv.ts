@@ -88,3 +88,15 @@ declare const functionalEnv: Cloudflare.InferEnv<typeof Functional>;
 export const _functionalDatabase: D1Database = functionalEnv.DB;
 // @ts-expect-error Functional Workers still reject undeclared bindings.
 functionalEnv.MISSING;
+
+// `R2.S3Credentials` on an async Worker's env arrives as a JSON string.
+declare const s3Bucket: Cloudflare.R2.Bucket;
+declare const s3Env: Cloudflare.InferEnv<{
+  S3: ReturnType<typeof Cloudflare.R2.S3Credentials>;
+  BUCKET: Cloudflare.R2.Bucket;
+}>;
+export const _s3Credentials: string = s3Env.S3;
+export const _s3Bucket: R2Bucket = s3Env.BUCKET;
+export const _s3Declared = Cloudflare.R2.S3Credentials(s3Bucket, {
+  access: "write",
+});

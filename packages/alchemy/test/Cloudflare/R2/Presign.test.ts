@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as pathe from "pathe";
 import PresignRemoteWorker, {
   PresignRemoteBucket,
 } from "./fixtures/presign/remote-worker.ts";
@@ -47,6 +48,53 @@ test.provider(
           parsed.pathname.startsWith(`/${deployed.bucket.bucketName}/`),
         ).toBe(true);
       }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+    ],
+    timeout: 180_000,
+  },
+);
+
+/**
+ * Deployed async Worker: `Cloudflare.R2.S3Credentials` injects token-derived
+ * credentials as a secret, and `aws4fetch` presigns against R2.
+ */
+test.provider(
+  "deployed async Worker presigns with S3Credentials",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("PresignAsyncBucket", {
+            forceDestroy: true,
+          });
+          const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/presign/async-worker.ts",
+            ),
+            env: {
+              BUCKET: bucket,
+              BUCKET_S3: Cloudflare.R2.S3Credentials(bucket),
+            },
+          });
+          return { bucket, worker };
+        }),
+      );
+
+      const { putUrl } = yield* presignRoundTrip(
+        deployed.worker.url!,
+        "uploads/async deployed.txt",
+      );
+      expect(new URL(putUrl).hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -31,6 +31,10 @@ import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
+import {
+  bindS3Credentials,
+  isS3Credentials,
+} from "../R2/S3CredentialsBinding.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
@@ -147,6 +151,19 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       if (isContainerDecl(bindingEff)) {
         env[bindingName] = bindingEff;
         yield* bindContainerClass(resource, bindingName, bindingEff);
+        continue;
+      }
+      // `Cloudflare.R2.S3Credentials` is also an Effect (its Effect-native
+      // form resolves to a runtime accessor): bind its deploy-time half under
+      // the env key instead of yielding it.
+      if (isS3Credentials(bindingEff)) {
+        env[bindingName] = bindingEff;
+        yield* bindS3Credentials(
+          resource,
+          bindingName,
+          bindingEff.bucket,
+          bindingEff.access,
+        );
         continue;
       }
       // Bindings can be passed as a plain resource value, an Effect that

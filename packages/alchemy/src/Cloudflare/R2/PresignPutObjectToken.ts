@@ -26,9 +26,9 @@ export const PresignPutObjectToken = Layer.effect(
   Effect.suspend(() =>
     makePresignBinding<PresignPutObjectRequest>({
       name: "Cloudflare.R2.PresignPutObject",
-      permissionGroups: ["Workers R2 Storage Write"],
-      presign: (target, request) =>
-        presignR2Url(target, {
+      access: "write",
+      presign: (credentials, request) =>
+        presignR2Url(credentials, {
           method: "PUT",
           key: request.key,
           expiresIn: request.expiresIn,

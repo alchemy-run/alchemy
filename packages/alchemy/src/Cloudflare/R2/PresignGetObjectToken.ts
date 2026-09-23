@@ -26,9 +26,9 @@ export const PresignGetObjectToken = Layer.effect(
   Effect.suspend(() =>
     makePresignBinding<PresignGetObjectRequest>({
       name: "Cloudflare.R2.PresignGetObject",
-      permissionGroups: ["Workers R2 Storage Read"],
-      presign: (target, request) =>
-        presignR2Url(target, {
+      access: "read",
+      presign: (credentials, request) =>
+        presignR2Url(credentials, {
           method: "GET",
           key: request.key,
           expiresIn: request.expiresIn,

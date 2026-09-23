@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 import PresignLocalWorker, {
   PresignLocalBucket,
 } from "./fixtures/presign/local-worker.ts";
@@ -58,6 +59,61 @@ test.provider(
       const prefix = `${deployed.worker.url}/cdn-cgi/local/r2/s3/${encodeURIComponent(deployed.bucket.bucketName)}/`;
       expect(putUrl.startsWith(prefix)).toBe(true);
       expect(getUrl.startsWith(prefix)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
+);
+
+/**
+ * Async (non-Effect) Workers get the same per-mode wiring through
+ * `Cloudflare.R2.S3Credentials` on `env`: in dev it resolves to the Worker's
+ * local S3 endpoint and local credentials, and `aws4fetch` presigns against
+ * it.
+ */
+test.provider(
+  "async Worker presigns with S3Credentials against a locally-emulated bucket",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("PresignAsyncBucket", {
+            forceDestroy: true,
+          });
+          const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/presign/async-worker.ts",
+            ),
+            env: {
+              BUCKET: bucket,
+              BUCKET_S3: Cloudflare.R2.S3Credentials(bucket),
+            },
+          });
+          return { bucket, worker };
+        }),
+      );
+
+      expect(deployed.bucket.bucketName).toMatch(/^dev:/);
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+
+      const { putUrl } = yield* presignRoundTrip(
+        deployed.worker.url!,
+        "uploads/async.txt",
+      );
+      expect(
+        putUrl.startsWith(`${deployed.worker.url}/cdn-cgi/local/r2/s3/`),
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
