@@ -3,14 +3,17 @@ import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { dispatchByMode } from "../LocalGateway.ts";
+import { makeProxyQueueHelpers } from "./LocalQueueGateway.ts";
+import { makeWriteQueueClient } from "./WriteQueueBinding.ts";
 import type { Queue } from "./Queue.ts";
 import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 import { WriteQueue } from "./WriteQueue.ts";
 
 /**
  * Local implementation of the {@link WriteQueue} binding — pushes messages
- * to a Cloudflare Queue over the bulk-push HTTP API using the **current
- * credentials** instead of a native Worker binding
+ * to a local queue through the dev runtime, or to a live Cloudflare Queue
+ * over the bulk-push HTTP API using the **current credentials**, instead of a Worker binding
  * ({@link WriteQueueBinding}) or a scoped API token ({@link WriteQueueHttp}).
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) so you can send
@@ -42,7 +45,8 @@ export const WriteQueueLocal = Layer.effect(
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the bulk-push effect can
     // run with the current credentials instead of a scoped token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    const environment = yield* CloudflareEnvironment;
+    const ambient = yield* Effect.context<never>();
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
@@ -52,13 +56,24 @@ export const WriteQueueLocal = Layer.effect(
       // time. No `host.bind`: the local variant registers no binding.
       const queueId = yield* queue.queueId;
 
-      return makeWriteQueueHttpClient(
+      const queueName = yield* queue.queueName;
+      const httpClient = makeWriteQueueHttpClient(
         {
           authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-          accountId: Effect.succeed(accountId),
+          accountId: Effect.map(environment, (env) => env.accountId),
         },
         queueId,
       );
+      const native = Effect.map(queueName, (name) =>
+        makeWriteQueueClient(makeProxyQueueHelpers(name, ambient)),
+      );
+      return dispatchByMode(queueId, httpClient, () => ({
+        raw: Effect.flatMap(native, (client) => client.raw),
+        send: (body, options) =>
+          Effect.flatMap(native, (client) => client.send(body, options)),
+        sendBatch: (messages) =>
+          Effect.flatMap(native, (client) => client.sendBatch(messages)),
+      }));
     });
   }),
 );

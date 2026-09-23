@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import { makeLocalBrowserClient } from "./LocalBrowserClient.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { Browser } from "./Browser.ts";
@@ -11,10 +13,10 @@ import {
 } from "./BrowserHttpClient.ts";
 
 /**
- * Local implementation of the {@link Browser} binding — drives Cloudflare
- * Browser Rendering over its REST data-plane (`/accounts/{id}/browser-rendering/*`)
- * using the **current credentials** instead of a native Worker binding
- * (`BrowserBinding`).
+ * Action-side implementation of the {@link Browser} binding. During local dev,
+ * quick actions use the runtime's local Chrome without Cloudflare credentials.
+ * Outside dev, or with `Alchemy.remote()`, calls use Cloudflare's REST API with
+ * the current credentials.
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) to run the JSON
  * quick actions — `content`, `markdown`, `scrape`, `links`, `snapshot`,
@@ -37,8 +39,10 @@ import {
  * );
  * ```
  *
- * `raw`, `fetch`, and the binary actions (`screenshot`/`pdf`) have no
- * Cloudflare REST equivalent and die — see {@link makeHttpBrowserClient}.
+ * Local quick actions support content, Markdown, links, scraping, screenshots,
+ * PDFs, and snapshots. AI JSON extraction requires `Alchemy.remote()`.
+ * `raw` and `fetch` require a Worker Browser binding for session lifetime.
+ * The remote HTTP client does not support binary actions.
  */
 export const BrowserLocal = Layer.effect(
   Browser,
@@ -46,19 +50,18 @@ export const BrowserLocal = Layer.effect(
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the REST ops run with the
     // current credentials — no `host.bind`, no minted token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    const environment = yield* CloudflareEnvironment;
+    const { dev } = yield* AlchemyContext;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
-    const auth: BrowserAuth = {
-      authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-      accountId,
-    };
-
-    return Effect.fn(function* (_binding: BrowserBinding) {
-      // Browser Rendering is account-scoped; the binding carries no cloud
-      // resource id, so nothing to resolve — the client only needs the account
-      // + injected auth.
+    return Effect.fn(function* (binding: BrowserBinding) {
+      if (dev && !binding.devRemote) return makeLocalBrowserClient();
+      const { accountId } = yield* environment;
+      const auth: BrowserAuth = {
+        authorize: (eff) => eff.pipe(Effect.provideContext(context)),
+        accountId,
+      };
       return makeHttpBrowserClient(auth);
     });
   }),
