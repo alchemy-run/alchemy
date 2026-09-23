@@ -17,10 +17,11 @@ import {
   makeEntrypointLayer,
   reifyBoundConfigProvider,
 } from "../../Runtime.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
-import { Stack } from "../../Stack.ts";
-import { buildEventTelemetry } from "../../Telemetry.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { StackContext } from "../../StackContext.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
 import {
@@ -32,12 +33,12 @@ import {
 } from "./Rpc.ts";
 import {
   ExportedHandlerMethods,
-  Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
   deferredExecutionContext,
   fromExecutionContext,
-} from "./Worker.ts";
+} from "./WorkerRuntime.ts";
+import type { Worker } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**
@@ -49,6 +50,7 @@ import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
  */
 export interface WorkerBuild<Export = any> {
   readonly context: Context.Context<any>;
+  readonly runtimeContext: WorkerRuntimeContext;
   readonly export: Export;
   readonly shape: () => Record<string, any>;
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
@@ -81,6 +83,7 @@ export const makeWorkerBridge = (
       build: WorkerBuild,
     ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
+    env: Record<string, unknown> | undefined,
     onExit: (
       exit: Exit.Exit<any, any>,
       scope: Scope.Closeable,
@@ -103,9 +106,10 @@ export const makeWorkerBridge = (
               Layer.mergeAll(
                 Layer.succeed(
                   WorkerExecutionContext,
-                  fromExecutionContext(ctx),
+                  fromExecutionContext(ctx, env),
                 ),
                 Layer.succeed(Scope.Scope, scope),
+                Layer.succeed(RuntimeContext, built.runtimeContext),
                 // The configured telemetry exporters. Constructed as part
                 // of this per-event layer, but `buildEventTelemetry`
                 // attaches their batching fibers and flush finalizers to
@@ -160,6 +164,7 @@ export const makeWorkerBridge = (
                 Context.Context<never>,
               ],
             this.ctx,
+            this.env,
             (exit) =>
               exit._tag === "Success"
                 ? Promise.resolve(exit.value)
@@ -203,6 +208,7 @@ export const makeWorkerBridge = (
                 ] as const;
               },
               this.ctx,
+              this.env,
               handleRpcExit,
             );
         },
@@ -280,7 +286,7 @@ const getSharedBuild = (
       Effect.map(({ env }) =>
         layer.pipe(
           Layer.provideMerge(
-            Layer.succeed(Stack, {
+            Layer.succeed(StackContext, {
               name: stack.name,
               stage: stack.stage,
               bindings: {},
@@ -414,14 +420,13 @@ export const getWorkerExport = <Export = any>({
       .then((context) =>
         Effect.runPromise(
           Effect.all([exported, runtimeContext]).pipe(
-            Effect.map(
-              ([exp, rc]): WorkerBuild<Export> => ({
-                context,
-                export: exp,
-                shape: rc.shape,
-                telemetry: () => rc.telemetry,
-              }),
-            ),
+            Effect.map(([exp, rc]): WorkerBuild<Export> => ({
+              context,
+              runtimeContext: rc,
+              export: exp,
+              shape: rc.shape,
+              telemetry: () => rc.telemetry,
+            })),
             Effect.provideContext(context),
           ),
         ),

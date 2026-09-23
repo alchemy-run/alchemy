@@ -111,7 +111,17 @@ test(
     const out = yield* stack;
     yield* assertMeta(out.effectWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // `raw` escape hatch resolves to the underlying runtime Hyperdrive object.
@@ -131,7 +141,17 @@ test(
     expect(raw.user).toBeTruthy();
     expect(raw.database).toBeTruthy();
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // ── Async (non-Effect) binding ── declared on `env`, resolved by `InferEnv`.
@@ -141,5 +161,15 @@ test(
     const out = yield* stack;
     yield* assertMeta(out.asyncWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

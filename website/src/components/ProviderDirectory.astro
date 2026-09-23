@@ -50,6 +50,10 @@ const firstLink = (nodes: SidebarNode[]): string | undefined => {
 
 /** Every provider has a docs hub: each card links to it. */
 const HUBS: Record<string, { href: string; blurb: string }> = {
+  ACME: {
+    href: "/acme",
+    blurb: "Certificate authority accounts, DNS-01 validation, and TLS certificates",
+  },
   Cloudflare: {
     href: "/cloudflare",
     blurb: "Workers, Durable Objects, D1, R2, Queues, Hyperdrive",
@@ -57,6 +61,18 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
   AWS: {
     href: "/aws",
     blurb: "Lambda, ECS, EKS, EC2, DynamoDB, S3, SQS, Kinesis",
+  },
+  Hetzner: {
+    href: "/hetzner",
+    blurb: "Servers running Services over SSH, Volumes, Load Balancers, DNS",
+  },
+  Fly: {
+    href: "/fly",
+    blurb: "Machines, Services, Volumes, Secrets, and fly.dev on Fly.io",
+  },
+  Railway: {
+    href: "/railway",
+    blurb: "Projects, Services, Postgres, Redis, Volumes, and Buckets",
   },
   Planetscale: {
     href: "/planetscale",
@@ -79,7 +95,7 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
   },
   SQL: {
     href: "/sql",
-    blurb: "Low-level effect-sql clients — tagged-template SQL as Effects",
+    blurb: "Effect SQL, Drizzle, and Prisma across cloud and database providers",
   },
   Command: {
     href: "/command",

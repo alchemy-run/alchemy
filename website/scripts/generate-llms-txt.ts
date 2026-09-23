@@ -4,7 +4,7 @@
  * pulled from each page's frontmatter.
  *
  * `llms.txt` covers the guides and concept docs and links to
- * `llms-full.txt`, which additionally lists every generated per-resource
+ * `llms-full.txt`, which additionally lists every generated service-level
  * API reference page (the Providers section) and is much larger.
  *
  * Run with: `bun scripts/generate-llms-txt.ts`
@@ -66,12 +66,11 @@ const SECTIONS: Section[] = [
         "cli/deploy",
         "cli/plan",
         "cli/destroy",
+        "cli/drift",
         "cli/nuke",
         "cli/adopting-resources",
         "cli/dev",
-        "cli/tail",
         "cli/logs",
-        "cli/login",
         "cli/profile",
         "cli/state",
         "cli/inspecting-state",
@@ -100,16 +99,15 @@ const SECTIONS: Section[] = [
   {
     heading: "Infrastructure as Effects",
     intro:
-      "How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.",
+      "How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.",
     pages: {
       slugs: [
-        "infrastructure-as-effects/index",
-        "infrastructure-as-effects/functions-and-servers",
+        "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/layers",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",
-        "infrastructure-as-effects/layers",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
       ],
@@ -231,6 +229,32 @@ const SECTIONS: Section[] = [
     pages: { directory: "cloudflare/networking" },
   },
   {
+    heading: "Prisma — start here",
+    pages: { slugs: ["prisma/index", "prisma/setup"] },
+  },
+  {
+    heading: "Prisma — tutorial",
+    intro:
+      "A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and a Vite frontend.",
+    pages: { directory: "prisma/tutorial" },
+  },
+  {
+    heading: "Prisma — Compute",
+    pages: { directory: "prisma/compute" },
+  },
+  {
+    heading: "Prisma — Data",
+    pages: { directory: "prisma/data" },
+  },
+  {
+    heading: "Prisma — Frontend",
+    pages: { directory: "prisma/frontend" },
+  },
+  {
+    heading: "Prisma — Guides",
+    pages: { directory: "prisma/guides" },
+  },
+  {
     heading: "AWS — start here",
     intro:
       "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
@@ -289,6 +313,72 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/networking" },
   },
   {
+    heading: "Fly — start here",
+    intro:
+      "The Fly hub: overview (Apps, Machines, Services, Sprites) and setup (org, API token, profile).",
+    pages: {
+      slugs: ["fly/index", "fly/setup"],
+    },
+  },
+  {
+    heading: "Fly — SQL",
+    pages: { slugs: ["fly/data/postgres", "fly/data/drizzle-postgres"] },
+  },
+  {
+    heading: "Fly — Frontend",
+    pages: { directory: "fly/frontend" },
+  },
+  {
+    heading: "Hetzner — start here",
+    intro:
+      "The Hetzner hub: overview (Servers and Services) and setup (project, API token, profile).",
+    pages: {
+      slugs: ["hetzner/index", "hetzner/setup"],
+    },
+  },
+  {
+    heading: "Hetzner — SQL",
+    pages: { slugs: ["hetzner/data/drizzle-postgres"] },
+  },
+  {
+    heading: "Hetzner — Frontend",
+    pages: { directory: "hetzner/frontend" },
+  },
+  {
+    heading: "Railway — start here",
+    intro:
+      "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
+    pages: {
+      slugs: ["railway/index", "railway/setup"],
+    },
+  },
+  {
+    heading: "Railway — SQL",
+    pages: {
+      slugs: [
+        "railway/data/postgres",
+        "railway/data/mysql",
+        "railway/data/drizzle-postgres",
+        "railway/data/drizzle-mysql",
+      ],
+    },
+  },
+  {
+    heading: "Prisma — SQL",
+    pages: {
+      slugs: [
+        "prisma/data/postgres",
+        "prisma/data/branches",
+        "prisma/data/connections",
+        "prisma/data/drizzle-postgres",
+      ],
+    },
+  },
+  {
+    heading: "Railway — Frontend",
+    pages: { directory: "railway/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
@@ -309,11 +399,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Neon",
     intro:
-      "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
+      "Neon backend resources: Postgres branches, Functions, private object storage, managed Auth, Data API, AI Gateway and Website adapters. The upload tutorial combines native and Effect handlers with authenticated browser uploads.",
     pages: {
       slugs: [
         "neon/index",
         "neon/setup",
+        "neon/governance",
+        "neon/guides/ai-gateway",
+        "neon/guides/production-auth",
+        "neon/guides/private-networking",
+        "neon/guides/custom-domains",
+        "neon/guides/state-recovery",
+        "neon/tutorial/index",
+        "neon/tutorial/backend",
+        "neon/tutorial/functions",
+        "neon/tutorial/frontend",
+        "neon/tutorial/previews",
         "neon/data/branching",
         "neon/data/connections",
         "neon/data/migrations",
@@ -352,6 +453,51 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Git",
+    intro:
+      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
+    pages: {
+      slugs: [
+        "git/index",
+        "git/getting-started",
+        "git/tutorial/part-1",
+        "git/tutorial/part-2",
+        "git/tutorial/part-3",
+        "git/tutorial/part-4",
+        "git/clone-and-push",
+        "git/repositories",
+        "git/pull-requests",
+        "git/github-api",
+        "git/blocks/index",
+        "git/blocks/server",
+        "git/blocks/repositories",
+        "git/blocks/registry",
+        "git/blocks/blob-store",
+        "git/blocks/hasher",
+        "git/blocks/auth",
+        "git/recipes/index",
+        "git/recipes/scaling",
+        "git/recipes/cloudflare",
+        "git/recipes/cloudflare-aws",
+        "git/recipes/your-own-store",
+      ],
+    },
+  },
+  {
+    heading: "Stripe",
+    intro:
+      "Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.",
+    pages: {
+      slugs: [
+        "stripe/index",
+        "stripe/setup",
+        "stripe/guides/subscriptions",
+        "stripe/guides/connect",
+        "stripe/guides/webhooks",
+      ],
+    },
+  },
+  {
     heading: "Docker",
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
@@ -367,17 +513,23 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
+      "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
     pages: {
       slugs: [
         "sql/index",
+        "sql/databases",
         "sql/effect-sql/postgres",
+        "sql/effect-sql/mysql",
         "sql/effect-sql/d1",
         "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
         "sql/drizzle/postgres",
+        "sql/drizzle/mysql",
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
+        "sql/prisma/postgres",
+        "sql/prisma/contracts",
+        "sql/prisma/migrations",
       ],
     },
   },
@@ -391,7 +543,7 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const PROVIDERS_INTRO_BASE = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags.`;
+const PROVIDERS_INTRO_BASE = `Service-level API reference, generated from JSDoc on the source \`.ts\` files via \`bun scripts/generate-api-reference.ts\`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.`;
 
 const PROVIDERS_INTRO = `${PROVIDERS_INTRO_BASE} Grouped by cloud below.`;
 
@@ -435,13 +587,13 @@ const HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The per-resource API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
+This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The service-level API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
 
 const FULL_HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every per-resource API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
+This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every service-level API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
 
 function parseFrontmatter(source: string): Record<string, string> {
   if (!source.startsWith("---")) return {};
@@ -582,7 +734,7 @@ async function main() {
   const fullSizeKb = Math.round(Buffer.byteLength(fullBody, "utf8") / 1024);
   const referenceSection = [
     `## API reference`,
-    `${PROVIDERS_INTRO_BASE}\n\nThe per-resource pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
+    `${PROVIDERS_INTRO_BASE}\n\nThe service-level pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
   ];
 
   const body = [HEADER, ...sections, ...referenceSection].join("\n\n") + "\n";

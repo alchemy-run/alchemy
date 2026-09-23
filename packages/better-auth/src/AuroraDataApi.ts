@@ -52,12 +52,40 @@ export const makeDataApiDialect = (
 ): Effect.Effect<import("kysely").Dialect> =>
   Effect.promise(async () => {
     const {
-      CompiledQuery,
+      CastNode,
+      DataTypeNode,
+      OperationNodeTransformer,
       PostgresAdapter,
       PostgresIntrospector,
       PostgresQueryCompiler,
+      ReferenceNode,
     } = await import("kysely");
-    void CompiledQuery;
+
+    class DataApiIntrospectionTransformer extends OperationNodeTransformer {
+      protected override transformAlias(node: import("kysely").AliasNode) {
+        const alias = super.transformAlias(node);
+        const reference = alias.node;
+        if (
+          ReferenceNode.is(reference) &&
+          reference.column.kind === "ColumnNode" &&
+          reference.column.column.name === "relkind"
+        ) {
+          // The Data API cannot return PostgreSQL's internal "char" type.
+          return {
+            ...alias,
+            node: CastNode.create(reference, DataTypeNode.create("text")),
+          };
+        }
+        return alias;
+      }
+    }
+
+    const introspectionTransformer = new DataApiIntrospectionTransformer();
+    const introspectionPlugin: import("kysely").KyselyPlugin = {
+      transformQuery: ({ node }) =>
+        introspectionTransformer.transformNode(node),
+      transformResult: async ({ result }) => result,
+    };
 
     class DataApiQueryCompiler extends PostgresQueryCompiler {
       protected override getCurrentParameterPlaceholder(): string {
@@ -122,7 +150,8 @@ export const makeDataApiDialect = (
       createAdapter: () => new PostgresAdapter(),
       createDriver: () => new DataApiDriver(),
       createQueryCompiler: () => new DataApiQueryCompiler(),
-      createIntrospector: (db: never) => new PostgresIntrospector(db),
+      createIntrospector: (db: import("kysely").Kysely<unknown>) =>
+        new PostgresIntrospector(db.withPlugin(introspectionPlugin)),
     } as unknown as import("kysely").Dialect;
   });
 
@@ -182,18 +211,13 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * the cluster/secret ARNs. Requires the cluster to have the Data API
  * enabled (`AWS.RDS.Aurora` enables it by default).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer kysely
- * @peer @distilled.cloud/aws
- * @product Aurora
  *
- * @section Lambda with an Aurora-backed BetterAuth
+ * ### Lambda with an Aurora-backed BetterAuth
  * Pass the `AWS.RDS.Aurora` composite directly — the layer wires the
  * cluster, credentials secret, and the writer-instance dependency (so
  * deploy-time migrations wait for the cluster to be queryable) from one
  * value.
- * @example Function URL serving auth over the Data API
+ * **Example:** Function URL serving auth over the Data API
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
@@ -210,14 +234,20 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * );
  * ```
  *
- * @section Serverless v2 scale-from-zero
+ * ### Serverless v2 scale-from-zero
  * A paused cluster answers `DatabaseResumingException` while waking; the
  * layer retries the transient window with bounded backoff at both deploy
  * and runtime.
- * @example Bare cluster + explicit secret
+ * **Example:** Bare cluster + explicit secret
  * ```typescript
  * AuroraDataApi(cluster, { secret, database: "auth" })
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer kysely
+ * @peer @distilled.cloud/aws
+ * @product Aurora
  */
 export const AuroraDataApi = (
   cluster:

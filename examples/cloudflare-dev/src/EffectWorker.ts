@@ -42,7 +42,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   {
     main: import.meta.url,
     dev: {
-      port: Config.number("PORT").pipe(Config.withDefault(1338)),
+      port: Config.Number("PORT").pipe(Config.withDefault(1338)),
     },
     build: {
       bundleAnalyzer: true,
@@ -199,8 +199,7 @@ export class CronFires extends Cloudflare.DurableObject<CronFires>()(
       const state = yield* Cloudflare.DurableObjectState;
       return {
         record: Effect.fn(function* (time: number) {
-          const times =
-            (yield* state.storage.get<number[]>("times")) ?? [];
+          const times = (yield* state.storage.get<number[]>("times")) ?? [];
           yield* state.storage.put("times", [...times, time]);
         }),
         snapshot: Effect.fn(function* () {

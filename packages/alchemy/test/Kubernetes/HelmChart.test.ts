@@ -11,7 +11,6 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { spawnSync } from "node:child_process";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -19,16 +18,13 @@ const testOptions = {
 const { test } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
-// builds); skip the render tests on machines without it.
-const isHelmReady =
-  spawnSync("helm", ["version"], { stdio: "ignore" }).status === 0;
-
+// builds) — `helm` must be installed on the machine running this suite.
 const chartDir = `${import.meta.dirname}/fixtures/chart`;
 
 const describe = layer(NodeServices.layer);
 
 describe("renderHelmChart (local fixture)", (it) => {
-  it.effect.skipIf(!isHelmReady)(
+  it.effect(
     "renders values, release name, and namespace",
     () =>
       Effect.gen(function* () {
@@ -50,9 +46,10 @@ describe("renderHelmChart (local fixture)", (it) => {
         expect(configMap.data.release).toBe("probe");
         expect(configMap.data.namespace).toBe("demo");
       }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 
-  it.effect.skipIf(!isHelmReady)(
+  it.effect(
     "values toggle conditional templates on and off",
     () =>
       Effect.gen(function* () {
@@ -74,9 +71,31 @@ describe("renderHelmChart (local fixture)", (it) => {
           ["probe-config", "probe-second"],
         );
       }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 
-  it.effect.skipIf(!isHelmReady)(
+  // Regression for #1312: the fixture chart ships a `helm.sh/hook: pre-delete`
+  // Job. HelmChart has no Helm release and no hook lifecycle, so the hook
+  // must never enter the managed-object graph (where it would be created and
+  // reconciled like an ordinary workload on every deploy).
+  it.effect(
+    "excludes Helm lifecycle hooks from the render",
+    () =>
+      Effect.gen(function* () {
+        const objects = yield* renderHelmChart({
+          chart: chartDir,
+          releaseName: "probe",
+          namespace: "demo",
+        });
+        expect(objects.map((object) => object.kind)).not.toContain("Job");
+        expect(objects.map((object) => object.metadata.name)).toEqual([
+          "probe-config",
+        ]);
+      }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+  );
+
+  it.effect(
     "a bad chart reference fails with a typed HelmError",
     () =>
       Effect.gen(function* () {
@@ -92,15 +111,18 @@ describe("renderHelmChart (local fixture)", (it) => {
           expect(result.failure._tag).toBe("HelmError");
         }
       }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 });
 
 describe("parseRenderedManifests", (it) => {
-  it.effect("ignores Helm OCI pull metadata", () =>
-    Effect.gen(function* () {
-      const objects = yield* parseRenderedManifests(
-        "oci://registry.example.test/charts/example",
-        `Pulled: registry.example.test/charts/example:1.2.3
+  it.effect(
+    "ignores Helm OCI pull metadata",
+    () =>
+      Effect.gen(function* () {
+        const objects = yield* parseRenderedManifests(
+          "oci://registry.example.test/charts/example",
+          `Pulled: registry.example.test/charts/example:1.2.3
 Digest: sha256:0123456789abcdef
 ---
 apiVersion: v1
@@ -108,38 +130,99 @@ kind: ConfigMap
 metadata:
   name: example
 `,
-      );
+        );
 
-      expect(objects).toHaveLength(1);
-      expect(objects[0]?.kind).toBe("ConfigMap");
-      expect(objects[0]?.metadata.name).toBe("example");
-    }),
+        expect(objects).toHaveLength(1);
+        expect(objects[0]?.kind).toBe("ConfigMap");
+        expect(objects[0]?.metadata.name).toBe("example");
+      }),
+    {
+      tags: [
+        "unit",
+        "provider:kubernetes",
+        "provider:kubernetes:helmchart",
+        "local",
+      ],
+    },
   );
 
-  it.effect("rejects pull-shaped metadata for non-OCI charts", () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(
-        parseRenderedManifests(
+  it.effect(
+    "excludes helm.sh/hook-annotated objects (#1312)",
+    () =>
+      Effect.gen(function* () {
+        const objects = yield* parseRenderedManifests(
           "example",
-          `Pulled: registry.example.test/charts/example:1.2.3
+          `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ordinary
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: uninstall-hook
+  annotations:
+    helm.sh/hook: pre-delete
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: smoke-test
+  annotations:
+    "helm.sh/hook": test
+`,
+        );
+
+        expect(objects.map((object) => object.metadata.name)).toEqual([
+          "ordinary",
+        ]);
+      }),
+    {
+      tags: [
+        "unit",
+        "provider:kubernetes",
+        "provider:kubernetes:helmchart",
+        "local",
+      ],
+    },
+  );
+
+  it.effect(
+    "rejects pull-shaped metadata for non-OCI charts",
+    () =>
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          parseRenderedManifests(
+            "example",
+            `Pulled: registry.example.test/charts/example:1.2.3
 Digest: sha256:0123456789abcdef
 `,
-        ),
-      );
+          ),
+        );
 
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("HelmError");
-      }
-    }),
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("HelmError");
+        }
+      }),
+    {
+      tags: [
+        "unit",
+        "provider:kubernetes",
+        "provider:kubernetes:helmchart",
+        "local",
+      ],
+    },
   );
 
-  it.effect("rejects pull metadata that is not the leading OCI preamble", () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(
-        parseRenderedManifests(
-          "oci://registry.example.test/charts/example",
-          `apiVersion: v1
+  it.effect(
+    "rejects pull metadata that is not the leading OCI preamble",
+    () =>
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          parseRenderedManifests(
+            "oci://registry.example.test/charts/example",
+            `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: example
@@ -147,14 +230,22 @@ metadata:
 Pulled: registry.example.test/charts/example:1.2.3
 Digest: sha256:0123456789abcdef
 `,
-        ),
-      );
+          ),
+        );
 
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("HelmError");
-      }
-    }),
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("HelmError");
+        }
+      }),
+    {
+      tags: [
+        "unit",
+        "provider:kubernetes",
+        "provider:kubernetes:helmchart",
+        "local",
+      ],
+    },
   );
 });
 
@@ -163,11 +254,21 @@ Digest: sha256:0123456789abcdef
 // empty. Proves the provider is registered and its record type-checks; the
 // live apply path rides the gated Deployment E2E cluster
 // (Deployment.test.ts).
-test.provider("list returns an empty array (in-cluster objects)", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Kubernetes.HelmChart);
-    const all = yield* provider.list();
-    expect(Array.isArray(all)).toBe(true);
-    expect(all).toEqual([]);
-  }),
+test.provider(
+  "list returns an empty array (in-cluster objects)",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Kubernetes.HelmChart);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+      expect(all).toEqual([]);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:kubernetes",
+      "provider:kubernetes:helmchart",
+      "local",
+    ],
+  },
 );

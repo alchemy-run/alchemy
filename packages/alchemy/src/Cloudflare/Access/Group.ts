@@ -92,18 +92,15 @@ export type Group = Resource<
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Group
- * @example Allow a single email domain
+ * ### Creating a Group
+ * **Example:** Allow a single email domain
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("ExampleDomain", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  * ```
  *
- * @example Combine include, exclude and require rules
+ * **Example:** Combine include, exclude and require rules
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("UsEngineers", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
@@ -112,8 +109,8 @@ export type Group = Resource<
  * });
  * ```
  *
- * @section Referencing a Group from a Policy
- * @example Allow members of the group
+ * ### Referencing a Group from a Policy
+ * **Example:** Allow members of the group
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("Team", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
@@ -124,6 +121,10 @@ export type Group = Resource<
  *   include: [{ group: { id: group.groupId } }],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Group = Resource<Group>("Cloudflare.Access.Group");
 

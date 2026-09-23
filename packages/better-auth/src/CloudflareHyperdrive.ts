@@ -36,16 +36,11 @@ export interface CloudflareHyperdriveOptions {
  * URL as `migrate` for deploy-time schema migrations (or omit it to skip
  * them).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer pg
- * @peer mysql2
- * @product Hyperdrive
  *
- * @section Pooled Postgres through Hyperdrive
+ * ### Pooled Postgres through Hyperdrive
  * The Worker connects over TCP through Hyperdrive's pooler; auth reads
  * should disable Hyperdrive caching so sessions are never stale.
- * @example Hyperdrive over a Neon origin
+ * **Example:** Hyperdrive over a Neon origin
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { CloudflareHyperdrive } from "@alchemy.run/better-auth/CloudflareHyperdrive";
@@ -77,16 +72,22 @@ export interface CloudflareHyperdriveOptions {
  * )
  * ```
  *
- * @section MySQL origins
+ * ### MySQL origins
  * Hyperdrive also fronts MySQL origins — select the dialect and the layer
  * drives `mysql2` instead of `pg`.
- * @example MySQL behind Hyperdrive
+ * **Example:** MySQL behind Hyperdrive
  * ```typescript
  * CloudflareHyperdrive(connection, {
  *   dialect: "mysql",
  *   migrate: password.connectionUrl,
  * })
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer pg
+ * @peer mysql2
+ * @product Hyperdrive
  */
 export const CloudflareHyperdrive = (
   connection:

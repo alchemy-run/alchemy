@@ -33,6 +33,10 @@ class WorkflowImpl implements Workflow {
     });
   }
 
+  async deleteBatch(instanceIds: string[]): Promise<WorkflowBatchDeleteResult> {
+    return this.binding.deleteBatch({ instances: instanceIds });
+  }
+
   async unsafeGetBindingName(): Promise<string> {
     return this.binding.unsafeGetBindingName();
   }
@@ -124,12 +128,24 @@ class InstanceImpl implements WorkflowInstance {
     return structuredClone(res);
   }
 
+  public async subscribe(
+    options?: WorkflowInstanceSubscribeOptions,
+  ): Promise<WorkflowInstanceSubscription> {
+    using instance = await this.getInstance();
+    return await instance.subscribe(options);
+  }
+
   public async sendEvent(args: {
     payload: unknown;
     type: string;
   }): Promise<void> {
     using instance = await this.getInstance();
     await instance.sendEvent(args);
+  }
+
+  public async delete(): Promise<void> {
+    using instance = await this.getInstance();
+    await instance.delete();
   }
 }
 

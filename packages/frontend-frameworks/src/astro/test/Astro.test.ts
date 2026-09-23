@@ -101,10 +101,12 @@ describe("cloudflare target module", () => {
     const worker = { compatibilityDate: "2026-03-10" };
     const target = cloudflareTarget({
       worker,
+      prerenderEnvironment: "node",
       sessionKVBindingName: "MY_SESSION",
     });
     expect(target.config).toEqual({
       worker,
+      prerenderEnvironment: "node",
       sessionKVBindingName: "MY_SESSION",
     });
     const integration = target.integration();

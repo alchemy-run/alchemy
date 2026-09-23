@@ -2,7 +2,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export const Bucket = Cloudflare.R2.Bucket("DevBucket");
+export const Bucket = Cloudflare.R2.Bucket("DevBucket", { forceDestroy: true });
 
 export const Website = Cloudflare.Website.Vite("TanStackDevBindingsFixture", {
   compatibility: {

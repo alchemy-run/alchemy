@@ -237,11 +237,8 @@ export type DirectoryService = Resource<
  * Names are unique within the account. All properties — including the host
  * and even the protocol type — are mutable in place via a full PUT; nothing
  * forces a replacement except moving accounts.
- * @resource
- * @product Connectivity
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Directory Service
- * @example TCP database service through a tunnel
+ * ### Creating a Directory Service
+ * **Example:** TCP database service through a tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("DbTunnel", {
  *   ingress: [{ service: "tcp://localhost:5432" }],
@@ -254,7 +251,7 @@ export type DirectoryService = Resource<
  * });
  * ```
  *
- * @example HTTP service on a private hostname
+ * **Example:** HTTP service on a private hostname
  * ```typescript
  * const api = yield* Cloudflare.Connectivity.DirectoryService("InternalApi", {
  *   type: "http",
@@ -267,8 +264,8 @@ export type DirectoryService = Resource<
  * });
  * ```
  *
- * @section Updating
- * @example Changing the host in place
+ * ### Updating
+ * **Example:** Changing the host in place
  * ```typescript
  * // Host, ports, name, and TLS settings are all mutable — the service
  * // keeps its serviceId across updates.
@@ -283,6 +280,10 @@ export type DirectoryService = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/
+ *
+ * @resource
+ * @product Connectivity
+ * @category Cloudflare One (Zero Trust)
  */
 export const DirectoryService = Resource<DirectoryService>(TypeId);
 

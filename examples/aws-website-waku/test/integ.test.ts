@@ -14,7 +14,6 @@ const { getWhenReady } = Test;
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Waku build AND creates a CloudFront
@@ -51,7 +50,7 @@ test(
     const html = yield* res.text;
     // The `GREETING` env value from alchemy.run.ts, read via `getEnv` in the
     // dynamic RSC page — proves the Lambda rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from Waku on AWS!");
     expect(html).toContain(
       "This page is rendered by the server on every request.",
     );

@@ -111,11 +111,8 @@ export type Site = Resource<
  * `zoneTag` identity models (or changing `zoneTag`) triggers a replacement.
  *
  * Web Analytics is available on free accounts.
- * @resource
- * @product RUM
- * @category Observability & Analytics
- * @section Measuring a hostname
- * @example Gray-clouded site (manual snippet embed)
+ * ### Measuring a hostname
+ * **Example:** Gray-clouded site (manual snippet embed)
  * ```typescript
  * const site = yield* Cloudflare.Rum.Site("Analytics", {
  *   host: "example.com",
@@ -125,8 +122,8 @@ export type Site = Resource<
  * const snippet = site.snippet;
  * ```
  *
- * @section Measuring a zone
- * @example Orange-clouded site with automatic snippet injection
+ * ### Measuring a zone
+ * **Example:** Orange-clouded site with automatic snippet injection
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
@@ -136,7 +133,7 @@ export type Site = Resource<
  * });
  * ```
  *
- * @example Skip injection for EU visitors
+ * **Example:** Skip injection for EU visitors
  * ```typescript
  * yield* Cloudflare.Rum.Site("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
@@ -146,6 +143,10 @@ export type Site = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/web-analytics/
+ *
+ * @resource
+ * @product RUM
+ * @category Observability & Analytics
  */
 export const Site = Resource<Site>(TypeId);
 

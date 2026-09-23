@@ -50,7 +50,9 @@ test.provider(
           const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(
             Alchemy.remote(liveKV),
           );
-          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket");
+          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket", {
+            forceDestroy: true,
+          });
           const database = yield* Cloudflare.D1.Database("CycleDB");
           return { namespace, bucket, database };
         });
@@ -110,7 +112,16 @@ test.provider(
       // 5. destroy — local rows only; nothing upstream to clean.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 /**
@@ -166,5 +177,5 @@ test.provider(
         yield* state.get({ stack: stk.name, stage: stk.stage, fqn }),
       ).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "live"], timeout: 120_000 },
 );

@@ -131,7 +131,16 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:tunnel",
+      "provider:cloudflare:vpcservice",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 const ORIGIN_PORT = 18787;
@@ -231,5 +240,14 @@ test.provider.skipIf(!cloudflaredBin)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:tunnel",
+      "provider:cloudflare:vpcservice",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

@@ -198,9 +198,8 @@ export const HyperPodEksInfra = Effect.gen(function* () {
   // add-on deploy AFTER the HyperPod nodes join — its controllers need a
   // schedulable node.
   const governance = yield* AWS.EKS.Addon("TaskGovernance", {
-    clusterName: Output.map(
-      hyperpod.orchestratorEksClusterArn,
-      (arn) => arn!.split("/").pop()!,
+    clusterName: Output.map(hyperpod.orchestratorEksClusterArn, (arn) =>
+      arn!.split("/").pop()!,
     ),
     addonName: "amazon-sagemaker-hyperpod-taskgovernance",
   });

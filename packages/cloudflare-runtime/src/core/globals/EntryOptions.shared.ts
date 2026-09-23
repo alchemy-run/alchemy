@@ -27,3 +27,6 @@ export const BINDING_EXPLORER = "EXPLORER";
  * this name for other local workers' explorers to reach this one.
  */
 export const SERVICE_EXPLORER = "core:entry";
+
+/** Internal module-runner connection; routed directly to the Worker in dev. */
+export const PATH_MODULE_RUNNER_INIT = "/cdn-cgi/alchemy/module-runner/init";

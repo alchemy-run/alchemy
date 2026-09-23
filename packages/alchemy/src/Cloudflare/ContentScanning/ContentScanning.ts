@@ -71,11 +71,8 @@ export type ContentScanning = Resource<
  * Content Scanning is an Enterprise paid add-on. Reading the status works
  * on every plan, but enabling it on a zone without the add-on fails with
  * the typed `ContentScanningNotEntitled` error.
- * @resource
- * @product Content Scanning
- * @category Application Security
- * @section Enabling Content Scanning
- * @example Turn on malicious-upload scanning for a zone
+ * ### Enabling Content Scanning
+ * **Example:** Turn on malicious-upload scanning for a zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -84,7 +81,7 @@ export type ContentScanning = Resource<
  * });
  * ```
  *
- * @example Pin Content Scanning off
+ * **Example:** Pin Content Scanning off
  * ```typescript
  * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
@@ -92,8 +89,8 @@ export type ContentScanning = Resource<
  * });
  * ```
  *
- * @section Custom scan expressions
- * @example Scan a JSON-embedded file field
+ * ### Custom scan expressions
+ * **Example:** Scan a JSON-embedded file field
  * ```typescript
  * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
@@ -106,6 +103,10 @@ export type ContentScanning = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/
+ *
+ * @resource
+ * @product Content Scanning
+ * @category Application Security
  */
 export const ContentScanning = Resource<ContentScanning>(TypeId, {
   aliases: ["Cloudflare.ContentScanning"],

@@ -1,3 +1,4 @@
+import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
 import { loadInternalWorker } from "../core/internal/internal-worker.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
@@ -50,21 +51,33 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
   exportTypes: ExportTypes,
+  /** See `RuntimeWorker.onRestart`. */
+  onRestart?: () => void,
 ) => {
   const scope = Scope.makeUnsafe();
+  const proxySharedSecret = crypto.randomUUID();
   const address = await serve(
     options,
     entryEnvironment,
     server,
     exportTypes,
+    proxySharedSecret,
+    onRestart,
   ).pipe(
-    Effect.provide(ViteAssets.ViteAssetsLive(server)),
-    Effect.provide(context),
+    // `provideMerge`: the assets layer's construction reads `Loopback` (and
+    // friends) from the runtime context, so the context must feed the layer,
+    // not just sit beside it.
+    Effect.provide(
+      ViteAssets.ViteAssetsLive(server).pipe(
+        Layer.provideMerge(Layer.succeedContext(context)),
+      ),
+    ),
     Scope.provide(scope),
     Effect.runPromise,
   );
   return {
     address,
+    proxySharedSecret,
     close: () => closeScope(scope),
   };
 };
@@ -188,6 +201,8 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   entryEnvironment: Omit<EntryEnvironment, "exportTypesId">,
   server: vite.ViteDevServer,
   exportTypes: ExportTypes,
+  proxySharedSecret: string,
+  onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
@@ -195,8 +210,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
+    proxySharedSecret,
+    onRestart,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
-    compatibilityDate: options.compatibilityDate ?? "2026-05-12",
+    compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
       UnsafeEval.local("__DISTILLED_UNSAFE_EVAL__"),
@@ -242,6 +259,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     // proxy instead of a local broker — and that accepts-and-drops every
     // message, with `send()` never settling.
     queueConsumers: options.worker?.queueConsumers,
+    crons: options.worker?.crons,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

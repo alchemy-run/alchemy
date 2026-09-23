@@ -20,13 +20,21 @@ import {
   BINDING_EXPLORER,
   BINDING_USER_WORKER_DIRECT,
   PATH_EXPLORER,
+  PATH_MODULE_RUNNER_INIT,
 } from "./EntryOptions.shared.ts";
 import {
   PATH_SCHEDULED,
   PATH_SCHEDULED_LEGACY,
 } from "./ScheduledOptions.shared.ts";
 
+import {
+  BINDING_PROXY_SHARED_SECRET,
+  HEADER_ORIGINAL_URL,
+  HEADER_PROXY_SHARED_SECRET,
+} from "./ProxyHeaders.shared.ts";
+
 interface Env {
+  [BINDING_PROXY_SHARED_SECRET]: string;
   /**
    * Head of the fetch middleware chain (the next middleware after the entry,
    * or the raw user worker when no downstream middleware exists). Fetch-only.
@@ -430,9 +438,11 @@ const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
  * The explorer can read and write every local resource, so (like Miniflare's
  * `validateCdnCgiRequest`) only serve it to requests whose `Host` and
  * `Origin` name a loopback host — this defeats DNS-rebinding and cross-site
- * requests from pages open in the developer's browser.
+ * requests from pages open in the developer's browser. `host` is the
+ * client-facing host: behind a trusted proxy the raw `Host` header is the
+ * private runtime address, so callers pass the restored URL's host instead.
  */
-function isLocalRequest(request: Request): boolean {
+function isLocalRequest(host: string | null, origin: string | null): boolean {
   const isLocal = (url: string) => {
     try {
       return LOCALHOST_HOSTNAMES.has(new URL(url).hostname);
@@ -440,8 +450,6 @@ function isLocalRequest(request: Request): boolean {
       return false;
     }
   };
-  const host = request.headers.get("Host");
-  const origin = request.headers.get("Origin");
   return (
     (host === null || isLocal(`http://${host}`)) &&
     (origin === null || isLocal(origin))
@@ -450,7 +458,19 @@ function isLocalRequest(request: Request): boolean {
 
 export default <ExportedHandler<Env>>{
   async fetch(request, env) {
-    const url = new URL(request.url);
+    // The proxy connects to a private runtime address. Only a trusted proxy
+    // may restore the client-facing URL and Host (matching Miniflare).
+    let url = new URL(request.url);
+    const secret = request.headers.get(HEADER_PROXY_SHARED_SECRET);
+    if (secret !== null) {
+      if (!secret || secret !== env[BINDING_PROXY_SHARED_SECRET]) {
+        return new Response("Invalid proxy shared secret", { status: 400 });
+      }
+      const originalUrl = request.headers.get(HEADER_ORIGINAL_URL);
+      if (originalUrl !== null) {
+        url = new URL(originalUrl);
+      }
+    }
     if (url.pathname === "/cdn-cgi/handler/queue") {
       try {
         const json = await request.json<EntryQueuePayload>();
@@ -536,7 +556,8 @@ export default <ExportedHandler<Env>>{
       (url.pathname === PATH_EXPLORER ||
         url.pathname.startsWith(`${PATH_EXPLORER}/`))
     ) {
-      if (!isLocalRequest(request as unknown as Request)) {
+      const host = secret !== null ? url.host : request.headers.get("Host");
+      if (!isLocalRequest(host, request.headers.get("Origin"))) {
         return new Response(
           "Forbidden: the Local Explorer is only served to localhost",
           {
@@ -575,6 +596,9 @@ export default <ExportedHandler<Env>>{
 
     const headers = new Headers(request.headers);
     headers.delete(HEADER_CF_BLOB);
+    headers.delete(HEADER_ORIGINAL_URL);
+    headers.delete(HEADER_PROXY_SHARED_SECRET);
+    if (secret !== null) headers.set("Host", url.host);
     if (clientIp && !headers.get("CF-Connecting-IP")) {
       // `clientIp` includes the port, e.g. `127.0.0.1:52621` or `[::1]:52621`
       const ipv4Regex = /(?<ip>.*?):\d+/;
@@ -589,10 +613,18 @@ export default <ExportedHandler<Env>>{
 
     // The experimental and standard workers-types `Request` generics
     // disagree; at runtime these are the same class.
-    const userRequest = new Request(request as unknown as Request, {
-      headers,
-      cf,
-    });
+    const userRequest = new Request(
+      new Request(url, request as unknown as Request),
+      {
+        headers,
+        cf,
+      },
+    );
+    if (url.pathname === PATH_MODULE_RUNNER_INIT) {
+      return await env[BINDING_USER_WORKER_DIRECT].fetch(
+        userRequest as unknown as typeof request,
+      );
+    }
     return await env.USER_WORKER.fetch(
       userRequest as unknown as typeof request,
     );

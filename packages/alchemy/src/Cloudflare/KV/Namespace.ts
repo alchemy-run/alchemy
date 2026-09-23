@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -42,17 +43,14 @@ export type Namespace = Resource<
  * KV provides eventually-consistent, low-latency reads with global
  * replication. Create a namespace as a resource, then bind it to a Worker
  * to get/put values at runtime.
- * @resource
- * @product KV
- * @category Storage & Databases
- * @section Creating a Namespace
- * @example Basic KV namespace
+ * ### Creating a Namespace
+ * **Example:** Basic KV namespace
  * ```typescript
  * const kv = yield* Cloudflare.KV.Namespace("MyKV");
  * ```
  *
- * @section Binding to a Worker
- * @example Using KV inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Using KV inside a Worker
  * ```typescript
  * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
@@ -68,6 +66,10 @@ export type Namespace = Resource<
  * token) in the worker's runtime layer. Use `Cloudflare.KV.ReadNamespace`
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
+ *
+ * @resource
+ * @product KV
+ * @category Storage & Databases
  */
 export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
   aliases: ["Cloudflare.KVNamespace"],
@@ -235,7 +237,7 @@ export const ProviderLocal = () =>
   Provider.succeed(Namespace, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.namespaceId) return { action: "update" } as const;
       if (!isResolved(news)) return undefined;
       if (output.accountId !== accountId) {
@@ -249,7 +251,7 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       return {
         title: yield* createTitle(id, news.title),
         namespaceId: output?.namespaceId ?? generateLocalId(),

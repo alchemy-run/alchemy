@@ -96,8 +96,8 @@ export interface MySQLPasswordAttributes {
  *
  * For PostgreSQL databases, use {@link PostgresRole} instead.
  *
- * @section Creating a Password
- * @example Reader password
+ * ### Creating a Password
+ * **Example:** Reader password
  * ```typescript
  * const reader = yield* Planetscale.MySQLPassword("AppReader", {
  *   database: "my-db",
@@ -105,7 +105,7 @@ export interface MySQLPasswordAttributes {
  * });
  * ```
  *
- * @example Writer password with TTL
+ * **Example:** Writer password with TTL
  * ```typescript
  * const writer = yield* Planetscale.MySQLPassword("AppWriter", {
  *   database: "my-db",
@@ -114,7 +114,7 @@ export interface MySQLPasswordAttributes {
  * });
  * ```
  *
- * @example Admin password with IP allowlist
+ * **Example:** Admin password with IP allowlist
  * ```typescript
  * const admin = yield* Planetscale.MySQLPassword("Admin", {
  *   database: "my-db",

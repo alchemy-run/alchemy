@@ -123,15 +123,11 @@ export const makePostgresService = (
  * the dynamically-imported driver ships in the artifact with an npm layout
  * (its CJS require chain does not survive store-style node_modules).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer pg
- * @product Postgres
  *
- * @section Connecting with a resource Output
+ * ### Connecting with a resource Output
  * Resource Outputs are bound into the host environment at deploy and read
  * back at runtime; the same source drives deploy-time migrations.
- * @example PlanetScale Postgres
+ * **Example:** PlanetScale Postgres
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Postgres } from "@alchemy.run/better-auth/Postgres";
@@ -144,13 +140,18 @@ export const makePostgresService = (
  * }).pipe(Effect.provide(Postgres(role.connectionUrl)))
  * ```
  *
- * @section Separate migration source
+ * ### Separate migration source
  * When the runtime URL is not deploy-resolvable (or points at a pooler),
  * pass a direct deploy-time URL as `migrate`.
- * @example Pooled runtime, direct migrations
+ * **Example:** Pooled runtime, direct migrations
  * ```typescript
  * Postgres(role.connectionUrlPooled, { migrate: role.connectionUrl })
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer pg
+ * @product Postgres
  */
 export const Postgres = (
   url: ConnectionSource,

@@ -43,9 +43,8 @@ export interface Exec extends Resource<
  * its inputs (or `command`/`cwd`/`env`) change; set `memo: false` to re-run on
  * every deploy.
  *
- * @resource
- * @section Running a Command
- * @example Run a One-Off Command
+ * ### Running a Command
+ * **Example:** Run a One-Off Command
  * ```typescript
  * yield* Exec("codegen", {
  *   command: "npm run codegen",
@@ -53,8 +52,8 @@ export interface Exec extends Resource<
  * });
  * ```
  *
- * @section Running with Custom Environment
- * @example Run Database Migrations
+ * ### Running with Custom Environment
+ * **Example:** Run Database Migrations
  * ```typescript
  * yield* Exec("migrate", {
  *   command: "npm run db:migrate",
@@ -64,8 +63,8 @@ export interface Exec extends Resource<
  * });
  * ```
  *
- * @section Memoizing Re-Runs
- * @example Only Re-Run When Inputs Change
+ * ### Memoizing Re-Runs
+ * **Example:** Only Re-Run When Inputs Change
  * ```typescript
  * yield* Exec("codegen", {
  *   command: "npm run codegen",
@@ -73,14 +72,16 @@ export interface Exec extends Resource<
  * });
  * ```
  *
- * @section Bounding Command Runtime
- * @example Time Out a Migration
+ * ### Bounding Command Runtime
+ * **Example:** Time Out a Migration
  * ```typescript
  * yield* Exec("migrate", {
  *   command: "npm run db:migrate",
  *   timeout: "5 minutes",
  * });
  * ```
+ *
+ * @resource
  */
 export const Exec = Resource<Exec>("Command.Exec");
 

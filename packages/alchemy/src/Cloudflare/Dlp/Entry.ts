@@ -76,11 +76,8 @@ export type Entry = Resource<
  *
  * Requires the Cloudflare DLP entitlement (a paid Zero Trust add-on);
  * accounts without it receive the typed `Forbidden` error on all writes.
- * @resource
- * @product DLP
- * @category Cloudflare One (Zero Trust)
- * @section Creating a DLP entry
- * @example Attach a regex entry to a profile
+ * ### Creating a DLP entry
+ * **Example:** Attach a regex entry to a profile
  * ```typescript
  * const entry = yield* Cloudflare.Dlp.Entry("EmployeeId", {
  *   pattern: { regex: "EMP-[0-9]{6}" },
@@ -88,7 +85,7 @@ export type Entry = Resource<
  * });
  * ```
  *
- * @example Luhn-validated card entry
+ * **Example:** Luhn-validated card entry
  * ```typescript
  * const card = yield* Cloudflare.Dlp.Entry("CardNumber", {
  *   pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
@@ -97,6 +94,10 @@ export type Entry = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
+ *
+ * @resource
+ * @product DLP
+ * @category Cloudflare One (Zero Trust)
  */
 export const Entry = Resource<Entry>(TypeId);
 

@@ -65,15 +65,11 @@ export const makeMySQLService = (
  * RDS MySQL, or any literal URL. One `mysql2` pool per execution, closed
  * when the event settles.
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer mysql2
- * @product MySQL
  *
- * @section Connecting to PlanetScale MySQL
+ * ### Connecting to PlanetScale MySQL
  * PlanetScale requires TLS — pass it in the URL's `ssl` query parameter
  * (mysql2 parses it as JSON).
- * @example PlanetScale MySQL with TLS
+ * **Example:** PlanetScale MySQL with TLS
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { MySQL } from "@alchemy.run/better-auth/MySQL";
@@ -91,6 +87,11 @@ export const makeMySQLService = (
  *   return { fetch: ... };
  * }).pipe(Effect.provide(MySQL(url)))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer mysql2
+ * @product MySQL
  */
 export const MySQL = (
   url: ConnectionSource,

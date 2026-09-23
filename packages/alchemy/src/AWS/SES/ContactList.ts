@@ -72,9 +72,8 @@ export interface ContactList extends Resource<
  * SES allows only **one contact list per AWS account**, so renaming a list
  * replaces it by deleting the old list (and its contacts) before creating the
  * new one — a create-then-delete replacement would exceed the account limit.
- * @resource
- * @section Creating Contact Lists
- * @example Basic Contact List
+ * ### Creating Contact Lists
+ * **Example:** Basic Contact List
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -83,7 +82,7 @@ export interface ContactList extends Resource<
  * });
  * ```
  *
- * @example Contact List with Topics
+ * **Example:** Contact List with Topics
  * ```typescript
  * const list = yield* SES.ContactList("Newsletter", {
  *   topics: [
@@ -101,15 +100,15 @@ export interface ContactList extends Resource<
  * });
  * ```
  *
- * @example Contact List with Tags
+ * **Example:** Contact List with Tags
  * ```typescript
  * const list = yield* SES.ContactList("Newsletter", {
  *   tags: { Team: "growth", Environment: "prod" },
  * });
  * ```
  *
- * @section Populating the List
- * @example Add Contacts to the List
+ * ### Populating the List
+ * **Example:** Add Contacts to the List
  * ```typescript
  * const list = yield* SES.ContactList("Newsletter", {
  *   topics: [
@@ -131,6 +130,8 @@ export interface ContactList extends Resource<
  *   });
  * }
  * ```
+ *
+ * @resource
  */
 export const ContactList = Resource<ContactList>("AWS.SES.ContactList");
 

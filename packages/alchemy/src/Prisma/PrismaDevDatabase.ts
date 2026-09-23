@@ -314,6 +314,9 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
       servers.delete(databaseId);
     }
     const server = yield* startServer(databaseId, options);
+    // `@prisma/dev` binds Postgres/HTTP to 127.0.0.1. Native Linux Docker
+    // must not SYN the bridge IP (UFW INPUT). The workerd sidecar proxy
+    // unix-socket-tunnels these ports into the container netns.
     const attrsResult = yield* Effect.result(
       prismaDevDatabaseAttrsFromServer(server),
     );
@@ -341,7 +344,12 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
       return yield* Effect.fail(attrsResult.failure);
     }
     const attrs = attrsResult.success;
-    entry = { optionsKey, migrationKey: undefined, server, attrs };
+    entry = {
+      optionsKey,
+      migrationKey: undefined,
+      server,
+      attrs,
+    };
     servers.set(databaseId, entry);
   }
 

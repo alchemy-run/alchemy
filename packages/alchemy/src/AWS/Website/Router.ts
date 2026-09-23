@@ -37,17 +37,16 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * the Router's KV store. The Router's CF function matches incoming requests to
  * routes by host pattern and path prefix, then delegates to `routeSite()` for
  * static site routing or directly sets URL/S3 origins.
- * @resource
- * @section Creating Routers
- * @example Basic Router
+ * ### Creating Routers
+ * **Example:** Basic Router
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   domain: { name: "example.com", hostedZoneId },
  * });
  * ```
  *
- * @section Inline Routes
- * @example URL And Bucket Routes
+ * ### Inline Routes
+ * **Example:** URL And Bucket Routes
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   routes: {
@@ -57,8 +56,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * });
  * ```
  *
- * @section Attaching Sites
- * @example Serve A StaticSite Through The Router
+ * ### Attaching Sites
+ * **Example:** Serve A StaticSite Through The Router
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   invalidation: { paths: "all", wait: true },
@@ -74,6 +73,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Router = Effect.fn("AWS.Website.Router")(
   function* (id: string, props: RouterProps) {
@@ -324,7 +325,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     });
 
     const records =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -333,7 +334,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
             ],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
+                // Optional — the Record provider infers the most specific
+                // public zone containing `name` when omitted.
+                hostedZoneId: domain.hostedZoneId,
                 name,
                 type: "A",
                 aliasTarget: {
@@ -350,8 +353,10 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // becoming an A-alias record pointing at this distribution (see
     // `WebsiteRouterBindTargets`).
     const siteRecords =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Route53Records("SiteAliasRecords", {
+            // Optional — the Records provider infers the zone from the
+            // first bound hostname when omitted.
             hostedZoneId: domain.hostedZoneId,
             type: "A",
             aliasTarget: {
@@ -379,17 +384,21 @@ export const Router = Effect.fn("AWS.Website.Router")(
           });
 
     // Precedence: the canonical domain, then aliases in declaration order,
-    // then the CloudFront default domain (only while `cloudfrontUrl` is
+    // then the distribution's own URL (only while `cloudfrontUrl` is
     // enabled). Redirect hostnames never appear.
+    //
+    // `distribution.url` rather than an interpolated
+    // `https://${distribution.domainName}`: the distribution knows its own
+    // address, which is `https://{id}.cloudfront.net` on AWS and
+    // `http://localhost:{port}` under `alchemy dev`, where that AWS hostname
+    // resolves to nothing.
     const urls: Input<string>[] = domain
       ? [
           Output.interpolate`https://${domain.name}`,
           ...(domain.aliases ?? []).map((alias) => `https://${alias}`),
-          ...(props.cloudfrontUrl !== false
-            ? [Output.interpolate`https://${distribution.domainName}`]
-            : []),
+          ...(props.cloudfrontUrl !== false ? [distribution.url] : []),
         ]
-      : [Output.interpolate`https://${distribution.domainName}`];
+      : [distribution.url];
 
     return {
       certificate,

@@ -16,9 +16,8 @@ export interface CreateEventRequest extends Omit<
  * Provide `AgentCore.CreateEventHttp` on the Function effect to implement
  * the binding over the AgentCore data-plane API.
  *
- * @binding
- * @section Recording Events
- * @example Record a Conversational Turn from a Lambda Function
+ * ### Recording Events
+ * **Example:** Record a Conversational Turn from a Lambda Function
  * ```typescript
  * import * as AgentCore from "alchemy/AWS/BedrockAgentCore";
  *
@@ -54,6 +53,8 @@ export interface CreateEventRequest extends Omit<
  *   }).pipe(Effect.provide(AgentCore.CreateEventHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface CreateEvent extends Binding.Service<
   CreateEvent,

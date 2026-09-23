@@ -69,12 +69,19 @@ export interface FoldkitProps<
    * Foldkit apps route on the client, so `notFoundHandling` defaults to
    * `"single-page-application"` — unmatched paths serve `index.html` and
    * the app's router takes over. Set `notFoundHandling` explicitly to
-   * override.
+   * override (e.g. `"404-page"` to serve the built `404.html`).
    *
    * @default { notFoundHandling: "single-page-application" }
    */
   assets?: AssetsConfig;
 }
+
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type FoldkitInput<Bindings extends WorkerBindingProps> = InputProps<
+  FoldkitProps<Bindings>,
+  "assets"
+>;
 
 /**
  * A Cloudflare Worker deployed from a [Foldkit](https://foldkit.dev) app.
@@ -92,33 +99,29 @@ export interface FoldkitProps<
  * defaults to `"single-page-application"` — deep links serve
  * `index.html` and the Foldkit router takes over.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Foldkit App
+ * ### Deploying a Foldkit App
  * A single call builds the project and deploys the client output as
  * static assets — no configuration required.
  *
- * @example Foldkit app
+ * **Example:** Foldkit app
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website");
  * ```
  *
- * @example Foldkit project in a subdirectory
+ * **Example:** Foldkit project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
  *   rootDir: "applications/web",
  * });
  * ```
  *
- * @section Single-Page Application Routing
+ * ### Single-Page Application Routing
  * Unmatched paths serve `index.html` by default so deep links boot the
- * app and the Foldkit router resolves the route. An explicit `assets`
- * config merges over the default — a site that ships real 404 content
- * can opt out.
+ * app and the Foldkit router resolves the route. A site that ships real
+ * 404 content overrides the default with `notFoundHandling: "404-page"`.
  *
- * @example Serving a real 404 page
+ * **Example:** Serving a real 404 page
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
  *   assets: {
@@ -127,7 +130,7 @@ export interface FoldkitProps<
  * });
  * ```
  *
- * @section Custom Worker Entry
+ * ### Custom Worker Entry
  * By default the deployment is assets-only. When code must run at the
  * edge — API routes, error reporting, Durable Object classes — point
  * `main` at your own module that serves the client build through the
@@ -136,7 +139,7 @@ export interface FoldkitProps<
  * browser code — a Foldkit app runs on the client, so anything it needs
  * must come from a route the Worker serves.
  *
- * @example Custom entry serving an API route from a KV namespace
+ * **Example:** Custom entry serving an API route from a KV namespace
  * ```typescript
  * const ticker = yield* Cloudflare.KV.Namespace("Ticker");
  *
@@ -148,12 +151,12 @@ export interface FoldkitProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
  * has large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
  *   memo: {
@@ -162,53 +165,65 @@ export interface FoldkitProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Foldkit` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.Foldkit<Website>()("Website") {}
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Foldkit: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
-        | InputProps<FoldkitProps<Bindings>>
-        | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
+        | FoldkitInput<Bindings>
+        | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
-      | InputProps<FoldkitProps<Bindings>>
-      | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
+      | FoldkitInput<Bindings>
+      | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | FoldkitInput<Bindings>
+    | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Foldkit(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | FoldkitInput<Bindings>
+          | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+      ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
         Effect.map(
@@ -216,7 +231,8 @@ export const Foldkit: {
           (props) => ({
             ...props,
             // Foldkit routes on the client; serve index.html for unmatched
-            // paths so deep links boot the app instead of 404ing.
+            // paths so deep links boot the app instead of 404ing. An
+            // explicit `assets.notFoundHandling` wins over the default.
             assets: {
               notFoundHandling: "single-page-application" as const,
               ...props?.assets,

@@ -13,7 +13,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
+test.provider.skipIf(!!process.env.FAST)(
   "create invalidation with explicit paths and wait for completion",
   (stack) =>
     Effect.gen(function* () {
@@ -112,7 +112,16 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
       yield* stack.destroy();
       yield* assertDistributionDeleted(deployed.distribution.distributionId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudfront",
+      "provider:aws:iam",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );
 
 test.provider(
@@ -125,6 +134,7 @@ test.provider(
       const all = yield* provider.list();
       expect(all).toEqual([]);
     }),
+  { tags: ["provider:aws", "provider:aws:cloudfront", "live"] },
 );
 
 const assertDistributionDeleted = (distributionId: string) =>

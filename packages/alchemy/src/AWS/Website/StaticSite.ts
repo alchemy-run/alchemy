@@ -29,6 +29,7 @@ import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
   type StaticSiteBuildProps,
@@ -50,10 +51,6 @@ export interface StaticSiteProps {
    * Optional build configuration executed before upload.
    */
   build?: StaticSiteBuildProps;
-  /**
-   * Environment variables exposed to the build command.
-   */
-  environment?: Record<string, Input<string>>;
   /**
    * Static site asset upload configuration.
    */
@@ -174,32 +171,31 @@ export interface StaticSiteProps {
  * KeyValueStore with a file manifest for edge routing, and optionally builds
  * the site first. Supports standalone distribution or composition with
  * `AWS.Website.Router`.
- * @resource
- * @section Basic Sites
- * @example Simple Static Site
+ * ### Basic Sites
+ * **Example:** Simple Static Site
  * ```typescript
  * const site = yield* StaticSite("Docs", {
  *   path: "./site",
  * });
  * ```
  *
- * @section Built Sites
- * @example Build A Vite App
+ * ### Built Sites
+ * **Example:** Build A Vite App
  * ```typescript
  * const site = yield* StaticSite("Web", {
  *   path: "./frontend",
  *   build: {
  *     command: "bun run build",
  *     output: "dist",
- *   },
- *   environment: {
- *     VITE_API_URL: api.url,
+ *     env: {
+ *       VITE_API_URL: api.url,
+ *     },
  *   },
  * });
  * ```
  *
- * @section Single-Page Applications
- * @example SPA With Client-Side Routing
+ * ### Single-Page Applications
+ * **Example:** SPA With Client-Side Routing
  * ```typescript
  * // Misses fall back to index.html with a 200 so the client router
  * // can handle the path.
@@ -213,8 +209,8 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @section Custom Domains
- * @example Site With A Route 53 Domain
+ * ### Custom Domains
+ * **Example:** Site With A Route 53 Domain
  * ```typescript
  * const site = yield* StaticSite("Web", {
  *   path: "./site",
@@ -226,8 +222,8 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @section Router Composition
- * @example Serve Through A Router
+ * ### Router Composition
+ * **Example:** Serve Through A Router
  * ```typescript
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
@@ -238,7 +234,7 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @example Host-Matched Router Attachment
+ * **Example:** Host-Matched Router Attachment
  * ```typescript
  * // The site serves for docs.example.com on the router. On a same-stack
  * // router that owns a domain, this declaration alone provisions the
@@ -254,6 +250,8 @@ export interface StaticSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const StaticSite = (id: string, props: StaticSiteProps) =>
   Effect.gen(function* () {
@@ -274,13 +272,20 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         env: props.dev.env,
       });
       const devUrl = Output.map(dev.url, (url) => url ?? props.dev?.url);
+      // A Router-attached site registers with the Router in dev exactly as it
+      // does live — same resource types, same ids, same route entries — with
+      // the local dev server standing in for the S3 origin.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, devUrl)
+        : undefined;
       return {
         bucket: undefined,
         build: undefined,
         files: undefined,
         distribution: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         url: devUrl,
         urls: [devUrl],
       };
@@ -401,7 +406,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
           lockfile: props.build.lockfile,
         },
         outdir: props.build.output,
-        env: props.environment,
+        env: props.build.env,
       })
     : undefined;
 
@@ -733,12 +738,14 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    if (domain?.hostedZoneId && domain.dns !== false) {
+    if (domain && domain.dns !== false) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
           Route53Record(`AliasRecord${index + 1}`, {
-            hostedZoneId: domain.hostedZoneId!,
+            // Optional — the Record provider infers the most specific
+            // public zone containing `name` when omitted.
+            hostedZoneId: domain.hostedZoneId,
             name,
             type: "A",
             aliasTarget: {
@@ -753,15 +760,19 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     // Precedence: the canonical domain, then aliases in declaration
     // order, then the CloudFront default domain (only while
     // `cloudfrontUrl` is enabled). Redirect hostnames never appear.
+    //
+    // `dist.url` rather than an interpolated
+    // `https://${dist.domainName}` (same as Router): the distribution
+    // knows its own address, which is `https://{id}.cloudfront.net` on
+    // AWS and `http://localhost:{port}` under `alchemy dev`, where that
+    // AWS hostname resolves to nothing.
     urls = domain
       ? [
           Output.interpolate`https://${domain.name}`,
           ...(domain.aliases ?? []).map((alias) => `https://${alias}`),
-          ...(props.cloudfrontUrl !== false
-            ? [Output.interpolate`https://${dist.domainName}`]
-            : []),
+          ...(props.cloudfrontUrl !== false ? [dist.url] : []),
         ]
-      : [Output.interpolate`https://${dist.domainName}`];
+      : [dist.url];
   }
 
   // The edge router signs S3 origin requests with OAC (sigv4, see

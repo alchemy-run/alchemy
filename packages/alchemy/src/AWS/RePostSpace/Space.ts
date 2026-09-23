@@ -169,9 +169,8 @@ export interface Space extends Resource<
  * AWS IAM Identity Center to be enabled in the account. Space provisioning
  * is asynchronous and can take tens of minutes; the provider waits for the
  * space to reach `CREATE_COMPLETED` before returning.
- * @resource
- * @section Creating a Space
- * @example Basic Space
+ * ### Creating a Space
+ * **Example:** Basic Space
  * ```typescript
  * import * as RePostSpace from "alchemy/AWS/RePostSpace";
  *
@@ -181,7 +180,7 @@ export interface Space extends Resource<
  * });
  * ```
  *
- * @example Space with Description and Tags
+ * **Example:** Space with Description and Tags
  * ```typescript
  * const space = yield* RePostSpace.Space("Engineering", {
  *   name: "Engineering Knowledge Base",
@@ -192,14 +191,16 @@ export interface Space extends Resource<
  * });
  * ```
  *
- * @section Encryption
- * @example Space with a Customer-Managed KMS Key
+ * ### Encryption
+ * **Example:** Space with a Customer-Managed KMS Key
  * ```typescript
  * const space = yield* RePostSpace.Space("Secure", {
  *   subdomain: "my-org-secure",
  *   userKMSKey: key.keyArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const Space = Resource<Space>("AWS.RePostSpace.Space");
 

@@ -14,11 +14,12 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { detachQueueConsumersOfScript } from "./Consumer.ts";
 import {
   generateLocalId,
   isLiveId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localRuntimeServices,
 } from "../LocalRuntime.ts";
@@ -53,29 +54,26 @@ export type Queue = Resource<
  * Queues enable you to send and receive messages with guaranteed delivery.
  * Create a queue as a resource, then bind it to a Worker to send messages
  * at runtime. Register a consumer to process messages.
- * @resource
- * @product Queues
- * @category Storage & Databases
- * @section Creating a Queue
- * @example Basic queue
+ * ### Creating a Queue
+ * **Example:** Basic queue
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue");
  * ```
  *
- * @example Queue with explicit name
+ * **Example:** Queue with explicit name
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
  *   name: "my-app-queue",
  * });
  * ```
  *
- * @section Binding to a Worker
+ * ### Binding to a Worker
  * In an Effect-style Worker, use `Cloudflare.Queues.WriteQueue` in
  * the init phase and provide `Cloudflare.Queues.WriteQueueBinding` in
  * the runtime layer. The returned `WriteQueueClient` exposes `send`
  * and `sendBatch`.
  *
- * @example Sending messages from a Worker
+ * **Example:** Sending messages from a Worker
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -107,6 +105,10 @@ export type Queue = Resource<
  *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
  * );
  * ```
+ *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  */
 export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
   aliases: ["Cloudflare.Queue"],
@@ -399,13 +401,13 @@ const findQueueByName = Effect.fn(function* (queueName: string) {
 export const ProviderLocal = () =>
   RpcProvider.effect(
     Queue,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
       return {
         stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountId = yield* localAccountId;
           if (!output?.queueId) return { action: "update" };
           // A real (non-`dev:`) queueId on a local-mode row is legacy damage:
           // pre-stamping dev runs preserved the live id, which the worker
@@ -437,7 +439,7 @@ export const ProviderLocal = () =>
           ).pipe(Option.getOrUndefined);
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountId = yield* localAccountId;
           const queue: Queue["Attributes"] = {
             // Never carry a real (non-`dev:`) id forward onto a local row —
             // the worker binding would treat it as an `Alchemy.remote()`

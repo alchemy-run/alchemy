@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
 import type { App } from "./App.ts";
+import type { Bucket } from "./Bucket.ts";
 import type { Database } from "./Database.ts";
 import type { Project } from "./Project.ts";
 
@@ -60,6 +61,17 @@ export const resolveDatabaseId = (database: string | Database) =>
   resolveId(
     "database id",
     typeof database === "string" ? database : (database.databaseId as unknown),
+  );
+
+export const unresolvedBucketIdOf = (bucket: string | Bucket | undefined) =>
+  concreteIdOf(
+    typeof bucket === "string" ? bucket : (bucket?.bucketId as unknown),
+  );
+
+export const resolveBucketId = (bucket: string | Bucket) =>
+  resolveId(
+    "bucket id",
+    typeof bucket === "string" ? bucket : (bucket.bucketId as unknown),
   );
 
 export const unresolvedAppIdOf = (app: string | App | undefined) =>

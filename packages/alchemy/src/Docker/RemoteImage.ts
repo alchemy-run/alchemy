@@ -79,10 +79,9 @@ export interface RemoteImage extends Resource<
  * to re-tag the pulled image, and `registry` to push it (mirroring it from a
  * source registry into your own, for example).
  *
- * @resource
  *
- * @section Pulling Images
- * @example Pull nginx
+ * ### Pulling Images
+ * **Example:** Pull nginx
  * ```typescript
  * const nginx = yield* Docker.RemoteImage("nginx", {
  *   name: "nginx",
@@ -90,7 +89,7 @@ export interface RemoteImage extends Resource<
  * });
  * ```
  *
- * @example Reuse an existing daemon tag
+ * **Example:** Reuse an existing daemon tag
  * ```typescript
  * const postgres = yield* Docker.RemoteImage("postgres", {
  *   name: "postgres",
@@ -99,8 +98,8 @@ export interface RemoteImage extends Resource<
  * });
  * ```
  *
- * @section Re-tagging and Pushing
- * @example Mirror a public image into your registry
+ * ### Re-tagging and Pushing
+ * **Example:** Mirror a public image into your registry
  * ```typescript
  * const mirrored = yield* Docker.RemoteImage("nginx-mirror", {
  *   name: "nginx",
@@ -110,13 +109,13 @@ export interface RemoteImage extends Resource<
  *   registry: {
  *     server: "ghcr.io",
  *     username: "octocat",
- *     password: Config.redacted("GITHUB_TOKEN"),
+ *     password: Config.Redacted("GITHUB_TOKEN"),
  *   },
  * });
  * ```
  *
- * @section Docker Context
- * @example Pull through a named Docker context
+ * ### Docker Context
+ * **Example:** Pull through a named Docker context
  * ```typescript
  * const nginx = yield* Docker.RemoteImage("nginx", {
  *   name: "nginx",
@@ -124,6 +123,9 @@ export interface RemoteImage extends Resource<
  *   context: "remote-build",
  * });
  * ```
+ *
+ * @resource
+ * @product Image
  */
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 

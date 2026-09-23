@@ -10,7 +10,7 @@ import { Database } from "./Database.ts";
  * cannot be the project's default database; use `Prisma.Project` to own the
  * default.
  *
- * @example
+ * **Example:** Example
  * ```typescript
  * const project = yield* Prisma.Project("app", { createDatabase: false });
  * const postgres = yield* Prisma.Postgres("db", {
@@ -20,6 +20,7 @@ import { Database } from "./Database.ts";
  * ```
  *
  * @resource
+ * @product Postgres
  */
 export const Postgres = Database;
 export type { DatabaseProps as PostgresProps } from "./Database.ts";

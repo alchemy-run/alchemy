@@ -10,7 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "astro": "catalog:frameworks"
+    "astro": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",

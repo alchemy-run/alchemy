@@ -7,6 +7,10 @@ import * as KvNamespace from "../bindings/kv-namespace/KvNamespace.ts";
 import * as R2Bucket from "../bindings/r2-bucket/R2Bucket.ts";
 import * as Workflows from "../bindings/workflows/Workflows.ts";
 import {
+  HEADER_ORIGINAL_URL,
+  HEADER_PROXY_SHARED_SECRET,
+} from "../globals/ProxyHeaders.shared.ts";
+import {
   localRuntimeLayer,
   poll,
   startTestWorker,
@@ -58,13 +62,14 @@ const API = "/cdn-cgi/explorer/api";
 
 const startExplorerWorker = (
   name: string,
-  options: { explorer?: boolean } = {},
+  options: { explorer?: boolean; proxySharedSecret?: string } = {},
 ) =>
   startTestWorker({
     name,
     compatibilityDate: "2026-03-10",
     compatibilityFlags: [],
     explorer: options.explorer ?? true,
+    proxySharedSecret: options.proxySharedSecret,
     modules: [{ name: "main.js", type: "ESModule", content: SCRIPT }],
     durableObjectNamespaces: [{ className: "Store", sql: true }],
     workflows: [{ workflowName: `${name}-flow`, className: "Flow" }],
@@ -331,6 +336,27 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
           headers: { origin: "https://evil.example" },
         });
         expect(crossSite.status).toBe(403);
+      }),
+    );
+
+    it.effect("checks the client-facing host behind a trusted proxy", () =>
+      Effect.gen(function* () {
+        const secret = "explorer-proxy-secret";
+        const worker = yield* startExplorerWorker("explorer-proxied", {
+          proxySharedSecret: secret,
+        });
+        // Behind the Vite proxy the raw Host is the private runtime address;
+        // the guard must judge the restored client-facing URL instead.
+        const viaProxy = (origin: string) =>
+          worker.fetch(`${API}/storage/kv/namespaces`, {
+            headers: {
+              [HEADER_PROXY_SHARED_SECRET]: secret,
+              [HEADER_ORIGINAL_URL]: `${origin}${API}/storage/kv/namespaces`,
+            },
+          });
+
+        expect((yield* viaProxy("http://evil.example")).status).toBe(403);
+        expect((yield* viaProxy("http://localhost:5173")).status).toBe(200);
       }),
     );
 

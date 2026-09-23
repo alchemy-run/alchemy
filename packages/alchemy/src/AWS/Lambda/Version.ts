@@ -119,9 +119,8 @@ export interface VersionClass extends ResourceClassLike<Version> {
  * replaying against the code that started them. Use `destroy()` only when the
  * exact numbered version is safe to remove.
  *
- * @resource
- * @section Publishing a Version
- * @example Publish a Managed Function
+ * ### Publishing a Version
+ * **Example:** Publish a Managed Function
  * ```typescript
  * const fn = yield* AWS.Lambda.Function("Handler", {
  *   main: import.meta.resolve("./handler.ts"),
@@ -131,8 +130,8 @@ export interface VersionClass extends ResourceClassLike<Version> {
  * });
  * ```
  *
- * @section Promoting with an Alias
- * @example Stable Production Alias
+ * ### Promoting with an Alias
+ * **Example:** Stable Production Alias
  * ```typescript
  * const version = yield* AWS.Lambda.Version("CampaignRunVersion", {
  *   function: campaign.function,
@@ -143,8 +142,8 @@ export interface VersionClass extends ResourceClassLike<Version> {
  * });
  * ```
  *
- * @section Explicit Deletion
- * @example Delete the Exact Version on Stack Destroy
+ * ### Explicit Deletion
+ * **Example:** Delete the Exact Version on Stack Destroy
  * ```typescript
  * import { destroy } from "alchemy/RemovalPolicy";
  *
@@ -152,6 +151,8 @@ export interface VersionClass extends ResourceClassLike<Version> {
  *   function: fn,
  * }).pipe(destroy());
  * ```
+ *
+ * @resource
  */
 export const Version = Object.assign(
   (id: string, props: VersionProps) =>

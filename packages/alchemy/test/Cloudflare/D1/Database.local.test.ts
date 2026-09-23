@@ -45,10 +45,7 @@ const RpcMigrationStack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Cloudflare.D1.Database("RpcMigratedDB", {
-    migrationsDir: pathe.resolve(
-      import.meta.dirname,
-      "fixtures/rpc-migrations",
-    ),
+    migrations: pathe.resolve(import.meta.dirname, "fixtures/rpc-migrations"),
   }),
 );
 
@@ -100,7 +97,10 @@ test(
 
     yield* destroy(RpcMigrationStack);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "local"],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -117,7 +117,7 @@ inProcessTest.provider(
 
       const db = yield* stack.deploy(
         Cloudflare.D1.Database("InProcessMigratedDB", {
-          migrationsDir: pathe.resolve(
+          migrations: pathe.resolve(
             import.meta.dirname,
             "fixtures/rpc-migrations",
           ),
@@ -129,7 +129,10 @@ inProcessTest.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "local"],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -173,15 +176,23 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
  * Migrations apply against the local simulator: reconcile boots an
- * ephemeral gateway workerd and drives the same executor-agnostic migration
- * flow the live provider uses (wrangler-compatible `d1_migrations` table,
- * idempotent re-application, sequential ids). Verified through the deployed
- * worker's binding — the same DO SQLite storage the gateway wrote to.
+ * ephemeral gateway workerd and drives the same migration flow the live
+ * provider uses (Alchemy's `__alchemy_migrations` table, idempotent
+ * re-application). Verified through the deployed worker's binding — the
+ * same DO SQLite storage the gateway wrote to.
  */
 test.provider(
   "D1 migrations apply against the local simulator and re-apply incrementally",
@@ -204,7 +215,7 @@ test.provider(
 
       const deploy = Effect.gen(function* () {
         const db = yield* Cloudflare.D1.Database("LocalMigratedDB", {
-          migrationsDir,
+          migrations: migrationsDir,
         });
         const worker = yield* Cloudflare.Worker("d1-migrations-worker", {
           main: pathe.resolve(
@@ -218,7 +229,7 @@ test.provider(
 
       const v1 = yield* stack.deploy(deploy);
       expect(v1.db.databaseId).toMatch(/^dev:/);
-      expect(v1.db.migrationsTable).toBe("d1_migrations");
+      expect(v1.db.migrationsTable).toBe("__alchemy_migrations");
       expect(Object.keys(v1.db.migrationsHashes)).toEqual(["0001_users.sql"]);
 
       const url = v1.worker.url!;
@@ -226,7 +237,7 @@ test.provider(
         tables: string[];
       };
       expect(schema.tables).toContain("users");
-      expect(schema.tables).toContain("d1_migrations");
+      expect(schema.tables).toContain("__alchemy_migrations");
 
       const users = (yield* getJsonReady(`${url}/users`)) as {
         users: string[];
@@ -248,12 +259,13 @@ test.provider(
         "0002_posts.sql",
       ]);
 
+      // Alchemy's shape: INTEGER ids, name-keyed.
       const migrations = (yield* getJsonReady(`${url}/migrations`)) as {
-        migrations: Array<{ id: string; name: string }>;
+        migrations: Array<{ id: number; name: string }>;
       };
       expect(migrations.migrations).toEqual([
-        { id: "00001", name: "0001_users.sql" },
-        { id: "00002", name: "0002_posts.sql" },
+        { id: 1, name: "0001_users.sql" },
+        { id: 2, name: "0002_posts.sql" },
       ]);
 
       // Data written by 0001 survived the second deploy (not re-applied).
@@ -264,7 +276,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -318,7 +338,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -383,7 +411,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -450,5 +486,13 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -44,7 +44,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Nuxt build, so give the hook more
@@ -75,11 +74,11 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("Nuxt on Cloudflare Workers");
+    expect(html).toContain("Nuxt on Cloudflare");
     // The `GREETING` env value from alchemy.run.ts, read via
     // `event.context.cloudflare.env` during SSR — proves the Worker
     // rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from Nuxt on Cloudflare!");
   }),
   { timeout: 180_000 },
 );
@@ -90,9 +89,11 @@ test(
     const url = yield* base;
     const body = yield* getBodyWhenReady(
       `${url}/api/hello`,
-      "Hello from alchemy",
+      "Hello from Nuxt on Cloudflare!",
     );
-    expect(JSON.parse(body)).toEqual({ greeting: "Hello from alchemy" });
+    expect(JSON.parse(body)).toEqual({
+      greeting: "Hello from Nuxt on Cloudflare!",
+    });
   }),
   { timeout: 180_000 },
 );

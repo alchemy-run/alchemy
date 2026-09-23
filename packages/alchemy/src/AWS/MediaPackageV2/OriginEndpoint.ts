@@ -145,9 +145,8 @@ export interface OriginEndpoint extends Resource<
  * low-latency HLS, DASH, and/or MSS manifests and serves them to downstream
  * devices (players or CDNs) on the channel group's egress domain.
  *
- * @resource
- * @section Creating an Origin Endpoint
- * @example HLS Endpoint on a Channel
+ * ### Creating an Origin Endpoint
+ * **Example:** HLS Endpoint on a Channel
  * ```typescript
  * import * as MediaPackageV2 from "alchemy/AWS/MediaPackageV2";
  *
@@ -163,7 +162,7 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @example CMAF Endpoint with DASH and Low-Latency HLS
+ * **Example:** CMAF Endpoint with DASH and Low-Latency HLS
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -175,8 +174,8 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Startover Window
- * @example Allow viewers to catch up on the last hour
+ * ### Startover Window
+ * **Example:** Allow viewers to catch up on the last hour
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -187,8 +186,8 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Resource Policy
- * @example Restrict playback to a CDN principal
+ * ### Resource Policy
+ * **Example:** Restrict playback to a CDN principal
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -207,11 +206,13 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Playback URLs
- * @example Read the served manifest URLs
+ * ### Playback URLs
+ * **Example:** Read the served manifest URLs
  * ```typescript
  * const playbackUrl = endpoint.hlsManifests.map((m) => m.url);
  * ```
+ *
+ * @resource
  */
 export const OriginEndpoint = Resource<OriginEndpoint>(
   "AWS.MediaPackageV2.OriginEndpoint",

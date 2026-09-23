@@ -94,18 +94,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Astro("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from Alchemy!",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from Alchemy!",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -165,17 +162,36 @@ export default defineConfig({
 });
 ```
 
-The `astro` prop on the resource exposes common serializable options
-for deploy-specific overrides; Astro merges them *over* the config
-file (scalars override, arrays like `integrations` and
-`vite.plugins` concatenate after the file's):
+A config file can't consume Alchemy `Output`s or vary by stage. For
+those values the `astro` prop is a deploy-time override bag — a
+serializable subset (`site`, `base`, `output`, `srcDir`, `publicDir`,
+`outDir`, `trailingSlash`) merged *over* the config file, so a value
+set here wins:
 
 ```typescript
 // alchemy.run.ts
+import { Stack } from "alchemy/Stack";
+
+Effect.gen(function* () {
+  const { stage } = yield* Stack;
+
+  const site = yield* AWS.Website.Astro("Website", {
+    astro: {
+      site:
+        stage === "prod"
+          ? "https://blog.example.com"
+          : `https://${stage}.example.com`,
+    },
+  });
+});
+```
+
+Use `config` to load an alternate config file (relative to
+`rootDir`) instead of astro's own `astro.config.*` discovery:
+
+```typescript
 export const Website = AWS.Website.Astro("Website", {
-  astro: {
-    site: "https://preview.example.com",
-  },
+  config: "astro.deploy.config.ts",
 });
 ```
 
@@ -200,12 +216,12 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Astro("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.
 
 :::note
 Astro's default image service uses `sharp`. To use Astro image

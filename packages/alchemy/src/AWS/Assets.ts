@@ -91,7 +91,7 @@ export const AssetsLive = Layer.effect(
               if (!environment.endpoint) {
                 return yield* Effect.die(
                   new Error(
-                    "Assets bucket not found. Run 'alchemy aws bootstrap' to create it.",
+                    "Assets bucket not found. Run 'alchemy provider aws bootstrap' to create it.",
                   ),
                 );
               }
@@ -142,13 +142,11 @@ export const AssetsLive = Layer.effect(
           );
           return key;
         }).pipe(
-          Effect.mapError(
-            (err): AssetsError => ({
-              _tag: "AssetsUploadError",
-              message: `Failed to upload asset ${key}`,
-              cause: err,
-            }),
-          ),
+          Effect.mapError((err): AssetsError => ({
+            _tag: "AssetsUploadError",
+            message: `Failed to upload asset ${key}`,
+            cause: err,
+          })),
         );
       },
       hasAsset: Effect.fn(function* (hash: string) {
@@ -159,13 +157,11 @@ export const AssetsLive = Layer.effect(
           .pipe(
             Effect.map(() => true),
             Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.mapError(
-              (err): AssetsError => ({
-                _tag: "AssetsCheckError",
-                message: `Failed to check asset ${key}`,
-                cause: err,
-              }),
-            ),
+            Effect.mapError((err): AssetsError => ({
+              _tag: "AssetsCheckError",
+              message: `Failed to check asset ${key}`,
+              cause: err,
+            })),
           );
       }),
     };
@@ -227,7 +223,7 @@ const getBucketTags = (bucketName: string) =>
 
 /**
  * Create the tagged assets bucket for the current account+region and wait for
- * it to be addressable. Idempotent — used by `alchemy aws bootstrap` and by
+ * it to be addressable. Idempotent — used by `alchemy provider aws bootstrap` and by
  * the transparent local-emulator bootstrap in {@link AssetsLive}.
  */
 export const createAssetsBucket = Effect.gen(function* () {

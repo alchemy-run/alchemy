@@ -83,11 +83,8 @@ export type ZoneTransferOutgoing = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the zone.
  * The configuration is a per-zone singleton: `zoneId` is the identity
  * (replacement on change), everything else is mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Configuring outgoing transfers
- * @example Serve a primary zone to an external secondary
+ * ### Configuring outgoing transfers
+ * **Example:** Serve a primary zone to an external secondary
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Secondary", {
  *   ip: "192.0.2.53",
@@ -100,7 +97,7 @@ export type ZoneTransferOutgoing = Resource<
  * });
  * ```
  *
- * @example Configure transfers but keep them disabled
+ * **Example:** Configure transfers but keep them disabled
  * ```typescript
  * yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
  *   zoneId: zone.zoneId,
@@ -111,6 +108,10 @@ export type ZoneTransferOutgoing = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferOutgoing = Resource<ZoneTransferOutgoing>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferOutgoing"],

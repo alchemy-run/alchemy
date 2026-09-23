@@ -16,9 +16,8 @@ import type { FindImageOptions } from "./Image.ts";
  * Provide the implementation with
  * `Effect.provide(AWS.EC2.GetAmiHttp)` (already registered by
  * `AWS.providers()` for plan-time use).
- * @binding
- * @section Looking Up Images
- * @example Plan-time lookup (data source)
+ * ### Looking Up Images
+ * **Example:** Plan-time lookup (data source)
  * ```typescript
  * const instance = yield* AWS.EC2.Instance("web", {
  *   imageId: AWS.EC2.getAmi({
@@ -29,7 +28,7 @@ import type { FindImageOptions } from "./Image.ts";
  *   subnetId: subnet.subnetId,
  * });
  * ```
- * @example Runtime lookup inside a Function
+ * **Example:** Runtime lookup inside a Function
  * ```typescript
  * // init — bind the operation
  * const getAmi = yield* AWS.EC2.GetAmi({
@@ -41,6 +40,8 @@ import type { FindImageOptions } from "./Image.ts";
  * const latest = yield* getAmi();
  * console.log(latest?.ImageId, latest?.CreationDate);
  * ```
+ *
+ * @binding
  */
 export interface GetAmi extends Binding.Service<
   GetAmi,

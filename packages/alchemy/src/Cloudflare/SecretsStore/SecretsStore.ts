@@ -6,6 +6,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -34,21 +35,22 @@ export type Store = Resource<
  * start and `create` is only ever invoked when no store exists yet.
  * Once it exists it is treated as account-level infrastructure that
  * outlives any single stack.
- * @resource
- * @product Secrets Store
- * @category Storage & Databases
- * @section Creating a Store
- * @example Basic Secrets Store (adopts existing or creates one)
+ * ### Creating a Store
+ * **Example:** Basic Secrets Store (adopts existing or creates one)
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * ```
  *
- * @example Adopt a specific named store
+ * **Example:** Adopt a specific named store
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore", {
  *   name: "production-secrets",
  * });
  * ```
+ *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  */
 export const Store = Resource<Store>("Cloudflare.SecretsStore");
 
@@ -172,7 +174,7 @@ export const StoreProviderLocal = () =>
   Provider.succeed(Store, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.storeId) return { action: "update" } as const;
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -184,7 +186,7 @@ export const StoreProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       return {
         storeId: output?.storeId ?? generateLocalId(),
         // Mirror the name Cloudflare uses for an account's default store.

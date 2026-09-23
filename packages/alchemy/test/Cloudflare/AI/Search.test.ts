@@ -74,7 +74,9 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
 // `yield*` wires the whole pipeline together.
 const program = () =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {});
+    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
+      forceDestroy: true,
+    });
     const search = yield* Cloudflare.AI.Search("Search", {
       source: bucket,
     });
@@ -107,7 +109,15 @@ test.provider(
 
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 // A web-crawler source crawls a seed URL and needs no service token, so the
@@ -175,5 +185,13 @@ test.provider(
 
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

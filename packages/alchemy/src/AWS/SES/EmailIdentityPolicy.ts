@@ -53,9 +53,8 @@ export interface EmailIdentityPolicy extends Resource<
  *
  * SES stores the policy document as JSON; Alchemy serializes the typed IAM
  * policy at the API boundary and compares its normalized content for drift.
- * @resource
- * @section Attaching a Policy
- * @example Authorize Another Account to Send
+ * ### Attaching a Policy
+ * **Example:** Authorize Another Account to Send
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -79,7 +78,7 @@ export interface EmailIdentityPolicy extends Resource<
  * });
  * ```
  *
- * @example Explicit Policy Name
+ * **Example:** Explicit Policy Name
  * ```typescript
  * // Without policyName a deterministic name is derived from app/stage/id.
  * const policy = yield* SES.EmailIdentityPolicy("AllowPartner", {
@@ -99,7 +98,7 @@ export interface EmailIdentityPolicy extends Resource<
  * });
  * ```
  *
- * @example Restrict the Grant with Conditions
+ * **Example:** Restrict the Grant with Conditions
  * ```typescript
  * const policy = yield* SES.EmailIdentityPolicy("AllowPartnerScoped", {
  *   emailIdentity: identity.emailIdentity,
@@ -120,7 +119,7 @@ export interface EmailIdentityPolicy extends Resource<
  * });
  * ```
  *
- * @example Several Policies on One Identity
+ * **Example:** Several Policies on One Identity
  * ```typescript
  * // Each policy is a separate resource keyed by its own name.
  * for (const partner of ["111122223333", "444455556666"]) {
@@ -141,6 +140,8 @@ export interface EmailIdentityPolicy extends Resource<
  *   });
  * }
  * ```
+ *
+ * @resource
  */
 export const EmailIdentityPolicy = Resource<EmailIdentityPolicy>(
   "AWS.SES.EmailIdentityPolicy",

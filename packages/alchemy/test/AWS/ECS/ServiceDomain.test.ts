@@ -93,13 +93,18 @@ test.provider.skipIf(!!process.env.FAST)(
         PrivateKey: new TextEncoder().encode(KEY_PEM),
       });
       const certificateArn = imported.CertificateArn!;
+      // Failure-path backup only (the happy path deletes the cert in-body,
+      // below). It runs inside the implicit file afterAll, whose budget is
+      // the 120s default — so this retry MUST stay well under that, or a
+      // still-in-use cert turns a passing file into an afterAll TimeoutError.
+      // If the cert is still ELB-held after ~60s, leak it for `pnpm nuke`.
       yield* Effect.addFinalizer(() =>
         acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceInUseException",
             schedule: Schedule.max([
               Schedule.spaced("5 seconds"),
-              Schedule.recurs(24),
+              Schedule.recurs(12),
             ]),
           }),
           Effect.ignore,
@@ -232,10 +237,19 @@ test.provider.skipIf(!!process.env.FAST)(
             Schedule.recurs(60),
           ]),
         }),
-        Effect.ignore,
       );
     }),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:acm",
+      "provider:aws:ec2",
+      "provider:aws:ecs",
+      "provider:aws:route53",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );
 
 // Typed probe (cheap, no infra): a `domain` whose hosted zone doesn't exist
@@ -267,7 +281,7 @@ test.provider(
       expect(rendered).toContain("no public Route 53 hosted zone");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ecs", "live"], timeout: 120_000 },
 );
 
 // Full ACM-issuance e2e (composed DNS-validated certificate) needs a REAL
@@ -330,5 +344,8 @@ test.provider.skipIf(!process.env.AWS_TEST_DOMAIN)(
 
       yield* stack.destroy();
     }),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 900_000,
+  },
 );

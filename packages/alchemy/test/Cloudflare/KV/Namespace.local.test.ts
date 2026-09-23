@@ -113,7 +113,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -185,7 +193,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -270,5 +286,13 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

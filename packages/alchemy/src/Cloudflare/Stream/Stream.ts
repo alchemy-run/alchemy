@@ -43,11 +43,8 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * binding through `Alchemy.remote()` to proxy to the real Stream service
  * instead.
  *
- * @binding
- * @product Stream
- * @category Media
- * @section Effect-style Worker (recommended)
- * @example Upload a video by URL and read back its details
+ * ### Effect-style Worker (recommended)
+ * **Example:** Upload a video by URL and read back its details
  * ```typescript
  * import * as Effect from "effect/Effect";
  *
@@ -68,8 +65,8 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * );
  * ```
  *
- * @section Worker binding metadata
- * @example Declare the binding on `env`
+ * ### Worker binding metadata
+ * **Example:** Declare the binding on `env`
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -80,8 +77,8 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * //   { STREAM: StreamBinding }
  * ```
  *
- * @section Local development
- * @example Proxy to the real Stream service in dev
+ * ### Local development
+ * **Example:** Proxy to the real Stream service in dev
  * ```typescript
  * // Default: videos land in the local video store under `alchemy dev`.
  * // Alchemy.remote() opts the binding into the real Stream service
@@ -93,6 +90,10 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * ```
  *
  * @see https://developers.cloudflare.com/stream/
+ *
+ * @binding
+ * @product Stream
+ * @category Media
  */
 export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
   /**

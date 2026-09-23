@@ -70,7 +70,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Cloudflare.R2.Bucket("LocalBucket");
+          const bucket = yield* Cloudflare.R2.Bucket("LocalBucket", {
+            forceDestroy: true,
+          });
           const worker = yield* Cloudflare.Worker("r2-local-worker", {
             main: pathe.resolve(
               import.meta.dirname,
@@ -104,7 +106,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -123,7 +133,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Cloudflare.R2.Bucket("ActionSeededBucket");
+          const bucket = yield* Cloudflare.R2.Bucket("ActionSeededBucket", {
+            forceDestroy: true,
+          });
 
           const Seed = Action(
             "Seed",
@@ -177,7 +189,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -195,9 +215,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Cloudflare.R2.Bucket("LiveDevBucket").pipe(
-            Alchemy.remote(),
-          );
+          const bucket = yield* Cloudflare.R2.Bucket("LiveDevBucket", {
+            forceDestroy: true,
+          }).pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("r2-live-worker", {
             main: pathe.resolve(
               import.meta.dirname,
@@ -239,5 +259,13 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -10,7 +10,7 @@
  * What the helper owns (identically for every consumer):
  *
  * - **RPC-sidecar hosting** via {@link RpcProvider.effect} with the shared
- *   AWS dev sidecar entry ([Local.ts](./Local.ts)), so the provider and its
+ *   AWS provider group ([Local.ts](./Local.ts)), so the provider and its
  *   watch fibers survive exec-process hot reloads during `alchemy dev`.
  * - **Live-provider delegation** — builds the caller's LIVE provider layer
  *   inside the floci override context ({@link flociServices} + optional
@@ -47,15 +47,16 @@ import type { ProviderService } from "../../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 
 /**
- * The AWS dev sidecar entry URL ([Local.ts](./Local.ts)) — every
+ * The AWS provider group module ([Local.ts](./Local.ts)) — every
  * {@link makeDevWatchProvider} consumer passes this so all floci dev
- * providers share ONE sidecar process.
+ * providers are served from the same group by the dev sidecar.
  */
-export const flociSidecarEntry = () =>
+export const flociProvidersUrl = () =>
   import.meta.resolve(
-    import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+    `./Local${moduleExtension(import.meta.url)}`,
     import.meta.url,
   );
 
@@ -113,6 +114,42 @@ export interface DevWatchSpec<Props, Attrs> {
    */
   readonly watchConfigOf: (news: Props, attrs: Attrs) => unknown;
   /**
+   * Transform the resolved props before EVERY delegated reconcile —
+   * engine-driven and watcher-driven alike — inside the per-id lock, with
+   * the floci override services provided. This is where a provider swaps a
+   * build-here artifact form for a build-locally one (e.g. the MicroVM dev
+   * provider docker-builds the image on the HOST and hands the live
+   * reconcile a `codeArtifact: { uri: "docker://…" }` instead of `main`/
+   * `context`, so the emulator never zips, uploads, or builds anything).
+   * The untransformed props stay in the watch registry, so restarts and
+   * watch-config comparisons see the user's real inputs.
+   */
+  readonly transformReconcileNews?: (input: {
+    id: string;
+    news: Props;
+  }) => Effect.Effect<Props, unknown, any>;
+  /**
+   * Called after EVERY successful reconcile — engine-driven (a prop
+   * change, a fresh session's converge) and watcher-driven
+   * ({@link DevWatchContext.rerunReconcile}) alike — inside the per-id
+   * lock, with the floci override services provided. This is where a
+   * provider makes the emulator's RUNNING state follow the new revision
+   * (e.g. ECS restarting tasks): the watch trigger only fires for FILE
+   * changes, so restart logic that lives only in the watch loop silently
+   * skips prop-driven updates (an inline dockerfile edit, a new env var)
+   * and running tasks keep serving the old revision until the next source
+   * edit.
+   *
+   * `previous` is the attrs before this reconcile — `undefined` on a
+   * greenfield create.
+   */
+  readonly onReconciled?: (input: {
+    id: string;
+    news: Props;
+    previous: Attrs | undefined;
+    attrs: Attrs;
+  }) => Effect.Effect<void, unknown, any>;
+  /**
    * Resource-specific replacement rules, mirroring the LIVE diff's cheap
    * checks (never bundling/building). Checked before the generic dev policy.
    */
@@ -166,13 +203,13 @@ export const makeDevWatchProvider = <
   Props = R["Props"],
   Attrs = R["Attributes"],
 >(
-  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
-  serverEntryUrl: string,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
+  providersUrl: string,
   spec: DevWatchSpec<Props, Attrs>,
 ) =>
   RpcProvider.effect(
     cls,
-    serverEntryUrl,
+    providersUrl,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const ambient = yield* Effect.context<never>();
@@ -272,14 +309,35 @@ export const makeDevWatchProvider = <
           currentAttrs: Effect.sync(() => entry.attrs as Attrs),
           rerunReconcile: withLock(input.id)(
             Effect.gen(function* () {
+              const previous = entry.attrs as Attrs | undefined;
+              const rerunNews =
+                spec.transformReconcileNews !== undefined
+                  ? yield* spec
+                      .transformReconcileNews({
+                        id: input.id,
+                        news: stripEffects(entry.lastInput.news) as Props,
+                      })
+                      .pipe(Effect.provide(services))
+                  : entry.lastInput.news;
               const fresh = yield* wrapped.reconcile(
                 withSafeSession({
                   ...entry.lastInput,
+                  news: rerunNews,
                   olds: entry.lastInput.news,
                   output: entry.attrs,
                 }) as any,
               );
               entry.attrs = fresh;
+              if (spec.onReconciled !== undefined) {
+                yield* spec
+                  .onReconciled({
+                    id: input.id,
+                    news: stripEffects(entry.lastInput.news) as Props,
+                    previous,
+                    attrs: fresh as Attrs,
+                  })
+                  .pipe(Effect.provide(services));
+              }
               return fresh as Attrs;
             }),
           ) as Effect.Effect<Attrs, unknown>,
@@ -321,7 +379,7 @@ export const makeDevWatchProvider = <
         diff: Effect.fn(function* ({
           id,
           olds,
-          news,
+          news: rawNews,
           output,
         }: {
           id: string;
@@ -329,6 +387,15 @@ export const makeDevWatchProvider = <
           news: Props;
           output: Attrs | undefined;
         }) {
+          // Runtime props (an Effect-native Function's handler, a Layer)
+          // arrive as Effects, which `isResolved` classifies as unresolved.
+          // They are irrelevant to the dev diff, so strip them BEFORE the
+          // resolved check — otherwise this diff bails to the engine default
+          // (`havePropsChanged` → noop) and the "fresh session with a state
+          // row but no watcher" branch below never runs: `alchemy dev`
+          // resumed over an existing stage would start no watch loop and
+          // hot reload would silently be dead.
+          const news = stripEffects(rawNews);
           if (!isResolved(news)) return;
           if (!output) return undefined;
           if (spec.replaceOn !== undefined) {
@@ -337,8 +404,30 @@ export const makeDevWatchProvider = <
           }
           // A fresh dev session has state rows but no running watcher (and
           // possibly a wiped emulator) — force a reconcile to converge floci
-          // and (re)start the watch loop.
-          if (!watches.has(id)) return { action: "update" as const };
+          // and (re)start the watch loop. A DEAD watcher (its loop exited or
+          // was interrupted) counts as none: nothing is handling content
+          // changes for this id anymore.
+          const entry = watches.get(id);
+          if (
+            entry === undefined ||
+            (entry.fiber !== undefined &&
+              entry.fiber.pollUnsafe() !== undefined)
+          ) {
+            return { action: "update" as const };
+          }
+          // The watcher may have swapped content SINCE state was last
+          // persisted (its rerunReconcile updates the emulator and the
+          // sidecar's in-memory attrs, not the state store). If the
+          // persisted attrs drifted from the watcher's current attrs, plan
+          // an update — the content-addressed reconcile is cheap, the
+          // engine persists the fresh attrs, and downstream consumers
+          // (stack outputs, Actions keyed on `code.hash`) see the swap
+          // instead of replaying stale state forever.
+          const persistedHash = yield* canonicalHash(output as object);
+          const watcherHash = yield* canonicalHash(entry.attrs as object);
+          if (persistedHash !== watcherHash) {
+            return { action: "update" as const };
+          }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {
             // Content-only changes are the watch loop's job — the dev diff
             // never bundles or builds.
@@ -349,10 +438,31 @@ export const makeDevWatchProvider = <
         reconcile: Effect.fn(function* (input: any) {
           return yield* withLock(input.id)(
             Effect.gen(function* () {
+              const previous = (input.output ??
+                watches.get(input.id)?.attrs) as Attrs | undefined;
+              const reconcileNews =
+                spec.transformReconcileNews !== undefined
+                  ? yield* spec
+                      .transformReconcileNews({
+                        id: input.id,
+                        news: stripEffects(input.news) as Props,
+                      })
+                      .pipe(Effect.provide(services))
+                  : input.news;
               const attrs = yield* wrapped.reconcile(
-                withSafeSession(input) as any,
+                withSafeSession({ ...input, news: reconcileNews }) as any,
               );
               yield* ensureWatch(input, attrs);
+              if (spec.onReconciled !== undefined) {
+                yield* spec
+                  .onReconciled({
+                    id: input.id,
+                    news: stripEffects(input.news) as Props,
+                    previous,
+                    attrs: attrs as Attrs,
+                  })
+                  .pipe(Effect.provide(services));
+              }
               return attrs;
             }),
           );
