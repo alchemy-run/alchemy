@@ -123,7 +123,10 @@ export const toFlyContainers = (
     })),
   }));
 
-const normalized = (containers: FlyContainerConfig[] | undefined) =>
+/** Canonical semantic config shared by drift detection and generation identity. */
+export const canonicalContainers = (
+  containers: FlyContainerConfig[] | undefined,
+) =>
   (containers ?? [])
     .map((container) => ({
       name: container.name,
@@ -157,7 +160,9 @@ export const sameContainers = (
   observed: FlyContainerConfig[] | undefined,
   desired: FlyContainerConfig[] | undefined,
 ) =>
-  deepEqual(normalized(observed), normalized(desired), { stripNullish: true });
+  deepEqual(canonicalContainers(observed), canonicalContainers(desired), {
+    stripNullish: true,
+  });
 
 /** Fly may synthesize a top-level image from the first container on readback. */
 export const sameContainerWorkload = (
