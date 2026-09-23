@@ -26,12 +26,14 @@ they conflict, this guide wins.
 Every page serves one of four needs. Decide which one before you write,
 and declare it in the frontmatter with `type`.
 
-| `type` | The reader wants to | Examples |
-| --- | --- | --- |
-| `tutorial` | learn by building something | Getting started, `cloudflare/tutorial/*` |
-| `how-to` | get a specific task done | CI, Testing a Stack, Custom Provider |
-| `reference` | look up an exact fact | generated `/providers` pages, CLI commands |
-| `explanation` | understand how and why it works | What is Alchemy?, Phases, Resource lifecycle |
+- **`tutorial`**: the reader wants to learn by building something.
+  Examples are Getting started and `cloudflare/tutorial/*`.
+- **`how-to`**: the reader wants to get a specific task done. Examples
+  are CI, Testing a Stack, and Custom Provider.
+- **`reference`**: the reader wants to look up an exact fact. Examples
+  are the generated `/providers` pages and the CLI commands.
+- **`explanation`**: the reader wants to understand how and why it
+  works. Examples are What is Alchemy?, Phases, and Resource lifecycle.
 
 ```yaml
 ---
@@ -102,6 +104,10 @@ to it.
   and update them.
 - **End with "Where next".** A short list of links in the form
   `- [Page](/path): what the reader finds there`.
+- **Use lists instead of tables.** Tables render poorly, and code in a
+  narrow column wraps badly. Write each row as a list item with a bold
+  or code lead term, such as `` - `name`: what it does. `` or
+  `- **Term**: what it means.`
 - **Prefer shorter.** Every section should answer a question this
   page's reader has. Detail for a different reader goes on that
   reader's page.
