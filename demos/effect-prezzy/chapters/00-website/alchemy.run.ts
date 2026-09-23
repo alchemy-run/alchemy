@@ -10,7 +10,6 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const web = yield* Cloudflare.Website.Vite("Web", {
-      rootDir: "./web",
       dev: { port: 5173 },
     });
 

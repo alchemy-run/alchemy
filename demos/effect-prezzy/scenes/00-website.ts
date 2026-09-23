@@ -11,7 +11,7 @@ export default defineScene({
       "Start from a plain Vite + React app",
       "An ordinary Vite + React dashboard. Nothing Alchemy-specific in it yet.",
     );
-    await s.editor.open("web/src/main.tsx");
+    await s.editor.open("src/main.tsx");
     s.pause(1);
 
     const stack = await s.chapterLines("alchemy.run.ts");
@@ -30,13 +30,13 @@ export default defineScene({
     await s.editor.patch(
       "alchemy.run.ts",
       "Add the Vite website as a resource",
-      edit.after(stack(11), stack(12, 15)),
+      edit.after(stack(11), stack(12, 14)),
       "Cloudflare.Website.Vite builds the Vite app and serves it from a Cloudflare Worker. dev pins the port alchemy dev serves it on.",
     );
     await s.editor.patch(
       "alchemy.run.ts",
       "Output the website's URL",
-      edit.after(stack(15), stack(16, 17)),
+      edit.after(stack(14), stack(15, 16)),
       "Whatever the Stack returns is its output: printed by alchemy dev and after every deploy.",
     );
 

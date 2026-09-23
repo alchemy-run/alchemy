@@ -6,12 +6,12 @@ export default defineScene({
   notes:
     "One LinkRoom Durable Object per link keeps the click count in transactional storage. The Worker calls it with typed RPC (record), and hands WebSocket upgrades to it; the sockets are hibernatable, so idle rooms can be evicted while connections stay open. The dashboard shows each count live, and a new test opens a socket, clicks, and expects the push.",
   async run(s) {
-    await s.sync({ except: ["src/LinkRoom.ts", "src/Api.ts", "web/src/main.tsx", "test/api.test.ts"] });
+    await s.sync({ except: ["src/LinkRoom.ts", "src/Api.ts", "src/main.tsx", "test/api.test.ts"] });
     await s.editor.show("src/LinkRoom.ts");
     s.pause(1);
     await s.editor.show("src/Api.ts");
     s.pause(0.5);
-    await s.editor.show("web/src/main.tsx");
+    await s.editor.show("src/main.tsx");
     s.pause(1);
 
     await s.terminal(async (t) => {

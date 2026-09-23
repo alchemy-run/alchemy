@@ -11,8 +11,8 @@ export default defineScene({
         "src/ShortyApi.ts",
         "src/Api.ts",
         "alchemy.run.ts",
-        "web/src/client.ts",
-        "web/src/main.tsx",
+        "src/client.ts",
+        "src/main.tsx",
       ],
     });
 
@@ -145,8 +145,8 @@ export default defineScene({
     s.pause(0.5);
 
     // The dashboard.
-    await s.editor.show("web/src/client.ts", "Derive a typed client from the same API");
-    await s.editor.show("web/src/main.tsx", "List and create links from the dashboard");
+    await s.editor.show("src/client.ts", "Derive a typed client from the same API");
+    await s.editor.show("src/main.tsx", "List and create links from the dashboard");
 
     s.step("Open the dashboard in the browser", "The dashboard served by alchemy dev, talking to the local Worker.");
     await s.browser.open("http://localhost:5173", { waitFor: /No links yet/ });

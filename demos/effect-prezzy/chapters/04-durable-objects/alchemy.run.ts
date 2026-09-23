@@ -12,7 +12,6 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const api = yield* Api;
     const web = yield* Cloudflare.Website.Vite("Web", {
-      rootDir: "./web",
       dev: { port: 5173 },
       env: { VITE_API_URL: api.url.as<string>() },
     });
