@@ -81,7 +81,10 @@ test(
       value: LITERAL_SECRET_VALUE,
     });
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -98,7 +101,10 @@ test(
       value: CONFIG_SECRET_VALUE,
     });
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -112,7 +118,10 @@ test(
     const body = (yield* res.json) as { type: string; value: unknown };
     expect(body).toEqual({ type: "string", value: STRING_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -126,7 +135,10 @@ test(
     const body = (yield* res.json) as { type: string; value: unknown };
     expect(body).toEqual({ type: "number", value: NUMBER_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -140,5 +152,8 @@ test(
     const body = (yield* res.json) as { type: string; value: unknown };
     expect(body).toEqual({ type: "object", value: OBJECT_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

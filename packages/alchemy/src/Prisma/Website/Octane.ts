@@ -5,7 +5,12 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export interface OctaneProps extends FrameworkSiteProps {}
 
 /**
- * Octane SSR and client assets on Prisma Compute. Select node() from @alchemy.run/frontend-frameworks/octane/node-adapter in the project’s octane.config.ts.
+ * Octane SSR and client assets on Prisma Compute.
+ *
+ * `Prisma.Website.Octane` selects hosting and automatically wraps Octane's
+ * default native Node output for Bun on Compute. Keep compiler and route
+ * settings in `octane.config.ts` without an adapter. The legacy Node marker
+ * adapter remains optional for existing projects.
  *
  * Native framework development and HMR run without Prisma cloud resources.
  * Apply `Alchemy.remote()` to use the live Compute deployment during dev.

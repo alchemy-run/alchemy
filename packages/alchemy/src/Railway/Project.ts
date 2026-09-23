@@ -163,6 +163,7 @@ export type Project = Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Project = Resource<Project>("Railway.Project");
 

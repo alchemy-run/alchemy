@@ -117,6 +117,7 @@ export interface CustomDomain extends Resource<
  * ```
  *
  * @resource
+ * @product Compute
  */
 export const CustomDomain = Resource<CustomDomain>("Prisma.CustomDomain");
 

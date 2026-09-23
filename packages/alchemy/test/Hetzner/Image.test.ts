@@ -104,5 +104,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:image",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );

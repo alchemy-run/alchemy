@@ -2,7 +2,7 @@
 
 Deploys a real Octane application with `Prisma.Website.Octane`.
 
-Octane server-renders the app, hydrates its counter, and serves `/api/hello` through a `ServerRoute`. The project selects the Node marker adapter; no KV binding is required.
+Octane server-renders the app, hydrates its counter, and serves `/api/hello` through a `ServerRoute`. `Prisma.Website.Octane` selects hosting and automatically wraps Octane's default native Node output for Bun on Compute. `octane.config.ts` keeps native route settings without an adapter; no KV binding is required.
 
 ## Infrastructure
 

@@ -65,7 +65,10 @@ test(
       expect(result.greeting).toBe("hello world");
     }).pipe(Effect.scoped, Effect.provide(clientLayer(targetUrl)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -80,7 +83,10 @@ test(
       expect(result.greeting).toBe("hello alchemy");
     }).pipe(Effect.scoped, Effect.provide(clientLayer(callerUrl)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -112,5 +118,8 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(callerUrl)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );

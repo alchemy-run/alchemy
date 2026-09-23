@@ -337,6 +337,7 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * ```
  *
  * @resource
+ * @product MongoDB
  */
 export const Mongo: typeof MongoResource = Object.assign(
   (

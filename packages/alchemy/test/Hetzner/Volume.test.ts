@@ -94,7 +94,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:service",
+      "provider:hetzner:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -143,7 +151,15 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:service",
+      "provider:hetzner:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -176,5 +192,13 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:service",
+      "provider:hetzner:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -344,7 +344,16 @@ test.provider(
         );
       expect(subscriptionGone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const expectWorkflowEvent = (
@@ -509,7 +518,16 @@ test.provider(
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
       yield* expectWorkflowGone(accountId, first.workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -616,7 +634,16 @@ test.provider(
       ),
     );
   },
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -689,7 +716,15 @@ test.provider(
       yield* expectWorkerGone(accountId, host.workerName);
       yield* expectWorkflowGone(accountId, hostBinding.workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const waitForAppliedStepLimit = (workflowName: string, expected: number) =>
@@ -734,7 +769,15 @@ test.provider(
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
       yield* expectWorkflowGone(accountId, deployed.workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const scheduledWorkflowMain = `${import.meta.dirname}/fixtures/workflow-schedules/async-worker.ts`;
@@ -798,7 +841,15 @@ test.provider(
       yield* expectWorkerGone(accountId, created.worker.workerName);
       yield* expectWorkflowGone(accountId, created.workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const namedWorkflowMain = `${import.meta.dirname}/fixtures/workflow-async/worker.ts`;
@@ -877,7 +928,15 @@ test.provider(
       yield* scratch.destroy();
       yield* expectWorkflowGone(accountId, explicit);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -1172,7 +1231,16 @@ test.provider(
         ).toBe(true);
       }
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -1228,7 +1296,15 @@ test.provider(
       yield* scratch.destroy();
       yield* expectWorkflowGone(accountId, workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -1301,7 +1377,15 @@ test.provider(
       yield* expectWorkflowGone(accountId, originalName);
       yield* expectWorkflowGone(accountId, occupiedName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -1415,7 +1499,16 @@ test.provider(
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
       yield* expectWorkflowGone(accountId, workflowName);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 for (const dev of [false, true]) {
@@ -1509,7 +1602,15 @@ for (const dev of [false, true]) {
           yield* expectWorkflowGone(moved.workflow.accountId, workflowName);
         }
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "provider:cloudflare:workflow",
+        ...(dev ? ["local"] : ["live"]),
+      ],
+      timeout: 120_000,
+    },
   );
 }
 
@@ -1580,6 +1681,14 @@ for (const api of ["async", "Effect"]) {
         yield* scratch.destroy();
         yield* expectWorkflowGone(accountId, workflowName);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "provider:cloudflare:workflow",
+        "live",
+      ],
+      timeout: 120_000,
+    },
   );
 }

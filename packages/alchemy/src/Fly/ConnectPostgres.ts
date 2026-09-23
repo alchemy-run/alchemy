@@ -27,6 +27,7 @@ import type { Postgres } from "./Postgres.ts";
  * ```
  *
  * @binding
+ * @product Postgres
  */
 export interface ConnectPostgres extends Binding.Service<
   ConnectPostgres,

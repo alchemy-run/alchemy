@@ -450,6 +450,7 @@ export type LoadBalancer = Resource<
  * ```
  *
  * @resource
+ * @product Load Balancer
  */
 export const LoadBalancer = Resource<LoadBalancer>("Hetzner.LoadBalancer");
 

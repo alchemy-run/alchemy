@@ -242,6 +242,7 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * ```
  *
  * @resource
+ * @product App
  */
 export const IpAssignment: typeof IpAssignmentResource = Object.assign(
   (

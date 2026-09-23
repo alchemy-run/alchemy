@@ -117,6 +117,14 @@ it.live(
       expect(sent.bodyJson).toEqual({ name: "default_secrets_store" });
       expect(Array.isArray(sent.bodyJson)).toBe(false);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:secretsstore",
+      "local",
+    ],
+  },
 );
 
 it.live(
@@ -145,6 +153,14 @@ it.live(
       expect(err.code).toBe(1003);
       expect(err.message).toBe("maximum_stores_exceeded");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:secretsstore",
+      "local",
+    ],
+  },
 );
 
 // Canonical `list()` test (account-scoped collection). Deploy/adopt the
@@ -153,24 +169,27 @@ it.live(
 // result. Bracketed with `stack.destroy()` at start and end; note the
 // SecretsStore provider's `delete` is an intentional no-op (account-level
 // infra), so destroy never tears down the shared store.
-test.provider("list enumerates the deployed secrets store", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed secrets store",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.SecretsStore.Store("ListStore");
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecretsStore.Store("ListStore");
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.SecretsStore.Store,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SecretsStore.Store,
+      );
+      const all = yield* provider.list();
 
-    expect(all.length).toBeGreaterThan(0);
-    expect(all.some((s) => s.storeId === deployed.storeId)).toBe(true);
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((s) => s.storeId === deployed.storeId)).toBe(true);
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
 );

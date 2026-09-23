@@ -304,6 +304,14 @@ for (const policy of [
         );
       }).pipe(logLevel),
     // Includes two SSR/image builds, real registry pushes, old-policy drain and cleanup.
-    { timeout: 900_000 },
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:machine",
+        "provider:fly:website",
+        "live",
+      ],
+      timeout: 900_000,
+    },
   );
 }

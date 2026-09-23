@@ -769,6 +769,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * idle capacity, application responsibilities, and verification limits.
  *
  * @resource
+ * @product Service
  */
 export const Service: Platform<
   Service,

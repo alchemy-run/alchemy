@@ -319,6 +319,7 @@ const GroupResource = Resource<Group>("Railway.Group");
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Group: typeof GroupResource = Object.assign(
   (
