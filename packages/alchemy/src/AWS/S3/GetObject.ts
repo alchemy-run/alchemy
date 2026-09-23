@@ -33,6 +33,24 @@ export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
  * );
  * ```
  *
+ * ### Reading from a Cloudflare Worker
+ * `GetObjectHttp` also works on a Cloudflare Worker host. At deploy time
+ * it creates an IAM user, an access key, and a role for the Worker to
+ * assume, and grants `s3:GetObject` on that role. At runtime it signs
+ * each call with the assumed role's credentials.
+ *
+ * **Example:** Bind a Bucket to a Worker
+ * ```typescript
+ * export default Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     // ...
+ *   }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface GetObject extends Binding.Service<

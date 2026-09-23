@@ -67,7 +67,7 @@ A nested `Effect.scoped` gives these queries their own memo and cleanup boundary
 const listUsers = sql`SELECT * FROM users`.pipe(Effect.scoped);
 ```
 
-Alchemy's runtime bridges supply execution scopes; when writing a standalone script or custom server integration, provide an explicit scope around each unit of work. `Effect.scoped` above creates a fresh lifetime each time `listUsers` runs; see [Runtime](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope) for instance and request boundaries.
+Alchemy's runtime bridges supply execution scopes; when writing a standalone script or custom server integration, provide an explicit scope around each unit of work. `Effect.scoped` above creates a fresh lifetime each time `listUsers` runs; see [Phases](/infrastructure-as-effects/phases#instance-scope-vs-request-scope) for instance and request boundaries.
 
 ## Provider setup
 

@@ -1,6 +1,7 @@
 ---
 title: What is Alchemy?
 description: Alchemy is Infrastructure as Code built in pure Effect, with Infrastructure as Effects on top. Declare your cloud resources and the code that runs on them in one type-safe TypeScript program, and deploy it with one command.
+type: explanation
 prev:
   link: /getting-started
   label: Getting started
@@ -10,17 +11,16 @@ next:
 ---
 
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
-import ProviderIcons from "../../components/ProviderIcons.astro";
 
 Alchemy is **Infrastructure as Code** built in pure
 [Effect](https://effect.website), with **Infrastructure as Effects**
 on top. Infrastructure as Code declares, diffs, and deploys cloud
 resources the way Terraform or Pulumi does. Infrastructure as Effects
 lets the code that runs on those resources live in the same program,
-as typed Effects and Layers.
+as typed Effects and layers.
 
-This file holds the whole application, an R2 Bucket and a
-Worker that serves files from it. A small Stack file deploys it (below).
+This file holds the whole application, an R2 Bucket and a Worker that
+serves files from it. A small stack file deploys it (below).
 
 ```typescript
 // src/api.ts
@@ -50,18 +50,16 @@ export default Cloudflare.Worker(
 
 The Bucket is declared next to the Worker that uses it. `bucket` is a
 typed client the handler closes over. Binding `Uploads` inside the
-Worker adds the Bucket to the Stack, so you don't yield it separately.
-This page covers Infrastructure as Code first, then what
-Infrastructure as Effects adds on top.
+Worker adds the Bucket to the stack, so you don't yield it separately.
 
 ## Infrastructure as Code
 
 The core of Alchemy is Infrastructure as Code, in the same family as
 Terraform, Pulumi, CloudFormation, and the CDK.
 
-#### Stack
+### Stack
 
-A **Stack** is the unit you deploy. It is an Effect that yields
+A **stack** is the unit you deploy. It is an Effect that yields
 resources and returns the outputs you want printed:
 
 ```typescript
@@ -81,54 +79,38 @@ export default Alchemy.Stack(
 );
 ```
 
-Deploy it:
-
-```sh
-bun alchemy deploy
-```
-
-Alchemy creates the Bucket, bundles the Worker, wires the binding
-between them, and prints the URL. Every deploy targets a
-[stage](/environments/stages). A stage is an isolated environment with
-its own copy of every resource, so `dev` and `prod` never touch each
-other:
-
-```sh
-alchemy deploy              # live_$USER by default
-alchemy deploy --stage prod
-```
-
-`alchemy dev` uses `dev_$USER` instead.
+`alchemy deploy` creates the Bucket, bundles the Worker, wires the
+binding between them, and prints the URL. Every deploy targets a
+[stage](/environments/stages), an isolated copy of every resource, so
+`dev` and `prod` never touch each other.
 
 Alchemy reads the current state, diffs it against your program, shows
 the plan, and applies it in dependency order. The terminal below shows
-that loop for a Stack with a Bucket, a KV Namespace, and a Worker
+that loop for a stack with a Bucket, a KV Namespace, and a Worker
 bound to both:
 
 <DeployTerminal client:visible />
 
 **State** is where the result persists between runs, so the next
-deploy only touches what changed. The `state` option above picks
-where it's stored.
+deploy only touches what changed. The `state` option picks where it's
+stored, as [State Store](/state-store) explains. See
+[Stacks](/infrastructure-as-code/stack) for every stack option.
 
-See [Stacks](/infrastructure-as-code/stack) and
-[State Store](/state-store).
+### Resource
 
-#### Resource
-
-A **Resource** is a cloud entity in a Stack managed by Alchemy, such
-as a bucket, a database, a queue, a Worker, or a DNS record. Yield it in the
-Stack to add it to the plan:
+A **resource** is a cloud entity in a stack managed by Alchemy, such
+as a bucket, a database, a queue, a Worker, or a DNS record. Yield it
+in the stack to add it to the plan:
 
 ```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+const bucket = yield* Cloudflare.R2.Bucket("Uploads"); // logical ID "Uploads"
 // bucket.bucketName is an Output
 ```
 
-Each Resource has a logical id (`"Uploads"` here). Alchemy uses it to
-track the Resource across deploys. Its outputs are typed values you
-can pass into other Resources. Here the physical bucket name Alchemy
-generated becomes an environment variable on a Worker:
+Alchemy tracks each resource across deploys by its logical ID. Its
+outputs are typed values you can pass into other resources. Here the
+physical bucket name Alchemy generated becomes an environment variable
+on a Worker:
 
 ```typescript
 const bucket = yield* Cloudflare.R2.Bucket("Uploads");
@@ -142,29 +124,28 @@ yield* Cloudflare.Worker("Api", {
 See [Resources](/infrastructure-as-code/resource) and
 [Outputs](/infrastructure-as-code/outputs).
 
-#### Provider
+### Provider
 
-A **Provider** tells Alchemy how to read, diff, create, update, and
+A **provider** tells Alchemy how to read, diff, create, update, and
 delete one resource type. Each cloud ships its providers as an Effect
-Layer. A Stack takes as many as it needs:
+`Layer`, and a stack takes as many as it needs:
 
 ```typescript
 providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
 ```
 
-The type system checks the wiring. Yield an AWS resource in a Stack
+The type system checks the wiring. Yield an AWS resource in a stack
 that only provides `Cloudflare.providers()` and the program does not
-compile. [Providers](/infrastructure-as-code/provider) covers the
-built-in ones, and
-[Custom Provider](/infrastructure-as-code/custom-provider) shows how
-to write your own.
+compile. See [Multiple providers](/infrastructure-as-code/stack#multiple-providers)
+for the wiring, [Custom Provider](/infrastructure-as-code/custom-provider)
+to write your own, and [Provider contract](/infrastructure-as-code/provider)
+for the operations a provider implements.
 
-## A superset of Infrastructure as Code
+## The same app with Infrastructure as Code alone
 
 With only Infrastructure as Code, Alchemy looks and works like any
 other IaC tool. One file declares the Bucket and the Worker and passes
-the Bucket on the Worker's `env`. A second file is the handler. It
-reads the Bucket from that env:
+the Bucket on the Worker's `env`:
 
 ```typescript
 // alchemy.run.ts
@@ -181,6 +162,8 @@ export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
 // ...plus the default-exported Alchemy.Stack that yields Api, as above
 ```
 
+A second file is the handler. It reads the Bucket from that env:
+
 ```typescript
 // src/api.ts
 import type { ApiEnv } from "../alchemy.run.ts";
@@ -195,29 +178,23 @@ export default {
 };
 ```
 
-This works and is supported. `InferEnv` types the env from the
-declaration, which most IaC tools do not do. The two files are still
-held together by the name `Uploads`, and the handler knows nothing
-about how the Bucket got there. Infrastructure as Effects turns those
-two files into the one at the top of this page.
+This style works and is supported. `InferEnv` types the env from the
+declaration, which most IaC tools do not do.
 
-:::tip
-Alchemy also supports circular references in the
-dependency graph, which most IaC tools reject. See
-[Circular Bindings](/infrastructure-as-effects/circular-bindings).
-:::
+The two files are still held together by the name `Uploads`, and the
+handler knows nothing about how the Bucket got there. Infrastructure
+as Effects turns those two files into the one at the top of this page.
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects adds Runtimes and Bindings to
+Infrastructure as Effects adds runtimes and bindings to
 Infrastructure as Code.
 
-#### Runtime
+### Runtime
 
-A **Runtime** is a Resource that carries the code it runs, such as a
-Worker, Lambda Function, Container, or Server. That code is always written
-the same way, as an **Effectful Constructor**. Bind what you need,
-then return what you expose:
+A **runtime** is a resource that carries the code it runs, such as a
+Worker, Lambda Function, Container, or Server. That code is always
+written the same way, as an **Effectful Constructor**:
 
 ```typescript
 Effect.gen(function* () {
@@ -229,15 +206,15 @@ Effect.gen(function* () {
 });
 ```
 
-The outer Effect runs at deploy time and at cold start. What it
+The outer Effect runs at deploy time and at cold start, and what it
 returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, and a Workflow returns its run function.
-Every Runtime in Alchemy is a variation on that one shape. See
-[Runtime](/infrastructure-as-effects/runtime).
+Every runtime in Alchemy is a variation on that shape, as
+[Runtime](/infrastructure-as-effects/runtime) shows.
 
-#### Binding
+### Binding
 
-A **Binding** connects a Resource to the Runtime that uses it:
+A **binding** connects a resource to the runtime that uses it:
 
 ```typescript
 const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
@@ -245,9 +222,9 @@ const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 ```
 
 It returns a typed client and generates what that client needs to
-work. On Cloudflare that is a native Worker binding. On AWS it is
-an IAM statement scoped to one resource, plus the resource's name in
-the Function's environment:
+work. On Cloudflare that is a native Worker binding. On AWS it is an
+IAM statement scoped to one resource, plus the resource's name in the
+Function's environment:
 
 ```typescript
 const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
@@ -258,11 +235,11 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 You don't reach for `env.Uploads` or write a policy by hand. The
 binding is the SDK. See [Binding](/infrastructure-as-effects/binding).
 
-#### Layers
+### Layers
 
-Every Binding is a contract paired with a **Layer** that fulfills it.
-You write the handler against the contract, and the Layer decides how.
-Swap the Layer and the handler doesn't change:
+Every binding is a contract paired with a layer that fulfills it. You
+write the handler against the contract, and the layer decides how.
+Swap the layer and the handler doesn't change:
 
 ```diff lang="typescript"
  Effect.gen(function* () {
@@ -272,78 +249,49 @@ Swap the Layer and the handler doesn't change:
 +}).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp));    // HTTP with a scoped token
 ```
 
-The same split works for services of your own. A Layer can own
-Resources and Bindings outright:
+The same split works for services of your own. A layer can own
+resources and bindings outright:
 
 ```typescript
 export const JobServiceKV = Layer.effect(
   JobService,
   Effect.gen(function* () {
-    const Jobs = yield* Cloudflare.KV.Namespace("Jobs");      // a Resource, owned by the Layer
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Jobs); // and its Binding
+    const Jobs = yield* Cloudflare.KV.Namespace("Jobs");      // a resource, owned by the layer
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Jobs); // and its binding
     return { getJob: (id: string) => kv.get<Job>(id, "json") };
   }),
 );
 ```
 
-You write business logic against the `JobService` contract. The
-Layer decides the infrastructure behind it, so the same handler can
-read jobs from KV in a Worker or from DynamoDB in a Lambda Function.
-Only the provided Layer changes:
-
-```diff lang="typescript"
- Effect.gen(function* () {
-   const jobs = yield* JobService;
-   // ...
--}).pipe(Effect.provide(JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding))));
-+}).pipe(Effect.provide(JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp))));
-```
-
-The inner `Layer.provide` supplies the binding implementation the
-service needs, either the native KV binding or DynamoDB over HTTP. A swap
-works only when the host supports every binding in the Layer.
-`AWS.DynamoDB.GetItemHttp` grants IAM only to AWS hosts, so the
-DynamoDB variant can't back a Cloudflare Worker. See
+You write business logic against the `JobService` contract. The layer
+decides the infrastructure behind it, so the same handler can read
+jobs from KV in a Worker or from DynamoDB in a Lambda Function. See
 [Layers](/infrastructure-as-effects/layers) for the full `JobService`
-definition.
+example and which hosts each layer supports.
 
-The Infrastructure as Effects section goes deeper from here.
-[Event Sources](/infrastructure-as-effects/event-sources) and
-[Sinks](/infrastructure-as-effects/sinks) turn resources into Effect
-`Stream`s. [Phases](/infrastructure-as-effects/phases) pins down
-exactly what runs when.
-[Circular Bindings](/infrastructure-as-effects/circular-bindings)
-lets two Workers call each other.
-[Telemetry](/infrastructure-as-effects/telemetry) exports every
-request's traces and logs.
+The Infrastructure as Effects section goes deeper from here:
+
+- [Event Sources](/infrastructure-as-effects/event-sources) and
+  [Sinks](/infrastructure-as-effects/sinks): turn resources into
+  Effect `Stream`s.
+- [Phases](/infrastructure-as-effects/phases): what runs at deploy
+  time and what runs in the deployed runtime.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings):
+  let two Workers call each other, a cycle most IaC tools reject.
+- [Telemetry](/infrastructure-as-effects/telemetry): export every
+  request's traces and logs.
 
 ## Where next
 
-<div class="next-steps">
-
-<a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
-  <strong>Runtime</strong>
-  <span>The Effectful Constructor in depth, including the fetch and RPC interface and the three ways to declare a Runtime.</span>
-</a>
-
-<a href="/infrastructure-as-code/stack" class="next-card">
-  <strong>Stacks</strong>
-  <span>The unit you deploy, with its options, outputs, and multiple providers.</span>
-</a>
-
-<a href="/cloudflare" class="next-card">
-  <strong>Cloudflare</strong>
-  <span>Workers, Durable Objects, R2, KV, D1, Queues, Workflows, and Containers, with a tutorial and a guide for each.</span>
-</a>
-
-<a href="/aws" class="next-card">
-  <strong>AWS</strong>
-  <span>Lambda, S3, SQS, DynamoDB, EC2, ECS, and EKS, with a tutorial and a guide for each.</span>
-</a>
-
-<a href="/providers" class="next-card">
-  <strong>More providers</strong>
-  <ProviderIcons />
-</a>
-
-</div>
+- [Runtime](/infrastructure-as-effects/runtime): the Effectful
+  Constructor in depth, including the fetch and RPC interface and the
+  three ways to declare a runtime.
+- [Stacks](/infrastructure-as-code/stack): the unit you deploy, with
+  its options, outputs, and multiple providers.
+- [Cloudflare](/cloudflare): Workers, Durable Objects, R2, KV, D1,
+  Queues, Workflows, and Containers, with a tutorial and a guide for
+  each.
+- [AWS](/aws): Lambda, S3, SQS, DynamoDB, EC2, ECS, and EKS, with a
+  tutorial and a guide for each.
+- [More providers](/providers): every other cloud and service Alchemy
+  supports.

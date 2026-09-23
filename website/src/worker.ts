@@ -206,11 +206,14 @@ const REDIRECTS: Record<string, string> = {
   "/infrastructure-as-effects/infrastructure-layers":
     "/infrastructure-as-effects/layers",
   "/guides/migrating-from-v1": "/migrating-from-v1",
-  "/guides/monorepo": "/project-structure/monorepo",
+  "/guides/monorepo": "/project-structure/file-layout#monorepos",
   "/guides/monorepo-multi-stack": "/project-structure/monorepo-multi-stack",
   "/guides/monorepo-single-stack": "/project-structure/monorepo-single-stack",
-  "/guides/testing-a-stack": "/testing/testing-a-stack",
+  "/guides/testing-a-stack": "/testing",
   "/guides/testing-providers": "/testing/testing-providers",
+  // Core docs redesign: merged pages.
+  "/testing/testing-a-stack": "/testing",
+  "/project-structure/monorepo": "/project-structure/file-layout#monorepos",
   "/hetzner/frontend": "/hetzner/frontend/websites",
   "/hetzner/websites": "/hetzner/frontend/websites",
   "/neon/branching": "/neon/data/branching",

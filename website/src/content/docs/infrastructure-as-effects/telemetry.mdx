@@ -1,45 +1,38 @@
 ---
 title: Telemetry
-description: OpenTelemetry is built into every runtime. Exporters are Layers, wired to resources through the binding infrastructure, built per event, and flushed as each request completes.
+description: Export the traces, logs, and metrics your Effect code emits by providing an exporter layer on a Worker or Lambda Function.
+type: how-to
 ---
 
-Every Alchemy runtime ships with OpenTelemetry export built in.
-Each fetch, queue message, cron fire, RPC call, Durable Object call,
-Workflow run, and Lambda invocation is wrapped in the machinery to
-export the traces, logs, and metrics that Effect already emits. That
-covers `Effect.withSpan` and `Effect.fn` spans, `Effect.log` records,
-and `Metric` updates. There is no SDK to initialize. The exporter is a
-Layer, configured like everything else in Alchemy.
+Every Alchemy runtime has OpenTelemetry export built in. To ship the
+spans, logs, and metrics your Effect code already emits, provide an
+exporter layer on the runtime. Without one, nothing exports, and
+Effect's default no-op tracer keeps instrumentation free.
 
-## Provide an exporter layer
+## Export to an OTLP endpoint
 
-To configure telemetry, provide a Layer on the Runtime's constructor
-Effect. Merge it into the single `Effect.provide` alongside the other
-binding layers:
+`Alchemy.Telemetry.layerOtlp` sends every signal to any OTLP/HTTP
+backend. Merge it into the runtime's single `Effect.provide` next to
+your other binding layers:
 
 ```typescript
-import * as Axiom from "alchemy/Axiom";
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-export const Traces = Axiom.Dataset("Traces", {
-  name: "app-traces",
-  kind: "otel:traces:v1",
-});
-
-export const Logs = Axiom.Dataset("Logs", {
-  name: "app-logs",
-  kind: "otel:logs:v1",
-});
-
-export const Ingest = Axiom.ApiToken("Ingest", {
-  name: "app-ingest",
-  datasetCapabilities: {
-    "app-traces": { ingest: ["create"] },
-    "app-logs": { ingest: ["create"] },
-  },
-});
+const Honeycomb = Layer.unwrap(
+  Effect.gen(function* () {
+    // Redacted values bind as secrets, never as plaintext.
+    const key = yield* Config.Redacted("HONEYCOMB_API_KEY");
+    return Alchemy.Telemetry.layerOtlp({
+      url: "https://api.honeycomb.io", // /v1/{traces,logs,metrics} is appended
+      headers: { "x-honeycomb-team": key },
+      serviceName: "checkout", // default: the Worker's physical name
+    });
+  }),
+);
 
 export default Cloudflare.Worker(
   "Worker",
@@ -48,142 +41,97 @@ export default Cloudflare.Worker(
     // ...
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.R2.ReadWriteBucketBinding,
-        Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
-      ),
+      Layer.mergeAll(Cloudflare.R2.ReadWriteBucketBinding, Honeycomb),
     ),
   ),
 );
 ```
 
-`token` is an ingest [`ApiToken`](/providers/axiom/apitoken) with
-`ingest: ["create"]` on each dataset. Each signal (`traces`, `logs`,
-`metrics`) takes a [`Dataset`](/providers/axiom/dataset) of the
-matching `otel:*:v1` kind. Omit a signal to skip exporting it. Here
-metrics are not exported.
+`layerOtlp` is a [binding](/infrastructure-as-effects/binding) layer.
+At deploy time it binds the URL and headers onto the host, and at
+runtime the exporter reads them back.
 
-Without a telemetry layer, nothing exports. Effect's default tracer
-is a no-op, so all instrumentation stays free.
+### Send each signal to its own endpoint
 
-On Cloudflare, [`Cloudflare.Telemetry()`](/cloudflare/observability/workers-tracing)
-is the platform-native alternative. It mirrors Effect spans into
-Workers Observability (fetch/KV/R2/D1 auto-spans included) instead of
-shipping OTLP from the Worker. Cloudflare owns sampling and export.
-
-## Binding layers
-
-`Alchemy.Telemetry.layerOtlp` is the generic form. It is a *binding*
-layer for any OTLP/HTTP backend. Its url and header values accept
-plain values or resource Outputs. At deploy time, building the layer
-binds them onto the host (`Redacted` values as secret bindings). At
-runtime the exporter reads them back:
+URLs and header values accept plain values, `Redacted` values, or
+resource [Outputs](/infrastructure-as-code/outputs). A per-signal entry
+takes precedence over the base `url` and its `headers`:
 
 ```typescript
 Alchemy.Telemetry.layerOtlp({
-  url: "https://api.honeycomb.io",
-  headers: { "x-honeycomb-team": apiKey },
-})
+  // a per-signal entry sends only its own headers
+  traces: { url: collector.tracesUrl, headers: { authorization: token } },
+  logs: { url: collector.logsUrl, headers: { authorization: token } },
+  // no base url and no metrics entry, so metrics don't export
+});
 ```
 
-You can also configure each signal independently. A per-signal
-entry takes precedence over the base `url`, which gets
-`/v1/{traces,logs,metrics}` appended:
+## Export to Axiom
+
+`Axiom.Telemetry` wraps `layerOtlp`. It takes an ingest `ApiToken` and
+one `Dataset` per signal, and builds the endpoints and auth headers:
 
 ```typescript
-Alchemy.Telemetry.layerOtlp({
-  traces: { url: collector.tracesUrl, headers: { ... } },
-  logs: { url: collector.logsUrl, headers: { ... } },
-})
-```
+import * as Axiom from "alchemy/Axiom";
+import { Ingest, Logs, Traces } from "./observability.ts";
 
-Vendor layers wrap this. [`Axiom.Telemetry`](/axiom) takes an ingest
-`ApiToken` and a `Dataset` per signal. It composes the endpoints and
-`Authorization`/`X-Axiom-Dataset` headers for you. See
-[Tutorial Part 6](/cloudflare/tutorial/part-6) for the end-to-end
-walkthrough.
-
-For a manually configured backend with a url and an API key, resolve
-the secret with `Config` in the layer's constructor and pass it as a
-header. The `Config` read binds the value at deploy time. Because it
-is `Redacted`, it travels as a secret binding:
-
-```typescript
-const Honeycomb = Layer.unwrap(
-  Effect.gen(function* () {
-    const key = yield* Config.Redacted("HONEYCOMB_API_KEY");
-    return Alchemy.Telemetry.layerOtlp({
-      url: "https://api.honeycomb.io",
-      headers: { "x-honeycomb-team": key },
-    });
-  }),
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.R2.ReadWriteBucketBinding,
+    // omit a signal (here metrics) to skip exporting it
+    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+  ),
 );
 ```
 
-## Multiple destinations
+See [Ship Worker telemetry to Axiom](/cloudflare/observability/axiom-observability)
+to declare the datasets and a least-privilege token.
 
-Exporter layers compose. Merge as many as you need and every
-destination receives the telemetry. Telemetry is serialized once and
-fanned out per signal, so trace and span ids agree across
-destinations. The same trace is queryable in both backends:
+On Cloudflare, [`Cloudflare.Telemetry()`](/cloudflare/observability/workers-tracing)
+mirrors Effect spans into Workers Observability instead, and Cloudflare
+owns sampling and export.
+
+## Send to several destinations
+
+Exporter layers compose, and every destination receives the signals
+it configures. Telemetry is serialized once, so trace and span IDs
+match across backends:
 
 ```typescript
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
+    // traces and logs
     Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+    // all three signals
     Alchemy.Telemetry.layerOtlp({
       url: "https://collector.internal.example.com",
       headers: { "x-api-key": apiKey },
     }),
   ),
-)
+);
 ```
 
-Each destination only receives the signals it configures. Here Axiom
-gets traces and logs, and the second collector gets all three. A
-destination that fails to accept an export is logged and skipped. One
-healthy destination keeps the exporter alive.
+A destination that rejects an export is logged and skipped. One
+healthy destination keeps the exporter running. If the platform sets
+the standard `OTEL_EXPORTER_OTLP_*` variables, they add one more
+destination.
 
-## Service identity
+## What gets exported
 
-The exported `service.name` defaults to the deployed Function/Worker's
-physical name, then the stack name. Set `serviceName` on the layer to
-override it. Every signal also carries `alchemy.stack` and
-`alchemy.stage` resource attributes, so one backend can receive every
-stage and still tell them apart.
+- **Spans**: from `Effect.withSpan` and `Effect.fn`.
+- **Logs**: from `Effect.log` and its level variants.
+- **Metrics**: every `Metric` update.
+- **HTTP request spans**: each fetch handler gets an `http.server`
+  root span with the method, URL, status, and headers. An incoming
+  `traceparent` header continues the caller's trace, and `HttpClient`
+  requests propagate it onward.
+- **Resource attributes**: `service.name` comes from `serviceName`,
+  then the deployed Function or Worker's physical name, then the stack
+  name. Every signal also carries `alchemy.stack` and `alchemy.stage`,
+  so one backend can tell stages apart.
 
-## Per-event scope and flushing
-
-On the per-event runtimes (Worker fetch/queue/cron/RPC, Durable
-Object calls, Workflow runs, Lambda invocations), the exporters are
-built into each event's request scope. Buffered telemetry is flushed
-when that scope closes:
-
-- On Cloudflare, the flush is registered with `ctx.waitUntil`, so it
-  happens after the response is sent and never adds latency.
-- On Lambda, the flush settles inline before the invocation returns.
-  The response isn't released until the invoke completes anyway.
-
-This per-event lifecycle makes export work on workerd, where timers
-and fetches are pinned to the request that created them. A
-process-global batching exporter would be killed the moment its
-creating request ended.
-
-Server runtimes (Cloudflare Containers, ECS Tasks, EC2 hosts,
-Lambda microVMs) are long-lived processes, so they build the
-exporters once at startup. Telemetry batches on the standard
-export intervals and the final flush runs at graceful shutdown.
-
-## HTTP request spans
-
-Fetch handlers get an `http.server` root span automatically, carrying
-the method, URL, status, and headers. Incoming `traceparent` headers
-are honored, so a trace that starts in one service continues through
-your Worker or Lambda. Outgoing requests made with Effect's
-`HttpClient` propagate the context onward.
-
-Everything you instrument nests under that root:
+Spans you add nest under the request span:
 
 ```typescript
 const object = yield* bucket
@@ -191,46 +139,59 @@ const object = yield* bucket
   .pipe(Effect.withSpan("bucket.get", { attributes: { key } }));
 ```
 
-## Custom exporters
+## When telemetry flushes
 
-`Alchemy.Telemetry.layer` installs any Layer that provides a
-`Tracer`, loggers, or metric exporters. Effect's
-`effect/unstable/observability` modules (`OtlpTracer`, `OtlpLogger`,
-`OtlpMetrics`, protobuf serialization) compose here directly. The
-Layer is built per event into the event's request scope, so a custom
-exporter gets the same flush-on-close behavior as the built-in one.
+Per-event runtimes build the exporters into each event's request
+scope and flush when that scope closes. This covers Worker fetch,
+queue, cron, and RPC handlers, Durable Object calls, Workflow runs,
+and Lambda invocations.
 
-Custom layers also compose with the OTLP destinations and with each
-other. Loggers and metric exporters merge. A custom `Tracer` is a
-single Effect service, and it replaces the built-in one.
+- **Cloudflare**: the flush runs in `ctx.waitUntil` after the response
+  is sent, so it adds no latency.
+- **Lambda**: the flush settles inline before the invocation returns.
+- **Server runtimes** (Cloudflare Containers, ECS Tasks, EC2 hosts,
+  Lambda microVMs): exporters start once per process, batch on the
+  standard intervals, and flush at graceful shutdown.
 
-:::caution
-A custom Layer for per-event runtimes should disable or greatly
-lengthen its periodic export intervals (e.g.
-`exportInterval: "1 hour"`). An interval export that fires mid-event
-races the scope close. The close interrupts the in-flight batch and
-drops it. The built-in exporter already handles this. The flush on
-scope close delivers everything.
-:::
+On workerd, timers and fetches are pinned to the request that created
+them, so a process-global batching exporter would stop when that
+request ends. See [Phases](/infrastructure-as-effects/phases#instance-scope-vs-request-scope)
+for instance and request scope.
 
-## Under the hood
+## Use a custom exporter
 
-The binding travels as environment bindings on the host. Each
-`layerOtlp` layer appends its destination to a single bound
-destination list (secrets through the secret channel). The runtime
-exporter reads the list back per event. An environment that sets the
-standard `OTEL_EXPORTER_OTLP_*` variables contributes one implicit
-extra destination. This helps when the platform injects OTLP settings
-for you.
+`Alchemy.Telemetry.layer` installs any layer that provides a `Tracer`,
+loggers, or metric exporters, such as Effect's
+`effect/unstable/observability` modules. It is built per event, so it
+flushes on scope close like the built-in exporter:
+
+```typescript
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
+import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
+
+Alchemy.Telemetry.layer(
+  OtlpTracer.layer({
+    url: "https://collector.example.com/v1/traces",
+    // A periodic export mid-event races the scope close and drops the batch.
+    exportInterval: "1 hour",
+  }).pipe(
+    Layer.provide([OtlpSerialization.layerJson, FetchHttpClient.layer]),
+  ),
+);
+```
+
+Custom loggers and metric exporters merge with the OTLP destinations.
+A custom `Tracer` replaces the built-in one, because Effect has a
+single tracer service.
 
 ## Where next
 
+- [Observability overview](/testing/observability): why the receiving
+  end is a resource in the same stack
 - [Tutorial Part 6](/cloudflare/tutorial/part-6): bind a Worker's
   telemetry to Axiom end to end
-- [Observability](/testing/observability): provision the receiving
-  end (datasets, tokens, monitors, alarms) as resources
 - [Native Workers tracing](/cloudflare/observability/workers-tracing):
-  `Cloudflare.Telemetry()`, Effect spans in the Cloudflare waterfall
-- [Ship Worker telemetry to Axiom](/cloudflare/observability/axiom-observability):
-  the Cloudflare-specific reference, including the platform-push
-  alternative
+  Effect spans in the Cloudflare waterfall
+- [Secrets](/environments/secrets): how `Config.Redacted` values reach
+  the runtime

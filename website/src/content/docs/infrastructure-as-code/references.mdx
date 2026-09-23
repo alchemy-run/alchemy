@@ -1,55 +1,64 @@
 ---
 title: References
 description: Read an already-deployed Resource or Stack at plan time. Use Resource.ref by Logical ID with optional stack/stage props, or import a Stack tag and depend on its outputs.
+type: how-to
 ---
 
 A reference reads something already deployed from the persisted
-[state store](/state-store) at plan time. The target can be in a
-different stage, a different Stack, or both. References are lazy
-and don't drift. Every plan re-reads the upstream's state, so
-downstream always sees whatever was actually last deployed.
+[state store](/state-store) at plan time. Use one to borrow a resource
+from another stage, another stack, or both. Every plan re-reads the
+upstream's state, so the downstream always sees what was last
+deployed.
+
+## Requirements
+
+- **Same state backend**: references read the state store of the
+  stack doing the referencing. Both stacks must use the same backend,
+  for example both `Cloudflare.state()` in the same account.
+- **The fully qualified name**: the ID you pass is the resource's
+  [fully qualified name](/infrastructure-as-code/resource#fully-qualified-names).
+  For a resource declared inside `Namespace.push("Site")`, pass
+  `"Site/Assets"`, not `"Assets"`.
+- **An upstream deploy**: the upstream must already be deployed to the
+  exact `{ stack, stage }` you name. See [Deploy order](#deploy-order).
 
 ## Reference another stage
 
-`Resource.ref` takes a
-[Logical ID](/infrastructure-as-code/resource#logical-id) (the full
-namespace path for a namespaced Resource, see
-[Requirements](#requirements)). Pass
-`stage` to read that Resource from a different stage of this stack:
+Pass `stage` to `Resource.ref` to read a resource from a different
+stage of this stack:
 
 ```typescript
 const { stage } = yield* Alchemy.Stack;
 
+// `staging` owns the database, and `pr-*` stages borrow it
 const project = stage.startsWith("pr-")
   ? yield* Neon.Project.ref("app-db", { stage: "staging" })
   : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
 ```
 
-The ref has the same type as `yield* Neon.Project("app-db", { … })`.
-You can pass it anywhere the real thing is accepted. Here `staging`
-owns the database and `pr-*` stages borrow it. Destroying a borrower
-never touches the Resources it references.
+The reference has the same type as `yield* Neon.Project("app-db", { … })`,
+so you can pass it anywhere the real resource is accepted. Destroying a
+borrower never touches the resources it references.
 
-## Reference another Stack
+## Reference another stack
 
-Pass `stack` too for a Resource in a different Stack:
+Pass `stack` too for a resource in a different stack:
 
 ```typescript
-const sharedBucket = yield* Storage.Bucket.ref("Assets", {
-  stack: "shared-infra",
-  stage: "prod",
+const sharedBucket = yield* Cloudflare.R2.Bucket.ref("Assets", {
+  stack: "shared-infra", // defaults to the current stack
+  stage: "prod",         // defaults to the current stage
 });
 ```
 
-`{ stack, stage, id }` is the full address. Anything you omit
-defaults to the current stack/stage. Pin `stage` when the stacks'
-stages don't line up. For example, `pr-147` has no counterpart in
-`shared-infra`.
+`{ stack, stage, id }` is the full address. Pin `stage` when the
+stacks' stages don't line up. For example, `pr-147` has no counterpart
+in `shared-infra`.
 
-## Depend on a Stack's outputs
+## Depend on a stack's outputs
 
-When the unit you consume is a whole Stack, import its tag and
-yield it:
+To consume a whole stack, declare a typed handle for it and deploy the
+stack with `.make`:
 
 ```typescript
 // backend/src/Stack.ts
@@ -57,90 +66,61 @@ export class Backend extends Alchemy.Stack<
   Backend,
   { url: string }
 >()("Backend") {}
-```
 
-```typescript
-// inside the frontend Stack's Effect.gen
-const a = yield* Backend;                // current stage
-const b = yield* Backend.stage.prod;     // pinned to "prod"
-const c = yield* Backend.stage["pr-42"]; // any stage name
-```
-
-Every successful `apply` persists what the Stack's effect returned
-as a per-stage output record. `yield* Backend` reads it back as a
-proxy of typed Outputs, so `(yield* Backend).url` is
-`Output<string>`. For a full two-package walkthrough, see
-[Multiple Stacks](/project-structure/monorepo-multi-stack).
-
-## Escape hatches
-
-When the Resource constructor isn't in scope, `Alchemy.ref` builds
-the same reference and `Output.of` turns it into a typed Output:
-
-```typescript
-import * as Alchemy from "alchemy";
-import * as Output from "alchemy/Output";
-
-const bucket = Output.of(
-  Alchemy.ref<Cloudflare.R2.Bucket>("Bucket", {
-    stack: "shared-infra",
-    stage: "prod",
+// backend/alchemy.run.ts
+export default Backend.make(
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    // ...
+    return { url: worker.url.as<string>() };
   }),
 );
 ```
 
-The type parameter is the resource's interface type
-(`Cloudflare.R2.Bucket`), not `typeof` its constructor.
-
-When a typed Stack handle isn't in scope, `Output.stackRef` reads
-the output record directly:
+Import the handle in another stack and `yield*` it:
 
 ```typescript
-const backend = yield* Output.stackRef<{ url: string }>("Backend", {
-  stage: "prod",
-});
+// inside the frontend stack's Effect.gen
+const a = yield* Backend;                // current stage
+const b = yield* Backend.stage.prod;     // pinned to "prod"
+const c = yield* Backend.stage["pr-42"]; // any stage name
+
+a.url; // Output<string>
 ```
 
-Prefer `Resource.ref` and `yield* MyStack`. They do the same
-lookups with real type bindings.
-
-## Requirements
-
-References read the state store of the stack doing the referencing.
-Both stacks must use the same state backend, for example both
-`Cloudflare.state()` in the same account.
-
-The id you pass is the resource's
-[fully qualified name](/infrastructure-as-code/resource#fully-qualified-names).
-For a Resource declared inside `Namespace.push("Site")`, pass
-`"Site/Assets"`, not `"Assets"`.
+Every successful apply persists what the stack's effect returned as a
+per-stage output record, and `yield* Backend` reads it back as typed
+Outputs. See [Multiple Stacks](/project-structure/monorepo-multi-stack)
+for a full two-package walkthrough.
 
 ## Deploy order
 
-The upstream must already be deployed to the exact
-`{ stack, stage }` the reference names. Otherwise the plan fails
-fast with a typed `InvalidReferenceError`. There is no
-deploy-and-hope path:
+Deploy the upstream first. If it isn't deployed to the exact
+`{ stack, stage }` the reference names, the plan fails with a typed
+`InvalidReferenceError`:
 
 ```sh
 alchemy deploy --stage staging   # creates app-db
 alchemy deploy --stage pr-147    # borrows staging's app-db
 ```
 
-Destroy in reverse order. Resolution itself is the in-stack
-[Output](/infrastructure-as-code/outputs) flow with one difference. A reference's
-upstream was reconciled by a previous deploy, so only its persisted
-attributes participate in this plan.
+Destroy in reverse order.
+
+## Escape hatches
+
+- When the resource constructor isn't in scope, build the reference
+  with `Alchemy.ref<Type>(id, { stack, stage })` and wrap it in
+  [`Output.of`](/infrastructure-as-code/outputs#of).
+- When a typed stack handle isn't in scope, read the output record with
+  [`Output.stackRef`](/infrastructure-as-code/outputs#stackref).
+
+Prefer `Resource.ref` and `yield* MyStack`, which do the same lookups
+with real type bindings.
 
 ## Where next
 
-- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle): how
-  the referenced state got persisted in the first place. Next page.
-- [Multiple Stacks](/project-structure/monorepo-multi-stack): typed
-  Stack handles wiring a monorepo.
-- [Shared database across stages](/cloudflare/data/shared-database):
-  the owner/borrower pattern end to end.
-- [Inputs & Outputs](/infrastructure-as-code/outputs): the Output
-  model that references plug into.
-- [State Store](/state-store): where the persisted state that refs
-  read lives.
+- [Actions](/infrastructure-as-code/action): run deploy-time work in the dependency graph.
+- [Multiple Stacks](/project-structure/monorepo-multi-stack): typed stack handles wiring a monorepo.
+- [Shared database across stages](/cloudflare/data/shared-database): the owner and borrower pattern end to end.
+- [Inputs & Outputs](/infrastructure-as-code/outputs): the output model that references plug into.
+- [State Store](/state-store): where the state that references read lives.

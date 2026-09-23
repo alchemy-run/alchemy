@@ -9,17 +9,18 @@ import Terminal from "../../../components/Terminal.astro";
 alchemy profile [subcommand] [options]
 ```
 
-Inspect and manage authentication settings in
-`~/.alchemy/profiles.json` and credentials under
-`~/.alchemy/credentials/<profile>/`.
-See [Profiles](/environments/profiles).
+Inspect and manage authentication profiles. Each profile is a directory,
+`~/.alchemy/profiles/<profile>/`, with one JSON document per connected
+provider, such as `cloudflare.json`. Set `ALCHEMY_HOME` to relocate
+`~/.alchemy`.
 
-The built-in `default` profile always exists — like the AWS CLI's — so
+See [Profiles](/environments/profiles) for how to use profiles.
+
+The built-in `default` profile always exists, like the AWS CLI's, so
 first-time flows never need a create step. It cannot be renamed or deleted,
 and every command uses it unless another profile is named with `--profile`
-or `$ALCHEMY_PROFILE`. Profiles are not consulted
-in CI; there, credentials come from
-[environment variables](/environments/ci) only.
+or `$ALCHEMY_PROFILE`. In CI, Alchemy skips profiles and reads
+credentials from [environment variables](/environments/ci) only.
 
 ## Interactive terminal dashboard
 
@@ -57,7 +58,7 @@ instead.
 | `--env-file <path>` | Load environment variables from a file                  |
 | `--config, -c <file>` | Stack entrypoint used to discover custom auth providers |
 
-## profile create
+## `profile create`
 
 ```sh
 alchemy profile create <name>
@@ -66,22 +67,27 @@ alchemy profile create <name>
 Explicitly create an empty profile. Profile names are unique; the command
 fails if the name already exists. You do not need to create `default`.
 
+A profile name must start with a letter or number, may contain letters,
+numbers, `.`, `_`, and `-`, and is at most 64 characters long.
+
 ```sh
 alchemy profile create production
 alchemy profile edit --profile production
 ```
 
-## profile rename
+## `profile rename`
 
 ```sh
 alchemy profile rename <name> [new-name]
 ```
 
-Rename a profile and move its stored credentials to the new name. Profiles
-carry a stable internal id, so renames do not orphan credentials. The command
-refuses to rename the built-in `default` profile and to overwrite either an
-existing profile or an existing credential directory. Omit the new name to
-enter it interactively.
+Rename a profile. The command moves the profile's directory, and the
+[Cloudflare state store](/state-store#first-run-bootstrap) credential cache
+under `~/.alchemy/credentials/<profile>/`, to the new name. It refuses
+to rename the built-in `default` profile or to overwrite an existing
+profile.
+
+Omit the new name to enter it interactively.
 
 ```sh
 # Prompt for the new name
@@ -94,7 +100,7 @@ alchemy profile rename production prod
 An `ALCHEMY_PROFILE` environment variable is external configuration and is not
 rewritten; update it separately if it names the old profile.
 
-## profile edit
+## `profile edit`
 
 ```sh
 alchemy profile edit [flags]
@@ -115,30 +121,38 @@ cycles the highlighted row through its states:
 │  ↑/↓ to navigate • Space: change action • Enter: confirm
 └`} />
 
-Enter applies the queued changes in order: each add/re-configure runs the
-provider's configuration flow (the same flow that connects a provider on
-first deploy), and each removal asks for confirmation before running the
-provider's logout.
+Enter applies the queued changes in order. Each add or reconfigure runs
+the provider's configuration flow, and each removal asks for
+confirmation before running the provider's logout.
 
-The `--add`, `--reconfigure`, and `--remove` flags perform changes directly
-with no prompts (removals are not re-confirmed). Each flag takes a provider,
-is repeatable, and you can combine them in one invocation. List each provider
-only once. Provider matching is case-insensitive. Custom auth
-providers are discovered from the stack entrypoint just as they are for
-`show`.
+The `--add`, `--reconfigure`, and `--remove` flags perform changes
+directly with no prompts, and removals are not re-confirmed:
 
-Adding or reconfiguring a provider normally opens its prompts (or a
-browser, for OAuth). For scripts and agents, token-shaped methods can be
-configured entirely from flags: `--method` picks the provider's configure
-method and repeatable `--set` supplies its fields. Values come in three
-forms so secrets stay out of shell history: a literal (`name=value`), an
-environment variable (`name=env:VAR`, resolved from the environment and
-`--env-file`), or stdin (`name=-`, one field at most). `--method` is
-required whenever `--set` is used. Browser-OAuth and `gh auth` methods stay
-interactive-only.
+- Each flag takes a provider and is repeatable.
+- You can combine the flags in one invocation, listing each provider
+  once.
+- Provider matching is case-insensitive.
+- Custom auth providers are discovered from the stack entrypoint, as
+  they are for `show`.
+
+Adding or reconfiguring a provider normally opens its prompts, or a
+browser for OAuth. For scripts and agents, token-shaped methods can be
+configured entirely from flags. `--method` picks the provider's
+configure method, and repeatable `--set` supplies its fields.
+
+`--set` values come in three forms, so secrets stay out of shell
+history:
+
+- `name=value`: a literal.
+- `name=env:VAR`: an environment variable, resolved from the
+  environment and `--env-file`.
+- `name=-`: stdin, for one field at most.
+
+`--method` is required whenever `--set` is used. Browser OAuth and
+`gh auth` methods stay interactive-only.
 
 `--method` is the same `method` value the provider writes to its file under
-`~/.alchemy/credentials/<profile>/`, and `--set` keys are that file's
+`~/.alchemy/profiles/<profile>/`, and `--set` keys are that file's
 properties. `stored` is the pasted-credential method every provider shares:
 
 | Provider    | `--method` | `--set` fields                                                       |
@@ -193,19 +207,20 @@ alchemy profile edit --add cloudflare --method stored \
 op read op://vault/neon/key | alchemy profile edit --add neon --method stored --set apiKey=-
 ```
 
-## profile refresh
+## `profile refresh`
 
 ```sh
 alchemy profile refresh [options]
 ```
 
 Refresh authentication for every connected provider without changing its
-configured method, account, or scopes. This runs the provider's login flow:
-for example, AWS SSO invokes `aws sso login`, while Cloudflare OAuth refreshes
-its token and falls back to browser authorization when necessary. If the
-stored scopes no longer match the current OAuth client, unknown scopes are
-dropped with a warning. The command refreshes the remaining scopes. If no
-valid scopes remain, it fails with a `--reconfigure` hint.
+configured method, account, or scopes. This runs the provider's login flow.
+For example, AWS SSO invokes `aws sso login`, and Cloudflare OAuth refreshes
+its token and falls back to browser authorization when necessary.
+
+If the stored scopes no longer match the current OAuth client, the
+command drops unknown scopes with a warning and refreshes the rest. If
+no valid scopes remain, it fails with a `--reconfigure` hint.
 
 Use `--provider` one or more times to refresh only selected providers. Provider
 names are matched case-insensitively.
@@ -225,7 +240,7 @@ alchemy profile refresh
 alchemy profile refresh --profile production --provider AWS
 ```
 
-## profile current
+## `profile current`
 
 ```sh
 alchemy profile current [options]
@@ -239,15 +254,15 @@ prints a single `name (source)` line.
 | ------------------- | -------------------------------------- |
 | `--env-file <path>` | Load environment variables from a file |
 
-## profile list
+## `profile list`
 
 ```sh
 alchemy profile list [options]
 ```
 
-Render configured profiles — `default` first, the rest alphabetical —
-including the active profile, configured providers, and each provider's
-authentication method.
+Render configured profiles, `default` first and the rest in
+alphabetical order. The list marks the active profile and shows each
+profile's providers and their authentication methods.
 
 <Terminal content={`╭──────────────────────────────────────────────────────╮
 │ Profiles (2)                                         │
@@ -267,16 +282,18 @@ In a non-interactive session each profile prints as one
 | ------------------- | -------------------------------------- |
 | `--env-file <path>` | Load environment variables from a file |
 
-## profile show
+## `profile show`
 
 ```sh
 alchemy profile show [options]
 ```
 
 Show a profile's providers as a table with authentication method, credential
-status, and resolved details. Sensitive credentials remain redacted. Built-in
-auth providers are always available. Alchemy also attempts to load the stack's
-auth providers so custom integrations can render their entries.
+status, and resolved details. Sensitive credentials remain redacted.
+
+Built-in auth providers are always available. Alchemy also attempts to
+load the stack's auth providers so custom integrations can render their
+entries.
 
 <Terminal content={`╭────────────────────────────────────────────────────────────╮
 │ Profile: default (active)                                  │
@@ -309,15 +326,16 @@ alchemy profile show
 alchemy profile show --profile prod
 ```
 
-## profile delete
+## `profile delete`
 
 ```sh
 alchemy profile delete <name> [options]
 ```
 
 Render the profile's redacted credentials, ask for confirmation, then delete
-the profile from `~/.alchemy/profiles.json` **and** remove its credential
-directory. The built-in `default` profile cannot be deleted.
+the profile's directory, `~/.alchemy/profiles/<name>/`, and its state-store
+credential cache, `~/.alchemy/credentials/<name>/`. The built-in `default`
+profile cannot be deleted.
 
 | Argument / option   | Description                                             |
 | ------------------- | ------------------------------------------------------- |
@@ -333,6 +351,13 @@ alchemy profile delete prod
 # Delete without prompting
 alchemy profile delete prod --yes
 ```
+
+## Legacy profile migration
+
+Older Alchemy versions kept a central `~/.alchemy/profiles.json` plus a
+`~/.alchemy/credentials/` directory. On first use, Alchemy migrates them
+into the per-profile layout and moves both originals to
+`~/.alchemy/.profiles-v0-<timestamp>/` as a backup.
 
 ## Where next
 

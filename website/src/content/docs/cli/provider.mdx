@@ -1,0 +1,125 @@
+---
+title: provider
+description: Check the CI environment variables each provider reads with alchemy provider check-env, and find the provider-specific subcommands.
+type: reference
+---
+
+```sh
+alchemy provider <subcommand> [options]
+```
+
+`provider` groups commands for cloud-provider prerequisites. The
+provider-specific subcommands have their own pages:
+
+- [`provider aws`](/cli/aws): bootstrap the per-account assets bucket that Lambda deployments use.
+- [`provider cloudflare`](/cli/cloudflare): the state-store Worker and
+  Cloudflare API tokens.
+
+## `provider check-env`
+
+```sh
+alchemy provider check-env [--provider <name>...] [options]
+```
+
+`check-env` verifies that the environment variables each provider
+needs in CI are set. It prints one line per provider and exits `1` when
+any required variable is missing, so it works as a CI preflight step:
+
+```sh
+# every provider the stack registers
+alchemy provider check-env
+
+# only some providers (repeatable)
+alchemy provider check-env --provider Cloudflare --provider AWS
+```
+
+Options:
+
+- `--provider <name>`: check only this provider. Repeat it for more
+  than one. Defaults to every provider the stack registers.
+- `--config, -c <file>`: stack entrypoint. Defaults to `alchemy.run.ts`.
+- `--env-file <path>`: load environment variables from a file.
+- `--profile <name>`: auth profile to use.
+
+Each provider declares machine-readable `environment` metadata for the
+variables its CI resolver reads, and `check-env` checks that list. A
+provider without the metadata reports "No CI environment contract". To
+declare the metadata for your own provider, see
+[Custom Auth Provider](/environments/custom-auth-provider).
+
+## Environment variables by provider
+
+These variables are a CI credential source, and Alchemy never writes
+them into a profile. When every required variable for a provider is
+set, Alchemy uses them instead of the profile. See
+[Profiles › Environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
+
+- **AWS**: requires `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
+  `AWS_REGION` or `AWS_DEFAULT_REGION`. Optional: `AWS_SESSION_TOKEN`,
+  and `AWS_ACCOUNT_ID`, which skips an STS `GetCallerIdentity` lookup.
+- **Cloudflare**: requires `CLOUDFLARE_ACCOUNT_ID`, plus either
+  `CLOUDFLARE_API_TOKEN`, or `CLOUDFLARE_API_KEY` with
+  `CLOUDFLARE_EMAIL` or `CLOUDFLARE_ACCOUNT_EMAIL`.
+- **GitHub**: requires `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`.
+  Enterprise hosts may use `GH_ENTERPRISE_TOKEN` or
+  `GITHUB_ENTERPRISE_TOKEN` instead. Optional: `GITHUB_BASE_URL`,
+  `GITHUB_API_URL`, or `GH_HOST` selects a GitHub Enterprise host.
+- **Neon**: requires `NEON_API_KEY`.
+- **PlanetScale**: requires `PLANETSCALE_API_TOKEN_ID`,
+  `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION`. Optional:
+  `PLANETSCALE_API_BASE_URL`.
+- **Prisma**: requires `PRISMA_SERVICE_TOKEN` or `PRISMA_API_TOKEN`.
+  Optional: `PRISMA_API_URL` or `PRISMA_MANAGEMENT_API_URL`.
+- **Axiom**: requires `AXIOM_TOKEN` or `AXIOM_API_KEY`. Optional:
+  `AXIOM_ORG_ID`, which a personal access token needs, and `AXIOM_URL`
+  for self-hosted or regional deployments.
+- **Fly**: requires `FLY_API_TOKEN`. Optional: `FLY_API_HOSTNAME`
+  overrides the Machines API root.
+- **Hetzner**: requires `HCLOUD_TOKEN`. Optional: `HCLOUD_ENDPOINT`
+  overrides the API base URL.
+- **Railway**: requires `RAILWAY_API_TOKEN`, an account or workspace
+  token. Optional: `RAILWAY_API_URL` overrides the GraphQL host.
+- **Stripe**: requires `STRIPE_API_KEY`. Optional:
+  `STRIPE_API_BASE_URL`.
+- **Doppler**: requires `DOPPLER_TOKEN`, or `DOPPLER_IDENTITY_ID` to
+  log in with the platform's OIDC token. Optional: `DOPPLER_OIDC_TOKEN`
+  and `DOPPLER_OIDC_AUDIENCE`. See [OIDC tokens](#oidc-tokens).
+- **Infisical**: requires `INFISICAL_TOKEN`, or `INFISICAL_IDENTITY_ID`
+  to log in with the platform's OIDC token. Optional:
+  `INFISICAL_OIDC_TOKEN`, `INFISICAL_OIDC_AUDIENCE`, and
+  `INFISICAL_API_URL`, which selects the EU cloud or a self-hosted
+  instance. See [OIDC tokens](#oidc-tokens).
+
+## OIDC tokens
+
+With `DOPPLER_IDENTITY_ID` or `INFISICAL_IDENTITY_ID` set, Alchemy
+exchanges the CI platform's identity token for a short-lived token on
+every run. It finds the platform's token as follows:
+
+- **GitHub Actions**: requests a token. The job needs
+  `permissions: id-token: write`.
+- **Vercel**: reads the token Vercel supplies.
+- **Google Cloud**: requests a token from the
+  [metadata identity endpoint](https://docs.cloud.google.com/docs/authentication/get-id-token)
+  on supported runtimes.
+- **GitLab CI**: name the token `DOPPLER_OIDC_TOKEN` (or
+  `INFISICAL_OIDC_TOKEN`) in the job's
+  [`id_tokens`](https://docs.gitlab.com/ci/secrets/id_token_authentication/)
+  block, with `aud` set to the audience your identity trusts. Alchemy
+  also detects `SIGSTORE_ID_TOKEN` when `GITLAB_CI` is set.
+- **Other platforms**: pass a token explicitly in `DOPPLER_OIDC_TOKEN`
+  or `INFISICAL_OIDC_TOKEN`.
+
+`DOPPLER_OIDC_AUDIENCE` and `INFISICAL_OIDC_AUDIENCE` set the requested
+audience on GitHub Actions and Google Cloud. Google's metadata endpoint
+requires one. They don't change the audience of a token that Vercel,
+GitLab, or the `*_OIDC_TOKEN` variable already supplies.
+
+## Where next
+
+- [CI](/environments/ci): a full GitHub Actions workflow.
+- [Profiles](/environments/profiles): credentials for local development.
+- [Doppler](/environments/doppler) and [Infisical](/environments/infisical):
+  secret providers that log in with OIDC in CI.
+- [Custom Auth Provider](/environments/custom-auth-provider): declare
+  `environment` metadata for your own provider.

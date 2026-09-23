@@ -196,6 +196,9 @@ export default defineConfig({
     "/better-auth/database-layers": "/better-auth/databases",
     "/better-auth/migrations": "/better-auth/guides/migrations",
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
+    // Core docs redesign: merged pages.
+    "/testing/testing-a-stack": "/testing",
+    "/project-structure/monorepo": "/project-structure/file-layout#monorepos",
   },
   prefetch: true,
   trailingSlash: "ignore",
@@ -259,14 +262,9 @@ export default defineConfig({
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
                 },
-                { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
                   label: "Inputs & Outputs",
                   link: "/infrastructure-as-code/outputs",
-                },
-                {
-                  label: "References",
-                  link: "/infrastructure-as-code/references",
                 },
                 {
                   label: "Resource Lifecycle",
@@ -276,18 +274,12 @@ export default defineConfig({
                   label: "Renaming Resources",
                   link: "/infrastructure-as-code/renaming",
                 },
+                { label: "State Store", link: "/state-store" },
                 {
-                  label: "Providers",
-                  link: "/infrastructure-as-code/provider",
+                  label: "References",
+                  link: "/infrastructure-as-code/references",
                 },
-                {
-                  label: "Custom Provider",
-                  link: "/infrastructure-as-code/custom-provider",
-                },
-                {
-                  label: "Local Provider",
-                  link: "/infrastructure-as-code/local-provider",
-                },
+                { label: "Actions", link: "/infrastructure-as-code/action" },
               ],
             },
             {
@@ -301,6 +293,7 @@ export default defineConfig({
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
@@ -310,18 +303,9 @@ export default defineConfig({
                   label: "Sinks",
                   link: "/infrastructure-as-effects/sinks",
                 },
-                { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
-                },
-                {
-                  label: "Telemetry",
-                  link: "/infrastructure-as-effects/telemetry",
-                },
-                {
-                  label: "Custom Runtime",
-                  link: "/infrastructure-as-effects/custom-runtime",
                 },
               ],
             },
@@ -351,14 +335,6 @@ export default defineConfig({
               items: [
                 { label: "Stages", link: "/environments/stages" },
                 { label: "Profiles", link: "/environments/profiles" },
-                {
-                  label: "Auth Providers",
-                  link: "/environments/auth-providers",
-                },
-                {
-                  label: "Custom Auth Provider",
-                  link: "/environments/custom-auth-provider",
-                },
                 { label: "Secrets & Config", link: "/environments/secrets" },
                 {
                   label: "Secret providers",
@@ -366,20 +342,30 @@ export default defineConfig({
                 },
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
+              ],
+            },
+            {
+              label: "Develop, test & ship",
+              items: [
                 {
                   label: "Local development",
                   link: "/environments/local-development",
                 },
+                { label: "Test a Stack", link: "/testing" },
+                { label: "Test harness", link: "/testing/test-harness" },
                 { label: "CI", link: "/environments/ci" },
               ],
             },
             {
-              label: "State Store",
+              label: "Observability",
               items: [
-                { label: "State Store", link: "/state-store" },
                 {
-                  label: "Custom State Store",
-                  link: "/state-store/custom-state-store",
+                  label: "Telemetry",
+                  link: "/infrastructure-as-effects/telemetry",
+                },
+                {
+                  label: "Observability overview",
+                  link: "/testing/observability",
                 },
               ],
             },
@@ -390,31 +376,51 @@ export default defineConfig({
                   label: "File layout",
                   link: "/project-structure/file-layout",
                 },
-                { label: "Monorepo", link: "/project-structure/monorepo" },
                 {
-                  label: "Single Stack",
+                  label: "Monorepo with one stack",
                   link: "/project-structure/monorepo-single-stack",
                 },
                 {
-                  label: "Multiple Stacks",
+                  label: "Monorepo with many stacks",
                   link: "/project-structure/monorepo-multi-stack",
                 },
               ],
             },
             {
-              label: "Testing & observability",
+              label: "Extending Alchemy",
               items: [
-                { label: "Testing", link: "/testing" },
                 {
-                  label: "Testing a Stack",
-                  link: "/testing/testing-a-stack",
+                  label: "Custom Provider",
+                  link: "/infrastructure-as-code/custom-provider",
+                },
+                {
+                  label: "Provider contract",
+                  link: "/infrastructure-as-code/provider",
                 },
                 {
                   label: "Testing Providers",
                   link: "/testing/testing-providers",
                 },
-                { label: "Test harness", link: "/testing/test-harness" },
-                { label: "Observability", link: "/testing/observability" },
+                {
+                  label: "Local Provider",
+                  link: "/infrastructure-as-code/local-provider",
+                },
+                {
+                  label: "Custom Runtime",
+                  link: "/infrastructure-as-effects/custom-runtime",
+                },
+                {
+                  label: "Auth Providers",
+                  link: "/environments/auth-providers",
+                },
+                {
+                  label: "Custom Auth Provider",
+                  link: "/environments/custom-auth-provider",
+                },
+                {
+                  label: "Custom State Store",
+                  link: "/state-store/custom-state-store",
+                },
               ],
             },
           ],
@@ -461,6 +467,7 @@ export default defineConfig({
             {
               label: "Providers",
               items: [
+                { label: "provider", link: "/cli/provider" },
                 { label: "aws", link: "/cli/aws" },
                 { label: "cloudflare", link: "/cli/cloudflare" },
               ],

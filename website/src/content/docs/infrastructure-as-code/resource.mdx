@@ -1,56 +1,52 @@
 ---
 title: Resources
 description: Resources are named cloud entities with input properties and output attributes. Learn logical IDs, fully qualified names, physical names, and how resources form a dependency graph.
+type: explanation
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-A **Resource** is a cloud entity that Alchemy manages. It can be a
-bucket, database, queue, function, DNS record, or anything else with
-a reconcile and delete lifecycle. You declare resources inside a
-[Stack](/infrastructure-as-code/stack), and Alchemy creates, updates,
-and deletes them to match your code.
+A **resource** is a cloud entity that Alchemy manages, such as a
+bucket, database, queue, function, or DNS record. You declare
+resources inside a [stack](/infrastructure-as-code/stack), and Alchemy
+creates, updates, and deletes them to match your code.
 
-## Declaring a Resource
+## Declaring a resource
 
 You declare a resource with a **logical ID** and optional **input
 properties**:
 
 ```typescript
+// logical ID only: many resources need no properties
 const bucket = yield* Cloudflare.R2.Bucket("Bucket");
+
+// logical ID + input properties
 const queue = yield* AWS.SQS.Queue("Jobs", {
   fifo: true,
 });
 ```
 
-The first argument (`"Bucket"`, `"Jobs"`) is the logical ID. The
-second is the input properties. Many resources, like the R2 bucket
-above, work with no properties at all.
-
 ## Logical ID
 
-The **logical ID** is the name you choose to identify the resource
-within its stack. Alchemy uses it to track the resource in state
-across deploys:
+The **logical ID** names the resource within its stack. Alchemy uses
+it to track the resource in state across deploys:
 
 - **Stable across deploys**: keep the same ID and Alchemy keeps
-  updating the same underlying cloud resource.
-- **Independent of your code layout**: you can change the variable
-  name, change the TypeScript class, or move the file. As long as the
-  logical ID stays the same, Alchemy still recognizes it.
-- **Rename = replace**: if you change the logical ID, Alchemy
-  treats it as a new resource and deletes the old one on the next
-  deploy. The exception is when you declare the rename with
+  updating the same cloud resource.
+- **Independent of your code layout**: rename the variable, change the
+  TypeScript class, or move the file. Alchemy still recognizes the
+  resource as long as the logical ID stays the same.
+- **Rename means replace**: a new logical ID is a new resource, and
+  Alchemy deletes the old one on the next deploy. To keep the
+  resource, declare the rename with
   [`renamedFrom`](/infrastructure-as-code/renaming).
 
 ## Fully qualified names
 
-Alchemy stores each resource under its **fully qualified name**
-(FQN). The FQN is the logical ID prefixed with the path of any
-namespaces the resource was declared in, joined with `/`. A resource
-declared at the top of the stack has an FQN equal to its logical ID.
-
-`Namespace.push` runs an Effect inside a namespace:
+Alchemy stores each resource under its **fully qualified name** (FQN).
+The FQN is the logical ID prefixed with the path of any namespaces the
+resource was declared in, joined with `/`. `Namespace.push` runs an
+Effect inside a namespace:
 
 ```typescript
 import * as Namespace from "alchemy/Namespace";
@@ -64,55 +60,112 @@ const siteAssets = yield* Cloudflare.R2.Bucket("Assets").pipe(
 // FQN: "Site/Assets"
 ```
 
-Both buckets use the logical ID `"Assets"`, but their FQNs differ,
-so they are two separate resources. Logical IDs only need to be
-unique within a namespace. Namespaces nest, so a resource inside
+Both buckets use the logical ID `"Assets"`, but their FQNs differ, so
+they are two separate resources. Logical IDs only need to be unique
+within a namespace. Namespaces nest, so a resource inside
 `Namespace.push("Api")` inside `Namespace.push("Site")` has the FQN
 `"Site/Api/<id>"`.
 
-FQNs matter wherever you name a resource from outside its
-declaration, such as [references](/infrastructure-as-code/references),
+Use the FQN wherever you name a resource from outside its declaration,
+such as [references](/infrastructure-as-code/references),
 [renames](/infrastructure-as-code/renaming), and the
 [state store](/state-store).
 
-## Input properties and output attributes
+## Outputs and the dependency graph
 
 Every resource has two sides:
 
-- **Input Properties**: the desired configuration you pass in
-  (e.g. `fifo: true`)
-- **Output Attributes**: the values produced after creation
-  (e.g. `queueUrl`, `queueArn`)
+- **Input properties**: the desired configuration you pass in, such as
+  `fifo: true`.
+- **Output attributes**: the values the cloud produces, such as
+  `queueUrl` and `queueArn`.
 
-The resource exposes its output attributes as
-[`Output`](/infrastructure-as-code/outputs) expressions. These are
-lazy, typed references that resolve once the upstream resource has
-been created:
+Each attribute is an [`Output`](/infrastructure-as-code/outputs), a
+lazy, typed reference that resolves once the resource exists. Passing
+an output from one resource as input to another adds an edge to the
+dependency graph:
 
 ```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Bucket");
-bucket.bucketName; // Output<string>
+const Bucket = yield* Cloudflare.R2.Bucket("Bucket");
+const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
+
+const Queue = yield* AWS.SQS.Queue("Queue", {
+  tags: { bucket: Bucket.bucketName }, // Output<string> → edge Bucket → Queue
+});
+
+const Worker = yield* Cloudflare.Worker("Worker", {
+  main: import.meta.url,
+  env: { Bucket, Sessions, Queue },
+});
 ```
 
-You can pass them as inputs to other resources to express
-dependencies. See [Inputs & Outputs](/infrastructure-as-code/outputs)
-for the full set of operators (`map`, `mapEffect`, `all`,
-`interpolate`, and more).
+Alchemy reads the outputs in each resource's props and builds this
+graph:
+
+<DAG
+  nodes={[
+    { id: "Bucket", type: "Cloudflare.R2.Bucket" },
+    { id: "Sessions", type: "Cloudflare.KV.Namespace" },
+    { id: "Queue", type: "AWS.SQS.Queue" },
+    { id: "Worker", type: "Cloudflare.Worker", tone: "accent" },
+  ]}
+  edges={[
+    { from: "Bucket", to: "Queue" },
+    { from: "Bucket", to: "Worker" },
+    { from: "Sessions", to: "Worker" },
+    { from: "Queue", to: "Worker" },
+  ]}
+/>
+
+It then deploys in topological order:
+
+1. `Bucket` and `Sessions` have no dependencies, so Alchemy creates
+   them in parallel.
+2. `Queue` waits for `Bucket.bucketName`, then Alchemy creates it.
+3. `Worker` depends on all three, so Alchemy creates it last.
+
+[Bindings](/infrastructure-as-effects/binding) also attach resources to
+runtimes. When bindings form a cycle, such as two Workers that call
+each other, see
+[Circular Bindings](/infrastructure-as-effects/circular-bindings).
+
+## Physical name
+
+The **physical name** is the name the cloud sees. Unless you pass a
+name prop, most providers generate one from four parts:
+
+```text
+{stack-name}-{logical-id}-{stage}-{instance-id suffix}
+
+# stack "myapp", logical ID "Bucket", stage "live_sam":
+myapp-bucket-live-sam-k3m7q2xw9pdt4vna
+#                     ^ 16 base32 characters from the instance ID
+```
+
+Characters other than letters, digits, and `-` become `-`, and some
+providers lowercase the name (R2 does). Names over the provider's
+length limit (64 characters unless the provider sets its own) are
+truncated with a short hash so they stay distinct.
+
+The **instance ID** is 16 random bytes Alchemy generates the first time
+it creates the resource. Different stages produce different names from
+the same code. A [replacement](/infrastructure-as-code/resource-lifecycle#replace)
+gets a new instance ID, so it gets a new physical name.
 
 ## Resources are Effects
 
 A resource declaration like `Cloudflare.R2.Bucket("Bucket")` is an
-`Effect`. Calling it doesn't talk to the cloud. `yield*`-ing it
-inside a [Stack](/infrastructure-as-code/stack) doesn't either. It
-registers the resource on the stack and returns a typed
-[`Output`](/infrastructure-as-code/outputs) reference for its attributes:
+`Effect`. Building it and `yield*`-ing it inside a stack make no cloud
+calls. It registers the resource on the stack and returns
+[`Output`](/infrastructure-as-code/outputs) references to its
+attributes:
 
 ```typescript
-// 1. Build the Effect. No API calls. No state mutation.
+// 1. Build the Effect. No API calls, no state mutation.
 const Bucket = Cloudflare.R2.Bucket("Bucket");
 
-// 2. Register it on the stack. Still no API calls. Alchemy is
-//    only collecting the desired-state graph.
+// 2. Register it on the stack. Still no API calls. Alchemy only
+//    collects the desired-state graph.
 export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
@@ -123,16 +176,14 @@ export default Alchemy.Stack(
 );
 ```
 
-Alchemy calls the cloud only later, when `alchemy deploy` runs the
-collected graph through plan and apply. See
-[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) for what happens
-after registration.
+Alchemy calls the cloud later, when `alchemy deploy` runs the collected
+graph through plan and apply. See
+[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle).
 
 ### Sharing across files
 
-The declaration is a value, so you can `export` it and
-import it from anywhere. Handlers, layers, and other resources can all
-use it:
+The declaration is a value, so you can `export` it and import it from
+handlers, layers, and other resources:
 
 ```typescript
 // src/bucket.ts
@@ -152,166 +203,16 @@ export default Alchemy.Stack(
 );
 ```
 
-Importing the same `Bucket` from multiple files is safe. Alchemy
-keys resources by their FQN, so if two modules `yield*` it, it
-registers on the stack exactly once.
-
-The same rule applies to two different declarations that share an
-FQN. The second `yield*` returns the resource the first one
-registered, and its props are ignored. Give each distinct resource
-its own logical ID.
-
-## The resource graph
-
-Every attribute a resource exposes (`Bucket.bucketName`,
-`Worker.url`) is an [Output](/infrastructure-as-code/outputs).
-Passing an Output from one resource as input to another adds an edge
-to the dependency graph. Consider this stack:
-
-```typescript
-const Bucket = yield* Cloudflare.R2.Bucket("Bucket");
-const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
-
-const Queue = yield* AWS.SQS.Queue("Queue", {
-  tags: { bucket: Bucket.bucketName },
-});
-
-const Worker = yield* Cloudflare.Worker("Worker", {
-  main: import.meta.url,
-  env: { Bucket, Sessions, Queue },
-});
-```
-
-Alchemy reads the Outputs in each resource's props and builds:
-
-<DAG
-  nodes={[
-    { id: "Bucket", type: "Cloudflare.R2.Bucket" },
-    { id: "Sessions", type: "Cloudflare.KV.Namespace" },
-    { id: "Queue", type: "AWS.SQS.Queue" },
-    { id: "Worker", type: "Cloudflare.Worker", tone: "accent" },
-  ]}
-  edges={[
-    { from: "Bucket", to: "Queue" },
-    { from: "Bucket", to: "Worker" },
-    { from: "Sessions", to: "Worker" },
-    { from: "Queue", to: "Worker" },
-  ]}
-/>
-
-It then deploys in topological order:
-
-1. `Bucket` and `Sessions` have no dependencies, so they are created
-   in parallel.
-2. `Queue` depends on `Bucket.bucketName`, so it waits for `Bucket`
-   and is then created.
-3. `Worker` depends on all three, so it is created last, after every
-   upstream Output has resolved.
-
-Outputs draw the edges. [Bindings](/infrastructure-as-effects/binding)
-attach resources to Workers and Lambdas. When bindings form a cycle,
-such as two Workers that call each other, Alchemy handles it with a
-two-phase plan. See
-[Circular Bindings](/infrastructure-as-effects/circular-bindings).
-
-## Physical name
-
-The **physical name** is the name the cloud sees. Unless you pass a
-name prop, most providers generate one with Alchemy's default
-pattern, built from four parts:
-
-```text
-{stack-name}-{logical-id}-{stage}-{instance-id suffix}
-```
-
-For a stack named `myapp`, the logical ID `Bucket`, and the default
-deploy stage `live_sam`, an R2 bucket gets a name like:
-
-```text
-myapp-bucket-live-sam-k3m7q2xw9pdt4vna
-```
-
-The parts come out this way for three reasons:
-
-- **Only letters, digits, and `-` survive.** Every other character,
-  including the `_` in `live_sam`, becomes `-`.
-- **Case is kept unless the provider lowercases.** R2 bucket names
-  must be lowercase, so the R2 provider lowercases the whole name.
-  Other providers keep the stack name and logical ID as written.
-- **The suffix is 16 base32 characters** taken from the instance ID.
-  Names longer than the provider's limit (64 characters unless the
-  provider sets its own) are truncated, with a short hash kept so they
-  stay distinct.
-
-The **instance ID** is 16 random bytes that Alchemy generates the
-first time it creates the resource. It saves the ID to state (with
-status `creating`) before it calls the provider. If the deploy
-crashes and you run it again, Alchemy reuses the saved ID, so the
-provider computes the same physical name and finds the resource it
-already started creating instead of making a duplicate.
-
-As a result:
-
-- **Stages don't collide**: `live_sam` and `prod` produce different
-  physical names from the same code.
-- **Retries are idempotent**: a re-run after a crash reuses the saved
-  instance ID and the same physical name.
-- **Replacements get a new name**: the instance ID is the part that
-  changes when a resource is replaced.
-
-## Replacement
-
-Some property changes can't be applied in place. For example, you
-can't change a DynamoDB table's partition key on a live table. The
-table has to be re-created. The resource's
-[provider](/infrastructure-as-code/provider) decides which changes
-replace and which update in place, in its
-[`diff`](/infrastructure-as-code/provider#diff).
-
-A replacement keeps the logical ID and FQN but gets a new instance
-ID, so it gets a new physical name. Alchemy creates the new resource,
-updates downstream resources to point at it, then deletes the old
-one. See [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle#replace)
-for the full sequence, including delete-first replacements.
-
-## Renaming
-
-Changing a logical ID normally plans a replacement. To rename a
-resource without touching the cloud, declare the old ID with
-`Alchemy.renamedFrom`. Alchemy moves the state row, and the instance
-ID and physical name stay the same. See
-[Renaming Resources](/infrastructure-as-code/renaming).
-
-## `ref`
-
-Every resource constructor has a static `ref` that returns a typed
-reference to an already-deployed resource, in another stage of this
-stack or in a different stack:
-
-```typescript
-const project = yield* Neon.Project.ref("app-db", { stage: "staging" });
-```
-
-The reference is lazy (no cloud calls at declaration time), typed
-(the same interface as a freshly deployed resource), and strict (it
-fails with `InvalidReferenceError` when the target is missing). See
-[References](/infrastructure-as-code/references) for the full
-reference surface and the
-[Shared database across stages](/cloudflare/data/shared-database)
-guide for a walkthrough.
-
-## Defining your own Resource type
-
-To support a new cloud or third-party API, declare a `Resource` type
-with its input props and output attributes, then implement its
-provider as a `Layer`. The same engine plans, deploys, and destroys
-it. See
-[Writing a Custom Resource Provider](/infrastructure-as-code/custom-provider)
-for a step-by-step walkthrough.
+Alchemy keys resources by FQN, so a resource registers once however
+many modules `yield*` it. The same applies to two different
+declarations that share an FQN. The second `yield*` returns the
+resource the first one registered and ignores its props, so give each
+distinct resource its own logical ID.
 
 ## Where next
 
 - [Inputs & Outputs](/infrastructure-as-code/outputs): the lazy references that draw the graph.
-- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle): what happens on deploy.
-- [References](/infrastructure-as-code/references): read resources from other stacks and stages.
-- [Actions](/infrastructure-as-code/action): deploy-time work without a lifecycle.
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle): what happens on deploy, including replacement.
+- [Rename a resource](/infrastructure-as-code/renaming): change a logical ID without replacing the resource.
+- [References](/infrastructure-as-code/references): read resources from other stacks and stages with `Resource.ref`.
+- [Custom Provider](/infrastructure-as-code/custom-provider): define your own resource type.

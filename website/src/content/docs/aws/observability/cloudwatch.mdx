@@ -3,13 +3,13 @@ title: CloudWatch
 description: Declare CloudWatch dashboards as structured widget documents and metric alarms that fire SNS topics — versioned next to the Lambda functions and queues they observe.
 ---
 
-CloudWatch is AWS's built-in metrics store: every Lambda function,
-SQS queue, and DynamoDB table publishes metrics into it
-automatically. In alchemy the consuming side is code too — a
-`Dashboard` is a structured widget document and an `Alarm` is a
-threshold on a metric, both declared in the same Stack as the
-resources they watch. A tweaked threshold or a new graph is a diff in
-the PR, not a console click.
+CloudWatch is AWS's built-in metrics store. Every Lambda function,
+SQS queue, and DynamoDB table publishes metrics into it automatically.
+
+In Alchemy, a `Dashboard` is a structured widget document and an
+`Alarm` is a threshold on a metric, both declared in the same stack as
+the resources they watch. A changed threshold or a new graph is a diff
+in the pull request.
 
 ## Dashboards as code
 
@@ -45,7 +45,7 @@ const dashboard = yield* AWS.CloudWatch.Dashboard("ApiHealth", {
 Top-level props are PascalCase because they mirror the
 `PutDashboard` API input; the widget document inside follows
 CloudWatch's own dashboard-body schema (`type`, `properties`,
-`metrics`, ...). Four widget types are supported: `metric` (graphs),
+`metrics`, and so on). Four widget types are supported: `metric` (graphs),
 `text` (markdown), `alarm` (alarm status grids), and `log` (Logs
 Insights queries). Each takes optional `x`/`y`/`width`/`height` grid
 coordinates.
@@ -138,33 +138,37 @@ status grid from ARNs:
 ```
 
 To aggregate several alarms into one page-worthy signal,
-`CompositeAlarm` combines their states with a boolean rule:
+`CompositeAlarm` combines their states with a boolean rule. Alchemy
+generates alarm names from the app, stage, and logical ID unless you
+set `name`, so reference them through the `alarmName` output:
 
 ```typescript
+import * as Output from "alchemy/Output";
+
+// latency is a second AWS.CloudWatch.Alarm
 const composite = yield* AWS.CloudWatch.CompositeAlarm("HighSeverity", {
-  AlarmRule: 'ALARM("HighErrors") OR ALARM("HighLatency")',
+  AlarmRule: Output.interpolate`ALARM("${errors.alarmName}") OR ALARM("${latency.alarmName}")`,
 });
 ```
 
-Like dashboards, alarms get generated per-stage names when `name` is
-omitted, and renaming one replaces it.
+Each stage gets its own alarms, and renaming one replaces it.
 
 ## Where metrics come from
 
-You rarely have to publish anything: AWS services emit metrics on
-their own. Every Lambda function reports `Invocations`, `Errors`,
-`Duration`, and `Throttles` under the `AWS/Lambda` namespace, keyed
-by the `FunctionName` dimension — which is why the snippets above
-work against a stock [Lambda](/aws/compute/lambda) function with zero
-instrumentation. Other services follow suit (`AWS/SQS`,
-`AWS/DynamoDB`, ...).
+You rarely have to publish anything, because AWS services emit
+metrics on their own. Every Lambda function reports `Invocations`,
+`Errors`, `Duration`, and `Throttles` under the `AWS/Lambda` namespace,
+keyed by the `FunctionName` dimension. That's why the snippets above
+work against a stock [Lambda](/aws/compute/lambda) function with no
+instrumentation.
 
-For application-level signals — spans, structured logs, custom
-metrics from your Effect code — see
-[Observability](/testing/observability): Effect emits OpenTelemetry
+Other services follow suit, such as `AWS/SQS` and `AWS/DynamoDB`.
+
+For application-level signals, such as spans, structured logs, and
+custom metrics from your Effect code, see
+[Observability](/testing/observability). Effect emits OpenTelemetry
 natively, and the receiving end (datasets, monitors, notifiers) is
-provisioned as resources in the same Stack, exactly like the alarms
-here.
+provisioned as resources in the same stack, like the alarms here.
 
 ## Where next
 

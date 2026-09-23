@@ -1,30 +1,47 @@
 ---
 title: Schemaless RPC
-description: Typed, schema-free RPC. Covers what an RPC member may be, how the typed client arises, how calls travel over the wire, and where the limits are.
+description: Typed RPC with no schema. What an RPC member may be, how the typed client arises, what crosses the wire, and how Streams and errors behave.
+type: explanation
 sidebar:
   order: 1
 ---
 
-Schemaless RPC is the default for internal communication between the
-services you deploy together. You expose methods on a runtime's
-interface, bind it from another resource, and call them through a
-typed client. There is no schema, no runtime validation, and no
-per-request decode cost.
+Schemaless RPC is the default for calls between services you deploy
+together. A runtime returns methods next to `fetch`, another resource
+binds it, and the caller gets a typed client. Nothing is validated at
+runtime, so a call pays no per-request decode.
 
-## The shape
+## What a member may be
 
-Every [Runtime](/infrastructure-as-effects/runtime) can return RPC
-methods next to `fetch` from its Effectful Constructor. Whether
-another resource can call them depends on the binder available for
-that pairing (see [The typed client](#the-typed-client)):
+An RPC member is a function, with any arguments, that returns an
+`Effect` or a `Stream`. The types reject anything else:
 
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
 export default class Greeter extends Cloudflare.Worker<Greeter>()(
   "Greeter",
   { main: import.meta.url },
   Effect.gen(function* () {
     return {
+      // ✅ a function returning an Effect
       greet: (name: string) => Effect.succeed(`hello ${name}`),
+      // ✅ a function returning a Stream
+      tick: (n: number) =>
+        Stream.iterate(0, (i) => i + 1).pipe(
+          Stream.take(n),
+          Stream.schedule(Schedule.spaced("100 millis")),
+        ),
+      // ❌ rejected, a plain value
+      // version: "1.0",
+      // ❌ rejected, a function returning a plain value
+      // shout: (s: string) => s.toUpperCase(),
+      // Bare Effects and Streams type-check too, but they serve the host
+      // (`fetch` is one), so declare the RPC surface as functions.
       fetch: Effect.gen(function* () {
         return HttpServerResponse.text("ok");
       }),
@@ -33,125 +50,100 @@ export default class Greeter extends Cloudflare.Worker<Greeter>()(
 ) {}
 ```
 
-The host class here is `Cloudflare.Worker`, but the pattern is the
-same on every runtime. This page covers what members are allowed,
-how the typed client arises, what crosses the wire, and where the
-limits are.
-
-## What a member may be
-
-An RPC-callable member is a **function returning an Effect**:
-
-```typescript
-return {
-  greet: (name: string) => Effect.succeed(`hello ${name}`),
-};
-```
-
-…or a **function returning a Stream**, which the caller consumes
-with the usual `Stream.*` combinators:
-
-```diff lang="typescript"
-return {
-  greet: (name: string) => Effect.succeed(`hello ${name}`),
-+  tick: (n: number) =>
-+    Stream.iterate(0, (i) => i + 1).pipe(
-+      Stream.take(n),
-+      Stream.schedule(Schedule.spaced("100 millis")),
-+    ),
-};
-```
-
-The rule is a function, with any arguments, that returns an Effect
-or a Stream. Bare Effect and Stream members also satisfy the type,
-and `fetch` itself is one. Those members serve the host, not remote
-callers, so declare your RPC surface as functions. Typed failures
-flow to the caller (see
-[errors over the wire](#errors-over-the-wire) below). The deployed
-runtime satisfies requirements like `RuntimeContext`.
-
-### What the types reject
-
-A member that is a plain value, or a function returning a plain value, fails the Shape constraint:
-
-```typescript
-// ❌ rejected — neither member is an Effect, a Stream, or returns one:
-return {
-  version: "1.0",
-  greet: (name: string) => `hello ${name}`,
-};
-
-// ✅ accepted:
-return {
-  version: () => Effect.succeed("1.0"),
-  greet: (name: string) => Effect.succeed(`hello ${name}`),
-};
-```
-
-The rejection happens at declaration, not at call time. It surfaces as an assignability error on the constructor Effect you pass to the host class. A shape that compiles is a shape every caller can rely on.
+A rejected member fails at declaration, as an assignability error on
+the constructor Effect you pass to the host class. The pattern is the
+same on every [runtime](/infrastructure-as-effects/runtime), and the
+deployed runtime satisfies requirements like `RuntimeContext`.
 
 ## The typed client
 
-There is no schema because the class itself carries the type. `class Greeter extends Cloudflare.Worker<Greeter>()(...)` gives the class the construct signature `new (_: never): Shape & ...`. That signature makes its instance type exactly the Shape the constructor Effect returns. The value you get by yielding the class carries that Shape as a phantom type, `Rpc<Shape> = { "~alchemy/rpc": Shape }`, which binders read back. Binding the class produces the client:
+The class carries the type, so there is no schema.
+`class Greeter extends Cloudflare.Worker<Greeter>()(...)` gives the
+class the construct signature `new (_: never): Shape & ...`, which
+makes its instance type exactly the shape the constructor returns.
+
+Yielding the class gives a value that carries that shape as a phantom
+type, `Rpc<Shape> = { "~alchemy/rpc": Shape }`. A binder reads it back
+and returns the client:
 
 ```typescript
 // in another resource's Effectful Constructor:
 const target = yield* Cloudflare.Workers.bindWorker(Greeter);
 
 // in the interface it returns:
-const greeting = yield* target.greet(name); // typed from Greeter's Shape
+const greeting = yield* target.greet("world"); // typed from Greeter's shape
 ```
 
-`bindWorker` is the Cloudflare Worker-to-Worker binder. Each pairing that has a stub has its own binder. The common ones:
+Each pairing that has a stub has its own binder:
 
-- Worker → Worker: `Cloudflare.Workers.bindWorker(Class)`
-- Worker → Durable Object: `yield* DOClass`, then `.getByName(name)`
-- Durable Object → Container: `yield* ContainerClass` inside the Durable Object, with `Cloudflare.Containers.layer(...)` provided
-- Lambda → MicroVM: `AWS.Lambda.connectMicrovm(Image, { endpoint, authToken })`
-- Railway Service or Function: `Railway.bindService(Class)` / `Railway.bindFunction(Class)`
+- **Worker → Worker**: `Cloudflare.Workers.bindWorker(Class)`.
+- **Worker → Durable Object**: `yield* DOClass`, then `.getByName(name)`.
+- **Durable Object → Container**: `yield* ContainerClass` inside the Durable Object, with `Cloudflare.Containers.layer(...)` provided.
+- **Lambda → MicroVM**: `AWS.Lambda.connectMicrovm(Image, { endpoint, authToken })`.
+- **Railway Service or Function**: `Railway.bindService(Class)` or `Railway.bindFunction(Class)`.
 
-Lambda → Lambda and ECS Tasks have no schemaless stub. Use the `AWS.Lambda.InvokeFunction` binding or [Effect RPC](/apis/effect-rpc) there. The hub pages show full callers per pairing.
+Lambda → Lambda and ECS Tasks have no schemaless stub. Use the
+`AWS.Lambda.InvokeFunction` binding or [Effect RPC](/apis/effect-rpc)
+there. The hub pages show a full caller for each pairing.
 
-The model is the same for every binder. The stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
+Every stub is a Proxy whose get-trap dispatches over the wire, so
+every property access is a remote call. The host's own `fetch` and
+`connect` pass through to the underlying binding. A stub has no local
+fields and consists only of its methods.
 
-## How a call travels
+## What crosses the wire
 
-RPC uses one wire protocol over two carriers. Where the platform provides a native structured-clone channel, such as Cloudflare service bindings and Durable Object stubs, calls use that channel directly and values move by structured clone. Everywhere else, including Containers and MicroVMs, a generic fetch transport carries the call. Each method invocation is a `POST {base}/__rpc__/{name}` whose body is the JSON-encoded argument array. The response is a JSON value, a JSON error envelope, or an NDJSON stream flagged by a response header:
+RPC uses one wire protocol over two carriers:
 
-```typescript
-// packages/alchemy/src/Rpc.ts
-/** Path prefix under which RPC methods are dispatched. */
-export const RPC_PATH_PREFIX = "/__rpc__/";
-/** Response header flag marking an NDJSON streamed body (vs a JSON value). */
-export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
-```
+- **Native channel**: Cloudflare service bindings and Durable Object stubs move values by structured clone.
+- **Fetch transport**: everything else, including Containers and MicroVMs. Each call is a `POST {base}/__rpc__/{name}` whose body is the JSON-encoded argument array. The response is a JSON value, a JSON error envelope, or an NDJSON stream flagged by the `x-alchemy-rpc-stream` header.
 
-Per-call protocol overhead is sub-millisecond. The wire-protocol test suite benchmarks it.
+Arguments and results must survive the codec:
 
-Railway Services and Functions use a lighter dispatcher on the private mesh. It supports value methods only (no Streams) and times out after 25 seconds. The callee's typed failures pass through. Transport failures surface as `Railway.RpcCallError`, and a rejected token as `Railway.RpcUnauthorized`. See [Railway Services](/railway/compute/services#schemaless-rpc).
+- Values move by structured clone on the native channel and as JSON on the fetch transport.
+- Stream elements are JSON values or `Uint8Array`. The fetch transport base64-tags binary so it round-trips.
+- Functions and callbacks don't serialize.
+- Class identity is stripped, except for error classes a Durable Object declares (see [Errors over the wire](#errors-over-the-wire)).
+
+Neither the stub nor the server validates at runtime, so nothing
+sanitizes what arrives. That is safe between code you deploy together
+and type from the same shape. [Trust boundaries](/apis#trust-boundaries)
+explains when to add a schema instead.
+
+Railway Services and Functions use a lighter dispatcher on the
+private mesh. See [Railway Services](/railway/compute/services#schemaless-rpc)
+for its limits and errors.
 
 ## Streams
 
-A stub call's return value is both an Effect and a Stream. The call is asynchronous, so the stub can't know synchronously which one the remote method returns. Its declared type still mirrors the remote Shape verbatim, so the single value it returns satisfies both interfaces:
+A stub call returns one value that is both an Effect and a Stream.
+The call is asynchronous, so the stub can't know which one the remote
+method returns. Its declared type mirrors the remote shape, so you use
+the value the way the method declares:
 
 ```typescript
-// one stub, both call shapes:
-const greeting = stub.greet(name);                  // value method — yield* it as an Effect
-const firstFive = stub.tick(n).pipe(Stream.take(5)); // streaming method — pipe it as a Stream
+const greeting = yield* stub.greet(name);           // value method, yield* it as an Effect
+const firstFive = stub.tick(n).pipe(Stream.take(5)); // streaming method, pipe it as a Stream
 ```
 
-Streams are pulled lazily under backpressure. You can apply `Stream.take(5)` to an infinite remote Stream, and the server stops producing when the client stops consuming. A returned Stream can be piped through any `Stream.*` combinator, including straight onto an HTTP response. Byte streams (`Uint8Array`) round-trip alongside JSON object streams. A failure mid-stream travels as a trailing error marker. It surfaces on the consumer as `RpcRemoteStreamError`, with the encoded inner error on `.error`. Values emitted before the failure are delivered.
+- **Backpressure**: Streams are pulled lazily. `Stream.take(5)` works on an infinite remote Stream, and the server stops producing when the client stops consuming.
+- **Combinators**: pipe a returned Stream through any `Stream.*` combinator, including straight onto an HTTP response.
+- **Bytes**: byte streams (`Uint8Array`) round-trip alongside JSON object streams.
+- **Failures**: a mid-stream failure travels as a trailing error marker. It surfaces as `RpcRemoteStreamError`, with the encoded inner error on `.error`. Values emitted before the failure are delivered.
 
 ## Errors over the wire
 
-Typed failures cross the wire intact. The caller can recover from `Effect.fail(new MyTaggedError(...))` on the callee:
+Typed failures cross the wire, so the caller can recover from a tagged
+error the callee fails with:
 
 ```typescript
+import * as Data from "effect/Data";
+
 class KeyMissing extends Data.TaggedError("KeyMissing")<{
   readonly key: string;
 }> {}
 
-// callee — a method that fails with a tagged error:
+// callee: a method that fails with a tagged error
 get: (key: string) =>
   kv.get(key).pipe(
     Effect.flatMap((value) =>
@@ -161,32 +153,17 @@ get: (key: string) =>
     ),
   ),
 
-// caller — `_tag` and `key` survive the wire:
+// caller: `_tag` and `key` survive the wire
 const value = yield* stub.get(key).pipe(
-  Effect.catchTag("KeyMissing", (e) =>
-    Effect.succeed(`missing: ${e.key}`),
-  ),
+  Effect.catchTag("KeyMissing", (e) => Effect.succeed(`missing: ${e.key}`)),
 );
 ```
 
-The codec keeps `_tag` and all own enumerable fields on tagged errors, which arrive as plain structs. `Effect.catchTag` matches because it keys on `_tag`. By default class identity does not survive, so `e instanceof KeyMissing` is `false`. Plain `Error`s keep `name`, `message`, and `stack`. Calling an unknown method fails with `RpcCallError`. Defects are not enveloped. The call rejects and surfaces as `RpcCallError`.
-
-A Cloudflare Durable Object can declare the error classes its methods fail with. The calling side then rebuilds each matching failure as a real instance, so `instanceof` and schema encoders see the class too:
-
-```typescript
-export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
-  "Repo",
-  { errors: [RepoNotFound] },
-) {}
-```
-
-A failure matches a declared class by the class's static `identifier` (Schema tagged errors) or otherwise by its class name, so the name must equal the `_tag`. Undeclared errors still arrive as plain structs.
-
-## Limits, and why there is no validation
-
-Arguments and results must survive the wire codec. The codec is structured clone on the native channel and JSON on the fetch transport. Stream elements must be JSON values or `Uint8Array`. Binary is base64-tagged on the fetch transport so it round-trips. Functions and callbacks don't serialize. Class identity is stripped, except for Durable Object errors declared in `errors`. Every property access on a stub dispatches remotely, except the host's own `fetch`/`connect` pass-through, so a stub has no local fields and consists only of its methods.
-
-Neither the stub nor the server does any runtime validation. This is deliberate, because it removes the schema to maintain and the per-request decode cost. The trade-off is that nothing sanitizes what arrives. Both sides are your code, deployed together and typed from the same Shape, so the trade is safe for internal calls. At a trust boundary, such as external callers, versioned APIs, or untrusted input, use schema-validated [Effect RPC](/apis/effect-rpc).
+- **Tagged errors** keep `_tag` and all own enumerable fields and arrive as plain structs. `Effect.catchTag` matches because it keys on `_tag`.
+- **Class identity** doesn't survive by default, so `e instanceof KeyMissing` is `false`. A Cloudflare Durable Object can declare its error classes so callers get real instances. See [Schemaless RPC on Cloudflare › Typed errors across the boundary](/cloudflare/apis/schemaless-rpc#typed-errors-across-the-boundary).
+- **Plain `Error`s** keep `name`, `message`, and `stack`.
+- **Unknown methods** fail with `RpcCallError`.
+- **Defects** are not enveloped. The call rejects and surfaces as `RpcCallError`.
 
 ## Where next
 

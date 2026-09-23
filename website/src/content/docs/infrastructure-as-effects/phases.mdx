@@ -1,18 +1,21 @@
 ---
 title: Phases
-description: Alchemy programs run in two phases. Construction drives the deploy, and Runtime handles requests. You need to know which is which to write Workers and Lambda Functions.
+description: When your code runs at deploy time and when it runs in the deployed runtime.
+type: explanation
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-Every alchemy program runs in two phases. Plantime builds the plan,
-and runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
-resources such as Workers, Lambdas, and Containers express both in a
-single program by returning an Effect from inside an Effect. Earlier
-pages named the two halves the Construction phase and the Runtime
-phase. This page defines when each one runs.
+This page covers when your code runs at deploy time and when it runs in
+the deployed [runtime](/infrastructure-as-effects/runtime). Read it
+before you put I/O, `Config` lookups, or cleanup in a Worker, Lambda
+Function, or Container.
 
-## Construction vs Runtime
+## Construction vs runtime
+
+A runtime's code is an Effect that returns an Effect. The outer Effect is the
+**Construction phase**, and the handlers it returns are the **Runtime
+phase**:
 
 ```typescript
 Cloudflare.Worker(
@@ -20,10 +23,12 @@ Cloudflare.Worker(
   { main: import.meta.url },
   Effect.gen(function* () {
     // ─── Construction phase ───
+    // runs at deploy time and once per cold start
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       // ─── Runtime phase ───
+      // runs per request, only inside the deployed Worker
       fetch: Effect.gen(function* () {
         const obj = yield* bucket.get("key");
         return HttpServerResponse.text(yield* obj.text());
@@ -33,32 +38,20 @@ Cloudflare.Worker(
 );
 ```
 
-| Phase        | Code   | When it runs                          |
-| ------------ | ------ | ------------------------------------- |
-| Construction | outer  | At plantime and at cold start         |
-| Runtime | inner  | Only inside a deployed handler        |
+Construction sets up `bucket` once, and the handler closure captures
+it. Each request then runs with everything already wired up.
 
-Construction sets up the `bucket` value once, and the runtime closure
-captures it. The constructor runs at most once per cold start. The
-runtime body runs per request with everything already wired up.
-Each phase has its own `Scope`, and the two lifetimes differ.
-[Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
-covers where cleanup can and cannot happen.
-
-`Alchemy.RuntimeContext` is available only in the Runtime phase.
-Any Effect whose requirements include `RuntimeContext` can only
-execute inside the runtime closure. The type system rejects it
-everywhere else.
-[Layers](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
-builds on this split to keep whole services honest about where they
-can run.
+`Alchemy.RuntimeContext` exists only in the Runtime phase. An Effect
+that requires `RuntimeContext` type-checks only inside the handler
+closure. [Layers](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
+uses this to keep whole services honest about where they can run.
 
 ## What runs when
 
 <DAG
-  caption="Plantime (top) records bindings and builds the plan. Runtime (bottom) starts on cold start and runs the handler per request."
+  caption="Deploy time (top) records bindings and builds the plan. Runtime (bottom) starts on cold start and runs the handler per request."
   nodes={[
-    { id: "Plan", label: "alchemy deploy", type: "plantime", tone: "accent" },
+    { id: "Plan", label: "alchemy deploy", type: "deploy time", tone: "accent" },
     { id: "ConstructP", label: "construct()", type: "records bindings" },
     { id: "Apply", label: "apply", type: "reconcile" },
     { id: "Deploy", label: "deployed", type: "Worker / Lambda" },
@@ -75,59 +68,118 @@ can run.
   ]}
 />
 
-- At **plantime**, the constructor runs to discover bindings. Alchemy needs
-  to know which resources the handler will use so it can wire
+- **At deploy time**, the constructor runs to discover bindings.
+  Alchemy needs to know which resources the handler uses so it can wire
   permissions, env vars, and references.
-- At **runtime cold start**, the constructor runs again inside the
-  deployed Worker. There, the same `bind()` calls return live SDK
-  clients backed by the deployed resource.
-- The **runtime body** only runs in the deployed handler. It never
-  executes at plantime, so you can put real per-request work there
-  without affecting deploy speed.
+- **At cold start**, the constructor runs again inside the deployed
+  Worker. The same binding calls now return live clients backed by the
+  deployed resource.
+- **The handler body** runs only in the deployed runtime. It never runs
+  at deploy time, so per-request work there doesn't slow down deploys.
 
 ### What this means for constructor code
 
-A `Config` lookup in the constructor is captured at plantime and bound
-onto the Runtime as a secret. At runtime the same lookup reads the
-value back from the Runtime's environment. See
+A `Config` lookup in the constructor is captured at deploy time and
+bound onto the runtime as a secret. At runtime the same lookup reads
+the value back from the runtime's environment. See
 [Secrets](/environments/secrets).
 
-Any other Effect in the constructor also runs during `alchemy deploy`,
+Every other Effect in the constructor also runs during `alchemy deploy`,
 `alchemy plan`, and `alchemy dev`. One-shot I/O there, such as fetching
 a value to cache for every request, must succeed in the deploy process
 too. If it can't, move it into the handler.
+
+## Instance scope vs request scope
+
+The constructor runs once per instance, such as a Worker isolate, a
+Lambda sandbox, or a server process. Each event runs the handler in a
+fresh `Scope`. Build things at instance scope, and use things at
+request scope:
+
+```typescript
+Effect.gen(function* () {
+  // instance scope: runs once, reused by every event
+  const secret = yield* fetchSecret;
+  // ✓ one-shot I/O producing a plain value
+
+  const conn = yield* acquireConnection;
+  // ✗ disposable. The instance scope may never close, so the
+  //   connection may never be released
+
+  return {
+    fetch: Effect.gen(function* () {
+      // request scope: runs per event, closed when the event settles
+      const conn = yield* acquireConnection;
+      // ✓ acquired per event, released when the event settles
+    }),
+  };
+});
+```
+
+For the inline and class
+[forms of a runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-a-runtime),
+the types enforce this.
+Their constructor has no `Scope` in its services, so
+`Effect.acquireRelease` or `Effect.addFinalizer` there is a type error,
+while the same code type-checks inside `fetch`. The `.make` of a Tag
+declared with an explicit shape, such as
+`Cloudflare.Worker<Api, {}>()("Api")`, skips this check, so follow the
+rule yourself there.
+
+Anything shared across calls within one event is memoized on the
+request scope. For example, `Drizzle.Postgres` opens one pool per
+event and closes it when the event settles, as the
+[SQL connection lifecycle](/sql/effect-sql/lifecycle) describes.
+
+### Finalizers
+
+A finalizer added inside a handler runs when the event settles:
+
+```typescript
+fetch: Effect.gen(function* () {
+  // workerd: runs after the response, through ctx.waitUntil
+  // Lambda: runs before the response leaves, so keep it cheap
+  yield* Effect.addFinalizer(() => flushMetrics.pipe(Effect.ignore));
+  return HttpServerResponse.text("ok");
+}),
+```
+
+Instance finalizers are best effort, so design your code to need no
+instance-level cleanup:
+
+- **workerd**: they never run, because isolates are frozen or evicted
+  without a teardown hook.
+- **Lambda**: they get a 500 ms `SIGTERM` window at spin-down, skipped
+  on hard failures.
+- **Servers**: they run on graceful process exit.
 
 ## `ALCHEMY_PHASE`
 
 Alchemy exposes the current phase as the `ALCHEMY_PHASE` environment
 variable or config key:
 
-| Value     | Context                                                              |
-| --------- | ------------------------------------------------------------------- |
-| `plan`    | Default. Running `alchemy deploy`, `alchemy plan`, or `alchemy dev`. |
-| `runtime` | Running inside a deployed Worker or Lambda Function.                 |
+- `plan`: the default. Set during `alchemy deploy`, `alchemy plan`, and
+  `alchemy dev`.
+- `runtime`: set by runtime providers in the deployed environment of a
+  Worker, Lambda Function, or Container.
 
-Runtime providers set `ALCHEMY_PHASE=runtime` in the deployed
-environment. Alchemy reads it to decide whether a `Config` lookup in
-the constructor is captured as a binding (`plan`) or read back from the
-environment (`runtime`). [Bindings](/infrastructure-as-effects/binding)
-instead check `globalThis.__ALCHEMY_RUNTIME__`, which the bundler folds
-to `true` at build time, so their deploy-only code is removed from the
-bundle ([see below](#the-__alchemy_runtime__-guard)).
+Alchemy reads it to decide whether a `Config` lookup in the constructor
+is captured as a binding (`plan`) or read back from the environment
+(`runtime`). Bindings use the build-time
+[`__ALCHEMY_RUNTIME__` guard](#the-__alchemy_runtime__-guard) instead.
 
 ## `ALCHEMY_DEV`
 
-`alchemy dev` is a plantime phase, so `ALCHEMY_PHASE` is `plan`
-during local development, the same as a regular deploy. To check
-whether you're running under `alchemy dev` specifically, read the
-`ALCHEMY_DEV` config key. The CLI sets `ALCHEMY_DEV=true` on the dev
-process. Every other entrypoint leaves it unset, so it defaults to
-`false`.
+`alchemy dev` runs at deploy time, so `ALCHEMY_PHASE` is `plan` there
+too. To check for `alchemy dev` specifically, read the `ALCHEMY_DEV`
+config key:
 
 ```typescript
 import { ALCHEMY_DEV } from "alchemy";
 
 Effect.gen(function* () {
+  // `alchemy dev` sets ALCHEMY_DEV=true. Every other entrypoint
+  // leaves it unset, so it defaults to false.
   if (yield* ALCHEMY_DEV) {
     // local-dev-only behavior
   }
@@ -136,44 +188,44 @@ Effect.gen(function* () {
 
 ## The `__ALCHEMY_RUNTIME__` guard
 
-A binding's contract is a `Binding.Service`. The guarded setup
-Effect lives in the implementation Layer you provide, not in the
-contract. That setup Effect does two things, and the phase decides
-how much of it runs:
+A binding's implementation layer does two things in the Construction
+phase. It registers deploy-time wiring on the host, and it returns a
+typed client. The wiring sits behind a guard:
 
-| Work                    | Phase | Job                                                      |
-| ----------------------- | ----- | -------------------------------------------------------- |
-| typed client            | both  | The lightweight typed SDK that ships with the bundle.    |
-| `host.bind(...)` wiring  | plan | Deploy-time registration of IAM / env / native bindings. |
+```typescript
+if (!globalThis.__ALCHEMY_RUNTIME__) {
+  // deploy time only: register IAM, native bindings, or env on the host
+  yield* host.bind`${resource}`(/* … */);
+}
+// both phases: return the typed runtime client
+```
 
-The deploy-time wiring is fenced behind `if (!globalThis.__ALCHEMY_RUNTIME__)`.
-At plantime the guard is open, so calling `bind()` records what the
-function will need. At runtime the global flag is set, so the guard is
-skipped and `bind()` returns only the typed client. The runtime bundle
-stays small because the planning branch never executes.
+When Alchemy bundles a runtime, it defines the global as `true`, so
+the bundler removes the whole branch as dead code:
 
-The implementation Layer you provided decides which wiring the
-guard protects
-([Bindings](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
+```typescript
+// Bundle/Bundle.ts, folded into every bundle as a rolldown define
+"globalThis.__ALCHEMY_RUNTIME__": "true"
+```
 
-The guard also lets you write `bucket.get(...)` inside a Worker
-without bundling AWS or Cloudflare provisioning code. The
-provisioning lives behind the guard and stays off the runtime path.
+At deploy time the global is unset, so `bind()` records what the
+runtime needs. In the bundle only the client ships. This is how you
+call `bucket.get(...)` in a Worker without bundling AWS or Cloudflare
+provisioning code.
 
-## Why this matters
-
-The Construction/Runtime split lets you write code that:
-
-1. **Resolves infrastructure references at deploy time.** Bindings
-   know which bucket ARN, queue URL, etc. to inject.
-2. **Initializes SDK clients once at cold start.** This does not
-   happen on every request.
-3. **Handles requests with a pre-configured context.** The `bucket`
-   variable in the runtime body already knows which resource to
-   talk to.
+Plan-time lookups need no guard. Constructing an
+[`Output.fromEffect`](/infrastructure-as-code/outputs#fromeffect) Output
+is inert, so helpers built on it, such as `AWS.EC2.amazonLinux2023()`,
+are safe in composition code that re-runs inside a deployed Function,
+Worker, or Instance bundle. See
+[Bindings › Plan-time invokes](/infrastructure-as-effects/binding#plan-time-invokes).
 
 ## Where next
 
-- [Circular Bindings](/infrastructure-as-effects/circular-bindings): the cycle resolution this phase split makes possible. Next page.
-- [Layers](/infrastructure-as-effects/layers): `RuntimeContext` as a type-level boundary, and infrastructure behind service interfaces.
-- [State Store](/state-store): where deploy results persist between runs.
+- [Layers](/infrastructure-as-effects/layers): `RuntimeContext` as a
+  type-level boundary, and infrastructure behind service interfaces.
+  Next page.
+- [Bindings](/infrastructure-as-effects/binding): the implementation
+  layers the guard protects.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings):
+  two runtimes that bind each other.

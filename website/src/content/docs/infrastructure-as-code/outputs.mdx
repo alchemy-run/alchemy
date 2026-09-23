@@ -1,24 +1,13 @@
 ---
 title: Inputs & Outputs
-description: Output<T> is alchemy's lazy reference type. Outputs flow between resources. You compose them with .pipe, map and interpolate them, and they resolve during deploy.
+description: Output<T> is Alchemy's lazy reference type. Every operator for reading, transforming, and combining Outputs, and passing them between resources.
+type: reference
 ---
 
-A [Resource](/infrastructure-as-code/resource)'s **inputs** are the props you pass
-in. Its **outputs** are the attributes the cloud returns after
-creation. Outputs don't exist when you write the code. They only
-exist after the resource is deployed.
-
-Alchemy bridges this with **`Output<T>`**, a lazy, typed reference
-that resolves once the upstream resource has run. You can read
-properties off it, transform it with `pipe`, combine it with other
-outputs, and feed it as input to the next resource. The resource
-graph is built from these dependencies.
-
-This page is a reference for every operator. For the bigger picture
-of how the graph deploys, see
-[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle).
-
-## What an Output is
+A [resource](/infrastructure-as-code/resource)'s **inputs** are the
+props you pass in, and its **outputs** are the attributes the cloud
+returns. Each output is an `Output<T>`, a lazy, typed reference that
+resolves during deploy, once the upstream resource exists.
 
 ```typescript
 const bucket = yield* Cloudflare.R2.Bucket("Bucket");
@@ -27,212 +16,118 @@ bucket.bucketName;
 // ^? Output<string>
 ```
 
-Three things to know:
+Alchemy evaluates every output during plan and apply, so the deploy
+graph is exactly the set of dependencies your outputs declare. See
+[Resources](/infrastructure-as-code/resource#outputs-and-the-dependency-graph)
+for how they draw the graph.
 
-1. **Lazy.** `bucket.bucketName` doesn't have a value yet. It
-   describes "the bucket's name once it's created."
-2. **Typed.** TypeScript still knows it's `string`, even though
-   you can't `console.log` it directly.
-3. **Tracked.** Passing it as input to another resource registers
-   a dependency edge. Alchemy uses these edges to deploy in the
-   right order.
+## Operators at a glance
 
-You almost never construct an `Output` yourself. Resource
-declarations and the operators below create them.
+- `resource.attr`: reference an attribute that doesn't exist yet.
+- [`Output.interpolate`](#interpolate): build a string from Outputs.
+- [`Output.map`](#map): transform an Output.
+- [`Output.all`](#all): combine several Outputs.
+- [`output.as<T>()`](#as): narrow an output's type.
+- [`Output.mapEffect`](#mapeffect): transform with an Effect.
+- [`Output.flatMap`](#flatmap): transform into another Output.
+- [`Output.literal`](#literal): wrap a constant as an Output.
+- [`Output.asOutput`](#asoutput): lift a value, Effect, or output into an output.
+- [`Output.fromEffect`](#fromeffect): lift a plan-time Effect into an Output.
+- [`Output.of`](#of): turn a resource or a reference into an Output.
+- [`Output.stackRef`](#stackref): read another stack's outputs without its typed handle.
+
+To read a resource from another stack or stage, use `Resource.ref`.
+See [References](/infrastructure-as-code/references).
+
+To inspect dependencies from a custom provider, use the helpers
+`Output.upstream`, `Output.hasOutputs`, `Output.isOutput`, and
+`Output.toEnvKey`. Each is documented on its export in
+[`Output.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Output.ts).
+
+## Passing outputs as props
+
+Pass an `Output`, or any structure containing outputs, as a prop of
+another resource. Alchemy walks the structure, collects the upstream
+dependencies, and waits for them before it calls the provider:
+
+```typescript
+const queue = yield* AWS.SQS.Queue("Jobs", {
+  tags: {
+    bucket: bucket.bucketName,              // Output<string>
+    region: Output.literal("us-west-2"),    // Output<string>
+  },
+  redrivePolicy: {
+    deadLetterTargetArn: dlq.queueArn,      // Output nested in an object
+    maxReceiveCount: 5,                     // plain value
+  },
+});
+```
 
 ## Property access
 
-Reading a property off a resource (or any `Output`) returns another
+Reading a property off a resource, or off any `Output`, returns another
 `Output`:
 
 ```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Bucket");
-
 bucket.bucketName;   // Output<string>
 bucket.accountId;    // Output<string>
 bucket.publicDomain; // Output<string | undefined>
 ```
 
-Nested access works too. `expr.nested.deep` walks down the object
-without forcing the value.
+Nested access such as `expr.nested.deep` walks down the object without
+forcing the value.
 
-## `literal`
+## `interpolate`
 
-Use this when you need an `Output` shape but already know the value:
+`Output.interpolate` is a tagged template literal that builds a string
+from outputs:
 
 ```typescript
 import * as Output from "alchemy/Output";
 
-Output.literal("hello");      // Output<string>
-Output.literal(42);           // Output<number>
-Output.literal({ a: 1 });     // Output<{ a: number }>
+const arn = Output.interpolate`arn:aws:s3:::${bucket.bucketName}/objects/*`;
+// Output<string>
+
+const dsn = Output.interpolate`postgres://${db.host}:${db.port}/${db.name}`;
+// nullish values render as ""
 ```
 
-It is useful as a default for an optional output, or as a placeholder
-in templates and `Output.all` calls.
+It expands to `Output.all(...args).pipe(Output.map(...))`, so it wires
+up the dependency graph for you.
 
-## `asOutput`
-
-Lifts a plain value, an `Effect`, or an existing `Output` into an
-`Output`:
+:::caution
+An output's value isn't known yet, so JS coercion of an output throws
+`Cannot coerce Output<…> to a string via JS coercion`. Use
+`` Output.interpolate`…` `` or `Output.map` instead:
 
 ```typescript
-Output.asOutput("foo");                  // wraps as a literal
-Output.asOutput(Effect.succeed(123));    // wraps as an EffectExpr
-Output.asOutput(existingOutput);         // returns it unchanged
+`s3://${bucket.bucketName}`; // ✗ throws
+bucket.bucketName + "/key";  // ✗ throws
++db.port;                    // ✗ arithmetic throws the same way
 ```
-
-Use this when writing helpers that should accept "anything output-y."
-
-## `fromEffect`
-
-Lifts a plan-time Effect into an `Output`. The effect runs when the
-stack resolves the Output during plan/deploy, with the stack's
-services (cloud credentials, region, ...) provided. It never runs
-inside a deployed runtime:
-
-```typescript
-Output.fromEffect(lookupLatestAmi());   // Output<string>
-```
-
-This is the low-level seam for lookup helpers that read cloud state to
-produce a prop value. Constructing the Output is inert, so these
-helpers are safe to call from composition code that re-executes
-inside a deployed Function, Worker, or Instance bundle. They need no
-`__ALCHEMY_RUNTIME__` guard. The higher-level form is
-[`Capability.execute`](/infrastructure-as-effects/binding#plan-time-invokes),
-which invokes a binding as a plan-time data source. The AMI finders
-(`AWS.EC2.getAmi`, `AWS.EC2.amazonLinux2023()`,
-`AWS.EC2.ubuntu2404()`, ...) are built on it:
-
-```typescript
-const instance = yield* AWS.EC2.Instance("web", {
-  imageId: AWS.EC2.amazonLinux2023(),
-  instanceType: "t3.micro",
-  subnetId: subnet.subnetId,
-});
-```
-
-The effect must not fail (`E = never`). For unresolvable lookups, die
-with a descriptive error.
+:::
 
 ## `map`
 
-`Output.map` transforms an `Output<A>` into an `Output<B>` without
-forcing it. The function runs once, after the upstream resource
-resolves:
+`Output.map` transforms an `Output<A>` into an `Output<B>`. The
+function runs once per evaluation, after every upstream output is
+ready:
 
 ```typescript
-import * as Output from "alchemy/Output";
-
+// pipeable
 const upper = bucket.bucketName.pipe(
   Output.map((name) => name.toUpperCase()),
 );
 // Output<string>
-```
 
-It also supports a data-first form when you don't want to use
-`pipe`:
-
-```typescript
+// data-first
 Output.map(bucket.bucketName, (name) => name.toUpperCase());
 ```
 
-`map` composes. Pipe several together to build a chain:
-
-```typescript
-const slug = bucket.bucketName.pipe(
-  Output.map((s) => s.toLowerCase()),
-  Output.map((s) => s.replaceAll("_", "-")),
-);
-```
-
-The function runs once per evaluation, and only after every upstream
-`Output` is ready. It can't run before the resource exists.
-
-## `mapEffect`
-
-`Output.mapEffect` works the same way, but the transform returns an
-`Effect`. Use it when the transformation does real work, such as
-reading a file, calling an API, or decoding a JWT, and you want that
-work to live in the Effect graph.
-
-```typescript
-const decoded = secret.value.pipe(
-  Output.mapEffect((s) =>
-    Effect.gen(function* () {
-      const result = yield* JwtDecoder.decode(s);
-      return result.payload;
-    }).pipe(Effect.orDie),
-  ),
-);
-// Output<Payload>
-```
-
-The Effect you return must not fail. Its error type is `never`, so
-handle errors inside the function or turn them into defects with
-`Effect.orDie`, as above.
-
-Chain them like `map`:
-
-```typescript
-Output.literal("a").pipe(
-  Output.mapEffect((s) => Effect.succeed(s + "b")),
-  Output.mapEffect((s) => Effect.succeed(s + "c")),
-);
-// resolves to "abc"
-```
-
-`mapEffect` only has the pipeable form. There is no data-first
-`Output.mapEffect(output, fn)` overload like the one `map` has.
-
-The resulting `Output` tracks the requirements (the `R` channel) of
-the inner Effects. You must provide anything those Effects need
-wherever the Output is finally evaluated.
-
-## `flatMap`
-
-`Output.flatMap` runs a function that returns another `Output`, then
-resolves that `Output` too. Use it when the next value is itself an
-`Output`:
-
-```typescript
-const upper = bucket.bucketName.pipe(
-  Output.flatMap((name) => Output.literal(name.toUpperCase())),
-);
-// Output<string>
-```
-
-Like `map`, it has both a pipeable form and a data-first form
-(`Output.flatMap(output, fn)`).
-
-:::caution
-Dependency edges come only from the source `Output`. Alchemy does not
-look inside the `Output` your function returns when it builds the
-graph. Don't return an `Output` of a resource that isn't already
-upstream of the source, or it may not be deployed yet when the
-function runs.
-:::
-
-## `as`
-
-`.as<T>()` changes the type of an `Output` without changing its
-value. Use it when you know more about the resolved type than
-TypeScript does. A Worker's `url` is typed `string | undefined`
-because some Workers have no URL, but a Worker you serve on
-`workers.dev` or a custom domain always has one:
-
-```typescript
-const url = worker.url.as<string>();
-// Output<string>
-```
-
-It is a type cast only. Nothing is checked or converted at runtime.
-
 ## `all`
 
-`Output.all` zips several `Output`s into one. The result resolves
-to a tuple that preserves the input shape and types:
+`Output.all` zips several outputs into one that resolves to a tuple
+with the same shape and types:
 
 ```typescript
 const both = Output.all(bucket.bucketName, queue.queueUrl);
@@ -241,42 +136,122 @@ const both = Output.all(bucket.bucketName, queue.queueUrl);
 const url = both.pipe(
   Output.map(([name, queue]) => `s3://${name}?dlq=${queue}`),
 );
+
+Output.all(...urls); // urls: Output<string>[] → Output<string[]>
 ```
 
-If you pass an array of `Output<T>` of unknown length, the result
-is `Output<T[]>` instead of a fixed tuple.
+## `as`
 
-## `interpolate`
-
-The most common use of `all` + `map` is building a string from
-outputs. `Output.interpolate` is a tagged template literal for
-that:
+`.as<T>()` changes the type of an output without changing its value.
+Use it when you know more about the resolved type than TypeScript
+does:
 
 ```typescript
-const arn = Output.interpolate`arn:aws:s3:::${bucket.bucketName}/objects/*`;
+// `url` is `string | undefined` because some Workers have no URL.
+// A Worker served on workers.dev or a custom domain always has one.
+const url = worker.url.as<string>();
 // Output<string>
-
-const dsn = Output.interpolate`postgres://${db.host}:${db.port}/${db.name}`;
 ```
 
-Nullish interpolated values render as the empty string.
+It is a type cast only. Nothing is checked or converted at runtime.
 
-This expands to `Output.all(...args).pipe(Output.map(...))`, so the
-dependency graph is wired up automatically.
+## `mapEffect`
+
+`Output.mapEffect` works like `map`, but the function returns an
+`Effect`. Use it when the transform does real work, such as reading a
+file or calling an API:
+
+```typescript
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+
+const config = bucket.bucketName.pipe(
+  Output.mapEffect((name) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.readFileString(`config/${name}.json`);
+    }).pipe(Effect.orDie), // the error type must be `never`
+  ),
+);
+// Output<string, FileSystem.FileSystem>
+```
+
+- The Effect must not fail. Handle errors inside it or turn them into
+  defects with `Effect.orDie`.
+- The output carries the Effect's requirements (`R`). Provide them
+  wherever the output is evaluated.
+- It has only the pipeable form. There is no data-first
+  `Output.mapEffect(output, fn)`.
+
+## `flatMap`
+
+`Output.flatMap` runs a function that returns another output, then
+resolves that output too:
+
+```typescript
+const upper = bucket.bucketName.pipe(
+  Output.flatMap((name) => Output.literal(name.toUpperCase())),
+);
+// Output<string>
+
+Output.flatMap(bucket.bucketName, (name) => Output.literal(name)); // data-first
+```
 
 :::caution
-Don't use a plain template literal or `+` with an Output. JS coercion
-of an Output throws `Cannot coerce Output<…> to a string via JS
-coercion`, because the value isn't known yet. Use
-`` Output.interpolate`…` `` or `Output.map` instead. Arithmetic on an
-Output (`+output`, `output * 2`) throws the same way.
+Dependency edges come only from the source Output. Alchemy does not
+look inside the output your function returns when it builds the graph.
+Don't return an output of a resource that isn't already upstream of the
+source, or it may not be deployed yet when the function runs.
 :::
+
+## `literal`
+
+`Output.literal` wraps a value you already know. Use it as a default
+for an optional output, or as a placeholder in templates and
+`Output.all` calls:
+
+```typescript
+Output.literal("hello");      // Output<string>
+Output.literal(42);           // Output<number>
+Output.literal({ a: 1 });     // Output<{ a: number }>
+```
+
+## `asOutput`
+
+`Output.asOutput` lifts a plain value, an `Effect`, or an existing
+output into an output. Use it in helpers that accept any of the three:
+
+```typescript
+Output.asOutput("foo");                  // wraps as a literal
+Output.asOutput(Effect.succeed(123));    // wraps the Effect
+Output.asOutput(existingOutput);         // returns it unchanged
+```
+
+## `fromEffect`
+
+`Output.fromEffect` lifts a plan-time Effect into an Output. The Effect
+runs when the stack resolves the output, with the stack's services
+(credentials, region) provided. It never runs inside a deployed
+runtime:
+
+```typescript
+const fromEffect: <A, Req = never>(
+  effect: Effect.Effect<A, never, Req>, // must not fail: die on unresolvable lookups
+) => ToOutput<A, Req>; // an Output<A, Req>
+```
+
+It is the low-level form behind lookup helpers such as the AMI finders.
+See [Bindings › Plan-time invokes](/infrastructure-as-effects/binding#plan-time-invokes)
+for the higher-level `.execute(...)` form. Constructing the Output is
+inert, so these helpers need no
+[`__ALCHEMY_RUNTIME__` guard](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard).
 
 ## `of`
 
-Alchemy uses this internally to convert resources to `Output`s. You
-rarely call it directly because resources already act like
-`Output`s:
+`Output.of` turns a resource into an output of its attributes. You
+rarely need it, because resources already act like Outputs. Its main
+use is to turn a reference built with `Alchemy.ref` into a typed output
+when the resource constructor isn't in scope:
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -284,7 +259,9 @@ import * as Output from "alchemy/Output";
 
 const bucketOut = Output.of(bucket); // Output of the bucket's attributes
 
-const refOut = Output.of(
+const shared = Output.of(
+  // the type parameter is the resource's interface type,
+  // not `typeof` its constructor
   Alchemy.ref<Cloudflare.R2.Bucket>("Bucket", {
     stack: "shared-infra",
     stage: "prod",
@@ -292,130 +269,41 @@ const refOut = Output.of(
 );
 ```
 
-The second form turns a reference built with `Alchemy.ref` into a
-typed `Output`. See [`ref`](#ref) below.
+## `stackRef`
 
-## `ref`
-
-To read a deployed resource's attributes from another stack or
-stage, use the resource's own `.ref`:
+`Output.stackRef` reads another stack's persisted output record when
+its typed stack handle isn't in scope. It returns an Effect, so you
+`yield*` it:
 
 ```typescript
-const bucket = yield* Cloudflare.R2.Bucket.ref("Bucket", {
-  stack: "shared-infra",
-  stage: "prod",
+const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+  stage: "prod", // optional, defaults to the current stage
 });
+backend.url; // Output<string>
 ```
 
-When the resource constructor isn't in scope, build the reference
-with `Alchemy.ref<Type>(id, { stack, stage })` and wrap it in
-`Output.of`, as in the previous section. See
-[References](/infrastructure-as-code/references) for the full reference
-surface (`Resource.ref`, `Alchemy.ref`, `Output.stackRef`,
-`Stack.stage`) and how each is resolved.
-
-## How Outputs compose in props
-
-You can pass an `Output` (or any structure containing Outputs) as
-the input prop of another resource. Alchemy walks the structure,
-collects upstream dependencies, and waits for them to resolve
-before calling the provider.
-
-```typescript
-const queue = yield* AWS.SQS.Queue("Jobs", {
-  tags: {
-    bucket: bucket.bucketName,
-    region: Output.literal("us-west-2"),
-  },
-  redrivePolicy: {
-    deadLetterTargetArn: dlq.queueArn,
-    maxReceiveCount: 5,
-  },
-});
-```
-
-Plain values, Outputs, nested objects, and arrays are all valid. The
-engine evaluates them recursively.
-
-## Helpers
-
-| Helper                 | Returns                                       |
-| ---------------------- | --------------------------------------------- |
-| `Output.isOutput(v)`   | `true` if `v` is an `Output<T>`               |
-| `Output.isExpr(v)`     | `true` for any internal expression node       |
-| `Output.upstream(o)`   | Map of upstream resources `o` depends on      |
-| `Output.hasOutputs(v)` | `true` if `v` (or anything inside) is lazy    |
-| `Output.toEnvKey(id, suffix)` | `"my-bucket" + "name"` → `"MY_BUCKET_NAME"` |
-
-`upstream` and `hasOutputs` power the dependency graph. Most code
-won't call them directly, but they're useful when writing custom
-providers.
+Prefer `yield* MyStack` from
+[References](/infrastructure-as-code/references#depend-on-a-stacks-outputs),
+which does the same lookup with real type bindings.
 
 ## Redacted values
 
-Alchemy preserves `Redacted<T>` (Effect's secret wrapper) through
-evaluation. Logs and console output show `<redacted>` in place of
-the underlying value:
+Alchemy preserves `Redacted<T>`, Effect's secret wrapper, through
+evaluation. Logs and console output show `<redacted>` in place of the
+value:
 
 ```typescript
-import * as Redacted from "effect/Redacted";
+import * as Config from "effect/Config";
 
-const apiKey = Redacted.make(env.API_KEY);
-
-yield* MyService("svc", {
-  apiKey, // stays Redacted in state and logs
+const webhook = yield* Cloudflare.Alerting.NotificationWebhook("Alerts", {
+  url: "https://example.com/hooks/cloudflare",
+  secret: yield* Config.redacted("WEBHOOK_SECRET"), // stays Redacted in state and logs
 });
 ```
 
-## Evaluation semantics
-
-When alchemy needs the actual value of an `Output`, it runs
-`Output.evaluate(expr, upstream)`. It needs the value to call a
-provider, to print outputs at the end of a deploy, or to satisfy a
-binding. Evaluation works like this:
-
-1. **Resource expressions** look up the resolved attributes of
-   their upstream resource.
-2. **Property expressions** evaluate their parent and read the
-   property.
-3. **Apply / EffectExpr** evaluate the parent first, then run the
-   user function.
-4. **All** evaluates its children in parallel.
-5. **Ref** reads from the state store using the target's stack,
-   stage, and fully qualified name.
-6. **Plain values** (objects, arrays, primitives) are walked
-   recursively so Outputs inside them get evaluated too.
-7. **`Redacted`** values are preserved as-is.
-
-You normally never call `Output.evaluate` yourself. Alchemy invokes
-it during plan and apply. Understanding the ordering still helps.
-Every Output is lazy until alchemy decides to resolve it, and the
-deploy graph is exactly the set of dependencies your Outputs
-declared.
-
-## Cheat sheet
-
-| You want to…                                | Use                                          |
-| ------------------------------------------- | -------------------------------------------- |
-| Reference an attribute that doesn't exist yet | `resource.attr`                            |
-| Wrap a constant as an Output                | `Output.literal(value)`                      |
-| Coerce a value / Effect / Output to Output  | `Output.asOutput(x)`                         |
-| Transform an Output                         | `output.pipe(Output.map(fn))`                |
-| Transform with an Effect                    | `output.pipe(Output.mapEffect(fn))`          |
-| Transform into another Output               | `output.pipe(Output.flatMap(fn))`            |
-| Narrow an Output's type                     | `output.as<T>()`                             |
-| Combine several Outputs                     | `Output.all(a, b, c)`                        |
-| Build a string from Outputs                 | `` Output.interpolate`a/${b}/c` ``           |
-| Read a resource from another stack          | `yield* X.ref("id", { stack, stage })`       |
-| Inspect dependencies                        | `Output.upstream(output)`                    |
-
 ## Where next
 
-- [References](/infrastructure-as-code/references): read Outputs across
-  stacks and stages. Next page.
-- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle): how
-  the graph deploys.
-- [Resources](/infrastructure-as-code/resource): what an Output actually
-  flows into.
-- [Layers](/infrastructure-as-effects/layers): hide resources and their
-  Outputs behind a service interface.
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle): how the graph deploys.
+- [References](/infrastructure-as-code/references): read outputs across stacks and stages.
+- [Resources](/infrastructure-as-code/resource): what an output flows into.
+- [Layers](/infrastructure-as-effects/layers): hide resources and their outputs behind a service interface.

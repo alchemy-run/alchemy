@@ -1,194 +1,19 @@
 ---
 title: Auth Providers
 description: An Auth Provider produces the credentials for a cloud's API calls. It resolves them lazily as Effects, so tokens and role sessions can refresh and never pin one static key.
+type: explanation
 ---
 
 Resources never take API keys as props. Each cloud registers an
-**Auth Provider**, the service that produces credentials for that
-cloud's API calls. A [Profile](/environments/profiles) stores which
-auth method you picked. The Auth Provider turns that choice into
-live credentials whenever lifecycle code calls the cloud.
+**auth provider**, the service that turns a stored login into live
+credentials whenever lifecycle code calls the cloud. Read this page to
+understand how credentials resolve and refresh, or before you
+[build your own](/environments/custom-auth-provider).
 
-## The contract
+## Where credentials come from
 
-An Auth Provider is a named record of five profile methods plus an optional
-CI environment resolver and its declared environment contract:
-
-```typescript
-// alchemy/Auth/AuthProvider
-export interface AuthProviderImpl<
-  Config extends { method: string },
-  Credentials,
-> {
-  readonly configSchema: Schema.Codec<Config>;
-  configure(
-    profileName: string,
-    currentConfig?: Config,
-  ): Effect.Effect<Config, AuthError>;
-  configureWith?(
-    profileName: string,
-    input: { method: string; values: Record<string, string> },
-  ): Effect.Effect<Config, AuthError>;
-  readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
-  login(
-    profileName: string,
-    config: Config,
-    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
-  ): Effect.Effect<Config | void, AuthError>;
-  logout(profileName: string, config: Config): Effect.Effect<void, AuthError>;
-  details(
-    profileName: string,
-    config: Config,
-    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
-  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth>;
-  read(
-    profileName: string,
-    config: Config,
-    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
-  ): Effect.Effect<Credentials, AuthError | NeedsReauth>;
-  readonly readEnvironment?: Effect.Effect<Credentials, AuthError>;
-  readonly environment?: ReadonlyArray<EnvironmentVariable>;
-}
-```
-
-`configure` handles interactive setup. `configureWith` handles `--method`
-and `--set`, with inputs declared by `configureMethods`. `login` and
-`logout` manage stored secrets. `details` supplies redacted profile status.
-`read` resolves credentials.
-
-`updateConfig` writes changed values (for example a refreshed OAuth token)
-back to the profile. `read` must never prompt. Fail with `NeedsReauth`
-instead.
-
-`configSchema` describes the provider's manifest entry. Stored entries are
-user-editable JSON that may come from another alchemy version. Alchemy decodes
-every load against this schema. An invalid entry fails with a reconfigure hint
-and never reaches provider code that matches exhaustively on `method`. The
-`makeStoredAuthProvider` factory supplies the schema automatically.
-
-`details` and `read` use the tagged `NeedsReauth` error for missing, expired,
-or rotated credentials. The profile UI renders it as "needs re-login."
-
-`readEnvironment` never receives or creates a profile. Alchemy uses it whenever
-every required variable in the provider's contract is present in config (the
-process environment, `.env`, or `--env-file`). In that case it takes precedence
-over any selected profile. Alchemy always uses it when `CI=true`. See
-[environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
-`environment` declares every variable `readEnvironment` consumes
-(`name`, `required`, `secret`, `description`, `alternatives`). Alchemy validates
-this declaration during registration. Registration fails when a provider has
-`readEnvironment` but no declaration. `alchemy provider check-env` uses the
-declaration as a CI preflight.
-
-Providers register by name into a single `AuthProviders` registry
-via `AuthProviderLayer`, inside each cloud's `providers()` Layer:
-
-```typescript
-// alchemy/Auth/AuthProvider
-export class AuthProviders extends Context.Service<
-  AuthProviders,
-  {
-    [providerName: string]: AuthProvider;
-  }
->()("AuthProviders") {}
-```
-
-[`alchemy profile edit`](/cli/profile#profile-edit) uses this registry. It
-imports your stack, reads the registry, and runs the selected providers'
-`configure`/`login`. The factory also wraps `read`, `details`, and `logout` in
-the same cross-process file lock, so two processes never refresh credentials at the
-same time. It also serializes interactive flows so prompts from different
-providers don't interleave. The file lock does not cover `configure` or
-`login`, because a browser grant may take minutes and would block every
-concurrent `read`. A provider whose login path silently refreshes a
-rotate-on-use token takes the lock itself, around only that
-read-refresh-persist section.
-
-## Credentials are lazy Effects
-
-Nothing in alchemy holds credentials as a plain value. The per-cloud
-environment services are `Context.Service`s whose service value is
-itself an Effect:
-
-```typescript
-// alchemy/Cloudflare/CloudflareEnvironment
-export class CloudflareEnvironment extends Context.Service<
-  CloudflareEnvironment,
-  Effect.Effect<CloudflareResolvedCredentials>
->()("Cloudflare::CloudflareEnvironment") {
-  readonly kind = "Environment" as const;
-}
-```
-
-AWS has the same shape and goes one level deeper. The resolved
-environment also holds its credentials as an Effect, so expiring SSO
-and assumed-role sessions re-resolve on each access:
-
-```typescript
-// alchemy/AWS/Environment
-export interface AWSEnvironmentShape {
-  accountId: AccountID;
-  region: RegionID;
-  credentials: Effect.Effect<ResolvedCredentials, CredentialsError>;
-  endpoint?: string;
-  profile?: string;
-}
-
-export class AWSEnvironment extends Context.Service<
-  AWSEnvironment,
-  Effect.Effect<AWSEnvironmentShape>
->()("AWS::Environment") {
-  static current = AWSEnvironment.use((env) => env);
-  readonly kind = "Environment" as const;
-}
-```
-
-This laziness is the design point. Provider Layers are built on
-every CLI invocation, possibly before a Profile exists, so the
-Layer can't bake in a resolved key. Handing consumers an Effect
-means resolution happens at the point of use. The Effect can also
-embed refresh logic, so an OAuth token or IAM role session renews
-itself and never pins whatever key was live at startup.
-
-## What lifecycle code yields
-
-Inside `reconcile`/`read`/`delete`, a handler yields the environment
-twice. The first yield gets the Effect out of the service. The second
-runs it:
-
-```typescript
-// Cloudflare (packages/alchemy/src/Cloudflare/Calls/App.ts)
-const { accountId } = yield* yield* CloudflareEnvironment;
-
-// AWS — AWSEnvironment.current does the double yield for you
-const { accountId, region } = yield* AWSEnvironment.current;
-```
-
-Most handlers never touch credentials. They call distilled SDK
-operations. Those operations require the SDK's `Credentials` service,
-which is also a lazy Effect:
-
-```typescript
-// @distilled.cloud/cloudflare (Neon and Planetscale are the same shape)
-export class Credentials extends Context.Service<
-  Credentials,
-  Effect.Effect<ResolvedCredentials, CredentialsError, never>
->()("CloudflareCredentials") {}
-```
-
-The distilled HTTP client re-runs that Effect on every API
-request, so any refresh logic in the Effect runs per request.
-Each cloud's `providers()` Layer supplies this service from the
-active Profile's Auth Provider. The handler only calls the API.
-
-## How Profiles select an Auth Provider
-
-A Profile stores one document per provider at
-`~/.alchemy/profiles/{profile}/{provider}.json`, holding the chosen `method`
-and its values. See
-[Profiles › Where profiles live](/environments/profiles#where-profiles-live).
-Each cloud bridges that config to its credential service with a
-`fromProfile`/`fromAuthProvider` Layer:
+Each cloud's `providers()` layer bridges its auth provider to a
+credentials service with a `fromProfile` or `fromAuthProvider` layer:
 
 ```typescript
 // alchemy/Cloudflare/CloudflareEnvironment
@@ -200,89 +25,115 @@ export const fromProfile = () =>
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      return yield* resolve.pipe(
-        Effect.orDie,
-        Effect.cached,
-      );
+      return yield* resolve.pipe(Effect.orDie, Effect.cached);
     }),
   );
 ```
 
-Outside CI, `resolveProviderConfig` selects the current profile and loads its
-stored config. An unconfigured provider fails with the exact
-`alchemy profile edit` command to run. Resolution never starts a login flow.
-The provider's `read` method then materializes credentials. Profile selection
-(`--profile`, `$ALCHEMY_PROFILE`, `alchemy profile`) is covered in
-[Profiles](/environments/profiles).
+`resolveProviderConfig` picks one of two sources per provider:
 
-### Environment credentials
+- **The environment**: when `CI=true`, or when every required variable
+  in the provider's contract is set, Alchemy calls the provider's
+  `readEnvironment`. It never creates or touches a profile. See
+  [Profiles › Environment variables outside CI](/environments/profiles#environment-variables-outside-ci)
+  and [CLI › provider](/cli/provider) for each provider's variables.
+- **The selected profile**: otherwise Alchemy loads the provider's
+  stored document from the [profile](/environments/profiles#where-profiles-live)
+  and calls the provider's `read`. An unconfigured provider fails with
+  the exact `alchemy profile edit` command to run. Resolution never
+  starts a login flow.
 
-When `CI=true`, `resolveProviderConfig` bypasses profile selection and calls
-the provider's `readEnvironment` capability. It does not manufacture an
-`{ method: "env" }` profile entry or touch the local profile files. See the
-[provider environment-variable table](/environments/profiles#ci-environment-variables-by-provider)
-for the exact inputs.
+## Credentials are lazy Effects
 
-Outside CI, the same capability runs first whenever the provider's required
-variables are all present in config (process environment, `.env`, or
-`--env-file`). This applies even when `--profile` or `ALCHEMY_PROFILE`
-selected a profile. The check is per provider, so one provider can come from the
-environment while the others in the same run come from the profile. Alchemy
-logs the variables it used. Unset them to fall back to the profile.
-
-## Refresh in practice
-
-Cloudflare's OAuth method shows why `read` is an Effect and not a
-stored value. Every resolve checks expiry and refreshes proactively:
+Nothing in Alchemy holds credentials as a plain value. Each cloud's
+environment service is a `Context.Service` whose value is itself an
+Effect:
 
 ```typescript
-// alchemy/Cloudflare/Auth/AuthProvider — inside read (method: "oauth")
+// alchemy/Cloudflare/CloudflareEnvironment
+export class CloudflareEnvironment extends Context.Service<
+  CloudflareEnvironment,
+  Effect.Effect<CloudflareResolvedCredentials>
+>()("Cloudflare::CloudflareEnvironment") {}
+
+// alchemy/AWS/Environment goes one level deeper, so expiring SSO and
+// assumed-role sessions re-resolve on each access
+export interface AWSEnvironmentShape {
+  accountId: AccountID;
+  region: RegionID;
+  credentials: Effect.Effect<ResolvedCredentials, CredentialsError>;
+  // ...
+}
+```
+
+Provider layers build on every CLI invocation, possibly before a
+profile exists, so a layer can't bake in a resolved key. An Effect
+resolves at the point of use and can carry its own refresh logic, so an
+OAuth token or IAM role session renews itself.
+
+## What lifecycle code yields
+
+Inside `reconcile`, `read`, or `delete`, a handler yields the
+environment twice. The first `yield*` gets the Effect out of the
+service, and the second runs it.
+
+```typescript
+// Cloudflare
+const { accountId } = yield* yield* CloudflareEnvironment;
+
+// AWS: AWSEnvironment.current does the double yield for you
+const { accountId, region } = yield* AWSEnvironment.current;
+```
+
+Most handlers never touch credentials directly. They call distilled SDK
+operations, which require the SDK's `Credentials` service. That service
+is also a lazy Effect, and the distilled HTTP client re-runs it on every
+request, so refresh logic runs per request.
+
+## Refresh, write-back, and locking
+
+Cloudflare's OAuth method shows why `read` is an Effect. Every resolve
+checks expiry, refreshes early, and writes the new token back:
+
+```typescript
+// alchemy/Cloudflare/Auth/AuthProvider, inside read (method: "oauth")
 const now = yield* Clock.currentTimeMillis;
 const fresh =
   creds.expires > now + 10_000
     ? creds
     : yield* OAuthClient.refresh(creds).pipe(
-        Effect.mapError(
-          (e) =>
-            new NeedsReauth({
-              provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-              profile: profileName,
-              message: `Cloudflare OAuth refresh failed. ${reauth}`,
-              cause: e,
-            }),
-        ),
+        // a failed refresh becomes NeedsReauth ("needs re-login" in the UI)
+        Effect.mapError((e) => new NeedsReauth({ /* ... */ cause: e })),
       );
 if (fresh !== creds) {
-  yield* (
-    updateConfig?.({
-      method: "oauth",
-      accountId,
-      clientId: fresh.clientId,
-      access: Redacted.value(fresh.access),
-      refresh: Redacted.value(fresh.refresh),
-      expires: fresh.expires,
-      scopes: fresh.scopes,
-    }) ?? Effect.void
-  );
+  // persist the refreshed token to the profile
+  yield* (updateConfig?.({ method: "oauth", /* ... */ }) ?? Effect.void);
 }
 ```
 
-Refreshed tokens are written back to the profile through the `updateConfig`
-callback that Alchemy passes to `read`. A failed refresh surfaces as
-`NeedsReauth`, which the profile UI renders as "needs re-login."
+- **Write-back**: Alchemy passes `updateConfig` to `read`, so refreshed
+  tokens land in the profile.
+- **Never prompt**: `read` fails with `NeedsReauth` instead of starting
+  a login. `alchemy profile refresh` runs the login or refresh without
+  changing the method, and `profile edit --reconfigure` changes it.
+- **Locking**: `read`, `details`, and `logout` run under a
+  cross-process file lock, so two concurrent deploys can't double-spend
+  a single-use refresh token. `configure` and `login` stay outside the
+  lock because a browser grant can take minutes. A login that silently
+  refreshes a rotate-on-use token takes the lock itself around that step.
+- **Serialized prompts**: interactive flows run one at a time, so
+  prompts from different providers don't interleave.
+- **Once per process**: `fromProfile` wraps resolution in
+  `Effect.cached`, so the profile-level `read` runs once. Ongoing
+  refresh happens inside the credential Effects the SDKs re-run.
 
-`read` runs under the cross-process file lock, so two concurrent
-deploys can't double-spend the single-use refresh token.
-To force the same provider-specific login/refresh operation without
-changing configuration, run `alchemy profile refresh`. You can pass a
-named profile and repeatable `--provider` filters. `profile edit
---reconfigure` is reserved for changing the method, account, scopes, or other
-provider configuration.
-The `fromProfile` Layers above pipe resolution through `Effect.cached`,
-so the Profile-level `read` runs once per process. Ongoing refresh
-happens inside the credential Effects that the SDKs re-run per request,
-and in proactive refreshes like the one above. Alchemy does not re-read
-the Profile from disk on every call.
+## The provider interface
+
+An auth provider implements `AuthProviderImpl` and registers by name in
+the `AuthProviders` registry through `AuthProviderLayer`. `alchemy profile edit`
+reads that registry to run each provider's `configure` and `login`. See
+[`Auth/AuthProvider.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Auth/AuthProvider.ts)
+for every method and its contract.
 
 ## Where next
 

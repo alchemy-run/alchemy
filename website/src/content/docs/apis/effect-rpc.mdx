@@ -1,20 +1,16 @@
 ---
 title: Effect RPC
-description: Schema-first RPC for trust boundaries. Declare procedures, construct handler Layers, and derive typed clients from the same schema.
+description: Schema-first RPC for trust boundaries. Declare procedures, construct handler layers, and derive typed clients from the same schema.
+type: explanation
 sidebar:
   order: 2
 ---
 
 Effect RPC is schema-first. Every procedure declares `payload`,
-`success`, and `error` Schemas, and every request and response is
-validated against them. Use it when data crosses a **trust
-boundary**, such as a web app or an external service calling into
-your stack. That validation has a per-request price that includes a frame parse,
-a Schema decode of the payload, and a Schema encode of the result,
-mirrored on the client. Because of that cost, it is discouraged for
-internal service-to-service calls. [Schemaless RPC](/apis/schemaless)
-gives you the same typed client with no schema, no runtime checking,
-and no per-request validation cost.
+`success`, and `error` schemas, and every request and response is
+validated against them. Use it at a [trust boundary](/apis#trust-boundaries)
+when the consumers are Effect or TypeScript programs, and
+[Schemaless RPC](/apis/schemaless) for internal calls.
 
 ## The pieces
 
@@ -22,16 +18,16 @@ An RPC API is five small files:
 
 ```sh
 src/
-├── Task.ts        # domain model + tagged errors — imported by server AND client
+├── Task.ts        # domain model + tagged errors, imported by server AND client
 ├── ApiSchema.ts   # one Rpc.make per procedure, collected into an RpcGroup
-├── ApiHandlers.ts # RpcGroup.toLayer handlers + the HttpEffect — host-agnostic
-├── ApiService.ts  # the host — a Lambda Function or Cloudflare Worker; wired on the hub pages
-└── ApiClient.ts   # a typed client — the same schema + a Fetcher
+├── ApiHandlers.ts # RpcGroup.toLayer handlers + the HttpEffect, host-agnostic
+├── ApiService.ts  # the host, a Lambda Function or Cloudflare Worker, wired on the hub pages
+└── ApiClient.ts   # a typed client, the same schema + a Fetcher
 ```
 
-The schema files are plain values with no runtime concerns, so both
-the server and every client import them directly. Only
-`ApiService.ts` names a cloud. Everything above it is host-agnostic.
+The schema files are plain values with no runtime concerns, so the
+server and every client import them directly. Only `ApiService.ts`
+names a cloud.
 
 ## The domain types
 
@@ -58,13 +54,14 @@ export class CreateTaskFailed extends Schema.TaggedClass<CreateTaskFailed>()(
 ) {}
 ```
 
-RPC errors are schema-backed tagged classes. The client receives
-them as typed values it can `catchTag` on, not raw HTTP status codes.
+RPC errors are schema-backed tagged classes. The client receives them
+as typed values it can `catchTag` on, with no HTTP status codes to
+interpret.
 
 ## The procedures
 
-Each `Rpc.make` declares one procedure. `RpcGroup.make` collects
-them into the single value that the server and the client share:
+Each `Rpc.make` declares one procedure. `RpcGroup.make` collects them
+into the single value that the server and the client share:
 
 ```typescript
 // src/ApiSchema.ts
@@ -89,17 +86,6 @@ export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
 
 `TaskRpcs` is a value-level description. Nothing executes yet.
 
-A procedure can also stream its results. Add `stream: true`:
-
-```typescript
-const watchTasks = Rpc.make("watchTasks", { success: Task, stream: true });
-```
-
-The handler for a streaming procedure returns a `Stream` of `Task`
-values, and the client method returns a `Stream` too. Streaming needs
-a framed serialization such as NDJSON on both server and client (see
-[Serve it](#serve-it)).
-
 ## Handlers
 
 `TaskRpcs.toLayer` takes one handler per procedure and produces a
@@ -112,7 +98,7 @@ import { TaskRpcs } from "./ApiSchema.ts";
 import { Task, TaskNotFound } from "./Task.ts";
 
 export const TaskRpcsLive = TaskRpcs.toLayer({
-  // stubs — the per-cloud guides back these with real storage Bindings
+  // stubs, the per-cloud guides back these with real storage bindings
   getTask: ({ id }) => Effect.fail(new TaskNotFound({ id })),
   createTask: ({ title }) =>
     Effect.succeed(
@@ -121,19 +107,19 @@ export const TaskRpcsLive = TaskRpcs.toLayer({
 });
 ```
 
-`toLayer` is pure construction. It builds a value and never runs the
-server, so it is safe inside a host's Construction phase, which also
-executes at plan time ([Phases](/infrastructure-as-effects/phases)).
-Each handler receives the decoded payload and returns an `Effect`
-that succeeds or fails with the declared schemas. The storage-backed
-bodies live on the hub pages, with R2 in
+Each handler receives the decoded payload and returns an `Effect` that
+succeeds or fails with the declared schemas. `toLayer` builds a value
+and never runs the server, so it is safe in a host's construction
+phase, which also runs at deploy time ([Phases](/infrastructure-as-effects/phases)).
+
+The storage-backed handlers live on the hub pages, with R2 in
 [Effect RPC on Workers](/cloudflare/apis/effect-rpc) and DynamoDB in
 [Effect RPC on Lambda](/aws/apis/effect-rpc).
 
 ## Serve it
 
-`RpcServer.toHttpEffect` needs exactly two layers, the handlers and
-a serialization:
+`RpcServer.toHttpEffect` needs two layers, the handlers and a
+serialization:
 
 ```typescript
 // src/ApiHandlers.ts (continued)
@@ -145,19 +131,12 @@ export const ApiHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
 );
 ```
 
-`toHttpEffect` returns an Effect that starts the RPC server and
-yields the request handler. It imports nothing cloud-specific.
-`layerJson` buffers one body per request and suits plain
-request/response. It collects a streamed rpc into that one body, so
-nothing arrives until the stream ends. Streaming rpcs need a framed
-serialization such as `RpcSerialization.layerNdjson`, which writes one
-frame per line. Whichever you pick, the client's serialization layer
-must match the server's.
-
-The host returns the handler as `fetch`:
+`toHttpEffect` returns an Effect that starts the RPC server and yields
+the request handler. It imports nothing cloud-specific. The host
+returns that handler as `fetch`:
 
 ```typescript
-// src/ApiService.ts — inside the host's Effectful Constructor
+// src/ApiService.ts, inside the host's Effectful Constructor
 return { fetch: yield* ApiHttpEffect };
 ```
 
@@ -165,18 +144,40 @@ return { fetch: yield* ApiHttpEffect };
 `fetch` also accepts the un-yielded Effect, but then the server is
 rebuilt on every request.
 
-The host can be a Cloudflare Worker or a Lambda Function. A Lambda
-Function's URL is on by default and public (`authType: "NONE"`). Set
-`functionUrl: { authType: "AWS_IAM" }` to require signed callers.
-Host wiring, storage binding Layers, and
-deploy live on [Workers](/cloudflare/apis/effect-rpc) and
-[Lambda](/aws/apis/effect-rpc).
+The host can be a Cloudflare Worker or a Lambda Function. Each hub
+covers host wiring, storage binding layers, authentication, and deploy:
+
+- [Effect RPC on Workers](/cloudflare/apis/effect-rpc): a Worker host with R2 storage.
+- [Effect RPC on Lambda](/aws/apis/effect-rpc): a Lambda host with DynamoDB storage. The Function URL is on and public by default, so see [Require signed callers](/aws/apis/effect-rpc#require-signed-callers).
+
+## Streaming
+
+A procedure streams its results when you add `stream: true`. Its
+handler returns a `Stream` of `Task` values, and the client method
+returns a `Stream` too:
+
+```typescript
+// src/ApiSchema.ts
+const watchTasks = Rpc.make("watchTasks", { success: Task, stream: true });
+
+export class TaskRpcs extends RpcGroup.make(getTask, createTask, watchTasks) {}
+
+// src/ApiHandlers.ts: serve it (and call it) with a framed serialization
+export const ApiHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
+  Effect.provide(Layer.mergeAll(TaskRpcsLive, RpcSerialization.layerNdjson)),
+);
+```
+
+- `RpcSerialization.layerJson` buffers one body per request. It collects a streamed procedure into that body, so nothing arrives until the stream ends.
+- `RpcSerialization.layerNdjson` writes one frame per line, so stream elements arrive as they are produced.
+- The client's serialization layer must match the server's.
 
 ## A typed client
 
-A client is the schema combined with a **Fetcher**, which is a plain URL for
-external consumers, or a platform Binding when the caller lives in
-the same account (see the Workers page). Here is the URL form:
+A client is the schema combined with a **Fetcher**. The Fetcher is a
+URL for external consumers, or a platform binding when the caller
+lives in the same account (see the Workers page). This is the URL
+form:
 
 ```typescript
 // src/ApiClient.ts
@@ -191,17 +192,18 @@ const program = Effect.gen(function* () {
 
   const task = yield* client.createTask({ title: "Write the docs" });
 
+  // Effect<Task, TaskNotFound | RpcClientError>
   const fetched = yield* client.getTask({ id: task.id });
   console.log(fetched.title);
 });
 
 Effect.runPromise(
   program.pipe(
-    Effect.scoped,
+    Effect.scoped, // the client needs a Scope
     Effect.provide(
       RpcClient.layerProtocolHttp({ url: process.env.TASK_API_URL! }).pipe(
         Layer.provide(FetchHttpClient.layer),
-        Layer.provide(RpcSerialization.layerJson),
+        Layer.provide(RpcSerialization.layerJson), // must match the server
       ),
     ),
   ),
@@ -209,20 +211,12 @@ Effect.runPromise(
 ```
 
 `RpcClient.make(TaskRpcs)` derives the whole client from the same
-group value with no codegen. Errors are typed. For example, `client.getTask`
-returns `Effect<Task, TaskNotFound | RpcClientError>`. `RpcClientError`
-covers transport and protocol failures, and `TaskNotFound` is your
-declared error. The client runs inside
-`Effect.scoped`, and the serialization layer must match the server's.
+group value with no codegen. `TaskNotFound` is your declared error,
+and `RpcClientError` covers transport and protocol failures.
 
 ## Where next
 
-- [Effect RPC on Workers](/cloudflare/apis/effect-rpc): full Worker
-  wiring, including R2-backed handlers, streaming rpcs, the `RpcWorker` and
-  `RpcDurableObject` sugar, typed in-account bindings, the DO bridge.
-- [Effect RPC on Lambda](/aws/apis/effect-rpc): full Lambda wiring,
-  including DynamoDB bindings, IAM, Function URL, deploy.
-- [Effect HTTP](/apis/effect-http): the same trust boundary as real
-  REST endpoints, for non-Effect consumers.
-- [Schemaless RPC](/apis/schemaless): the default for internal
-  calls.
+- [Effect RPC on Workers](/cloudflare/apis/effect-rpc): full Worker wiring, including R2-backed handlers, streaming procedures, the `RpcWorker` and `RpcDurableObject` sugar, typed in-account bindings, and the Durable Object bridge.
+- [Effect RPC on Lambda](/aws/apis/effect-rpc): full Lambda wiring, including DynamoDB bindings, IAM, the Function URL, and deploy.
+- [Effect HTTP](/apis/effect-http): the same trust boundary as real REST endpoints, for non-Effect consumers.
+- [Schemaless RPC](/apis/schemaless): the default for internal calls.

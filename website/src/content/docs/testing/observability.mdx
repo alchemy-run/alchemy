@@ -1,233 +1,109 @@
 ---
-title: Observability
-description: Effect emits OpenTelemetry natively and the exporter is a Layer. Provision the receiving end, including datasets, monitors, notifiers, and alarms, as resources in the same Stack as the code that emits the signals.
+title: Observability overview
+description: How Alchemy treats observability as code, from the exporter layer in your runtime to the datasets, monitors, and alarms declared in the same stack.
+type: explanation
 ---
 
-Effect already emits traces, metrics, and logs. Every alchemy
-runtime ships with the OTLP exporter built in. The exporter is a
-Layer, wired to resources through the binding infrastructure. With
-alchemy the receiving end is code too. Datasets, ingest tokens,
-monitors, notifiers, and alarms live in the same Stack as the
-Workers and Functions they observe. A threshold change is a diff in
-the PR that you can review, revert, and trace with `git blame`.
+This page explains how observability fits into an Alchemy stack. Read
+it before you choose where your traces, logs, and alerts go. The setup
+steps live on the linked guides.
 
-## OTel everywhere
+## How signals leave your code
 
-Provide a telemetry Layer on the Function/Worker and the built-in
-exporter ships Effect's traces, metrics, and logs. Without one,
-nothing is exported:
+Effect already emits traces, logs, and metrics. Every Alchemy runtime
+exports them once you provide an exporter layer, and the exporter is
+a layer like any other:
 
 ```typescript
-Alchemy.Telemetry.layerOtlp({ url: "https://collector.example.com" })
-```
-
-Any OTLP/HTTP endpoint works. Swap the layer to ship somewhere else,
-and the code emitting the signals stays the same. See
-[Telemetry](/infrastructure-as-effects/telemetry) for the mechanics,
-passing an API key as a `Config.Redacted` header, and how buffered
-telemetry is flushed.
-
-## Provision the receiving end
-
-The endpoint the exporter targets is a resource. You declare one
-[Axiom](/axiom) `Dataset` per OTEL signal. Each one exposes its
-OTLP endpoints as outputs:
-
-```typescript
-// src/observability.ts
-import * as Axiom from "alchemy/Axiom";
-
-export const Traces = Axiom.Dataset("Traces", {
-  name: "app-traces",
-  kind: "otel:traces:v1",
-});
-export const Logs = Axiom.Dataset("Logs", {
-  name: "app-logs",
-  kind: "otel:logs:v1",
-});
-```
-
-Each dataset's `otelTracesEndpoint`, `otelLogsEndpoint`, and
-`otelMetricsEndpoint` attributes are [Outputs](/infrastructure-as-code/outputs).
-You wire these references into whatever runs the exporter.
-
-## Bind the datasets to the runtime
-
-Mint a least-privilege ingest token, then provide `Axiom.Telemetry`
-on the Worker. It is a binding layer that wires the datasets and
-token in one line:
-
-```typescript
-// src/observability.ts
-export const Ingest = Axiom.ApiToken("Ingest", {
-  name: "prod-ingest",
-  datasetCapabilities: {
-    "app-traces": { ingest: ["create"] },
-    "app-logs": { ingest: ["create"] },
-  },
-});
-
-// src/worker.ts — in the Worker's constructor Effect:
-import { Ingest, Logs, Traces } from "./observability.ts";
-
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
-    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+    Alchemy.Telemetry.layerOtlp({ url: "https://collector.example.com" }),
   ),
-)
+);
 ```
 
-Building the layer binds each dataset's OTLP endpoint and the
-token's `Authorization` header onto the Worker. The bearer travels
-as a `secret_text` binding (see [Secrets](/environments/secrets)) and
-never appears in plaintext. At runtime the built-in exporter ships
-each signal to its dataset. The Worker contains no exporter code.
+Your handlers never call an SDK. To ship somewhere else, you swap the
+layer, and the code that emits the signals stays the same. See
+[Telemetry](/infrastructure-as-effects/telemetry) for exporters,
+multiple destinations, and flushing.
 
-## Export from the platform
+## The receiving end is a resource
 
-On Cloudflare you can skip the in-process exporter. An
-`ObservabilityDestination` has Cloudflare push Workers Logs telemetry
-(traces, logs, or metrics) to an OTLP collector:
+The backend that receives the signals is part of the stack. An
+[Axiom](/axiom) `Dataset` exposes its OTLP endpoints as
+[Outputs](/infrastructure-as-code/outputs), and an `ApiToken` mints a
+least-privilege ingest credential:
 
 ```typescript
-// in the Stack's generator
-import * as Output from "alchemy/Output";
-import * as Redacted from "effect/Redacted";
-import { Ingest, Traces } from "./src/observability.ts";
+export const Traces = Axiom.Dataset("Traces", {
+  name: "app-traces",
+  kind: "otel:traces:v1", // exposes otelTracesEndpoint
+});
 
-const traces = yield* Traces;
-const ingest = yield* Ingest;
-
-yield* Cloudflare.Workers.ObservabilityDestination("TracesExport", {
-  url: traces.otelTracesEndpoint,
-  headers: {
-    authorization: Output.map(ingest.token, (t) => `Bearer ${Redacted.value(t)}`),
-    "x-axiom-dataset": traces.name,
-  },
-  logpushDataset: "opentelemetry-traces",
+export const Ingest = Axiom.ApiToken("Ingest", {
+  name: "app-ingest",
+  datasetCapabilities: { "app-traces": { ingest: ["create"] } },
 });
 ```
 
-The `authorization` header is derived from the ingest token's
-`Redacted` output. The `x-axiom-dataset` header tells Axiom's OTLP
-endpoint which dataset receives the data.
-
-Workers Traces are opt-in. Set
-`observability: { traces: { enabled: true } }` on each Worker whose
-traces you want to export.
-
-Create one destination per signal (`opentelemetry-traces`,
-`opentelemetry-logs`, `opentelemetry-metrics`). The endpoint URL and
-headers update in place. Changing `name` or `logpushDataset` replaces
-the destination. Cloudflare preflights the `url` with a `POST` on
-create (skippable with `skipPreflightCheck`) and on every update, so
-the collector must answer `2xx`. The
+The exporter binds to these outputs, so the endpoint and token never
+appear in your code or in plaintext. The token travels as a secret
+binding (see [Secrets](/environments/secrets)). The
 [Axiom observability guide](/cloudflare/observability/axiom-observability)
-covers the details.
+walks through the full setup.
 
-## Alerts in code
+## Exporting from the platform
 
-Monitors and notifiers are resources too. A `Notifier` is an alert
-destination. A `Monitor` is a scheduled APL query that fires it:
+On Cloudflare, a `Cloudflare.Workers.ObservabilityDestination` has
+Cloudflare push Workers Logs telemetry to an OTLP collector, so your
+Worker ships no exporter code. In exchange, the ingest token lives in
+Cloudflare's destination config, and each Worker opts in to traces
+with `observability: { traces: { enabled: true } }`. See
+[Let Cloudflare push it](/cloudflare/observability/axiom-observability#alternative-let-cloudflare-push-it)
+for the setup.
+
+## Alerts and dashboards are resources
+
+Monitors, notifiers, alarms, and dashboards live in the same stack as
+the runtimes they watch:
 
 ```typescript
-const slack = yield* Axiom.Notifier("ops-slack", {
-  name: "ops-channel",
-  properties: {
-    slack: { slackUrl: process.env.SLACK_WEBHOOK_URL! },
-  },
-});
-
 yield* Axiom.Monitor("error-rate", {
   name: "High error rate",
   type: "Threshold",
-  aplQuery: `
-    ['app-traces']
-    | where status >= 500
-    | summarize count() by bin_auto(_time)
-  `,
+  aplQuery: `['app-traces'] | where status >= 500 | summarize count() by bin_auto(_time)`,
   operator: "Above",
-  threshold: 100,
+  threshold: 100, // raising it is a one-line diff
   intervalMinutes: 5,
   rangeMinutes: 5,
-  notifierIds: [slack.id],
+  notifierIds: [slack.id], // slack is an Axiom.Notifier
 });
 ```
 
-Notifiers cover Slack, email, PagerDuty, Opsgenie, Discord, Teams,
-and custom webhooks. Monitors come in `Threshold`, `MatchEvent`, and
-`AnomalyDetection` flavors. Raising the threshold is a one-line diff.
-The same notifier is reused across every monitor in the stack.
+This has three effects:
 
-## CloudWatch alarms and dashboards
+- **Reviewable changes**: a threshold change is a diff in the pull
+  request that you can review, revert, and trace with `git blame`.
+- **A copy per stage**: `prod`, `staging`, and `pr-42` each get their
+  own alarms and dashboards, because each stage deploys its own stack.
+- **Generated names**: Alchemy names a CloudWatch alarm from the app,
+  stage, and logical ID unless you set `name`, so you reference it
+  through its `alarmName` output. See [CloudWatch › Alarms](/aws/observability/cloudwatch#alarms).
 
-AWS works the same way. Alarms reference metrics by name and fire
-SNS topics. Dashboards are structured documents. You declare both
-next to the resources they observe:
-
-```typescript
-import * as AWS from "alchemy/AWS";
-
-const alerts = yield* AWS.SNS.Topic("Alerts");
-
-const errors = yield* AWS.CloudWatch.Alarm("HighErrors", {
-  MetricName: "Errors",
-  Namespace: "AWS/Lambda",
-  Statistic: "Sum",
-  Period: 60,
-  EvaluationPeriods: 1,
-  Threshold: 1,
-  ComparisonOperator: "GreaterThanOrEqualToThreshold",
-  AlarmActions: [alerts.topicArn],
-});
-
-yield* AWS.CloudWatch.Dashboard("ApiHealth", {
-  DashboardBody: {
-    widgets: [
-      {
-        type: "metric",
-        width: 12,
-        properties: {
-          title: "Lambda errors",
-          view: "timeSeries",
-          stat: "Sum",
-          metrics: [["AWS/Lambda", "Errors", "FunctionName", "api"]],
-        },
-      },
-      {
-        type: "alarm",
-        width: 12,
-        properties: {
-          title: "Alarms",
-          alarms: [errors.alarmArn],
-        },
-      },
-    ],
-  },
-});
-```
-
-`AWS.CloudWatch.CompositeAlarm` combines alarm states with AND/OR
-into a higher-level alert. Alchemy generates alarm names from the
-app, stage, and logical ID unless you set `name`, so reference them
-through the `alarmName` output:
-
-```typescript
-import * as Output from "alchemy/Output";
-
-yield* AWS.CloudWatch.CompositeAlarm("HighSeverity", {
-  AlarmRule: Output.interpolate`ALARM("${errors.alarmName}")`,
-});
-```
-
-Stacks are per-stage, so `prod`, `staging`, and `pr-42` each get
-their own dashboards and alarms.
+See [Monitors & Alerting](/axiom/guides/alerting) for Axiom and
+[CloudWatch](/aws/observability/cloudwatch) for AWS alarms and
+dashboards.
 
 ## Where next
 
-- [Telemetry](/infrastructure-as-effects/telemetry): how the built-in exporters work across every runtime, and the override API
-- [Axiom](/axiom): datasets, tokens, monitors, notifiers, and dashboards as resources
-- [Axiom observability guide](/cloudflare/observability/axiom-observability): end-to-end setup for a Cloudflare Worker
-- [Tutorial Part 6](/cloudflare/tutorial/part-6): the step-by-step version
-- [Secrets](/environments/secrets): how `Redacted` values like ingest tokens are bound
+- [Telemetry](/infrastructure-as-effects/telemetry): provide an
+  exporter layer on a Worker or Lambda Function
+- [Axiom](/axiom): datasets, tokens, monitors, notifiers, and
+  dashboards as resources
+- [Axiom observability guide](/cloudflare/observability/axiom-observability):
+  end-to-end setup for a Cloudflare Worker
+- [CloudWatch](/aws/observability/cloudwatch): alarms and dashboards
+  for AWS
+- [Tutorial Part 6](/cloudflare/tutorial/part-6): the step-by-step
+  version

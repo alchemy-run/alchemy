@@ -11,7 +11,7 @@ alchemy destroy [options]
 
 `destroy` deletes every resource in a stack. It computes a plan where all existing resources are marked for deletion, asks for approval, and removes them in dependency order.
 
-Under the hood, `destroy` is `deploy` with the desired state zeroed out — every resource in state plans as a deletion.
+`destroy` is `deploy` with an empty desired state, so every resource in state plans as a deletion.
 
 <Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
 
@@ -49,11 +49,11 @@ alchemy destroy --stage dev_sam
 
 ## Retained resources
 
-Resources declared with `RemovalPolicy.retain()` are skipped by
-`destroy`: the provider's `delete` is never called and only the state
-row is dropped, so the cloud object outlives the stack. The same is
-true of a resource whose declaration you simply delete — the orphan
-sweep reads the policy from the state row, not from your code.
+`destroy` skips resources declared with `RemovalPolicy.retain()`. It
+never calls the provider's `delete` and drops only the state row, so
+the cloud object outlives the stack. The same holds for a resource
+whose declaration you delete, because the orphan sweep reads the policy
+from the state row.
 
 ```typescript
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
@@ -62,6 +62,18 @@ const data = yield* R2.Bucket("Data").pipe(RemovalPolicy.retain());
 ```
 
 See [Resource lifecycle › Removal policy](/infrastructure-as-code/resource-lifecycle#removal-policy).
+
+## Buckets that still hold objects
+
+R2 refuses to delete a Bucket that still holds objects, so `destroy` fails with `BucketNotEmpty` and the Bucket and its objects survive. To let `destroy` empty the Bucket first, set `forceDestroy`:
+
+```typescript
+const scratch = yield* Cloudflare.R2.Bucket("Scratch", {
+  forceDestroy: true, // default false keeps the objects
+});
+```
+
+See [R2 Bucket › Deleting a Bucket](/providers/Cloudflare/R2#bucket-deleting-a-bucket).
 
 `destroy` is scoped to one stack + stage and driven by the state store; to enumerate and delete everything a set of providers can see in the live account, see [nuke](/cli/nuke).
 

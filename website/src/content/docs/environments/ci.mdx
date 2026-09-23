@@ -1,9 +1,10 @@
 ---
-title: CI
-description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews. Provider credentials are managed as code.
+title: Deploy from CI
+description: Deploy a PR preview per pull request, prod on main, and clean up on close, with CI credentials managed as code.
+type: how-to
 ---
 
-import { Code, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 import yaml from "yaml";
 
 export function DeployWorkflow({ manager = "bun" }) {
@@ -163,70 +164,29 @@ fi`,
 return <Code lang="yaml" code={content} />;
 }
 
-The core idea is **credentials as code**. Alchemy provisions exactly
-the credentials your CI needs, such as a scoped Cloudflare API token
-or an AWS IAM role for OIDC. It writes them into the repo as
-encrypted secrets. You don't copy-paste API keys into the GitHub UI.
+This guide deploys your stack from GitHub Actions. Each pull request
+gets its own `pr-<number>` [stage](/environments/stages) with a preview
+comment, pushes to `main` deploy `prod`, and closing a PR destroys its
+stage.
 
-In CI, Alchemy doesn't read profiles. With `CI=true` (set
-automatically by GitHub Actions), each provider resolves its
-credentials from environment variables. See
-[Profiles › CI](/environments/profiles#ci) for the variables each
-provider needs.
+You create or change three files:
 
-## Preflight: verify the environment
+- `alchemy.run.ts`: a remote state store and a PR comment.
+- `.github/workflows/deploy.yml`: the deploy and cleanup jobs.
+- `stacks/github.ts`: a stack that mints CI credentials and writes
+  them to the repo as encrypted secrets, so you never paste API keys
+  into the GitHub UI.
 
-Every auth provider declares the environment variables its CI resolution
-consumes. `alchemy provider check-env` validates them against that
-contract. It prints one line per registered provider and exits with code 1
-when a required variable is missing:
-
-```sh
-$ bun alchemy provider check-env
-ok Cloudflare
-MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION
-```
-
-Run it as the first step of a deploy job. The job then fails fast with a
-list of missing secrets, so it doesn't fail minutes later inside a
-provider API call. `--provider <name>` checks a subset and can be
-repeated. `--env-file` includes a dotenv file in resolution.
-
-## How PR previews work
-
-Open a PR. Alchemy does the rest.
-
-1. **A pull request is opened.** GitHub fires `pull_request`. The
-   workflow computes `STAGE = pr-{number}` and runs the deploy job.
-2. **Alchemy deploys the stack to that stage.** The stage gets an isolated
-   copy of every resource, such as Workers, Lambdas, queues, and tables.
-   [Stage state lives separately](/environments/stages), so PRs can't
-   touch each other or prod.
-3. **A bot comment is posted (or updated) on the PR.** The
-   `GitHub.Comment` resource keeps its logical id stable, so the
-   comment updates in place on each push.
-4. **PR is merged or closed → cleanup runs.** A second job runs
-   `alchemy destroy --stage pr-{n} --yes`. The resources are deleted and
-   stop costing money.
-
-## What we'll build
-
-By the end you'll have:
-
-1. A GitHub Actions workflow (`.github/workflows/deploy.yml`) with
-   PR previews, prod deploys, and automatic cleanup.
-2. A `stacks/github.ts` that creates provider credentials and writes
-   them to your repo as `GitHub.Secret` / `GitHub.Variable`.
-3. A PR-comment resource in your `alchemy.run.ts` that posts the
-   preview URL on each push.
+In CI, Alchemy doesn't read profiles. GitHub Actions sets `CI=true`, so
+each provider resolves its credentials from environment variables. See
+[Profiles › CI](/environments/profiles#ci).
 
 ## Use a remote state store
 
-A preview deploy and its cleanup job run on different runners. Local
-`.alchemy/` state starts empty on every runner, so the cleanup job
-would find nothing to destroy. Give the app stack a remote
-[state store](/state-store) so every run reads and writes the same
-state:
+The deploy and cleanup jobs run on different runners, and local
+`.alchemy/` state starts empty on each one. Give the app stack a
+remote [state store](/state-store) so the cleanup job finds what the
+deploy created:
 
 ```typescript
 export default Alchemy.Stack(
@@ -239,135 +199,115 @@ export default Alchemy.Stack(
 );
 ```
 
-With `Cloudflare.state()`, the first CI run deploys the state-store
-worker without a prompt when the command passes `--yes`.
+## Post a preview comment
 
-## GitHub Actions Workflow
+Post the preview URL on each pull request. `GitHub.GitHubEnv` reads
+the workflow's environment and is `undefined` outside GitHub Actions.
+The comment's logical ID stays the same, so it updates in place on
+every push.
 
-<Steps>
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
++import * as GitHub from "alchemy/GitHub";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
 
-1. **Add preview comments to your stack**
+export default Alchemy.Stack(
+  "my-app",
+-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
++  {
++    providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()),
++    state: Cloudflare.state(),
++  },
+  Effect.gen(function* () {
+    const app = yield* App;
++    const github = yield* GitHub.GitHubEnv;
 
-   Update your `alchemy.run.ts` to post a preview URL on each pull
-   request. The comment updates on every push because the logical
-   ID stays the same.
++    if (github?.pr) {
++      yield* GitHub.Comment("preview-comment", {
++        owner: github.owner,
++        repository: github.repository,
++        issueNumber: github.pr,
++        body: Output.interpolate`
++          ## Preview Deployed
++
++          **URL:** ${app.url}
++
++          Built from commit ${github.sha.slice(0, 7)}
++
++          ---
++          _This comment updates automatically with each push._
++        `,
++      });
++    }
 
-   ```diff lang="typescript"
-   import * as Alchemy from "alchemy";
-   import * as Cloudflare from "alchemy/Cloudflare";
-   +import * as GitHub from "alchemy/GitHub";
-   +import * as Output from "alchemy/Output";
-   import * as Effect from "effect/Effect";
-   +import * as Layer from "effect/Layer";
+    return { url: app.url };
+  }),
+);
+```
 
-   export default Alchemy.Stack(
-     "my-app",
-   -  { providers: Cloudflare.providers(), state: Cloudflare.state() },
-   +  {
-   +    providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()),
-   +    state: Cloudflare.state(),
-   +  },
-     Effect.gen(function* () {
-       const app = yield* App;
-   +    const github = yield* GitHub.GitHubEnv;
+GitHub Actions provides `GITHUB_TOKEN`, which `GitHub.Comment` uses to
+post the comment.
 
-   +    if (github?.pr) {
-   +      yield* GitHub.Comment("preview-comment", {
-   +        owner: github.owner,
-   +        repository: github.repository,
-   +        issueNumber: github.pr,
-   +        body: Output.interpolate`
-   +          ## Preview Deployed
-   +
-   +          **URL:** ${app.url}
-   +
-   +          Built from commit ${github.sha.slice(0, 7)}
-   +
-   +          ---
-   +          _This comment updates automatically with each push._
-   +        `,
-   +      });
-   +    }
+## Add the deploy workflow
 
-       return { url: app.url };
-     }),
-   );
-   ```
+Create `.github/workflows/deploy.yml`. The `deploy` job deploys the
+stage, and the `cleanup` job destroys it when the PR closes:
 
-2. **Create the base deployment workflow**
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    <DeployWorkflow manager="bun" />
+  </TabItem>
+  <TabItem label="npm">
+    <DeployWorkflow manager="npm" />
+  </TabItem>
+  <TabItem label="pnpm">
+    <DeployWorkflow manager="pnpm" />
+  </TabItem>
+  <TabItem label="yarn">
+    <DeployWorkflow manager="yarn" />
+  </TabItem>
+</Tabs>
 
-   Create `.github/workflows/deploy.yml`. This workflow deploys `prod` on
-   pushes to `main` and a `pr-<number>` stage for each pull request. When a
-   PR is closed, the workflow destroys the preview environment.
+The `STAGE` variable comes from the GitHub event:
 
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       <DeployWorkflow manager="bun" />
-     </TabItem>
-     <TabItem label="npm">
-       <DeployWorkflow manager="npm" />
-     </TabItem>
-     <TabItem label="pnpm">
-       <DeployWorkflow manager="pnpm" />
-     </TabItem>
-     <TabItem label="yarn">
-       <DeployWorkflow manager="yarn" />
-     </TabItem>
-   </Tabs>
+- **Pull request events**: `pr-{number}`.
+- **Pushes to `main`**: `prod`.
+- **Other branches**: the branch name.
 
-   :::note[STAGE Variable Logic]
-   The `STAGE` environment variable is computed from the GitHub event:
+The cleanup job refuses to run when `STAGE` is `prod`, so it can't
+destroy production by accident.
 
-   ```yaml
-   env:
-     STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || (github.ref == 'refs/heads/main' && 'prod' || github.ref_name) }}
-   ```
+CI has no terminal to approve the plan, so every command passes
+`--yes`. Without it, Alchemy changes nothing and exits with code 1.
+With `Cloudflare.state()`, `--yes` also lets the run deploy or upgrade
+the state store without a prompt.
 
-   - Pull request events → `pr-{number}`
-   - Pushes to `main` → `prod`
-   - Other branches → the branch name
+Test suites that deploy through [`Test.make`](/testing/test-harness)
+never prompt, so they need no flag.
 
-   The cleanup job includes a safety check so it can't destroy the
-   production environment by accident.
-   :::
+The workflow has no provider credentials yet. The next sections create
+them and add them to both jobs.
 
-   CI has no terminal to approve the plan, so every command passes
-   `--yes`. Without it, Alchemy changes nothing and exits with code 1.
-   With `Cloudflare.state()`, `--yes` also lets the run deploy or
-   upgrade the state store without a prompt.
+## Create a GitHub stack for CI credentials
 
-3. **Add provider credentials**
+Manage the repo's Actions secrets and variables with a dedicated
+`stacks/github.ts` that you deploy once from your machine. The
+credential set is then reviewable, diffable, and reproducible.
 
-   The base workflow above doesn't include any provider credentials yet.
-   Pick the section below that matches your provider and apply the changes
-   to your workflow.
-
-   GitHub Actions provides `GITHUB_TOKEN` automatically. The
-   `GitHub.Comment` resource uses it to post PR comments.
-
-</Steps>
-
-## The GitHub Stack
-
-Before CI can deploy, your repo needs provider credentials configured
-as Actions secrets and variables. We recommend managing them with a
-dedicated `stacks/github.ts` that you deploy once locally. This makes
-the credential set reviewable, diffable, and reproducible.
-
-The stack uses `GitHub.Secret` and `GitHub.Variable` to write into
-your repository. Provider resources like
-`Cloudflare.ApiToken.AccountApiToken` or `AWS.IAM.Role` mint the
-credentials themselves.
+- `GitHub.Secret` and `GitHub.Variable` write into your repository.
+- Provider resources such as `Cloudflare.ApiToken.AccountApiToken` or
+  `AWS.IAM.Role` mint the credentials.
 
 ### Set up an `admin` profile
 
-The `stacks/github.ts` you're about to write needs more privilege
-than your day-to-day app stack. Creating a Cloudflare API token
-requires `API Tokens > Write`. Creating an IAM role and OIDC
-provider requires IAM admin rights.
-
-Create a separate `admin` profile so your default
-[profile](/environments/profiles) doesn't hold those rights:
+Minting credentials needs more privilege than your app stack. A
+Cloudflare API token needs `API Tokens > Write`, and an IAM role with
+an OIDC provider needs IAM admin rights. Keep those rights out of your
+default [profile](/environments/profiles) with a separate `admin`
+profile:
 
 ```sh
 alchemy profile create admin
@@ -375,43 +315,35 @@ alchemy profile edit --profile admin
 ```
 
 :::danger[Heads up]
-The credentials stored under `--profile admin` can mint new tokens
-and roles with arbitrary scope. Treat it like root. Use it only
-when deploying `stacks/github.ts`. Keep your default profile on a
-narrowly scoped credential for everyday `alchemy deploy` runs, such
-as OAuth, a scoped API token, or OIDC.
+The `admin` profile can mint tokens and roles with any scope. Treat it
+like root, and use it only to deploy `stacks/github.ts`. Keep your
+default profile on a narrowly scoped credential, such as OAuth, a
+scoped API token, or OIDC.
 :::
 
-After creating the file, deploy it once locally under the admin
-profile:
+Write the stack for your cloud in the sections below, then deploy it
+under the admin profile:
 
 ```sh
 alchemy deploy --config stacks/github.ts --profile admin
 ```
 
-You only need to re-run this stack when you want to rotate
-credentials or change permissions.
+Re-run it only to rotate credentials or change permissions.
 
 ## Cloudflare
 
-The simplest case uses a single Cloudflare account for both prod and
-PR previews. Your `admin` profile mints a scoped API token. The stack
-pushes it into your repo as a GitHub Actions secret.
+This stack mints a scoped API token with your `admin` profile and
+pushes it into the repo as an Actions secret. One Cloudflare account
+serves both prod and PR previews.
 
 :::caution[Required Cloudflare permissions]
-The credential behind `--profile admin` must be allowed to create
-API tokens. The two practical options are:
+The credential behind `--profile admin` must be allowed to create API
+tokens. A standard "Edit Cloudflare Workers" token can't. Use one of:
 
-- The **Global API Key** (API Key + Email). It has full account
+- The **Global API Key** (API Key + Email), which has full account
   access, including token management.
-- An **API Token** with at least `User > API Tokens > Write` (for
-  user-owned tokens) and `Account > API Tokens > Write` for the
-  target account.
-
-A standard "Edit Cloudflare Workers" token is not enough. It can
-deploy Workers but cannot mint other tokens. Use the Global API Key
-for `--profile admin` unless you've explicitly configured a
-token-management token.
+- An **API Token** with `User > API Tokens > Write` for user-owned
+  tokens and `Account > API Tokens > Write` on the target account.
 :::
 
 ```typescript
@@ -423,39 +355,36 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
+// Defaults for a Workers + KV + R2 + D1 app. Trim to what your app uses.
+const ciPolicy = (accountId: string): Cloudflare.ApiToken.Policy => ({
+  effect: "allow",
+  permissionGroups: [
+    "Workers Scripts Write",
+    "Workers KV Storage Write",
+    "Workers R2 Storage Write",
+    "D1 Write",
+    "Queues Write",
+    "Pages Write",
+    "Account Settings Write",
+    "Secrets Store Write", // Cloudflare.state() reads its token from the Secrets Store
+    "Workers Tail Read",
+  ],
+  resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+});
+
 export default Alchemy.Stack(
   "github",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      GitHub.providers(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    // The account of the profile you deploy with. No CLOUDFLARE_ACCOUNT_ID needed.
     const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
 
     const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("CIToken", {
       accountId,
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: [
-            "Workers Scripts Write",
-            "Workers KV Storage Write",
-            "Workers R2 Storage Write",
-            "D1 Write",
-            "Queues Write",
-            "Pages Write",
-            "Account Settings Write",
-            "Secrets Store Write",
-            "Workers Tail Read",
-          ],
-          resources: {
-            [`com.cloudflare.api.account.${accountId}`]: "*",
-          },
-        },
-      ],
+      policies: [ciPolicy(accountId)], // editing a policy updates the same token
     });
 
     yield* GitHub.Secret("cf-api-token", {
@@ -475,39 +404,14 @@ export default Alchemy.Stack(
 );
 ```
 
-Some details about this stack:
+Cloudflare returns the token value once. Alchemy stores it in state and
+passes it to `GitHub.Secret`, so the raw token never appears in your
+terminal or in CI logs. The double `yield*` is explained in
+[Auth Providers › What lifecycle code yields](/environments/auth-providers#what-lifecycle-code-yields), and why the token needs
+`Secrets Store Write` is on [State Store › In CI](/state-store#in-ci).
 
-- `Cloudflare.CloudflareEnvironment` resolves the credentials of the
-  profile you're deploying with, including the account ID. This local
-  deploy doesn't need a `CLOUDFLARE_ACCOUNT_ID` env var. The double
-  `yield*` is needed because the service's value is itself an Effect.
-  Credentials are cached and can refresh themselves, because OAuth
-  tokens expire. You yield once for the service and once to resolve
-  the current credentials.
-- `Cloudflare.ApiToken.AccountApiToken` calls
-  `POST /accounts/{account_id}/tokens`. Cloudflare returns the new
-  token value exactly once. Alchemy captures it, stores it in state,
-  and passes it to `GitHub.Secret`. The raw token never appears in
-  your terminal or in CI logs.
-- Trim the `permissionGroups` list to what your app needs. The list
-  above is a sensible default for a Workers + KV + R2 + D1 app.
-- The resource diff is stable across redeploys. Editing a policy
-  produces a clean update against the same token ID.
-
-:::note[Why `Secrets Store Write`?]
-`Cloudflare.state()` keeps the state-store worker's bearer token in
-the account-wide [Cloudflare Secrets Store](https://developers.cloudflare.com/secrets-store/).
-On every CI run, Alchemy reads that secret back by uploading a
-short-lived edge-preview worker that binds the secret. Binding a
-Secrets Store secret to a worker, even an ephemeral preview,
-requires the `Secrets Store Write` permission. `Read` is not
-enough. With `Read` you can only enumerate the store via
-`GET /accounts/{id}/secrets_store/stores`. The
-`POST .../scripts/{name}/edge-preview` call that mounts the
-binding is rejected without `Write`.
-:::
-
-Then add the secrets to your workflow's deploy and cleanup steps:
+Add the secrets to the deploy step, and the same two lines to the
+cleanup job's destroy step:
 
 ```diff lang="yaml"
       - name: Deploy
@@ -520,130 +424,17 @@ Then add the secrets to your workflow's deploy and cleanup steps:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-```diff lang="yaml"
-      - name: Destroy Preview Environment
-        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
-        env:
-+         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-+         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PULL_REQUEST: ${{ github.event.number }}
-```
+## AWS with GitHub OIDC
 
-### Optional: separate test and prod accounts
+GitHub OIDC lets the workflow assume an IAM role without long-lived
+access keys, so it is the recommended AWS setup. This stack creates the
+OIDC provider and a role scoped to your repo. It writes the role ARN
+and region as Actions variables, because they are not sensitive.
 
-For stricter isolation, you can run preview environments on one
-Cloudflare account and production on another. Mint two tokens from
-the same `stacks/github.ts` and prefix the secrets so the workflow
-can pick the right pair based on `STAGE`.
-
-Your profile resolves a single account ID, so this is the one case
-where you pass the account IDs in explicitly. Set
-`TEST_CLOUDFLARE_ACCOUNT_ID` and `PROD_CLOUDFLARE_ACCOUNT_ID` in
-your environment when you deploy this stack.
-
-```typescript
-// stacks/github.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-
-export default Alchemy.Stack(
-  "github",
-  {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      GitHub.providers(),
-    ),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const testAccountId = yield* Config.String("TEST_CLOUDFLARE_ACCOUNT_ID");
-    const prodAccountId = yield* Config.String("PROD_CLOUDFLARE_ACCOUNT_ID");
-
-    const policies = (accountId: string) => [
-      {
-        effect: "allow" as const,
-        permissionGroups: [
-          "Workers Scripts Write",
-          "Workers KV Storage Write",
-          "Workers R2 Storage Write",
-          "D1 Write",
-          "Queues Write",
-          "Pages Write",
-          "Account Settings Write",
-          "Secrets Store Write",
-          "Workers Tail Read",
-        ],
-        resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
-      },
-    ];
-
-    const testToken = yield* Cloudflare.ApiToken.AccountApiToken("TestApiToken", {
-      accountId: testAccountId,
-      policies: policies(testAccountId),
-    });
-
-    const prodToken = yield* Cloudflare.ApiToken.AccountApiToken("ProdApiToken", {
-      accountId: prodAccountId,
-      policies: policies(prodAccountId),
-    });
-
-    const secrets: Record<string, Redacted.Redacted<string>> = {
-      TEST_CLOUDFLARE_API_TOKEN: testToken.value,
-      TEST_CLOUDFLARE_ACCOUNT_ID: Redacted.make(testAccountId),
-      PROD_CLOUDFLARE_API_TOKEN: prodToken.value,
-      PROD_CLOUDFLARE_ACCOUNT_ID: Redacted.make(prodAccountId),
-    };
-
-    yield* Effect.all(
-      Object.entries(secrets).map(([name, value]) =>
-        GitHub.Secret(name, {
-          owner: "your-org",
-          repository: "your-repo",
-          name,
-          value,
-        }),
-      ),
-    );
-  }),
-);
-```
-
-Your `admin` profile needs API-token-write permission on both
-accounts. The simplest setup is to log in with the Global API Key of
-a user who is a member of both.
-
-In your workflow, switch on `STAGE` to choose the right credential
-pair:
-
-```diff lang="yaml"
-      - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
-        env:
-+         CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
-+         CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
-          PULL_REQUEST: ${{ github.event.number }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## AWS with GitHub OIDC (recommended)
-
-GitHub OIDC lets your workflow assume an IAM role without storing
-long-lived access keys. The GitHub stack creates the OIDC provider
-and an IAM role scoped to your repo. It then writes the role ARN and
-region to the repo as Actions variables. They are not sensitive, so
-they don't need to be secrets.
-
-Your `--profile admin` AWS credentials need IAM admin rights for
-this stack, because it creates an `OpenIDConnectProvider` and an IAM
-`Role`. Run `alchemy profile edit --profile admin --add AWS` and
-choose a credential that's authorized for IAM administration, such
-as SSO/OIDC or access keys.
+Your `admin` profile needs IAM admin rights for this stack. Run
+`alchemy profile edit --profile admin --add AWS` and choose a
+credential authorized for IAM administration, such as SSO/OIDC or
+access keys.
 
 ```typescript
 // stacks/github.ts
@@ -656,10 +447,7 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "github",
   {
-    providers: Layer.mergeAll(
-      AWS.providers(),
-      GitHub.providers(),
-    ),
+    providers: Layer.mergeAll(AWS.providers(), GitHub.providers()),
     state: AWS.state(),
   },
   Effect.gen(function* () {
@@ -689,6 +477,7 @@ export default Alchemy.Stack(
                 "token.actions.githubusercontent.com:aud":
                   "sts.amazonaws.com",
               },
+              // Only workflows in this repo can assume the role.
               StringLike: {
                 "token.actions.githubusercontent.com:sub":
                   "repo:your-org/your-repo:*",
@@ -722,16 +511,14 @@ export default Alchemy.Stack(
 ```
 
 :::tip[Tighten the role]
-`AdministratorAccess` is the path of least resistance for getting
-CI working. For production, swap it for a custom-managed policy
-that grants only the actions your app needs, for example
-`lambda:*`, `dynamodb:*`, and the bucket actions you use. The
-`assumeRolePolicyDocument` already restricts who can assume the
-role to your specific repo via the `sub` condition.
+`AdministratorAccess` gets CI working fastest. For production, replace
+it with a policy that grants only the actions your app needs, such as
+`lambda:*`, `dynamodb:*`, and the bucket actions you use.
 :::
 
-After deploying, update the workflow to add `id-token: write` and
-the `configure-aws-credentials` step. No secrets are needed:
+Add `id-token: write` and the `configure-aws-credentials` step to the
+deploy job. Make the same change to the cleanup job, before its destroy
+step. No secrets are needed:
 
 ```diff lang="yaml"
     deploy:
@@ -751,32 +538,12 @@ the `configure-aws-credentials` step. No secrets are needed:
           run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
 ```
 
-```diff lang="yaml"
-    cleanup:
-      permissions:
-+       id-token: write
-        contents: read
-        pull-requests: write
-      steps:
-        - uses: actions/checkout@v4
-        # ...setup, install, and safety check...
-+       - name: Configure AWS credentials
-+         uses: aws-actions/configure-aws-credentials@v4
-+         with:
-+           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-+           aws-region: ${{ vars.AWS_REGION }}
-        - name: Destroy Preview Environment
-          run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
-```
-
 ## AWS with access keys
 
-If OIDC isn't an option, fall back to static IAM access keys stored
-as repo secrets. For example, some sandbox accounts disallow OIDC,
-or you may be targeting an account you don't fully control. The
-stack pushes existing keys from your environment into the repo. It
-does not mint a new IAM user, because most teams prefer to do that
-step in the AWS console.
+Use static IAM access keys when OIDC isn't an option, such as a sandbox
+account that disallows it. This stack pushes existing keys from your
+environment into the repo. It doesn't mint an IAM user, because most
+teams create that in the AWS console.
 
 ```typescript
 // stacks/github.ts
@@ -821,7 +588,8 @@ export default Alchemy.Stack(
 );
 ```
 
-Then add the secrets to your workflow's deploy and cleanup steps:
+Add the secrets to the deploy step, and the same three lines to the
+cleanup job's destroy step:
 
 ```diff lang="yaml"
       - name: Deploy
@@ -835,19 +603,82 @@ Then add the secrets to your workflow's deploy and cleanup steps:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+## Check the environment before deploying
+
+`alchemy provider check-env` checks the CI variables each registered
+provider needs. It prints one line per provider and exits with code 1
+when a required variable is missing:
+
+```sh
+bun alchemy provider check-env                     # every provider the stack registers
+bun alchemy provider check-env --provider AWS      # a subset (repeatable)
+bun alchemy provider check-env --env-file .env.ci  # include a dotenv file
+```
+
+Run it as the first step of the deploy job, with the same `env` as the
+Deploy step. The job then fails fast with a list of missing secrets
+instead of failing later inside a provider API call. See
+[CLI › provider](/cli/provider) for each provider's variables.
+
+## Separate test and prod Cloudflare accounts
+
+To run previews on one Cloudflare account and production on another,
+mint a token per account from the same `stacks/github.ts`. Your profile
+resolves one account ID, so set `TEST_CLOUDFLARE_ACCOUNT_ID` and
+`PROD_CLOUDFLARE_ACCOUNT_ID` when you deploy it:
+
+```diff lang="typescript"
++import * as Config from "effect/Config";
+
+  Effect.gen(function* () {
+-    const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
+-    const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("CIToken", {
+-      accountId,
+-      policies: [ciPolicy(accountId)],
+-    });
+-    // ...the two GitHub.Secret calls
++    for (const env of ["TEST", "PROD"]) {
++      const accountId = yield* Config.String(`${env}_CLOUDFLARE_ACCOUNT_ID`);
++      const apiToken = yield* Cloudflare.ApiToken.AccountApiToken(`${env}ApiToken`, {
++        accountId,
++        policies: [ciPolicy(accountId)],
++      });
++      yield* GitHub.Secret(`${env}_CLOUDFLARE_API_TOKEN`, {
++        owner: "your-org",
++        repository: "your-repo",
++        name: `${env}_CLOUDFLARE_API_TOKEN`,
++        value: apiToken.value,
++      });
++      yield* GitHub.Secret(`${env}_CLOUDFLARE_ACCOUNT_ID`, {
++        owner: "your-org",
++        repository: "your-repo",
++        name: `${env}_CLOUDFLARE_ACCOUNT_ID`,
++        value: Redacted.make(accountId),
++      });
++    }
+  }),
+```
+
+Your `admin` profile needs API-token-write permission on both accounts.
+The simplest setup is the Global API Key of a user who belongs to both.
+In the workflow, pick the pair by `STAGE`:
+
 ```diff lang="yaml"
-      - name: Destroy Preview Environment
-        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
-+         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-+         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-+         AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
++         CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
++         CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Where next
 
-- [Stages](/environments/stages) explains how `pr-42` and `prod` stay isolated.
-- [Profiles](/environments/profiles) documents local credentials and the CI environment-variable matrix.
-- [Secrets & env on Cloudflare](/cloudflare/security/secrets-env) shows how to wire app secrets into a Worker.
-- [Secrets & env on AWS](/aws/security/secrets-env) walks through the same setup for Lambda.
+- [Stages](/environments/stages): how `pr-42` and `prod` stay isolated.
+- [Profiles](/environments/profiles): local credentials and how CI skips them.
+- [CLI › provider](/cli/provider): the environment variables each provider reads in CI.
+- [Test a Stack](/testing): run integration tests against each PR stage.
+- [Secrets & env on Cloudflare](/cloudflare/security/secrets-env): wire app secrets into a Worker.
+- [Secrets & env on AWS](/aws/security/secrets-env): the same setup for Lambda.

@@ -1,6 +1,7 @@
 ---
 title: Getting started
-description: Install Alchemy and create your first Stack in under two minutes.
+description: Install Alchemy, deploy an R2 Bucket to Cloudflare, and clean it up.
+type: tutorial
 next:
   link: /what-is-alchemy
   label: What is Alchemy?
@@ -12,15 +13,14 @@ import { effectVersion } from "../../versions";
 
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
 
-:::tip
-[What is Alchemy?](/what-is-alchemy) explains the model in a few
-minutes. Read it first if you want the idea before the install.
-Otherwise, read on and you reach it next.
-:::
+In this tutorial you create a TypeScript project with one stack and
+deploy an R2 Bucket to Cloudflare. The
+[Cloudflare tutorial](/cloudflare/tutorial/part-2) continues from the
+stack you build here.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22.15+ (or 23.5+ / 24+)
+- [Bun](https://bun.sh) or Node.js 22.15+
 - A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
@@ -40,7 +40,7 @@ Otherwise, read on and you reach it next.
   </TabItem>
 </Tabs>
 
-## Install
+## Install Alchemy and Effect
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -57,9 +57,9 @@ Otherwise, read on and you reach it next.
   </TabItem>
 </Tabs>
 
-## Create your Stack
+## Create your stack
 
-Every Alchemy program starts with a Stack. Create `alchemy.run.ts`:
+Every Alchemy program starts with a stack. Create `alchemy.run.ts`:
 
 ```typescript
 // alchemy.run.ts
@@ -68,14 +68,16 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "MyApp",
+  "MyApp", // the stack's name
   {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    providers: Cloudflare.providers(), // required, lets the stack create Cloudflare resources
+    state: Cloudflare.state(), // required, where Alchemy records what it deployed
   },
   Effect.gen(function* () {
+    // declares an R2 Bucket with the logical ID "Bucket"
     const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
+    // printed as the stack's outputs after the deploy
     return {
       bucketName: bucket.bucketName,
     };
@@ -83,18 +85,38 @@ export default Alchemy.Stack(
 );
 ```
 
-`"MyApp"` is the Stack's name. `providers: Cloudflare.providers()`
-lets the Stack create Cloudflare resources. `state: Cloudflare.state()`
-picks where Alchemy records what it deployed. Both options are
-required. `yield* Cloudflare.R2.Bucket("Bucket")` declares a Bucket
-with the logical ID `Bucket`. The object you return is printed as the
-Stack's outputs after the deploy. See
-[Stacks](/infrastructure-as-code/stack) and
-[State Store](/state-store).
+The stack is an Effect that yields resources and returns outputs. See
+[Stacks](/infrastructure-as-code/stack) for the other options. See
+[State Store](/state-store) to choose where state lives.
 
-## Deploy
+## Connect Cloudflare
 
-Run `alchemy deploy` to create the Bucket on Cloudflare:
+Sign in to Cloudflare and save the credentials to your `default`
+[profile](/environments/profiles):
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy profile edit --add Cloudflare" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npx alchemy profile edit --add Cloudflare" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy profile edit --add Cloudflare" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy profile edit --add Cloudflare" lang="sh" />
+  </TabItem>
+</Tabs>
+
+Choose OAuth to sign in through the browser, or paste an API token. If
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set in your
+shell or `.env`, Alchemy uses them instead of the profile. See
+[Environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
+
+## Deploy the stack
+
+Run `alchemy deploy` to create the Bucket:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -111,26 +133,13 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
   </TabItem>
 </Tabs>
 
-Connect Cloudflare first with `alchemy profile edit --add Cloudflare`.
-Sign in with OAuth in the browser or paste an API token. The
-credentials are saved to your `default`
-[profile](/environments/profiles) in
-`~/.alchemy/profiles/default/cloudflare.json`. You don't need
-environment variables. If `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN` are set in your shell or `.env`, Alchemy uses
-them instead of the profile. See
-[Environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
-Login only happens through the `profile` command. A deploy with
-nothing configured fails and prints the exact command to run.
+The first deploy on an account asks to create the
+`alchemy-state-store` Worker once. Every stack and stage on the account
+shares it, so choose Deploy. See
+[First-run bootstrap](/state-store#first-run-bootstrap).
 
-The first deploy on an account also asks to deploy Alchemy's
-state-store Worker, `alchemy-state-store`. It is created once per
-account and shared by every Stack and stage. Choose Deploy. See
-[First-run bootstrap](/state-store#first-run-bootstrap). To keep state
-on disk instead, use `State.localState()` from `alchemy/State`.
-
-Once you're authenticated, Alchemy shows a plan, asks for
-confirmation, and provisions the resource:
+Alchemy then shows the plan, asks for confirmation, and creates the
+Bucket:
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 [g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d]
@@ -144,19 +153,10 @@ Proceed?
 
 You now have a live R2 Bucket on Cloudflare.
 
-See [CLI](/cli) for the full command reference.
-
-:::tip
-To re-run the credential prompt later (e.g. to switch from OAuth to
-an API token), use `alchemy profile edit --reconfigure Cloudflare`.
-For a separate profile, run `alchemy profile create prod` followed by
-`alchemy profile edit --profile prod`.
-See [Profiles](/environments/profiles) for the full picture.
-:::
-
 ## Clean up
 
-Run `alchemy destroy` to remove what you deployed:
+If you don't continue to the
+[tutorial](/cloudflare/tutorial/part-2), delete the Bucket:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -173,49 +173,14 @@ Run `alchemy destroy` to remove what you deployed:
   </TabItem>
 </Tabs>
 
-This deletes every resource in the Stack for the same default stage
-that `alchemy deploy` used. R2 refuses to delete a Bucket that still
-holds objects (`BucketNotEmpty`) unless the Bucket sets
-`forceDestroy: true`. The shared state-store Worker is not part of your
-Stack and stays. See [destroy](/cli/destroy).
+`alchemy destroy` deletes every resource in the stack for the same
+default stage that `alchemy deploy` used. The state-store Worker isn't part of your
+stack, so it stays. See [destroy](/cli/destroy).
 
 ## Where next
 
-You have a live Stack. [What is Alchemy?](/what-is-alchemy) explains
-what just happened and the model the rest of the docs build on. The
-[tutorial](/cloudflare/tutorial/part-1) then builds a full app on
-Cloudflare, starting from this exact Stack.
-
-<div class="next-steps">
-
-<a href="/what-is-alchemy" class="next-card next-card--recommended">
-  <strong>What is Alchemy?</strong>
-  <span>Infrastructure as Code built in Effect, with Infrastructure as Effects on top.</span>
-</a>
-
-<a href="/cloudflare/tutorial/part-1" class="next-card">
-  <strong>Tutorial</strong>
-  <span>Build a full app on Cloudflare starting from this Stack, with a Worker, bindings, tests, local dev, CI, and telemetry.</span>
-</a>
-
-<a href="/infrastructure-as-effects/runtime" class="next-card">
-  <strong>Infrastructure as Effects</strong>
-  <span>The model the rest of the docs build on, including Runtimes, Bindings, Layers, and the Construction and Runtime phases.</span>
-</a>
-
-<a href="/cloudflare" class="next-card">
-  <strong>Cloudflare</strong>
-  <span>Workers, Durable Objects, R2, KV, D1, Queues, Workflows, and Containers, with a tutorial and a guide for each.</span>
-</a>
-
-<a href="/aws" class="next-card">
-  <strong>AWS</strong>
-  <span>Lambda, S3, SQS, DynamoDB, EC2, ECS, and EKS, with a tutorial and a guide for each.</span>
-</a>
-
-<a href="/cli" class="next-card">
-  <strong>CLI</strong>
-  <span>Every command and its flags, including deploy, plan, destroy, dev, tail, logs, and state.</span>
-</a>
-
-</div>
+- [What is Alchemy?](/what-is-alchemy): the model behind the stack you
+  deployed.
+- [Cloudflare tutorial, Part 2](/cloudflare/tutorial/part-2): add a
+  Worker to this stack and build a full app on Cloudflare.
+- [CLI](/cli): every command and its flags.
