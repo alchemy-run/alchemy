@@ -108,8 +108,8 @@ where it's stored.
 
 #### Resource
 
-A **Resource** is a cloud entity in a Stack managed by Alchemy: a
-bucket, a database, a queue, a Worker, a DNS record. Yield it in the
+A **Resource** is a cloud entity in a Stack managed by Alchemy, such
+as a bucket, a database, a queue, a Worker, or a DNS record. Yield it in the
 Stack to add it to the plan:
 
 ```typescript
@@ -197,13 +197,13 @@ dependency graph, which most IaC tools reject. See
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects adds two new concepts to Infrastructure as
-Code: Runtimes and Bindings.
+Infrastructure as Effects adds Runtimes and Bindings to
+Infrastructure as Code.
 
 #### Runtime
 
-A **Runtime** is a Resource that carries the code it runs: a Worker,
-Lambda Function, Container, or Server. That code is always written
+A **Runtime** is a Resource that carries the code it runs, such as a
+Worker, Lambda Function, Container, or Server. That code is always written
 the same way, as an **Effectful Constructor**. Bind what you need,
 then return what you expose:
 
@@ -301,7 +301,7 @@ request's traces and logs.
 
 <a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
   <strong>Runtime</strong>
-  <span>The Effectful Constructor in depth: the fetch and RPC interface, and the three ways to declare a Runtime.</span>
+  <span>The Effectful Constructor in depth, including the fetch and RPC interface and the three ways to declare a Runtime.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">

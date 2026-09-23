@@ -33,8 +33,8 @@ export default class BindingTargetWorker extends Cloudflare.Worker<BindingTarget
 Any other resource that binds this Worker gets a typed client.
 `yield* target.greet("world")` is an ordinary Effect call. The return type is
 inferred from the class, and serialization is automatic. The same model holds
-across every pairing: a Durable Object bound into a Worker, a Container called
-from a Durable Object, a MicroVM called from a Lambda Function.
+across every pairing, such as a Durable Object bound into a Worker, a Container
+called from a Durable Object, or a MicroVM called from a Lambda Function.
 
 That schemaless path is the default for internal communication. Schemas enter
 only when data crosses a **trust boundary**, such as a web app, an external

@@ -16,7 +16,7 @@ A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/a
     └── integ.test.ts    # deploys the Stack, hits the live URL
 ```
 
-Three rules produce this shape: one file per Resource or Layer,
+Three rules produce this shape. Use one file per Resource or Layer,
 group Resources that travel together, and keep `alchemy.run.ts`
 as the composition root. This page walks a project from one file
 to that shape.
@@ -208,10 +208,9 @@ export default Alchemy.Stack(
 );
 ```
 
-It has four jobs: name the Stack, merge Providers, pick a State
-Store, wire units into outputs. The CLI discovers
-`alchemy.run.ts` at the project root automatically; pass a path
-to override (`alchemy deploy --config ./infra/app.ts`).
+It names the Stack, merges Providers, picks a State Store, and
+wires units into outputs. The CLI discovers `alchemy.run.ts` at the
+project root automatically. Pass a path to override it (`alchemy deploy --config ./infra/app.ts`).
 
 If `alchemy.run.ts` is growing, something is missing a home in
 `src/`.
@@ -236,7 +235,7 @@ shape step by step ([Part 2](/cloudflare/tutorial/part-2)).
 ## Where next
 
 - [Monorepo](/project-structure/monorepo) covers the workspace-level version
-  of this question: one Stack or one per package.
+  of this question, whether to use one Stack or one per package.
 - [References](/infrastructure-as-code/references) covers splits that
   cross Stack boundaries.
 - [Layers](/infrastructure-as-effects/layers) shows how to promote

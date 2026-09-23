@@ -102,7 +102,7 @@ const target = yield* Cloudflare.Workers.bindWorker(Greeter);
 const greeting = yield* target.greet(name); // typed from Greeter's Shape
 ```
 
-`bindWorker` is the Cloudflare Worker-to-Worker binder. Each runtime pair has its own bind callable, and the hub pages list them with full callers per pairing. The model is the same everywhere: the stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
+`bindWorker` is the Cloudflare Worker-to-Worker binder. Each runtime pair has its own bind callable, and the hub pages list them with full callers per pairing. The model is the same everywhere. The stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
 
 ## How a call travels
 
@@ -167,6 +167,6 @@ Neither the stub nor the server does any runtime validation. This is deliberate,
 
 ## Where next
 
-- [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc): every Cloudflare pairing: Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
+- [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc): every Cloudflare pairing, including Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
 - [Schemaless RPC on AWS](/aws/apis/schemaless-rpc): Lambda → MicroVM, plus what AWS does not yet have a schemaless stub for.
 - [Effect RPC](/apis/effect-rpc): schema-validated RPC for trust boundaries.
