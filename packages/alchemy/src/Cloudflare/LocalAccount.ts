@@ -14,24 +14,38 @@ export const LOCAL_ACCOUNT_ID = "00000000000000000000000000000000";
 // Read identity only: expired OAuth credentials must not prevent local dev,
 // and discovering an account must never authenticate or refresh a token.
 export const localAccountId = Effect.gen(function* () {
-  const accountId = yield* Config.option(
-    Config.String("CLOUDFLARE_ACCOUNT_ID"),
-  );
-  if (Option.isSome(accountId) && accountId.value.trim()) {
-    return accountId.value.trim();
+  const accountId = (yield* Config.String("CLOUDFLARE_ACCOUNT_ID").pipe(
+    Config.withDefault(""),
+  )).trim();
+  if (accountId.length > 0) {
+    return accountId;
   }
-  if (yield* Config.Boolean("CI").pipe(Config.withDefault(false))) {
+
+  const isCI = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
+  if (isCI) {
     return LOCAL_ACCOUNT_ID;
   }
-  const store = yield* Effect.serviceOption(ProfileStore);
-  if (Option.isNone(store)) return LOCAL_ACCOUNT_ID;
-  const profiles = store.value;
-  const { name } = yield* profiles.current;
-  const profile = yield* profiles.getProfile(name);
-  const stored = profile?.providers[CLOUDFLARE_AUTH_PROVIDER_NAME];
-  if (stored === undefined) return LOCAL_ACCOUNT_ID;
-  const config = yield* Schema.decodeUnknownEffect(CloudflareAuthConfigSchema)(
-    stored,
+
+  const profiles = Option.getOrUndefined(
+    yield* Effect.serviceOption(ProfileStore),
   );
-  return "accountId" in config ? config.accountId : LOCAL_ACCOUNT_ID;
+  if (profiles === undefined) {
+    return LOCAL_ACCOUNT_ID;
+  }
+
+  const currentProfile = yield* profiles.current;
+  const profile = yield* profiles.getProfile(currentProfile.name);
+  const cloudflareConfig = profile?.providers[CLOUDFLARE_AUTH_PROVIDER_NAME];
+  if (cloudflareConfig === undefined) {
+    return LOCAL_ACCOUNT_ID;
+  }
+
+  const config = yield* Schema.decodeUnknownEffect(CloudflareAuthConfigSchema)(
+    cloudflareConfig,
+  );
+  if ("accountId" in config) {
+    return config.accountId;
+  }
+
+  return LOCAL_ACCOUNT_ID;
 }).pipe(Effect.orDie);

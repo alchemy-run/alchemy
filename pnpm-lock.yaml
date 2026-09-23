@@ -6440,9 +6440,6 @@ importers:
         specifier: 'catalog:'
         version: 2.9.0
     devDependencies:
-      '@cloudflare/puppeteer':
-        specifier: 'catalog:'
-        version: 1.3.0(supports-color@10.2.2)
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
@@ -6452,6 +6449,9 @@ importers:
       '@cloudflare/containers':
         specifier: 'catalog:'
         version: 0.3.7
+      '@cloudflare/puppeteer':
+        specifier: 'catalog:'
+        version: 1.3.0(supports-color@10.2.2)
       '@cloudflare/workers-types':
         specifier: 5.20260918.1
         version: 5.20260918.1
@@ -6732,9 +6732,6 @@ importers:
 
   packages/cloudflare-runtime:
     dependencies:
-      '@cloudflare/puppeteer':
-        specifier: 'catalog:'
-        version: 1.3.0(supports-color@10.2.2)
       '@alchemy.run/node-utils':
         specifier: workspace:*
         version: link:../node-utils

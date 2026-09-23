@@ -112,9 +112,7 @@ export type RuntimeServices = Runtime.Runtime | BindingServices;
 export const layerProxy = () => WorkerProxy.WorkerProxyLive;
 
 export const layerRegistry = () =>
-  RegistryProxy.RegistryProxyLive.pipe(
-    Layer.provideMerge(Registry.RegistryLive),
-  );
+  RegistryProxy.RegistryProxyLive.pipe(Layer.provide(Registry.RegistryLive));
 
 export const layerRuntime = (config: RuntimeConfig) =>
   Runtime.RuntimeLive.pipe(

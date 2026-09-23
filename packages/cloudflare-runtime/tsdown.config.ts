@@ -104,10 +104,7 @@ export default defineConfig([
     target: "esnext",
     format: "esm",
     inputOptions: {
-      external: [
-        /^#cloudflare-runtime-/,
-        /^@cloudflare\/workers-types(?:\/|$)/,
-      ],
+      external: [/^#cloudflare-runtime-/],
       makeAbsoluteExternalsRelative: true,
     },
     outputOptions: {
