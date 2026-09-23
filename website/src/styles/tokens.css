@@ -361,3 +361,24 @@ body.alc-root,
   background: #5c7a3e66; /* editor.selectionBackground from the walnut EC theme */
   color: var(--alc-code-var);
 }
+
+/* ---------- Reduced motion (site-wide) ----------
+   Visitors who ask for less motion get every CSS animation and transition
+   jumped to its end state (entrance animations land on their final frame,
+   looping pulses and spinners stop) and instant scrolling. Canvas and
+   scripted demos check the same media query in JS. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  html,
+  * {
+    scroll-behavior: auto !important;
+  }
+}

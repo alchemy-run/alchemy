@@ -5,11 +5,19 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "@alchemy.run/vite-plugin-copy-editor";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
+import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 
 /**
@@ -122,6 +130,34 @@ function providerApiReferenceEntry(...providers: string[]) {
  * the directory layout but normalizing extensions to `.md`. This lets the worker
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
+/**
+ * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
+ * Generated reference pages are edited through their JSDoc instead.
+ */
+const markdownCopy: MarkdownFilesOptions = {
+  root: fileURLToPath(new URL(".", import.meta.url)),
+  exclude: /\/src\/content\/docs\/providers\//,
+  style: JSDOC_COPY_STYLE,
+};
+
+function markdownCopyEditing(): AstroIntegration {
+  return {
+    name: "markdown-copy-editing",
+    hooks: {
+      "astro:config:setup": ({ command, config }) => {
+        if (command !== "dev") return;
+        const processor = config.markdown.processor as
+          | { name: string; options?: { mdastPlugins?: unknown[] } }
+          | undefined;
+        if (processor?.name !== "satteri" || !processor.options?.mdastPlugins) {
+          return;
+        }
+        processor.options.mdastPlugins.unshift(markdownBlocks(markdownCopy));
+      },
+    },
+  };
+}
+
 function copyMarkdownSources(): AstroIntegration {
   return {
     name: "copy-markdown-sources",
@@ -195,8 +231,10 @@ export default defineConfig({
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
+  devToolbar: { enabled: false },
   trailingSlash: "ignore",
   integrations: [
+    markdownCopyEditing(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
@@ -1530,7 +1568,16 @@ export default defineConfig({
     mdx(),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      copyEditor({
+        handlers: {
+          jsdoc: jsdocCopyHandler(),
+          md: markdownFiles(markdownCopy),
+        },
+        markdownStyles: { [JSDOC_COPY_STYLE]: jsdocMarkdownStyle },
+      }),
+      tailwindcss(),
+    ],
     server: {
       // Dev-only: allow sharing the dev server through cloudflared quick
       // tunnels (random *.trycloudflare.com hostnames).

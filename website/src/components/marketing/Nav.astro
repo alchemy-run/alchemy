@@ -106,7 +106,12 @@ const { marketing = false } = Astro.props;
     align-items: center;
     gap: 24px;
   }
+  /* Flex + fixed line-height so the logo centers the same way on marketing
+     pages (body line-height 1.6) and Starlight pages (1.75). */
   .alc-nav__brand {
+    display: flex;
+    align-items: center;
+    line-height: 1;
     text-decoration: none;
   }
   .alc-nav__spacer {

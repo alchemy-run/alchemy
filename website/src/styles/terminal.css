@@ -47,7 +47,13 @@
   border-radius: 0;
   min-height: 296px;
 }
+/* Window dots are only drawn in terminals. Elsewhere they had no size but
+   their flex gaps still pushed the filename right, so drop them. */
+.alc-code-block__dot {
+  display: none;
+}
 .alc-term .alc-code-block__dot {
+  display: block;
   width: 10px;
   height: 10px;
   border-radius: 50%;

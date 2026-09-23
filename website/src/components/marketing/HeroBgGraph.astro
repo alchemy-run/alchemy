@@ -367,8 +367,10 @@ const {
 
     let raf = 0;
     let visible = true;
+    // Playback rate for every motion in the graph (zoom and ring spin).
+    const SPEED = 0.5;
     const loop = (t: number) => {
-      draw(t);
+      draw(t * SPEED);
       if (visible && !reduced) raf = requestAnimationFrame(loop);
     };
 

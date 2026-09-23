@@ -11,7 +11,7 @@ import {
  * Faithful emulation of the real `alchemy dev` TUI
  * (packages/alchemy/src/Cli/components/view/SigilCli.tsx + PlanView.tsx):
  *
- * - static scrollback on top (`$ alchemy dev`, captured vite output)
+ * - static scrollback on top (`$ alchemy dev`, Vite HMR and Worker reloads)
  * - the live plan widget below: a `Plan · <counts>` summary rule, TaskRows
  *   with braille spinners, per-status colors/glyphs from Util/Theme.ts, and
  *   the KeyBar footer (`Starting dev stack (n/m) │ p hide widget • Ctrl+C exit`)
@@ -100,7 +100,7 @@ export default function DevTuiTerminal({
       }));
 
     while (!signal.aborted) {
-      // ── generation 1: boot ──────────────────────────────────────────
+      // ── boot: one command starts the Worker and the Vite app ────────
       setState({ ...BOOT, logs: [] });
       log(
         <>
@@ -113,35 +113,47 @@ export default function DevTuiTerminal({
       set({
         widget: true,
         rows: [
-          {
-            id: "Website",
-            type: "Cloudflare.Website.Vite",
-            status: "creating",
-          },
+          { id: "Api", type: "Cloudflare.Worker", status: "creating" },
+          { id: "Web", type: "Cloudflare.Website.Vite", status: "creating" },
         ],
       });
-      await sleep(1500);
+      await sleep(900);
       if (signal.aborted) return;
-      row("Website", { status: "created", elapsed: "1.2s" });
+      row("Api", { status: "created", elapsed: "0.6s" });
+      await sleep(700);
+      if (signal.aborted) return;
+      row("Web", { status: "created", elapsed: "1.3s" });
       await sleep(500);
       if (signal.aborted) return;
       set({ view: "output", label: "Dev stack ready", busy: false });
       await sleep(2200);
       if (signal.aborted) return;
 
-      // ── vite HMR lands in scrollback above the widget ───────────────
+      // ── edit the frontend: Vite HMR ─────────────────────────────────
       log(
         <>
-          <span style={{ color: C.muted }}>[vite] </span>
+          <span style={{ color: C.muted }}>[web] </span>
           <span style={{ color: C.info }}>hmr update </span>
           <span style={{ color: C.emphasis }}>/src/App.tsx</span>
           <span style={{ color: C.muted }}> (96ms)</span>
         </>,
       );
-      await sleep(2000);
+      await sleep(1800);
       if (signal.aborted) return;
 
-      // ── generation 2: alchemy.run.ts changed — new plan ────────────
+      // ── edit the backend: the Worker reloads in place ───────────────
+      log(
+        <>
+          <span style={{ color: C.muted }}>[api] </span>
+          <span style={{ color: C.info }}>reloaded </span>
+          <span style={{ color: C.emphasis }}>src/api.ts</span>
+          <span style={{ color: C.muted }}> (41ms)</span>
+        </>,
+      );
+      await sleep(1800);
+      if (signal.aborted) return;
+
+      // ── edit alchemy.run.ts: a new bucket, bound to the Worker ──────
       log(
         <>
           <span style={{ color: C.warning }}>↻ </span>
@@ -158,20 +170,17 @@ export default function DevTuiTerminal({
         busy: true,
         rows: [
           { id: "Uploads", type: "Cloudflare.R2.Bucket", status: "creating" },
-          {
-            id: "Website",
-            type: "Cloudflare.Website.Vite",
-            status: "pending",
-          },
+          { id: "Api", type: "Cloudflare.Worker", status: "pending" },
+          { id: "Web", type: "Cloudflare.Website.Vite", status: "no change" },
         ],
       });
       await sleep(900);
       if (signal.aborted) return;
-      row("Uploads", { status: "created", elapsed: "0.5s" });
-      row("Website", { status: "updating" });
-      await sleep(1000);
+      row("Uploads", { status: "created", elapsed: "0.3s" });
+      row("Api", { status: "updating" });
+      await sleep(800);
       if (signal.aborted) return;
-      row("Website", { status: "updated", elapsed: "0.8s" });
+      row("Api", { status: "updated", elapsed: "0.4s" });
       await sleep(500);
       if (signal.aborted) return;
       set({ view: "output", label: "Dev stack ready", busy: false });
@@ -213,13 +222,27 @@ export default function DevTuiTerminal({
               )}
             </Rule>
             {state.view === "output" ? (
-              <Line>
-                <span style={{ color: C.muted }}>{"{"} url: </span>
-                <span style={{ color: C.accentBright }}>
-                  'http://localhost:5173'
-                </span>
-                <span style={{ color: C.muted }}> {"}"}</span>
-              </Line>
+              <>
+                <Line>
+                  <span style={{ color: C.muted }}>{"{"}</span>
+                </Line>
+                <Line>
+                  <span style={{ color: C.muted }}>{"  "}web: </span>
+                  <span style={{ color: C.accentBright }}>
+                    'http://localhost:5173'
+                  </span>
+                  <span style={{ color: C.muted }}>,</span>
+                </Line>
+                <Line>
+                  <span style={{ color: C.muted }}>{"  "}api: </span>
+                  <span style={{ color: C.accentBright }}>
+                    'http://localhost:1337'
+                  </span>
+                </Line>
+                <Line>
+                  <span style={{ color: C.muted }}>{"}"}</span>
+                </Line>
+              </>
             ) : (
               state.rows.map((r) => (
                 <Line key={r.id}>

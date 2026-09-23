@@ -90,7 +90,7 @@ export default function TestTerminal({
       while (!aborted()) {
         setSteps([]);
         setSummary(null);
-        await typeCmd("bun test");
+        await typeCmd("pnpm test");
         if (aborted()) return;
         await sleep(280);
 
