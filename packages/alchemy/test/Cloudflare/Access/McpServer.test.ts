@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
@@ -7,6 +8,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -23,6 +25,8 @@ const RECREATE_SERVER_ID = "alchemy-test-mcp-server-recreate";
 const REPLACE_SERVER_ID = "alchemy-test-mcp-server-replace";
 const REPLACE_SERVER_ID_V2 = "alchemy-test-mcp-replaced";
 const SYNC_SERVER_ID = "alchemy-test-mcp-server-sync";
+const DEFERRED_SYNC_SERVER_ID = "alchemy-test-mcp-deferred-sync";
+const TOKEN_SERVER_ID = "alchemy-test-mcp-service-token";
 const PROBE_SERVER_ID = "alchemy-test-mcp-server-probe";
 
 // Placeholder upstreams on the standing test zone. They are never contacted:
@@ -31,6 +35,155 @@ const HOSTNAME = "https://mcp.alchemy-test-2.us/mcp";
 const HOSTNAME_V2 = "https://mcp-v2.alchemy-test-2.us/mcp";
 // A real, public, unauthenticated MCP server for the capability-sync case.
 const PUBLIC_HOSTNAME = "https://docs.mcp.cloudflare.com/mcp";
+
+test.provider(
+  "enabling sync discovers capabilities without changing server configuration",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const fetch = yield* FetchHttpClient.Fetch;
+      let serverRequests = 0;
+      let syncRequests = 0;
+      // Observe real requests: Cloudflare may discover capabilities in the
+      // background even when Alchemy has not called the sync endpoint.
+      const trackSync = ((input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith(`/mcp/servers/${DEFERRED_SYNC_SERVER_ID}`)) {
+          serverRequests++;
+        }
+        if (url.endsWith(`/mcp/servers/${DEFERRED_SYNC_SERVER_ID}/sync`)) {
+          syncRequests++;
+        }
+        return fetch(input, init);
+      }) as typeof globalThis.fetch;
+
+      const deploy = (sync: boolean | undefined) =>
+        stack
+          .deploy(
+            Cloudflare.Access.McpServer("DeferredSync", {
+              serverId: DEFERRED_SYNC_SERVER_ID,
+              hostname: PUBLIC_HOSTNAME,
+              authType: "unauthenticated",
+              sync,
+            }),
+          )
+          .pipe(Effect.provideService(FetchHttpClient.Fetch, trackSync));
+
+      const deferred = yield* deploy(false);
+      expect(deferred.tools).toHaveLength(0);
+      expect(deferred.lastSuccessfulSync).toBeUndefined();
+      expect(serverRequests).toBeGreaterThan(0);
+      expect(syncRequests).toEqual(0);
+
+      const synced = yield* deploy(true);
+      expect(syncRequests).toEqual(1);
+      expect(synced.serverId).toEqual(deferred.serverId);
+      expect(synced.createdAt).toEqual(deferred.createdAt);
+      expect(synced.status).toEqual("ready");
+      expect(synced.tools.length).toBeGreaterThan(0);
+      expect(synced.lastSuccessfulSync).toBeDefined();
+
+      const live = yield* getLiveServer(accountId, DEFERRED_SYNC_SERVER_ID);
+      expect(live?.status).toEqual("ready");
+      expect(live?.tools.length).toBeGreaterThan(0);
+
+      const noop = yield* deploy(true);
+      expect(syncRequests).toEqual(1);
+      expect(noop.lastSynced).toEqual(synced.lastSynced);
+
+      yield* deploy(false);
+      expect(syncRequests).toEqual(1);
+      const defaultSync = yield* deploy(undefined);
+      expect(syncRequests).toEqual(2);
+      expect(defaultSync.status).toEqual("ready");
+      yield* deploy(undefined);
+      expect(syncRequests).toEqual(2);
+
+      yield* stack.destroy();
+      expect(
+        yield* getLiveServer(accountId, DEFERRED_SYNC_SERVER_ID),
+      ).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "service-token outputs resolve into redacted MCP authentication credentials",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const token = yield* Cloudflare.Access.ServiceToken("McpToken", {});
+          const credentials = Output.all(
+            token.clientId,
+            token.clientSecret,
+          ).pipe(
+            Output.map(([clientId, clientSecret]) =>
+              Redacted.make(
+                JSON.stringify({
+                  headers: {
+                    "cf-access-client-id": clientId,
+                    "cf-access-client-secret": Redacted.value(clientSecret!),
+                  },
+                }),
+              ),
+            ),
+          );
+          const server = yield* Cloudflare.Access.McpServer("GuardedTools", {
+            serverId: TOKEN_SERVER_ID,
+            hostname: HOSTNAME,
+            authType: "bearer",
+            authCredentials: credentials,
+            sync: false,
+          });
+          return { token, server, credentials };
+        }),
+      );
+
+      expect(Redacted.isRedacted(deployed.credentials)).toBe(true);
+      // Compare without printing either credential on an assertion failure.
+      expect(
+        Redacted.value(deployed.credentials) ===
+          JSON.stringify({
+            headers: {
+              "cf-access-client-id": deployed.token.clientId,
+              "cf-access-client-secret": Redacted.value(
+                deployed.token.clientSecret!,
+              ),
+            },
+          }),
+      ).toBe(true);
+      expect(deployed.server.authType).toEqual("bearer");
+      const live = yield* getLiveServer(accountId, TOKEN_SERVER_ID);
+      expect(live?.authType).toEqual("bearer");
+
+      yield* stack.destroy();
+      expect(yield* getLiveServer(accountId, TOKEN_SERVER_ID)).toBeUndefined();
+      const deletedToken = yield* zeroTrust
+        .getAccessServiceTokenForAccount({
+          accountId,
+          serviceTokenId: deployed.token.serviceTokenId,
+        })
+        .pipe(
+          Effect.catchTag("AccessServiceTokenNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      expect(deletedToken).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 120_000,
+  },
+);
 
 // Read a server out-of-band, mapping "gone" to undefined.
 const getLiveServer = (accountId: string, id: string) =>

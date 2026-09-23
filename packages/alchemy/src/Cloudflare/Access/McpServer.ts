@@ -134,7 +134,8 @@ export interface McpServerProps {
   updatedPrompts?: McpServerCapabilityOverride[];
   /**
    * Run a capability sync (tool and prompt discovery against the upstream)
-   * after the server is created or its configuration changes. Discovery
+   * after the server is created, its configuration changes, or sync is
+   * enabled after being disabled. Discovery
    * problems are reported on the `status` and `error` attributes and never
    * fail the deploy. Skipped while the server still requires an
    * administrator to complete its OAuth authentication.
@@ -232,13 +233,15 @@ export type McpServer = Resource<
  * const guarded = yield* Cloudflare.Access.McpServer("GuardedTools", {
  *   hostname: "https://mcp.example.com/mcp",
  *   authType: "bearer",
- *   authCredentials: Redacted.make(
- *     JSON.stringify({
- *       headers: {
- *         "cf-access-client-id": token.clientId,
- *         "cf-access-client-secret": Redacted.value(token.clientSecret!),
- *       },
- *     }),
+ *   authCredentials: Output.all(token.clientId, token.clientSecret).pipe(
+ *     Output.map(([clientId, clientSecret]) =>
+ *       Redacted.make(JSON.stringify({
+ *         headers: {
+ *           "cf-access-client-id": clientId,
+ *           "cf-access-client-secret": Redacted.value(clientSecret!),
+ *         },
+ *       })),
+ *     ),
  *   ),
  * });
  * ```
@@ -403,12 +406,13 @@ export const McpServerProvider = () =>
         }
       }
 
-      // 4. Capability sync — best effort, only after a change, and never
-      //    while an administrator still has to complete the OAuth flow.
+      // 4. Capability sync — best effort after a configuration change or
+      //    when sync is enabled, and never while an administrator still
+      //    has to complete the OAuth flow.
       //    Upstream discovery problems come back in the response body
       //    (`status`/`error`), not as API failures.
       if (
-        changed &&
+        (changed || olds?.sync === false) &&
         news.sync !== false &&
         observed.authenticationStatus !== "required"
       ) {
