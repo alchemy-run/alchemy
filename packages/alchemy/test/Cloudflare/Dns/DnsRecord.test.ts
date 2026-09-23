@@ -4,7 +4,10 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { noopSession } from "@/Report";
+import * as Result from "effect/Result";
 import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -860,3 +863,63 @@ const findOwnedError = (
       (value): value is OwnedBySomeoneElse =>
         value instanceof OwnedBySomeoneElse,
     );
+
+test.provider(
+  "missing DNS records recover on read and delete while other API errors propagate",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* resolveZoneId;
+      const name = `alchemy-dnsrecord-missing.${zoneName}`;
+      const props = { zoneId, name, type: "A" as const, content: "192.0.2.1" };
+      const record = yield* stack.deploy(
+        Cloudflare.DNS.Record("MissingRecord", props).pipe(adopt(true)),
+      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.Record);
+      const input = {
+        id: "MissingRecord",
+        fqn: "MissingRecord",
+        instanceId: "missing-record-test",
+        olds: props,
+        output: record,
+        bindings: [],
+        session: { ...noopSession, note: () => Effect.void },
+      };
+
+      // The real API must reject an inaccessible zone; neither lifecycle may
+      // hide that failure as if the record had simply been deleted.
+      const inaccessible = {
+        ...input,
+        output: { ...record, zoneId: "00000000000000000000000000000000" },
+      };
+      for (const operation of [
+        provider.read!(inaccessible),
+        provider.delete(inaccessible),
+      ]) {
+        const result = yield* operation.pipe(Retry.none, Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result))
+          expect(result.failure._tag).not.toBe("RecordNotFound");
+      }
+
+      // Delete out of band to exercise stale persisted state against Cloudflare.
+      yield* dns.deleteRecord({ zoneId, dnsRecordId: record.recordId });
+      const missing = yield* dns
+        .getRecord({ zoneId, dnsRecordId: record.recordId })
+        .pipe(Effect.flip);
+      expect(missing._tag).toBe("RecordNotFound");
+      expect(yield* provider.read!(input)).toBeUndefined();
+      yield* provider.delete(input);
+      yield* provider.delete(input);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 120000,
+  },
+);
