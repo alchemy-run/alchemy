@@ -1,16 +1,16 @@
 ---
 title: Phases
-description: Alchemy programs run in two phases — Construction drives the deploy, Runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
+description: Alchemy programs run in two phases. Construction drives the deploy, and Runtime handles requests. You need to know which is which to write Workers and Lambda Functions.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-Every alchemy program runs in two phases — plantime builds the plan,
-runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
-resources — Workers, Lambdas, Containers — express both in a single
-program by **returning an Effect from inside an Effect**. Earlier
+Every alchemy program runs in two phases. Plantime builds the plan,
+and runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
+resources such as Workers, Lambdas, and Containers express both in a
+single program by returning an Effect from inside an Effect. Earlier
 pages named the two halves the Construction phase and the Runtime
-phase; this page pins down exactly when each one runs.
+phase. This page defines when each one runs.
 
 ## Construction vs Runtime
 
@@ -35,20 +35,20 @@ Cloudflare.Worker(
 
 | Phase        | Code   | When it runs                          |
 | ------------ | ------ | ------------------------------------- |
-| Construction | outer  | At plantime **and** at cold start     |
+| Construction | outer  | At plantime and at cold start         |
 | Runtime | inner  | Only inside a deployed handler        |
 
-The `bucket` value is established once during Construction and captured
-by the runtime closure. The constructor runs at most once per cold start; the
+Construction sets up the `bucket` value once, and the runtime closure
+captures it. The constructor runs at most once per cold start. The
 runtime body runs per request with everything already wired up.
-Each phase has its own `Scope` with very different lifetimes —
+Each phase has its own `Scope`, and the two lifetimes differ.
 [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
-covers where cleanup can (and cannot) happen.
+covers where cleanup can and cannot happen.
 
-The Runtime phase is the *only* place where `Alchemy.RuntimeContext`
-is available. Any Effect whose requirements include `RuntimeContext`
-can only execute inside the runtime closure — the type system
-rejects it everywhere else.
+`Alchemy.RuntimeContext` is available only in the Runtime phase.
+Any Effect whose requirements include `RuntimeContext` can only
+execute inside the runtime closure. The type system rejects it
+everywhere else.
 [Layers](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
 builds on this split to keep whole services honest about where they
 can run.
@@ -75,11 +75,11 @@ can run.
   ]}
 />
 
-- At **plantime**, the constructor runs to discover bindings — alchemy needs
+- At **plantime**, the constructor runs to discover bindings. Alchemy needs
   to know which resources the handler will use so it can wire
   permissions, env vars, and references.
-- At **runtime cold start**, the constructor runs again — this time inside the
-  deployed Worker, where the same `bind()` calls return live SDK
+- At **runtime cold start**, the constructor runs again inside the
+  deployed Worker. There, the same `bind()` calls return live SDK
   clients backed by the deployed resource.
 - The **runtime body** only runs in the deployed handler. It never
   executes at plantime, so you can put real per-request work there
@@ -87,25 +87,25 @@ can run.
 
 ## `ALCHEMY_PHASE`
 
-The current phase is exposed as the `ALCHEMY_PHASE` environment
-variable / config key:
+Alchemy exposes the current phase as the `ALCHEMY_PHASE` environment
+variable or config key:
 
 | Value     | Context                                                              |
 | --------- | ------------------------------------------------------------------- |
 | `plan`    | Default. Running `alchemy deploy`, `alchemy plan`, or `alchemy dev`. |
 | `runtime` | Running inside a deployed Worker or Lambda Function.                 |
 
-Most user code never reads this directly — but providers and
+Most user code never reads this directly. Providers and
 [Bindings](/infrastructure-as-effects/binding) use it internally to behave
 differently across phases.
 
 ## `ALCHEMY_DEV`
 
 `alchemy dev` is a plantime phase, so `ALCHEMY_PHASE` is `plan`
-during local development just like a regular deploy. To tell whether
-you're running under `alchemy dev` specifically, read the
+during local development, the same as a regular deploy. To check
+whether you're running under `alchemy dev` specifically, read the
 `ALCHEMY_DEV` config key. The CLI sets `ALCHEMY_DEV=true` on the dev
-process; every other entrypoint leaves it unset, so it defaults to
+process. Every other entrypoint leaves it unset, so it defaults to
 `false`.
 
 ```typescript
@@ -120,9 +120,9 @@ Effect.gen(function* () {
 
 ## The `__ALCHEMY_RUNTIME__` guard
 
-A binding's contract is a `Binding.Service`; the guarded setup
-Effect lives in the implementation Layer you provide, not the
-contract. That setup Effect does two things — and the phase decides
+A binding's contract is a `Binding.Service`. The guarded setup
+Effect lives in the implementation Layer you provide, not in the
+contract. That setup Effect does two things, and the phase decides
 how much of it runs:
 
 | Work                    | Phase | Job                                                      |
@@ -133,31 +133,31 @@ how much of it runs:
 The deploy-time wiring is fenced behind `if (!globalThis.__ALCHEMY_RUNTIME__)`.
 At plantime the guard is open, so calling `bind()` records what the
 function will need. At runtime the global flag is set, so the guard is
-skipped and `bind()` returns just the typed client. The runtime bundle
+skipped and `bind()` returns only the typed client. The runtime bundle
 stays small because the planning branch never executes.
 
-Which wiring the guard protects is decided by the implementation
-Layer you provided
+The implementation Layer you provided decides which wiring the
+guard protects
 ([Bindings](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
 
-This is also how alchemy can let you write `bucket.get(...)` inside a
-Worker without bundling AWS / Cloudflare provisioning code: the
-provisioning lives behind the guard, never on the runtime path.
+The guard also lets you write `bucket.get(...)` inside a Worker
+without bundling AWS or Cloudflare provisioning code. The
+provisioning lives behind the guard and stays off the runtime path.
 
 ## Why this matters
 
 The Construction/Runtime split lets you write code that:
 
-1. **Resolves infrastructure references at deploy time** — bindings
+1. **Resolves infrastructure references at deploy time.** Bindings
    know which bucket ARN, queue URL, etc. to inject.
-2. **Initializes SDK clients once at cold start** — not on every
-   request.
-3. **Handles requests with a pre-configured context** — the `bucket`
+2. **Initializes SDK clients once at cold start.** This does not
+   happen on every request.
+3. **Handles requests with a pre-configured context.** The `bucket`
    variable in the runtime body already knows which resource to
    talk to.
 
 ## Where next
 
-- [Circular Bindings](/infrastructure-as-effects/circular-bindings) — the two-pass plan this phase split makes possible. Next page.
-- [Layers](/infrastructure-as-effects/layers) — `RuntimeContext` as a type-level boundary; infrastructure behind service interfaces.
-- [State Store](/state-store) — where deploy results persist between runs.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings): the two-pass plan this phase split makes possible. Next page.
+- [Layers](/infrastructure-as-effects/layers): `RuntimeContext` as a type-level boundary, and infrastructure behind service interfaces.
+- [State Store](/state-store): where deploy results persist between runs.

@@ -1,6 +1,6 @@
 ---
 title: File layout
-description: How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
+description: How to organize an Alchemy project. Use one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
 ---
 
 A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle)):
@@ -23,8 +23,7 @@ to that shape.
 
 ## Start with one file
 
-Everything in `alchemy.run.ts` is a perfectly good starting
-point:
+Everything in `alchemy.run.ts` is a good starting point:
 
 ```typescript
 // alchemy.run.ts
@@ -54,12 +53,12 @@ export default Alchemy.Stack(
 );
 ```
 
-This is fine until the file accumulates runtime code, stage
-logic, and a dozen Resources — then split.
+This works until the file accumulates runtime code, stage
+logic, and a dozen Resources. Then split it.
 
 ## One file per Resource
 
-A Resource declaration is a value; give it its own module:
+A Resource declaration is a value. Give it its own module:
 
 ```typescript
 // src/Photos.ts
@@ -68,11 +67,11 @@ import * as Cloudflare from "alchemy/Cloudflare";
 export const Photos = Cloudflare.R2.Bucket("Photos");
 ```
 
-A declaration is inert until a Stack yields it — importing this
+A declaration is inert until a Stack yields it. Importing this
 file deploys nothing.
 
-Workers get the same treatment, with `main: import.meta.url`
-making the file its own entrypoint:
+Workers get the same treatment. `main: import.meta.url` makes
+the file its own entrypoint:
 
 ```typescript
 // src/Api.ts
@@ -92,10 +91,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The Worker's declaration and its runtime code live in one file —
-there is no separate `wrangler.toml` pointing at a script.
+The Worker's declaration and its runtime code live in one file.
+There is no separate `wrangler.toml` pointing at a script.
 
-Layers follow the same rule — the `SandboxLive` Layer lives in
+Layers follow the same rule. The `SandboxLive` Layer lives in
 `src/Sandbox.ts` (see
 [Layers](/infrastructure-as-effects/layers)).
 
@@ -128,14 +127,14 @@ export const NeonDb = Effect.gen(function* () {
 });
 ```
 
-A migration touches all three — Schema regenerates the SQL,
-Branch applies it — so they share a file. The heuristic: group
+A migration touches all three. Schema regenerates the SQL and
+Branch applies it, so they share a file. As a rule, group
 Resources when they share a lifecycle.
 
 ## Wrap units in Effects, not in the Stack
 
-`NeonDb` above is an exported `Effect.gen` — a unit of
-composition anything can build on:
+`NeonDb` above is an exported `Effect.gen`. It is a unit of
+composition that anything can build on:
 
 ```typescript
 // src/Db.ts
@@ -147,8 +146,8 @@ export const Hyperdrive = Effect.gen(function* () {
 });
 ```
 
-Both `Hyperdrive` and `alchemy.run.ts` yield `NeonDb`, but each
-Resource is memoized by its logical ID — the database is
+Both `Hyperdrive` and `alchemy.run.ts` yield `NeonDb`. Each
+Resource is memoized by its logical ID, so the database is
 provisioned once no matter how many units yield it.
 
 ## Stage-conditional config
@@ -164,9 +163,9 @@ const sandbox = yield* Cloudflare.Container("Sandbox", {
 });
 ```
 
-The decision lives next to the Resource it affects, not in
-`alchemy.run.ts`. The most common case — `pr-*` stages borrowing
-staging's database via `.ref` — is covered in
+The decision lives next to the Resource it affects, outside
+`alchemy.run.ts`. The most common case is `pr-*` stages
+borrowing staging's database via `.ref`, which is covered in
 [References](/infrastructure-as-code/references).
 
 ## alchemy.run.ts is the composition root
@@ -231,16 +230,16 @@ If `alchemy.run.ts` is growing, something is missing a home in
     └── schema.ts    # plain application code (Drizzle schema)
 ```
 
-Tests mirror the tree under `test/`; the tutorial builds this
+Tests mirror the tree under `test/`. The tutorial builds this
 shape step by step ([Part 2](/cloudflare/tutorial/part-2)).
 
 ## Where next
 
-- [Monorepo](/project-structure/monorepo) — the workspace-level version of
-  this question: one Stack or one per package.
-- [References](/infrastructure-as-code/references) — when the split
-  crosses Stack boundaries.
-- [Layers](/infrastructure-as-effects/layers) — promote
+- [Monorepo](/project-structure/monorepo) covers the workspace-level version
+  of this question: one Stack or one per package.
+- [References](/infrastructure-as-code/references) covers splits that
+  cross Stack boundaries.
+- [Layers](/infrastructure-as-effects/layers) shows how to promote
   a multi-Resource unit into a swappable Layer.
-- [Stacks](/infrastructure-as-code/stack) — the Stack service, stages, and
-  outputs used by the composition root.
+- [Stacks](/infrastructure-as-code/stack) covers the Stack service, stages,
+  and outputs used by the composition root.

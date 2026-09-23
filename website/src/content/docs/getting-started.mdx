@@ -13,9 +13,9 @@ import { effectVersion } from "../../versions";
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
 
 :::tip
-Want the idea before the install? [What is Alchemy?](/what-is-alchemy)
-explains the model in a few minutes. Otherwise, read on and it's the
-next page.
+[What is Alchemy?](/what-is-alchemy) explains the model in a few
+minutes. Read it first if you want the idea before the install.
+Otherwise, read on and you reach it next.
 :::
 
 ## Prerequisites
@@ -59,7 +59,7 @@ next page.
 
 ## Create your Stack
 
-Every Alchemy program starts with a Stack — create `alchemy.run.ts`:
+Every Alchemy program starts with a Stack. Create `alchemy.run.ts`:
 
 ```typescript
 // alchemy.run.ts
@@ -104,11 +104,11 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
 
 Connect Cloudflare first with `alchemy profile edit --add Cloudflare`.
 Sign in with OAuth in the browser or paste an API token. The
-credentials are saved to your **`default`**
-[profile](/environments/profiles) at `~/.alchemy/profiles.json`. No
-environment variables required. Logging in only ever happens through the
-`profile` command; a deploy with nothing configured fails with the exact
-command to run.
+credentials are saved to your `default`
+[profile](/environments/profiles) at `~/.alchemy/profiles.json`. You
+don't need environment variables. Login only happens through the
+`profile` command. A deploy with nothing configured fails and prints the
+exact command to run.
 
 Once you're authenticated, Alchemy shows a plan, asks for
 confirmation, and provisions the resource:
@@ -123,9 +123,9 @@ Proceed?
 [s2]bucketName: "myapp-bucket-a1b2c3d4e5",
 }`} />
 
-That's it — you have a live R2 Bucket on Cloudflare.
+You now have a live R2 Bucket on Cloudflare.
 
-Full command reference: [CLI](/cli).
+See [CLI](/cli) for the full command reference.
 
 :::tip
 To re-run the credential prompt later (e.g. to switch from OAuth to

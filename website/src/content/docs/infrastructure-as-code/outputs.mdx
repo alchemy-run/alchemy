@@ -1,14 +1,14 @@
 ---
 title: Inputs & Outputs
-description: Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
+description: Output<T> is alchemy's lazy reference type. Outputs flow between resources. You compose them with .pipe, map and interpolate them, and they resolve during deploy.
 ---
 
 A [Resource](/infrastructure-as-code/resource)'s **inputs** are the props you pass
 in. Its **outputs** are the attributes the cloud returns after
-creation. The catch: outputs don't exist when you write the code.
-They only exist after the resource is deployed.
+creation. Outputs don't exist when you write the code. They only
+exist after the resource is deployed.
 
-Alchemy bridges this with **`Output<T>`** — a lazy, typed reference
+Alchemy bridges this with **`Output<T>`**, a lazy, typed reference
 that resolves once the upstream resource has run. You can read
 properties off it, transform it with `pipe`, combine it with other
 outputs, and feed it as input to the next resource. The resource
@@ -29,16 +29,16 @@ bucket.bucketName;
 
 Three things to know:
 
-1. **Lazy** — `bucket.bucketName` doesn't have a value yet. It's a
-   description of "the bucket's name once it's created."
-2. **Typed** — TypeScript still knows it's `string`, even though
+1. **Lazy.** `bucket.bucketName` doesn't have a value yet. It
+   describes "the bucket's name once it's created."
+2. **Typed.** TypeScript still knows it's `string`, even though
    you can't `console.log` it directly.
-3. **Tracked** — passing it as input to another resource registers
+3. **Tracked.** Passing it as input to another resource registers
    a dependency edge. Alchemy uses these edges to deploy in the
    right order.
 
-You almost never construct an `Output` yourself — they fall out of
-resource declarations and the operators below.
+You almost never construct an `Output` yourself. Resource
+declarations and the operators below create them.
 
 ## Property access
 
@@ -53,12 +53,12 @@ bucket.bucketArn;         // Output<string>
 bucket.tags?.environment; // Output<string | undefined>
 ```
 
-Nested access works too — `expr.nested.deep` walks down the object
+Nested access works too. `expr.nested.deep` walks down the object
 without forcing the value.
 
 ## `literal`
 
-When you need an `Output` shape but the value is already known:
+Use this when you need an `Output` shape but already know the value:
 
 ```typescript
 import * as Output from "alchemy/Output";
@@ -68,8 +68,8 @@ Output.literal(42);           // Output<number>
 Output.literal({ a: 1 });     // Output<{ a: number }>
 ```
 
-Useful as a default for an optional output, or as a placeholder in
-templates and `Output.all` calls.
+It is useful as a default for an optional output, or as a placeholder
+in templates and `Output.all` calls.
 
 ## `asOutput`
 
@@ -87,23 +87,23 @@ Use this when writing helpers that should accept "anything output-y."
 ## `fromEffect`
 
 Lifts a plan-time Effect into an `Output`. The effect runs when the
-stack resolves the Output during plan/deploy — with the stack's
-services (cloud credentials, region, ...) provided — and never inside
-a deployed runtime:
+stack resolves the Output during plan/deploy, with the stack's
+services (cloud credentials, region, ...) provided. It never runs
+inside a deployed runtime:
 
 ```typescript
 Output.fromEffect(lookupLatestAmi());   // Output<string>
 ```
 
 This is the low-level seam for lookup helpers that read cloud state to
-produce a prop value. Because constructing the Output is inert, such
-helpers are safe to call from composition code that is re-executed
-inside a deployed Function, Worker, or Instance bundle — no
-`__ALCHEMY_RUNTIME__` guard needed. The higher-level form is
-[`Capability.execute`](/infrastructure-as-effects/binding#plan-time-invokes)
-— invoking a binding as a plan-time data source — which the AMI
-finders (`AWS.EC2.getAmi`, `AWS.EC2.amazonLinux2023()`,
-`AWS.EC2.ubuntu2404()`, ...) are built on:
+produce a prop value. Constructing the Output is inert, so these
+helpers are safe to call from composition code that re-executes
+inside a deployed Function, Worker, or Instance bundle. They need no
+`__ALCHEMY_RUNTIME__` guard. The higher-level form is
+[`Capability.execute`](/infrastructure-as-effects/binding#plan-time-invokes),
+which invokes a binding as a plan-time data source. The AMI finders
+(`AWS.EC2.getAmi`, `AWS.EC2.amazonLinux2023()`,
+`AWS.EC2.ubuntu2404()`, ...) are built on it:
 
 ```typescript
 const instance = yield* AWS.EC2.Instance("web", {
@@ -113,8 +113,8 @@ const instance = yield* AWS.EC2.Instance("web", {
 });
 ```
 
-The effect must not fail (`E = never`) — die with a descriptive error
-for unresolvable lookups.
+The effect must not fail (`E = never`). For unresolvable lookups, die
+with a descriptive error.
 
 ## `map`
 
@@ -138,7 +138,7 @@ It also supports a data-first form when you don't want to use
 Output.map(bucket.bucketName, (name) => name.toUpperCase());
 ```
 
-`map` composes — pipe several together to build up a chain:
+`map` composes. Pipe several together to build a chain:
 
 ```typescript
 const slug = bucket.bucketName.pipe(
@@ -147,16 +147,15 @@ const slug = bucket.bucketName.pipe(
 );
 ```
 
-The function only runs once (per evaluation) and only after every
-upstream `Output` is ready. There is no risk of "the function ran
-before the resource existed."
+The function runs once per evaluation, and only after every upstream
+`Output` is ready. It can't run before the resource exists.
 
 ## `mapEffect`
 
-`Output.mapEffect` is the same idea but the transform returns an
-`Effect`. Use this when the transformation needs to do real work —
-read a file, hit an API, decode a JWT — and you want it to live in
-the Effect graph.
+`Output.mapEffect` works the same way, but the transform returns an
+`Effect`. Use it when the transformation does real work, such as
+reading a file, calling an API, or decoding a JWT, and you want that
+work to live in the Effect graph.
 
 ```typescript
 const decoded = secret.value.pipe(
@@ -170,7 +169,7 @@ const decoded = secret.value.pipe(
 // Output<Payload>
 ```
 
-Chain them just like `map`:
+Chain them like `map`:
 
 ```typescript
 "a".pipe(
@@ -180,14 +179,14 @@ Chain them just like `map`:
 // resolves to "abc"
 ```
 
-Requirements (the `R` channel of the inner Effects) are tracked in
-the resulting `Output`'s requirements, so anything those Effects
-need must be provided wherever the Output is finally evaluated.
+The resulting `Output` tracks the requirements (the `R` channel) of
+the inner Effects. You must provide anything those Effects need
+wherever the Output is finally evaluated.
 
 ## `all`
 
 `Output.all` zips several `Output`s into one. The result resolves
-to a tuple (preserving the input shape and types):
+to a tuple that preserves the input shape and types:
 
 ```typescript
 const both = Output.all(bucket.bucketName, queue.queueUrl);
@@ -203,9 +202,9 @@ is `Output<T[]>` instead of a fixed tuple.
 
 ## `interpolate`
 
-The most common combination of `all` + `map` is "build a string
-from outputs." `Output.interpolate` is a tagged template literal
-for exactly that:
+The most common use of `all` + `map` is building a string from
+outputs. `Output.interpolate` is a tagged template literal for
+that:
 
 ```typescript
 const arn = Output.interpolate`arn:aws:s3:::${bucket.bucketName}/objects/*`;
@@ -216,21 +215,22 @@ const dsn = Output.interpolate`postgres://${db.host}:${db.port}/${db.name}`;
 
 Nullish interpolated values render as the empty string.
 
-Behind the scenes this is `Output.all(...args).pipe(Output.map(...))` —
-so the dependency graph is wired up automatically.
+This expands to `Output.all(...args).pipe(Output.map(...))`, so the
+dependency graph is wired up automatically.
 
 ## `of`
 
-You rarely call this directly because resources already act like
-`Output`s, but it's how the conversion happens internally:
+Alchemy uses this internally to convert resources to `Output`s. You
+rarely call it directly because resources already act like
+`Output`s:
 
 ```typescript
 const bucketOut = Output.of(bucket);          // Output<Bucket>
 const refOut    = Output.of(Ref({ id: "B" })); // for cross-stack refs
 ```
 
-Use `Output.of(Ref(...))` (or [`Output.ref`](#ref))
-to read a resource's attributes from another stack — see below.
+Use `Output.of(Ref(...))` or [`Output.ref`](#ref) to read a
+resource's attributes from another stack. See below.
 
 ## `ref`
 
@@ -265,8 +265,8 @@ const queue = yield* AWS.SQS.Queue("Jobs", {
 });
 ```
 
-Plain values, Outputs, nested objects, and arrays are all valid —
-the engine evaluates them recursively.
+Plain values, Outputs, nested objects, and arrays are all valid. The
+engine evaluates them recursively.
 
 ## Helpers
 
@@ -278,14 +278,14 @@ the engine evaluates them recursively.
 | `Output.hasOutputs(v)` | `true` if `v` (or anything inside) is lazy    |
 | `Output.toEnvKey(id, suffix)` | `"my-bucket" + "name"` → `"MY_BUCKET_NAME"` |
 
-`upstream` and `hasOutputs` power the dependency graph — most code
+`upstream` and `hasOutputs` power the dependency graph. Most code
 won't call them directly, but they're useful when writing custom
 providers.
 
 ## Redacted values
 
 Alchemy preserves `Redacted<T>` (Effect's secret wrapper) through
-evaluation. Logs and console output show `<redacted>` instead of
+evaluation. Logs and console output show `<redacted>` in place of
 the underlying value:
 
 ```typescript
@@ -300,9 +300,10 @@ yield* MyService("svc", {
 
 ## Evaluation semantics
 
-When alchemy needs the actual value of an `Output` (to call a
-provider, to print outputs at the end of a deploy, to satisfy a
-binding), it runs `Output.evaluate(expr, upstream)`:
+When alchemy needs the actual value of an `Output`, it runs
+`Output.evaluate(expr, upstream)`. It needs the value to call a
+provider, to print outputs at the end of a deploy, or to satisfy a
+binding. Evaluation works like this:
 
 1. **Resource expressions** look up the resolved attributes of
    their upstream resource.
@@ -316,10 +317,10 @@ binding), it runs `Output.evaluate(expr, upstream)`:
    recursively so Outputs inside them get evaluated too.
 7. **`Redacted`** values are preserved as-is.
 
-You normally never call `Output.evaluate` yourself — alchemy invokes
-it during plan and apply. But understanding the ordering helps:
-**every Output is lazy until alchemy decides to resolve it**, and
-the deploy graph is exactly the set of dependencies your Outputs
+You normally never call `Output.evaluate` yourself. Alchemy invokes
+it during plan and apply. Understanding the ordering still helps.
+Every Output is lazy until alchemy decides to resolve it, and the
+deploy graph is exactly the set of dependencies your Outputs
 declared.
 
 ## Cheat sheet
@@ -338,11 +339,11 @@ declared.
 
 ## Where next
 
-- [References](/infrastructure-as-code/references) — read Outputs across
+- [References](/infrastructure-as-code/references): read Outputs across
   stacks and stages. Next page.
-- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) — how
+- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle): how
   the graph deploys.
-- [Resources](/infrastructure-as-code/resource) — what an Output actually
+- [Resources](/infrastructure-as-code/resource): what an Output actually
   flows into.
-- [Layers](/infrastructure-as-effects/layers) — hide resources and their
+- [Layers](/infrastructure-as-effects/layers): hide resources and their
   Outputs behind a service interface.

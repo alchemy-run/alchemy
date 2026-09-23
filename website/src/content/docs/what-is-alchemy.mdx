@@ -19,8 +19,8 @@ resources the way Terraform or Pulumi does. Infrastructure as Effects
 lets the code that runs on those resources live in the same program,
 as typed Effects and Layers.
 
-Here is the whole thing in one file. An R2 Bucket, and a Worker that
-serves files from it:
+This file is the whole application. It declares an R2 Bucket and a
+Worker that serves files from it:
 
 ```typescript
 // src/api.ts
@@ -48,10 +48,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-That one file is a complete application. The Bucket is declared next
-to the Worker that uses it, and `bucket` is a typed client the handler
-closes over. Let's start with Infrastructure as Code, then look at what
-Infrastructure as Effects adds on top.
+The Bucket is declared next to the Worker that uses it. `bucket` is a
+typed client the handler closes over. This page covers Infrastructure
+as Code first, then what Infrastructure as Effects adds on top.
 
 ## Infrastructure as Code
 
@@ -60,8 +59,8 @@ Terraform, Pulumi, CloudFormation, and the CDK.
 
 #### Stack
 
-A **Stack** is the unit you deploy, an Effect that yields resources
-and returns the outputs you want printed:
+A **Stack** is the unit you deploy. It is an Effect that yields
+resources and returns the outputs you want printed:
 
 ```typescript
 // alchemy.run.ts
@@ -87,8 +86,9 @@ bun alchemy deploy
 ```
 
 Alchemy creates the Bucket, bundles the Worker, wires the binding
-between them, and prints the URL. Every deploy targets a stage, an isolated environment with its own
-copy of every resource, so `dev` and `prod` never touch each other:
+between them, and prints the URL. Every deploy targets a stage. A
+stage is an isolated environment with its own copy of every resource,
+so `dev` and `prod` never touch each other:
 
 ```sh
 alchemy deploy              # dev_$USER by default
@@ -96,13 +96,14 @@ alchemy deploy --stage prod
 ```
 
 Alchemy reads the current state, diffs it against your program, shows
-the plan, and applies it in dependency order. Here is that loop for a
-Stack with a Bucket, a KV Namespace, and a Worker bound to both:
+the plan, and applies it in dependency order. The terminal below shows
+that loop for a Stack with a Bucket, a KV Namespace, and a Worker
+bound to both:
 
 <DeployTerminal client:visible />
 
 **State** is where the result persists between runs, so the next
-deploy only touches what changed — the `state` option above picks
+deploy only touches what changed. The `state` option above picks
 where it's stored.
 
 #### Resource
@@ -116,10 +117,10 @@ const bucket = yield* Cloudflare.R2.Bucket("Uploads");
 // bucket.bucketName is an Output
 ```
 
-Each Resource has a logical id, `"Uploads"` here, that Alchemy uses to
-track it across deploys. Its outputs are typed values you can pass
-into other Resources. Here the physical bucket name Alchemy generated
-becomes an environment variable on a Worker:
+Each Resource has a logical id (`"Uploads"` here). Alchemy uses it to
+track the Resource across deploys. Its outputs are typed values you
+can pass into other Resources. Here the physical bucket name Alchemy
+generated becomes an environment variable on a Worker:
 
 ```typescript
 const bucket = yield* Cloudflare.R2.Bucket("Uploads");
@@ -132,9 +133,9 @@ yield* Cloudflare.Worker("Api", {
 
 #### Provider
 
-A **Provider** teaches Alchemy how to read, diff, create, update, and
+A **Provider** tells Alchemy how to read, diff, create, update, and
 delete one resource type. Each cloud ships its providers as an Effect
-Layer, and a Stack takes as many as it needs:
+Layer. A Stack takes as many as it needs:
 
 ```typescript
 providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
@@ -149,11 +150,10 @@ to write your own.
 
 ## A superset of Infrastructure as Code
 
-With only Infrastructure as Code, Alchemy looks like and functions like any other
-IaC tool. One file
-declares the Bucket and the Worker, passing the Bucket on the Worker's
-`env`. Another file is the handler, reaching for the Bucket through
-that env:
+With only Infrastructure as Code, Alchemy looks and works like any
+other IaC tool. One file declares the Bucket and the Worker and passes
+the Bucket on the Worker's `env`. A second file is the handler. It
+reads the Bucket from that env:
 
 ```typescript
 // alchemy.run.ts
@@ -183,12 +183,11 @@ export default {
 };
 ```
 
-This works, and it is fully supported. `InferEnv` even types the env
-from the declaration, which is more than most IaC tools give you. But
-the two files are still held together by the name `Uploads`, and the
-handler knows nothing about how the Bucket got there. Infrastructure
-as Effects is what turns those two files into the one at the top of
-this page.
+This works and is supported. `InferEnv` types the env from the
+declaration, which most IaC tools do not do. The two files are still
+held together by the name `Uploads`, and the handler knows nothing
+about how the Bucket got there. Infrastructure as Effects turns those
+two files into the one at the top of this page.
 
 :::tip
 Alchemy also supports circular references in the
@@ -218,10 +217,10 @@ Effect.gen(function* () {
 });
 ```
 
-The outer Effect runs both at deploy time and at cold start; what it
+The outer Effect runs at deploy time and at cold start. What it
 returns runs per request. A Worker returns `fetch`, a Durable Object
-returns its RPC methods, a Workflow returns its run function, and
-every Runtime in Alchemy is a variation on that one shape.
+returns its RPC methods, and a Workflow returns its run function.
+Every Runtime in Alchemy is a variation on that one shape.
 
 #### Binding
 
@@ -232,8 +231,8 @@ const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 // bucket.get / bucket.put / bucket.list, typed end to end
 ```
 
-It hands back a typed client and generates whatever that client needs
-to work. On Cloudflare that is a native Worker binding. On AWS it is
+It returns a typed client and generates what that client needs to
+work. On Cloudflare that is a native Worker binding. On AWS it is
 an IAM statement scoped to one resource, plus the resource's name in
 the Function's environment:
 
@@ -243,14 +242,14 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 // → Jobs_tableName=Jobs-a1b2c3
 ```
 
-There is no `env.Uploads` to reach for and no hand-written policy. The
+You don't reach for `env.Uploads` or write a policy by hand. The
 binding is the SDK.
 
 #### Layers
 
-Every Binding is a contract paired with a **Layer** that fulfills it:
-the handler is written against the contract, and the Layer decides
-how — swap the Layer and the handler doesn't change:
+Every Binding is a contract paired with a **Layer** that fulfills it.
+You write the handler against the contract, and the Layer decides how.
+Swap the Layer and the handler doesn't change:
 
 ```diff lang="typescript"
  Effect.gen(function* () {
@@ -274,7 +273,7 @@ export const JobServiceKV = Layer.effect(
 );
 ```
 
-Business logic is implemented against the `JobService` contract. The
+You write business logic against the `JobService` contract. The
 Layer decides the infrastructure behind it, so swapping KV for
 DynamoDB is one line:
 
@@ -286,13 +285,13 @@ DynamoDB is one line:
 +}).pipe(Effect.provide(JobServiceDynamo)); // now a DynamoDB Table instead
 ```
 
-The Infrastructure as Effects section goes deeper from here:
+The Infrastructure as Effects section goes deeper from here.
 [Event Sources](/infrastructure-as-effects/event-sources) and
 [Sinks](/infrastructure-as-effects/sinks) turn resources into Effect
-`Stream`s, [Phases](/infrastructure-as-effects/phases) pins down
-exactly what runs when,
+`Stream`s. [Phases](/infrastructure-as-effects/phases) pins down
+exactly what runs when.
 [Circular Bindings](/infrastructure-as-effects/circular-bindings)
-lets two Workers call each other, and
+lets two Workers call each other.
 [Telemetry](/infrastructure-as-effects/telemetry) exports every
 request's traces and logs.
 

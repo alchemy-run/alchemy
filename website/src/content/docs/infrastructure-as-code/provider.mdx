@@ -1,13 +1,13 @@
 ---
 title: Providers
-description: Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
+description: Providers implement the lifecycle operations for a resource type, such as reconcile, delete, diff, and read.
 ---
 
 A **Provider** implements the lifecycle operations for a resource
 type. When you `yield*` a resource inside a Stack, alchemy looks up
-the provider for that resource's type and calls the appropriate
-lifecycle method. This is what gives meaning to a
-[Resource](/infrastructure-as-code/resource) declaration — the engine plans, the
+the provider for that resource's type and calls the matching
+lifecycle method. The provider gives meaning to a
+[Resource](/infrastructure-as-code/resource) declaration. The engine plans and the
 provider acts.
 
 ## Provider layers
@@ -26,13 +26,13 @@ Alchemy.Stack(
 );
 ```
 
-The type system enforces this — using a Cloudflare resource without
+The type system enforces this. Using a Cloudflare resource without
 `Cloudflare.providers()` raises a compile-time error.
 
 ## Multiple providers
 
-A stack can use any number of providers. Because providers are
-Layers, combining them is just `Layer.mergeAll`:
+A stack can use any number of providers. Providers are Layers, so
+you combine them with `Layer.mergeAll`:
 
 ```typescript
 import * as Layer from "effect/Layer";
@@ -49,7 +49,7 @@ Alchemy.Stack(
 );
 ```
 
-This works for as many providers as you need — built-in ones
+This works for as many providers as you need. Built-in providers
 (`Cloudflare`, `AWS`, `Neon`, `Planetscale`, `Docker`, …) and
 [custom providers](/infrastructure-as-code/custom-provider) merge
 the same way:
@@ -63,22 +63,23 @@ providers: Layer.mergeAll(
 ),
 ```
 
-The type system tracks the requirements per resource: each resource
-you `yield*` demands its own provider from the merged layer, so a
-missing provider is a compile-time error, never a deploy-time
-surprise.
+The type system tracks requirements per resource. Each resource you
+`yield*` requires its own provider from the merged layer. A missing
+provider is a compile-time error, so it never surprises you at
+deploy time.
 
 ## Lifecycle operations
 
-A provider is an object implementing some subset of these operations.
-`reconcile` and `delete` are required; the rest are optional hooks
-alchemy uses for richer behavior.
+A provider is an object that implements some subset of these
+operations. `reconcile` and `delete` are required. The rest are
+optional hooks that alchemy uses for richer behavior.
 
 ### `reconcile`
 
-Required. Called for every "make it so" intent — first-time
-provisioning, routine updates, and adoption takeovers. Returns the
-**output attributes** that downstream resources can reference.
+Required. Alchemy calls it for every "make it so" intent. That
+covers first-time provisioning, routine updates, and adoption
+takeovers. It returns the **output attributes** that downstream
+resources can reference.
 
 A reconciler is a single observe → ensure → sync → return flow:
 
@@ -98,28 +99,29 @@ The provider receives `output: Attributes | undefined` and
 
 | `output`    | `olds`      | Meaning                              |
 | ----------- | ----------- | ------------------------------------ |
-| `undefined` | `undefined` | Greenfield — no prior resource       |
+| `undefined` | `undefined` | Greenfield: no prior resource        |
 | defined     | defined     | Routine update                       |
-| defined     | `undefined` | Adoption — engine adopted via `read` |
+| defined     | `undefined` | Adoption: engine adopted via `read`  |
 
 The reconciler must work for all three combinations. **Do not
-branch the body on `output === undefined`** — that just renames the
-old `create`/`update` split. Trust observed cloud state, not `olds`.
+branch the body on `output === undefined`**. That only renames the
+old `create`/`update` split. Trust observed cloud state over `olds`.
 
-`reconcile` must be **idempotent**: alchemy may retry it after a
-state persistence failure. Deterministic physical names plus the
-observe step ensure a retry finds the existing resource and re-syncs
-any drifted fields.
+`reconcile` must be **idempotent**, because alchemy may retry it
+after a state persistence failure. With deterministic physical names
+and the observe step, a retry finds the existing resource and
+re-syncs any drifted fields.
 
-For a real reconciler built up step by step — observe, ensure,
-sync, return, against the Stripe API — see the
-[custom provider guide](/infrastructure-as-code/custom-provider#implement-reconcile).
+The [custom provider guide](/infrastructure-as-code/custom-provider#implement-reconcile)
+builds a real reconciler against the Stripe API step by step:
+observe, ensure, sync, return.
 
 ### `delete`
 
-Required. Called when a resource is removed from code, replaced, or
-when running `alchemy destroy`. Like `reconcile`, must be **idempotent**
-— treat "already deleted" as success.
+Required. Alchemy calls it when a resource is removed from code,
+when it is replaced, or when you run `alchemy destroy`. Like
+`reconcile`, it must be **idempotent**. Treat "already deleted" as
+success.
 
 ```typescript
 delete: ({ output }) =>
@@ -128,9 +130,9 @@ delete: ({ output }) =>
 
 ### `diff`
 
-Optional. Called during planning to decide what kind of change is
-needed when properties differ. Returns a tagged `Diff` describing
-the action:
+Optional. Alchemy calls it during planning to decide what kind of
+change is needed when properties differ. It returns a tagged `Diff`
+that describes the action:
 
 ```typescript
 diff: Effect.fn(function* ({ news, olds }) {
@@ -146,32 +148,32 @@ diff: Effect.fn(function* ({ news, olds }) {
 
 The shape is one of:
 
-- **`{ action: "noop" }`** — properties differ trivially; don't
+- **`{ action: "noop" }`**: the properties differ trivially. Don't
   call `update`.
-- **`{ action: "update", stables?: [...] }`** — apply an in-place
+- **`{ action: "update", stables?: [...] }`**: apply an in-place
   update. `stables` lists props that are guaranteed not to change
   during this update.
-- **`{ action: "replace", deleteFirst?: boolean }`** — destroy and
+- **`{ action: "replace", deleteFirst?: boolean }`**: destroy and
   recreate (see [Resource Lifecycle › Replace](/infrastructure-as-code/resource-lifecycle#replace)).
   Set `deleteFirst: true` for resources that can't coexist with
   their replacement (e.g. unique-name constraints).
-- **`void` / `undefined`** — fall back to the default behavior
-  (treat the change as an `update`).
+- **`void` / `undefined`**: fall back to the default behavior,
+  which treats the change as an `update`.
 
 A provider can also declare top-level `stables` for attributes that
 are immutable across all updates (e.g. ARNs, resource IDs).
 
-For comparing nested objects, use the `deepEqual` and
-`anyPropsAreDifferent` helpers from `alchemy/Diff`. If any input
-might still be unresolved when `diff` runs (an unresolved `Output`),
-guard with `isResolved` first and return `undefined` to let the
-default path handle it.
+To compare nested objects, use the `deepEqual` and
+`anyPropsAreDifferent` helpers from `alchemy/Diff`. An input might
+still be an unresolved `Output` when `diff` runs. In that case,
+guard with `isResolved` first and return `undefined` so the default
+path handles it.
 
 ### `read`
 
-Optional. The engine consults `read` whenever a resource has no prior
-state — both for **state recovery** (state lost between create and
-persist) and for **adoption** (a fresh state store deploying against
+Optional. The engine calls `read` whenever a resource has no prior
+state. This covers **state recovery** (state lost between create and
+persist) and **adoption** (a fresh state store deploying against
 existing cloud infrastructure). It is the single source of truth for
 "does this resource exist, and is it ours?".
 
@@ -189,20 +191,20 @@ read: Effect.fn(function* ({ id, olds, output }) {
 
 `read` returns one of three values:
 
-- **`undefined`** — the resource doesn't exist. The engine will
-  drive a normal `create`.
-- **plain attributes** — the resource exists and we own it.
-  The engine silently adopts: it persists the attributes as the
+- **`undefined`**: the resource doesn't exist. The engine drives a
+  normal `create`.
+- **plain attributes**: the resource exists and we own it. The
+  engine adopts it silently. It persists the attributes as the
   initial `created` state and lets ordinary `diff` decide whether
   the next deploy is a noop or update.
-- **`Unowned(attributes)`** — the resource exists but we *don't*
+- **`Unowned(attributes)`**: the resource exists but we don't
   own it. By default the engine fails with `OwnedBySomeoneElse`
   so you don't accidentally clobber a production resource.
   Re-running with `--adopt` (or scoping the effect with
-  `adopt(true)`) unlocks a takeover.
+  `adopt(true)`) allows a takeover.
 
-`Unowned` is a brand from `alchemy/AdoptPolicy` — there's no wrapper
-to unwrap, just a hidden symbol on the attributes object:
+`Unowned` is a brand from `alchemy/AdoptPolicy`. It is a hidden
+symbol on the attributes object, so there is no wrapper to unwrap:
 
 ```typescript
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -218,39 +220,39 @@ read: Effect.fn(function* ({ id, olds }) {
 **Inputs.** `read` may be called for an existence/adoption probe with
 `output: undefined` (no prior state). Resources whose live lookup
 requires a previously-persisted ID (e.g. `output.productId`) should
-return `undefined` in that case — they have no way to find the
-resource without it.
+return `undefined` in that case. They cannot find the resource
+without it.
 
 **Ownership detection.** Resources with no notion of ownership (e.g.
-"the cloud API just gives us a single global object by name") should
+"the cloud API gives us a single global object by name") should
 always return plain attributes. The engine treats them as owned and
-silent adoption is the default, so `--adopt` is unnecessary.
+adopts them silently by default, so `--adopt` is unnecessary.
 Resources with tag-based or naming-based ownership (most cloud
 resources) should brand foreign-owned attributes with `Unowned`.
 
 > **Lifecycle methods don't gate on ownership.** Once `read` clears a
 > resource for write, `reconcile` can assume it's safe to proceed.
-> Don't repeat the ownership check inside `reconcile` — that just
-> hides the policy decision from the engine.
+> Don't repeat the ownership check inside `reconcile`. That hides
+> the policy decision from the engine.
 
 ### `precreate`
 
 Optional. Reserves a physical name (or stub resource) before
-`create` runs. This is what enables [circular
-bindings](/infrastructure-as-effects/circular-bindings) — Worker A can know Worker B's
+`create` runs. This enables [circular
+bindings](/infrastructure-as-effects/circular-bindings). Worker A can know Worker B's
 URL before either is fully created.
 
 ### `list`
 
 Enumerates every existing resource of this type in the ambient
-scope (account, region, or zone), returning the same `Attributes`
-shape `read` produces — so each item is directly usable with
+scope (account, region, or zone). It returns the same `Attributes`
+shape that `read` produces, so you can pass each item directly to
 `delete`. This powers account-wide operations like
-[`alchemy unsafe nuke`](/cli/nuke). It must paginate exhaustively;
-resources with no enumeration API (singletons, existence-only
+[`alchemy unsafe nuke`](/cli/nuke). It must paginate exhaustively.
+Resources with no enumeration API (singletons, existence-only
 resources) return an empty array. Providers can opt out of nuke
 with `nuke.singleton` (delete only resets always-present config)
-or `nuke.skip` (the resource can never actually be deleted).
+or `nuke.skip` (the resource can never be deleted).
 
 ### `tail` / `logs`
 
@@ -263,12 +265,12 @@ Optional. Powers `alchemy logs --tail` (live log streaming) and
 Alchemy combines every provider's lifecycle operations into a single
 **plan**, then **applies** it.
 
-- **Plan** — for each declared resource, alchemy compares the
-  desired props against persisted state and uses `diff` to decide
-  whether it's a `create`, `update`, `replace`, or `noop`. Anything
-  in state but no longer declared is marked for `delete`.
-- **Apply** — alchemy walks the plan in dependency order and calls
-  the matching lifecycle operation on each provider, surfacing the
+- **Plan**: for each declared resource, alchemy compares the
+  desired props against persisted state. It uses `diff` to decide
+  whether the change is a `create`, `update`, `replace`, or `noop`.
+  Anything in state that is no longer declared is marked for `delete`.
+- **Apply**: alchemy walks the plan in dependency order and calls
+  the matching lifecycle operation on each provider. It surfaces the
   results as `Output`s for downstream resources.
 
 See [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) for how a
@@ -276,17 +278,17 @@ resource moves through these phases over time.
 
 ## Authoring a custom provider
 
-Providers are just Layers, so adding a new cloud or third-party API
-is "declare a [Resource type](/infrastructure-as-code/resource), implement a
-Layer" — and merge it alongside `Cloudflare.providers()` or
+Providers are Layers. To add a new cloud or third-party API, declare
+a [Resource type](/infrastructure-as-code/resource) and implement a
+Layer. Then merge it alongside `Cloudflare.providers()` or
 `AWS.providers()`. The [custom provider guide](/infrastructure-as-code/custom-provider)
 builds a Stripe `Product` provider end-to-end.
 
 ## Where next
 
-- [Custom Provider](/infrastructure-as-code/custom-provider) — step-by-step
+- [Custom Provider](/infrastructure-as-code/custom-provider): a step-by-step
   walkthrough of a Stripe `Product` provider.
-- [Actions](/infrastructure-as-code/action) — deploy-time work that isn't a
+- [Actions](/infrastructure-as-code/action): deploy-time work that isn't a
   resource.
-- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) — when each
+- [Resource lifecycle](/infrastructure-as-code/resource-lifecycle): when each
   operation fires.
