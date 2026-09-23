@@ -42,7 +42,7 @@ const greeting = yield* target.greet("world");
 
 `yield* target.greet("world")` is an ordinary Effect call. The return type is
 inferred from the class, and serialization is automatic. The same model holds
-wherever Alchemy ships a binder for the pairing: a Durable Object bound into a
+wherever Alchemy ships a binder for the pairing, such as a Durable Object bound into a
 Worker, a Container called from a Durable Object, a MicroVM called from a
 Lambda Function, a Railway Service called from another.
 [Schemaless RPC](/apis/schemaless#the-typed-client) lists the binders.

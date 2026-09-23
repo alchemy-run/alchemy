@@ -85,9 +85,9 @@ you from feeding the wrong shape in:
 
 Every policy is scoped to the exact resource ARN.
 
-`QueueSink` takes a `QueueSinkEntry`: an SQS `SendMessageBatchRequestEntry`
+`QueueSink` takes a `QueueSinkEntry`, which is an SQS `SendMessageBatchRequestEntry`
 without its `Id`, so you set `MessageBody`, `MessageGroupId`, message
-attributes, and so on. `TopicSink` takes a `TopicSinkEntry`: an SNS
+attributes, and so on. `TopicSink` takes a `TopicSinkEntry`, which is an SNS
 `PublishBatchRequestEntry` without its `Id`, so you set `Message`,
 `Subject`, and so on. The sink assigns each batch entry's `Id` itself.
 `StreamSink` takes raw `PutRecordsRequestEntry` values, so you keep
@@ -142,8 +142,8 @@ checks the per-entry results:
   Kinesis treats every failed record (throughput exceeded or internal
   failure) as transient.
 - Permanent rejections are dropped with a warning log. Only
-  `SQS.QueueSink` and `SNS.TopicSink` drop entries: those that come back
-  with `SenderFault: true`.
+  `SQS.QueueSink` and `SNS.TopicSink` drop entries, and only those that
+  come back with `SenderFault: true`.
 - The sink resends up to five times, with exponential backoff starting
   at 200 ms. If entries are still failing after that, it fails with a
   `BatchRetryExhaustedError` whose `entries` field holds them.

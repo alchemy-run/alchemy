@@ -215,7 +215,7 @@ Actions live in the same FQN namespace as Resources. They can:
 - Take Resource outputs as input (`{ table: bucket.name }`)
 - Capture a Resource Output in the constructor (`yield* bucket.name`). See
   [Reading a resource's Outputs](#reading-a-resources-outputs)
-- Be referenced by Resources: pass the value returned by
+- Be referenced by Resources. Pass the value returned by
   `yield* MyAction(...)` (an `Output<Out>`) or a property of it
   (`rows.rows`) as a resource prop. The resource waits for the action
   before reconciling

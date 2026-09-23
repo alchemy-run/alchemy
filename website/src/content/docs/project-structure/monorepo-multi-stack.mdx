@@ -134,8 +134,8 @@ frontend reads the `sam` backend, and `pr-42` reads `pr-42`.
 The frontend reads the backend's outputs through its own `state` layer, so
 both Stacks must use the same state store. The example uses
 `Cloudflare.state()` on both sides. `Alchemy.localState()` does not work
-here: it writes state to `.alchemy/state` in the directory you run `alchemy`
-from. Running `alchemy` from each package directory gives each package its
+here because it writes state to `.alchemy/state` in the directory you run
+`alchemy` from. Running `alchemy` from each package directory gives each package its
 own store, and the frontend's plan fails with `InvalidReferenceError`. See [State Store](/state-store).
 :::
 
@@ -155,7 +155,7 @@ cd frontend && alchemy deploy --stage sam
 
 The backend must be deployed to the stage first. Otherwise the frontend's
 plan fails with `InvalidReferenceError` because there are no persisted
-outputs to read. Destroy in reverse order: frontend first, then backend.
+outputs to read. Destroy in reverse order, frontend first and then backend.
 
 Because you run `alchemy` from each package directory, relative paths
 (`main`, `rootDir`) resolve against that package. If you instead run from

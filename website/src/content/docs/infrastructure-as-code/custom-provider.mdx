@@ -172,11 +172,11 @@ actual state to the desired state (`news`). It runs on every apply, so
 one body must handle three situations. The values of `output` and
 `olds` tell them apart:
 
-| `output`    | `olds`      | Situation                                    |
-| ----------- | ----------- | -------------------------------------------- |
-| `undefined` | `undefined` | Greenfield: nothing exists yet               |
-| defined     | defined     | Routine update                               |
-| defined     | `undefined` | Adoption: the engine imported it via `read`  |
+| `output`    | `olds`      | Situation                                          |
+| ----------- | ----------- | -------------------------------------------------- |
+| `undefined` | `undefined` | Greenfield, where nothing exists yet               |
+| defined     | defined     | Routine update                                     |
+| defined     | `undefined` | Adoption, where the engine imported it via `read`  |
 
 Every reconciler follows the same shape:
 

@@ -187,8 +187,8 @@ deploy.
 A few things to know before writing them:
 
 - **Use `encodeState` when writing** and a reviver when reading, all
-  from `alchemy/State`. They preserve values plain JSON would lose:
-  Effect `Redacted` values, `Duration`s and `Date`s. A `Redacted`
+  from `alchemy/State`. They preserve values plain JSON would lose,
+  such as Effect `Redacted` values, `Duration`s and `Date`s. A `Redacted`
   value is written in plaintext inside a `__redacted__` marker, so
   protect the store itself. When you read a JSON string, pass
   `reviveState` to `JSON.parse`. When your driver returns

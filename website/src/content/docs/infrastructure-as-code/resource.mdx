@@ -66,12 +66,12 @@ const siteAssets = yield* Cloudflare.R2.Bucket("Assets").pipe(
 
 Both buckets use the logical ID `"Assets"`, but their FQNs differ,
 so they are two separate resources. Logical IDs only need to be
-unique within a namespace. Namespaces nest: a resource inside
+unique within a namespace. Namespaces nest, so a resource inside
 `Namespace.push("Api")` inside `Namespace.push("Site")` has the FQN
 `"Site/Api/<id>"`.
 
 FQNs matter wherever you name a resource from outside its
-declaration: [references](/infrastructure-as-code/references),
+declaration, such as [references](/infrastructure-as-code/references),
 [renames](/infrastructure-as-code/renaming), and the
 [state store](/state-store).
 

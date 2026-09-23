@@ -4,7 +4,7 @@ description: A Runtime is a Resource that carries the code it runs. It can be a 
 ---
 
 In Alchemy, a **Runtime** is a [Resource](/infrastructure-as-code/resource)
-that carries the code it runs: a Cloudflare Worker, Lambda Function,
+that carries the code it runs, such as a Cloudflare Worker, Lambda Function,
 ECS Task, Container, or Server. The props are the cloud configuration.
 The Effect is the code. This page takes apart the running example from
 [What is Alchemy?](/what-is-alchemy):
@@ -158,8 +158,8 @@ yield* kv.get("session-id");
 ```
 
 A Cloudflare R2 binding and an AWS S3 binding look the same from here.
-What differs is what they generate at deploy time: a native Worker
-binding on one, an IAM statement and an environment variable on the
+What differs is what they generate at deploy time, which is a native Worker
+binding on one and an IAM statement and an environment variable on the
 other. See [Bindings](/infrastructure-as-effects/binding) for how they
 work.
 
@@ -325,8 +325,8 @@ handler code.
 
 ## Instance scope vs request scope
 
-The constructor runs once per instance: a Worker isolate, a Lambda
-sandbox, a server process. Each event runs the handler in a fresh
+The constructor runs once per instance, such as a Worker isolate, a Lambda
+sandbox, or a server process. Each event runs the handler in a fresh
 `Scope`:
 
 ```typescript
@@ -406,8 +406,8 @@ instance-level cleanup.
 ## Where next
 
 - [Bindings](/infrastructure-as-effects/binding): what
-  `yield* ReadWriteBucket(Uploads)` generates: IAM, env injection, a
-  typed client.
+  `yield* ReadWriteBucket(Uploads)` generates, including IAM, env
+  injection, and a typed client.
 - [APIs](/apis): how bound resources call the methods you return.
 - [Phases](/infrastructure-as-effects/phases): when the constructor
   runs vs the interface it returns, and why.

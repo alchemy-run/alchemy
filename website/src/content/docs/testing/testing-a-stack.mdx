@@ -149,7 +149,7 @@ test(
 );
 ```
 
-`Test.rpcClientLayer(url)` is an HTTP transport for the RPC client, using ndjson serialization by default. A plain RPC transport never checks the response's content type. On a fresh `workers.dev` URL it would decode Cloudflare's HTML placeholder page, which is served with status 200, and fail with an opaque `RpcClientDefect`. The layer rejects any response with the wrong content type and retries the request through the cold-start window: 5 retries by default, backing off exponentially from 500ms with a 3s cap.
+`Test.rpcClientLayer(url)` is an HTTP transport for the RPC client, using ndjson serialization by default. A plain RPC transport never checks the response's content type. On a fresh `workers.dev` URL it would decode Cloudflare's HTML placeholder page, which is served with status 200, and fail with an opaque `RpcClientDefect`. The layer rejects any response with the wrong content type and retries the request through the cold-start window. It makes 5 retries by default, backing off exponentially from 500ms with a 3s cap.
 
 Pass `{ times, schedule }` to tune the retry, `serialization` to use another RPC serialization, or `{ guard: false }` to turn the guard off and assert on raw edge behavior. For other protocol clients that need the same guard, `Test.guardedFetchLayer(contentType)` provides a guarded fetch-backed `HttpClient`.
 

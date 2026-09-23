@@ -112,7 +112,7 @@ const greeting = yield* target.greet(name); // typed from Greeter's Shape
 
 Lambda → Lambda and ECS Tasks have no schemaless stub. Use the `AWS.Lambda.InvokeFunction` binding or [Effect RPC](/apis/effect-rpc) there. The hub pages show full callers per pairing.
 
-The model is the same for every binder: the stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
+The model is the same for every binder. The stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
 
 ## How a call travels
 
@@ -190,7 +190,7 @@ Neither the stub nor the server does any runtime validation. This is deliberate,
 
 ## Where next
 
-- [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc): every Cloudflare pairing: Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
+- [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc): every Cloudflare pairing, including Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
 - [Schemaless RPC on AWS](/aws/apis/schemaless-rpc): Lambda → MicroVM, plus what AWS does not yet have a schemaless stub for.
 - [Schemaless RPC on Railway](/railway/compute/services#schemaless-rpc): Service and Function stubs over the private mesh.
 - [Effect RPC](/apis/effect-rpc): schema-validated RPC for trust boundaries.

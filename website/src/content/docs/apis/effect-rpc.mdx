@@ -9,7 +9,7 @@ Effect RPC is schema-first. Every procedure declares `payload`,
 `success`, and `error` Schemas, and every request and response is
 validated against them. Use it when data crosses a **trust
 boundary**, such as a web app or an external service calling into
-your stack. That validation has a per-request price: a frame parse,
+your stack. That validation has a per-request price that includes a frame parse,
 a Schema decode of the payload, and a Schema encode of the result,
 mirrored on the client. Because of that cost, it is discouraged for
 internal service-to-service calls. [Schemaless RPC](/apis/schemaless)
@@ -126,8 +126,8 @@ server, so it is safe inside a host's Construction phase, which also
 executes at plan time ([Phases](/infrastructure-as-effects/phases)).
 Each handler receives the decoded payload and returns an `Effect`
 that succeeds or fails with the declared schemas. The storage-backed
-bodies live on the hub pages: R2 in
-[Effect RPC on Workers](/cloudflare/apis/effect-rpc), DynamoDB in
+bodies live on the hub pages, with R2 in
+[Effect RPC on Workers](/cloudflare/apis/effect-rpc) and DynamoDB in
 [Effect RPC on Lambda](/aws/apis/effect-rpc).
 
 ## Serve it
@@ -174,7 +174,7 @@ deploy live on [Workers](/cloudflare/apis/effect-rpc) and
 
 ## A typed client
 
-A client is the schema combined with a **Fetcher**: a plain URL for
+A client is the schema combined with a **Fetcher**, which is a plain URL for
 external consumers, or a platform Binding when the caller lives in
 the same account (see the Workers page). Here is the URL form:
 
@@ -209,7 +209,7 @@ Effect.runPromise(
 ```
 
 `RpcClient.make(TaskRpcs)` derives the whole client from the same
-group value with no codegen. Errors are typed: `client.getTask`
+group value with no codegen. Errors are typed. For example, `client.getTask`
 returns `Effect<Task, TaskNotFound | RpcClientError>`. `RpcClientError`
 covers transport and protocol failures, and `TaskNotFound` is your
 declared error. The client runs inside
@@ -218,10 +218,10 @@ declared error. The client runs inside
 ## Where next
 
 - [Effect RPC on Workers](/cloudflare/apis/effect-rpc): full Worker
-  wiring: R2-backed handlers, streaming rpcs, the `RpcWorker` and
+  wiring, including R2-backed handlers, streaming rpcs, the `RpcWorker` and
   `RpcDurableObject` sugar, typed in-account bindings, the DO bridge.
-- [Effect RPC on Lambda](/aws/apis/effect-rpc): full Lambda wiring:
-  DynamoDB bindings, IAM, Function URL, deploy.
+- [Effect RPC on Lambda](/aws/apis/effect-rpc): full Lambda wiring,
+  including DynamoDB bindings, IAM, Function URL, deploy.
 - [Effect HTTP](/apis/effect-http): the same trust boundary as real
   REST endpoints, for non-Effect consumers.
 - [Schemaless RPC](/apis/schemaless): the default for internal

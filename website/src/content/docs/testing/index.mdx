@@ -3,7 +3,7 @@ title: Testing
 description: How Alchemy tests work. They run on real clouds by default, use local emulators on demand, deploy one Stack per suite in an isolated stage, and follow deploy → assert → destroy.
 ---
 
-Alchemy tests run against real clouds by default and use no mocks. A suite deploys a real Stack once, runs assertions against live resources, and tears it back down: deploy → assert → destroy. The same suite can also run entirely on your machine. See [Local mode](#local-mode-dev-true) below.
+Alchemy tests run against real clouds by default and use no mocks. A suite deploys a real Stack once, runs assertions against live resources, and tears it back down, in the order deploy → assert → destroy. The same suite can also run entirely on your machine. See [Local mode](#local-mode-dev-true) below.
 
 ## One deploy per suite
 

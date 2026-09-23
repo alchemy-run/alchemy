@@ -93,7 +93,7 @@ Add `.alchemy/` to your `.gitignore`:
 echo ".alchemy/" >> .gitignore
 ```
 
-Each developer gets their own state through the default stage: `live_$USER` for `alchemy deploy`,
+Each developer gets their own state through the default stage, which is `live_$USER` for `alchemy deploy` and
 `dev_$USER` for `alchemy dev`. See [Stages](/environments/stages).
 
 ## Cloudflare state store
@@ -268,7 +268,7 @@ Pass exactly one of these connection options:
 - **`client`**: an existing `SqlClient` that you own, for example a
   `PgClient.make` pool from `@effect/sql-pg`. The store only runs
   queries on it. The client must hand out at least two concurrent
-  connections: one holds the lock and another verifies it. A
+  connections, because one holds the lock and another verifies it. A
   single-connection client is refused at the first lease check.
 
 Other options:
@@ -279,8 +279,8 @@ Other options:
 | `leaseCheckTtlMs` | `5000`       | How long, in milliseconds, a passing lock check is trusted before the next state operation checks again. |
 | `id`              | `"postgres"` | Store ID reported in telemetry. |
 
-On first use the store creates two tables if they don't exist:
-`alchemy_resource_state` for resource records and
+On first use the store creates two tables if they don't exist,
+named `alchemy_resource_state` for resource records and
 `alchemy_stack_output` for stack outputs. Nothing touches the database
 when the layer is built.
 

@@ -94,7 +94,7 @@ export interface Platform<
 | ---------------- | ------------------------------------------------------- | -------------------------------------------------------------- |
 | `Resource`       | `Task`                                                  | The Resource contract above                                     |
 | `Services`       | `Credentials \| Region \| ServerHost \| AWSEnvironment` | Services the runtime provides to the user's constructor Effect        |
-| `MainShape`      | `TaskShape`                                             | What the constructor Effect may return: `{ fetch?, run? }`     |
+| `MainShape`      | `TaskShape`                                             | What the constructor Effect may return, which is `{ fetch?, run? }` |
 | `RuntimeContext` | `TaskRuntimeContext extends HostRuntimeContext`         | The mutable context that collects handlers, env, and exports   |
 
 The value-level factory takes the type string and a
@@ -254,7 +254,7 @@ sync flow works for greenfield creates, updates, and adoption. Don't
 branch on `output === undefined`. See
 [Providers › reconcile](/infrastructure-as-code/provider#reconcile).
 
-`delete` tears down everything reconcile created: the task
+`delete` tears down everything reconcile created, including the task
 definition, ECR repository, log group, and IAM roles. It treats
 "already gone" as success.
 

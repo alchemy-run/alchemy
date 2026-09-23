@@ -19,8 +19,8 @@ resources the way Terraform or Pulumi does. Infrastructure as Effects
 lets the code that runs on those resources live in the same program,
 as typed Effects and Layers.
 
-This file holds the whole application: an R2 Bucket and a Worker that
-serves files from it. A small Stack file deploys it (below).
+This file holds the whole application, an R2 Bucket and a
+Worker that serves files from it. A small Stack file deploys it (below).
 
 ```typescript
 // src/api.ts
@@ -116,8 +116,8 @@ See [Stacks](/infrastructure-as-code/stack) and
 
 #### Resource
 
-A **Resource** is a cloud entity in a Stack managed by Alchemy: a
-bucket, a database, a queue, a Worker, a DNS record. Yield it in the
+A **Resource** is a cloud entity in a Stack managed by Alchemy, such
+as a bucket, a database, a queue, a Worker, or a DNS record. Yield it in the
 Stack to add it to the plan:
 
 ```typescript
@@ -209,13 +209,13 @@ dependency graph, which most IaC tools reject. See
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects adds two new concepts to Infrastructure as
-Code: Runtimes and Bindings.
+Infrastructure as Effects adds Runtimes and Bindings to
+Infrastructure as Code.
 
 #### Runtime
 
-A **Runtime** is a Resource that carries the code it runs: a Worker,
-Lambda Function, Container, or Server. That code is always written
+A **Runtime** is a Resource that carries the code it runs, such as a
+Worker, Lambda Function, Container, or Server. That code is always written
 the same way, as an **Effectful Constructor**. Bind what you need,
 then return what you expose:
 
@@ -300,7 +300,7 @@ Only the provided Layer changes:
 ```
 
 The inner `Layer.provide` supplies the binding implementation the
-service needs: the native KV binding, or DynamoDB over HTTP. A swap
+service needs, either the native KV binding or DynamoDB over HTTP. A swap
 works only when the host supports every binding in the Layer.
 `AWS.DynamoDB.GetItemHttp` grants IAM only to AWS hosts, so the
 DynamoDB variant can't back a Cloudflare Worker. See
@@ -323,12 +323,12 @@ request's traces and logs.
 
 <a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
   <strong>Runtime</strong>
-  <span>The Effectful Constructor in depth: the fetch and RPC interface, and the three ways to declare a Runtime.</span>
+  <span>The Effectful Constructor in depth, including the fetch and RPC interface and the three ways to declare a Runtime.</span>
 </a>
 
 <a href="/infrastructure-as-code/stack" class="next-card">
   <strong>Stacks</strong>
-  <span>The unit you deploy: its options, outputs, and multiple providers.</span>
+  <span>The unit you deploy, with its options, outputs, and multiple providers.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">
