@@ -236,7 +236,7 @@ export default defineConfig({
         {
           icon: "discord",
           label: "Discord",
-          href: "https://discord.gg/jwKw8dBJdN",
+          href: "/discord",
         },
       ],
       editLink: {
