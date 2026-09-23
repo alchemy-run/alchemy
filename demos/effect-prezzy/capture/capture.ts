@@ -159,28 +159,32 @@ const waitForPage = async (url: string) => {
   throw new Error(`${url} did not serve a page after 90s`);
 };
 
-/** Load `url` in a headless WebKit view sized like the video's browser viewport and screenshot it. */
-const capturePage = async (url: string, waitFor?: RegExp) => {
-  await waitForPage(url);
-  const view = new Bun.WebView({ ...BROWSER_VIEWPORT, backend: "webkit" });
-  try {
-    await view.navigate(url);
-    let text = "";
-    for (let attempt = 0; attempt < 120; attempt++) {
-      text = String(await view.evaluate("document.body ? document.body.innerText : ''"));
-      if (waitFor ? waitFor.test(text) : text.length > 0) break;
-      await Bun.sleep(250);
-    }
-    if (waitFor && !waitFor.test(text)) {
-      throw new Error(`${url} never showed ${waitFor}; page text: ${text.slice(0, 500)}`);
-    }
-    await Bun.sleep(600);
-    const title = String(await view.evaluate("document.title"));
-    const png = (await view.screenshot({ encoding: "buffer" })) as Uint8Array;
-    return { title, png };
-  } finally {
-    view.close();
+/** Wait until the page's text matches `waitFor` (or has any text), then let it settle. */
+const settlePage = async (view: Bun.WebView, url: string, waitFor?: RegExp) => {
+  let text = "";
+  for (let attempt = 0; attempt < 120; attempt++) {
+    text = String(await view.evaluate("document.body ? document.body.innerText : ''"));
+    if (waitFor ? waitFor.test(text) : text.length > 0) break;
+    await Bun.sleep(250);
   }
+  if (waitFor && !waitFor.test(text)) {
+    throw new Error(`${url} never showed ${waitFor}; page text: ${text.slice(0, 500)}`);
+  }
+  await Bun.sleep(600);
+};
+
+/** The element's box in page (CSS) pixels, which is also the video's viewport coordinates. */
+const boxOf = async (view: Bun.WebView, selector: string) => {
+  const json = String(
+    await view.evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return "";
+      const r = el.getBoundingClientRect();
+      return JSON.stringify({ x: r.x, y: r.y, width: r.width, height: r.height });
+    })()`),
+  );
+  if (!json) throw new Error(`no element matches ${selector}`);
+  return JSON.parse(json) as { x: number; y: number; width: number; height: number };
 };
 
 /** Window contents carried from scene to scene. */
@@ -202,6 +206,15 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
   let terminalBeats = 0;
   const openedTabs = new Set<Pane>(desk.terminalTabs ?? ["shell"]);
   let shots = 0;
+  /** One real browser tab per scene, driven like a user would. */
+  let view: Bun.WebView | undefined;
+  const shoot = async () => {
+    const title = String(await view!.evaluate("document.title"));
+    const png = (await view!.screenshot({ encoding: "buffer" })) as Uint8Array;
+    const screenshot = `${id}/browser-${++shots}.png`;
+    await Bun.write(path.join(captureRoot, screenshot), png);
+    return { title, screenshot };
+  };
 
   /** Edited text not yet on disk: intermediate edits never reach `alchemy dev`. */
   const pending = new Map<string, string>();
@@ -374,6 +387,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         },
         async diagram(opts) {
           await flush();
+          // The architecture comes from the state alchemy dev writes as it reloads.
+          if (openedTabs.has("dev")) await waitDev();
           const stateDir = path.join(dir, ".alchemy", "state", "Shorty");
           const deadline = Date.now() + 120_000;
           let graph: Graph;
@@ -402,19 +417,50 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         },
         browser: {
           async open(url, opts) {
-            const { title, png } = await capturePage(url, opts?.waitFor);
-            const screenshot = `${id}/browser-${++shots}.png`;
-            await Bun.write(path.join(captureRoot, screenshot), png);
-            browser = { url, title, screenshot };
-            beats.push({ kind: "browser", url, title, screenshot });
+            await flush();
+            // Let alchemy dev pick up the latest code before the page loads.
+            if (openedTabs.has("dev")) await waitDev();
+            await waitForPage(url);
+            view?.close();
+            view = new Bun.WebView({ ...BROWSER_VIEWPORT, backend: "webkit" });
+            await view.navigate(url);
+            await settlePage(view, url, opts?.waitFor);
+            const shot = await shoot();
+            browser = { url, ...shot };
+            beats.push({ kind: "browser", url, ...shot });
           },
           async update(opts) {
-            if (!browser) throw new Error("browser.update before browser.open");
-            const { title, png } = await capturePage(browser.url, opts.waitFor);
-            const screenshot = `${id}/browser-${++shots}.png`;
-            await Bun.write(path.join(captureRoot, screenshot), png);
-            browser = { ...browser, title, screenshot };
-            beats.push({ kind: "browser.update", title, screenshot });
+            if (!browser || !view) throw new Error("browser.update before browser.open");
+            await view.navigate(browser.url);
+            await settlePage(view, browser.url, opts.waitFor);
+            const shot = await shoot();
+            browser = { ...browser, ...shot };
+            beats.push({ kind: "browser.update", ...shot });
+          },
+          async fill(selector, text) {
+            if (!browser || !view) throw new Error("browser.fill before browser.open");
+            const target = await boxOf(view, selector);
+            // Set the value the way React sees user input.
+            await view.evaluate(`(() => {
+              const el = document.querySelector(${JSON.stringify(selector)});
+              el.focus();
+              const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set;
+              set.call(el, ${JSON.stringify(text)});
+              el.dispatchEvent(new Event("input", { bubbles: true }));
+            })()`);
+            await Bun.sleep(300);
+            const shot = await shoot();
+            browser = { ...browser, ...shot };
+            beats.push({ kind: "browser.action", action: "fill", target, ...shot });
+          },
+          async click(selector, opts) {
+            if (!browser || !view) throw new Error("browser.click before browser.open");
+            const target = await boxOf(view, selector);
+            await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+            await settlePage(view, browser.url, opts?.waitFor);
+            const shot = await shoot();
+            browser = { ...browser, ...shot };
+            beats.push({ kind: "browser.action", action: "click", target, ...shot });
           },
         },
         focus(app) {
@@ -425,7 +471,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         },
       };
 
-      await scene.run(context);
+      try {
+        await scene.run(context);
+      } finally {
+        view?.close();
+      }
       await flush();
 
       // The edits on screen must add up to the real, tested chapter.

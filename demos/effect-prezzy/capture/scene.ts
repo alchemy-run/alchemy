@@ -63,6 +63,10 @@ export interface SceneContext {
     open(url: string, opts?: { waitFor?: RegExp }): Promise<void>;
     /** Re-capture the open page once it shows `waitFor` (live updates). */
     update(opts: { waitFor: RegExp }): Promise<void>;
+    /** Type `text` into a field, as a user would (shown with the pointer). */
+    fill(selector: string, text: string): Promise<void>;
+    /** Click an element and wait for the page to show `waitFor`. */
+    click(selector: string, opts?: { waitFor?: RegExp }): Promise<void>;
   };
   /** Cmd-Tab to a window without doing anything in it. */
   focus(app: AppId): void;

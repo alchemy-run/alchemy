@@ -16,6 +16,16 @@ export default defineScene({
       ],
     });
 
+    s.step(
+      "Start alchemy dev",
+      "alchemy dev runs the whole stack locally and hot-reloads it on every save. It stays up in its own tab for the rest of the talk.",
+    );
+    await s.terminal(async (t) => {
+      await t.type("dev", "alchemy dev");
+      await t.waitDev();
+      await t.sleep(1000);
+    });
+
     // src/Link.ts: the domain.
     const link = await s.chapterLines("src/Link.ts");
     await s.editor.patch(
@@ -111,6 +121,9 @@ export default defineScene({
       ),
       "yield* Api adds the Worker to the Stack.",
     );
+    s.step("The Api joins the architecture", "alchemy dev reloaded: a second local Worker, next to the website.");
+    await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"] });
+    s.pause(0.5);
     await s.editor.patch(
       "alchemy.run.ts",
       "Output the API's URL",
@@ -123,33 +136,24 @@ export default defineScene({
       edit.after("      dev: { port: 5173 },\n", "      env: { VITE_API_URL: api.url.as<string>() },\n"),
       "api.url is an Output: a value known once the Worker exists. Alchemy orders the deploy so the website is built with it.",
     );
+    s.step(
+      "The website now depends on the Api",
+      "That one line is an edge in the architecture: Web references Api's URL through an Output. It's a reference, not a binding: no permissions are granted.",
+    );
+    await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"], edges: ["Web->Api"] });
+    s.pause(0.5);
 
     // The dashboard.
     await s.editor.show("web/src/client.ts", "A typed client, derived from ShortyApi");
     await s.editor.show("web/src/main.tsx", "The dashboard lists and creates links");
 
-    s.step("Start alchemy dev", "alchemy dev runs the whole stack locally and hot-reloads it on every save. It stays up for the rest of the talk.");
-    await s.terminal(async (t) => {
-      await t.type("dev", "alchemy dev");
-      await t.waitDev();
-      await t.sleep(1000);
-    });
+    s.step("Open the dashboard", "The dashboard served by alchemy dev, talking to the local Worker.");
+    await s.browser.open("http://localhost:5173", { waitFor: /No links yet/ });
+    s.pause(0.5);
 
-    s.step("Call the API");
-    await s.terminal(async (t) => {
-      await t.run(`curl --json '{"url":"https://effect.website"}' localhost:1337/links`);
-      await t.run("curl localhost:1337/links");
-    });
-
-    s.step("The dashboard, calling the Worker");
-    await s.browser.open("http://localhost:5173", { waitFor: /effect\.website/ });
-    s.pause(1);
-
-    s.step(
-      "The architecture so far",
-      "Two local Workers: Web knows Api's URL through an Output reference. No bindings yet.",
-    );
-    await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"], edges: ["Web->Api"] });
+    s.step("Shorten a link", "Create a link from the UI: the typed client calls create on the Worker.");
+    await s.browser.fill("form input", "https://effect.website");
+    await s.browser.click("form button", { waitFor: /effect\.website/ });
     s.pause(1);
   },
 });

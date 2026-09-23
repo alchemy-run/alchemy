@@ -78,6 +78,14 @@ export type Beat =
   | { kind: "diagram"; graph: Graph; addedNodes: string[]; addedEdges: string[] }
   /** Type `url` into the address bar and show the captured page. */
   | { kind: "browser"; url: string; title: string; screenshot: string }
+  /** The pointer moves to `target` (page pixels) and fills or clicks it; the page then shows `screenshot`. */
+  | {
+      kind: "browser.action";
+      action: "fill" | "click";
+      target: { x: number; y: number; width: number; height: number };
+      title: string;
+      screenshot: string;
+    }
   /** The open page changes in place (live updates). */
   | { kind: "browser.update"; title: string; screenshot: string }
   /** Hold on the current picture. */

@@ -17,6 +17,8 @@ export const TIMING = {
   diagramPerAdded: 10,
   diagramMax: 240,
   browserUpdate: 30,
+  /** Pointer glides to the element, clicks (or the text lands), the page updates, then a short hold. */
+  browserAction: { move: 16, act: 8, hold: 14 },
   /** Click the address bar, paste, press Enter. */
   urlPaste: 14,
   pageLoad: 18,
@@ -67,6 +69,7 @@ const appOf = (beat: Beat, current: AppId): AppId => {
     case "diagram":
       return "diagram";
     case "browser.update":
+    case "browser.action":
       return "browser";
     case "terminal":
       return "terminal";
@@ -117,6 +120,9 @@ export const schedule = async (
           TIMING.diagramMax,
           TIMING.diagram + TIMING.diagramPerAdded * (beat.addedNodes.length + beat.addedEdges.length),
         );
+        break;
+      case "browser.action":
+        work = TIMING.browserAction.move + TIMING.browserAction.act + TIMING.browserAction.hold;
         break;
       case "browser.update":
         work = TIMING.browserUpdate;

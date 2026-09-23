@@ -20,6 +20,10 @@ interface BrowserState {
   progress: number | undefined;
   /** Opacity of the page that just finished loading. */
   reveal: number;
+  /** The mouse pointer over the page (page pixels), if it has been used. */
+  pointer?: { x: number; y: number; pressed: number };
+  /** Field or button being acted on, highlighted briefly. */
+  focusRing?: { x: number; y: number; width: number; height: number; opacity: number };
 }
 
 const browserState = (
@@ -46,6 +50,38 @@ const browserState = (
       };
       continue;
     }
+    if (beat.kind === "browser.action" && state.page) {
+      const local = frame - segment.from - segment.switchFrames;
+      const { move, act } = TIMING.browserAction;
+      const target = { x: beat.target.x + beat.target.width / 2, y: beat.target.y + beat.target.height / 2 };
+      const from = state.pointer ?? { x: BROWSER_VIEWPORT.width * 0.62, y: BROWSER_VIEWPORT.height * 0.78 };
+      const t = interpolate(local, [0, move], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+      const ease = 1 - (1 - t) ** 3;
+      const acted = local >= move + act / 2;
+      state = {
+        ...state,
+        pointer: {
+          x: from.x + (target.x - from.x) * ease,
+          y: from.y + (target.y - from.y) * ease,
+          pressed:
+            beat.action === "click"
+              ? interpolate(local, [move, move + act / 2, move + act], [0, 1, 0], {
+                  extrapolateLeft: "clamp",
+                  extrapolateRight: "clamp",
+                })
+              : 0,
+        },
+        focusRing: {
+          ...beat.target,
+          opacity: interpolate(local, [move - 4, move, move + act + 10, move + act + 20], [0, 1, 1, 0], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          }),
+        },
+        page: acted ? { ...state.page, title: beat.title, screenshot: beat.screenshot } : state.page,
+      };
+      continue;
+    }
     if (beat.kind !== "browser") continue;
     const local = frame - segment.from - segment.switchFrames;
     const typingFrames = TIMING.urlPaste;
@@ -66,6 +102,7 @@ const browserState = (
         address: beat.url,
         focused: false,
         page: beat,
+        pointer: state.pointer,
         progress: undefined,
         reveal: interpolate(since, [0, 6], [0, 1], { extrapolateRight: "clamp" }),
       };
@@ -81,6 +118,35 @@ const Icon = ({ d }: { d: string }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c4c7c5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d={d} />
   </svg>
+);
+
+/** A macOS arrow pointer; `pressed` (0–1) shrinks it and shows a click ripple. */
+const Pointer = ({ x, y, pressed }: { x: number; y: number; pressed: number }) => (
+  <div style={{ position: "absolute", left: x, top: y, pointerEvents: "none" }}>
+    {pressed > 0 ? (
+      <div
+        style={{
+          position: "absolute",
+          left: -22,
+          top: -22,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          background: "rgba(163, 196, 115, 0.35)",
+          transform: `scale(${0.5 + pressed})`,
+          opacity: pressed,
+        }}
+      />
+    ) : null}
+    <svg
+      width="28"
+      height="34"
+      viewBox="0 0 28 34"
+      style={{ position: "absolute", left: -3, top: -2, transform: `scale(${1 - pressed * 0.12})`, filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}
+    >
+      <path d="M3 2 L3 26 L9.5 20 L14 31 L18.5 29 L14 18.5 L23 18.5 Z" fill="#111" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  </div>
 );
 
 export const Browser = ({
@@ -175,6 +241,21 @@ export const Browser = ({
             }}
           />
         ) : null}
+        {state.focusRing && state.focusRing.opacity > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              left: state.focusRing.x - 4,
+              top: state.focusRing.y - 4,
+              width: state.focusRing.width + 8,
+              height: state.focusRing.height + 8,
+              borderRadius: 16,
+              border: "3px solid rgba(163, 196, 115, 0.9)",
+              opacity: state.focusRing.opacity,
+            }}
+          />
+        ) : null}
+        {state.pointer ? <Pointer {...state.pointer} /> : null}
       </div>
     </Window>
   );
