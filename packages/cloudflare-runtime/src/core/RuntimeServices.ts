@@ -19,6 +19,7 @@ import {
   Workflows,
 } from "./bindings/index.ts";
 import * as Docker from "./Docker.ts";
+import * as Explorer from "./explorer/Explorer.ts";
 import {
   Globals,
   Internet,
@@ -116,10 +117,13 @@ export const layerProxy = () =>
   );
 
 export const layerRegistry = () =>
-  RegistryProxy.RegistryProxyLive.pipe(Layer.provide(Registry.RegistryLive));
+  RegistryProxy.RegistryProxyLive.pipe(
+    Layer.provideMerge(Registry.RegistryLive),
+  );
 
 export const layerRuntime = (config: RuntimeConfig) =>
   Runtime.RuntimeLive.pipe(
+    Layer.provide(Explorer.ExplorerLive),
     Layer.provideMerge(layerLocalBindings()),
     Layer.provideMerge(layerRemoteBindings(config.api)),
     Layer.provideMerge(WorkerProxy.WorkerProxyLive),

@@ -102,6 +102,15 @@ test.provider(
       expect(body.keys.sort()).toEqual(["key1", "key2"]);
       expect(body.afterDelete).toBeNull();
 
+      // Miniflare's Local Explorer is served by every local worker and lists
+      // the namespace bound as `KV`.
+      const explorer = (yield* getJsonReady(
+        `${deployed.worker.url}/cdn-cgi/explorer/api/storage/kv/namespaces`,
+      )) as { result: Array<{ id: string; title: string }> };
+      expect(explorer.result.map((namespace) => namespace.title)).toContain(
+        "KV",
+      );
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },

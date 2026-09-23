@@ -31,7 +31,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
+    "build": "tsdown && bun src/core/scripts/copy-explorer.ts && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",
@@ -65,6 +65,7 @@
     "heap-js": "catalog:cloudflare",
     "itty-time": "catalog:cloudflare",
     "mime": "catalog:cloudflare",
+    "miniflare": "catalog:workers",
     "mysql2": "catalog:cloudflare",
     "postal-mime": "catalog:cloudflare",
     "rolldown": "catalog:",
@@ -98,6 +99,7 @@
   },
   "imports": {
     "#cloudflare-runtime-core-worker/*": "./dist/core/workers/*.mjs",
+    "#cloudflare-runtime-explorer/*": "./dist/core/explorer/*",
     "#cloudflare-runtime-vite-worker/*": "./dist/vite/workers/*.mjs"
   },
   "exports": {

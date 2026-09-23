@@ -38,6 +38,10 @@ export class Registry extends Context.Service<
       subscribers: ReadonlyArray<Subscriber>,
     ) => Stream.Stream<ResolvedTargetMap>;
     /**
+     * Every live registry entry, across all local dev processes.
+     */
+    readonly list: Effect.Effect<ReadonlyArray<RegistryEntry>>;
+    /**
      * Writes an entry to the registry.
      * The entry is removed when the scope closes.
      */
@@ -135,6 +139,9 @@ export const RegistryLive = Layer.effect(
     ).pipe(Stream.runDrain, Effect.forkScoped);
 
     return Registry.of({
+      list: SubscriptionRef.get(ref).pipe(
+        Effect.map((registry) => Array.from(MutableHashMap.values(registry))),
+      ),
       read: (subscribers) =>
         SubscriptionRef.get(ref).pipe(
           Effect.map(pickSubscriberServices(subscribers)),

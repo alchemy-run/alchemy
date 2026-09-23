@@ -16,7 +16,11 @@ import {
   PATH_EMAIL,
   PATH_HANDLER_PREFIX,
 } from "./EmailOptions.shared.ts";
-import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
+import {
+  BINDING_EXPLORER,
+  BINDING_USER_WORKER_DIRECT,
+  PATH_EXPLORER,
+} from "./EntryOptions.shared.ts";
 import {
   PATH_SCHEDULED,
   PATH_SCHEDULED_LEGACY,
@@ -40,6 +44,8 @@ interface Env {
   // the built-in storage layers) — replies then fail with a clear error.
   [BINDING_EMAIL_DISK]?: Fetcher;
   [BINDING_EMAIL_DIRECTORY]?: string;
+  // Only bound when the worker enables the Local Explorer.
+  [BINDING_EXPLORER]?: Fetcher;
 }
 
 export interface EntryQueuePayload {
@@ -418,6 +424,30 @@ async function handleEmail(
   return new Response("Worker successfully processed email", { status: 200 });
 }
 
+const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * The explorer can read and write every local resource, so (like Miniflare's
+ * `validateCdnCgiRequest`) only serve it to requests whose `Host` and
+ * `Origin` name a loopback host — this defeats DNS-rebinding and cross-site
+ * requests from pages open in the developer's browser.
+ */
+function isLocalRequest(request: Request): boolean {
+  const isLocal = (url: string) => {
+    try {
+      return LOCALHOST_HOSTNAMES.has(new URL(url).hostname);
+    } catch {
+      return false;
+    }
+  };
+  const host = request.headers.get("Host");
+  const origin = request.headers.get("Origin");
+  return (
+    (host === null || isLocal(`http://${host}`)) &&
+    (origin === null || isLocal(origin))
+  );
+}
+
 export default <ExportedHandler<Env>>{
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -498,6 +528,23 @@ export default <ExportedHandler<Env>>{
           status: 500,
         });
       }
+    }
+    // Miniflare's Local Explorer UI + REST API.
+    const explorer = env[BINDING_EXPLORER];
+    if (
+      explorer &&
+      (url.pathname === PATH_EXPLORER ||
+        url.pathname.startsWith(`${PATH_EXPLORER}/`))
+    ) {
+      if (!isLocalRequest(request as unknown as Request)) {
+        return new Response(
+          "Forbidden: the Local Explorer is only served to localhost",
+          {
+            status: 403,
+          },
+        );
+      }
+      return await explorer.fetch(request);
     }
     // Unknown trigger-handler paths get a 404 pointing at the valid handlers
     // (mirrors Miniflare's entry worker; the queue route above is internal

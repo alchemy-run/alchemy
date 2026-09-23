@@ -26,7 +26,11 @@ import {
   BINDING_EMAIL_DISK,
   SERVICE_EMAIL_STORAGE,
 } from "./EmailOptions.shared.ts";
-import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
+import {
+  BINDING_EXPLORER,
+  BINDING_USER_WORKER_DIRECT,
+  SERVICE_EXPLORER,
+} from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
@@ -173,6 +177,14 @@ export const GlobalsLive = Layer.effect(
                     name: BINDING_USER_WORKER_DIRECT,
                     service: { name: SERVICE_USER_WORKER },
                   },
+                  ...(worker.explorer
+                    ? [
+                        {
+                          name: BINDING_EXPLORER,
+                          service: { name: SERVICE_EXPLORER },
+                        },
+                      ]
+                    : []),
                   ...(email === undefined
                     ? []
                     : [

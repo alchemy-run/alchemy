@@ -1765,6 +1765,7 @@
         "http-cache-semantics": "catalog:cloudflare",
         "itty-time": "catalog:cloudflare",
         "mime": "catalog:cloudflare",
+        "miniflare": "catalog:workers",
         "mysql2": "catalog:cloudflare",
         "postal-mime": "catalog:cloudflare",
         "rolldown": "catalog:",

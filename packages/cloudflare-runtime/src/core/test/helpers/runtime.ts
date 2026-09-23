@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Docker from "../../Docker.ts";
+import * as Explorer from "../../explorer/Explorer.ts";
 import * as Globals from "../../globals/Globals.ts";
 import * as Internet from "../../globals/Internet.ts";
 import * as Storage from "../../globals/Storage.ts";
@@ -52,6 +53,7 @@ export const configProvider = (
  * deploy a preview script and fail without credentials.
  */
 export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
+  Layer.provide(Explorer.ExplorerLive),
   Layer.provideMerge(RuntimeServices.layerLocalBindings()),
   Layer.provideMerge(RuntimeServices.layerProxy()),
   Layer.provide(Globals.GlobalsLive),
