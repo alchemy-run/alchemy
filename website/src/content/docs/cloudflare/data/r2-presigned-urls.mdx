@@ -9,10 +9,12 @@ to a client, and the client uploads or downloads the object directly
 from R2. The request body never passes through the Worker, and the
 client needs no credentials.
 
-Presigning is a SigV4 signature over a request to R2's S3-compatible
-API. The native R2 binding on a Worker has no presign method, because
-signing needs S3 credentials. Alchemy provides those credentials and
-the right endpoint for you:
+A presigned URL is a link to R2's S3-compatible API with a signature
+in its query string. The signature is computed from an S3 access key
+and secret, so whoever creates the URL needs those keys. A Worker's R2
+binding reads and writes objects without any keys, so it can't create
+presigned URLs. Alchemy gives the Worker an access key, a secret, and
+the S3 endpoint to sign against:
 
 - **Deployed**, Alchemy mints a scoped account API token for the
   Worker and derives S3 credentials from it. URLs point at
