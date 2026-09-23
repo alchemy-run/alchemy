@@ -38,24 +38,6 @@ export const deck: DeckItem[] = [
     },
     seconds: 2.5,
   },
-  {
-    kind: "slide",
-    id: "outline",
-    title: "The loop",
-    notes:
-      "Every chapter runs the same loop: write the code, alchemy dev picks it up locally, the architecture diagram is read from Alchemy's state, and pnpm test deploys a real copy, asserts against it and destroys it.",
-    layout: "bullets",
-    props: {
-      heading: "Every chapter, the same loop",
-      bullets: [
-        "Write the code",
-        "alchemy dev reloads it locally",
-        "See the architecture it produced",
-        "pnpm test: deploy, assert, destroy",
-      ],
-    },
-    seconds: 3,
-  },
   ...chapter(0, "00-website", "Deploy a website", "Cloudflare.Website.Vite and alchemy deploy"),
   ...chapter(1, "01-api", "An Effectful Worker", "An HttpApi served by a Worker, called by a typed client"),
   ...chapter(2, "02-d1", "Store links in D1", "A database, its migrations, and a binding"),
