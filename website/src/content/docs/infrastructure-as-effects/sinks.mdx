@@ -32,7 +32,7 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     const sink = yield* AWS.SQS.QueueSink(OutboundQueue);
-    // → Sink<void, string, readonly string[], never>
+    // → Sink<void, QueueSinkEntry, readonly QueueSinkEntry[], QueueSinkError>
     // → policy: sqs:SendMessage + sqs:SendMessageBatch on OutboundQueue's ARN
 
     return {
@@ -40,7 +40,10 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
         const request = yield* HttpServerRequest;
         const body = (yield* request.json) as { messages: string[] };
 
-        yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+        yield* Stream.fromIterable(body.messages).pipe(
+          Stream.map((message) => ({ MessageBody: message })),
+          Stream.run(sink),
+        );
 
         return yield* HttpServerResponse.json({
           ok: true,
@@ -76,13 +79,17 @@ you from feeding the wrong shape in:
 
 | Sink                          | Element                  | Batch API          | IAM emitted                                    |
 | ----------------------------- | ------------------------ | ------------------ | ---------------------------------------------- |
-| `SQS.QueueSink(queue)`        | `string`                 | `SendMessageBatch` | `sqs:SendMessage`, `sqs:SendMessageBatch`      |
-| `SNS.TopicSink(topic)`        | `string`                 | `PublishBatch`     | `sns:Publish`                                  |
+| `SQS.QueueSink(queue)`        | `QueueSinkEntry`         | `SendMessageBatch` | `sqs:SendMessage`, `sqs:SendMessageBatch`      |
+| `SNS.TopicSink(topic)`        | `TopicSinkEntry`         | `PublishBatch`     | `sns:Publish`                                  |
 | `Kinesis.StreamSink(stream)`  | `PutRecordsRequestEntry` | `PutRecords`       | `kinesis:PutRecords`                           |
 
 Every policy is scoped to the exact resource ARN.
 
-`QueueSink` and `TopicSink` take message bodies as `string`.
+`QueueSink` takes a `QueueSinkEntry`: an SQS `SendMessageBatchRequestEntry`
+without its `Id`, so you set `MessageBody`, `MessageGroupId`, message
+attributes, and so on. `TopicSink` takes a `TopicSinkEntry`: an SNS
+`PublishBatchRequestEntry` without its `Id`, so you set `Message`,
+`Subject`, and so on. The sink assigns each batch entry's `Id` itself.
 `StreamSink` takes raw `PutRecordsRequestEntry` values, so you keep
 control of `PartitionKey`:
 
@@ -118,16 +125,47 @@ export default class Ingest extends AWS.Lambda.Function<Ingest>()(
 
 ## Batching
 
-A Sink drains its input chunk by chunk. Each chunk of the stream
-becomes one call to the underlying batch API. To control batch
-size, rechunk the stream before running it into the sink:
+A Sink drains its input chunk by chunk. It splits each chunk into
+batches that fit the API's limits, keeping the input order:
+
+| Sink                 | Max entries per call | Max bytes per call |
+| -------------------- | -------------------- | ------------------ |
+| `SQS.QueueSink`      | 10                   | 256 KiB            |
+| `SNS.TopicSink`      | 10                   | 256 KiB            |
+| `Kinesis.StreamSink` | 500                  | 5 MiB              |
+
+The sink sends the batches one at a time, in order. After each call it
+checks the per-entry results:
+
+- Transient failures are resent. For SQS and SNS these are entries
+  with `SenderFault: false`, such as throttling or internal errors.
+  Kinesis treats every failed record (throughput exceeded or internal
+  failure) as transient.
+- Permanent rejections are dropped with a warning log. Only
+  `SQS.QueueSink` and `SNS.TopicSink` drop entries: those that come back
+  with `SenderFault: true`.
+- The sink resends up to five times, with exponential backoff starting
+  at 200 ms. If entries are still failing after that, it fails with a
+  `BatchRetryExhaustedError` whose `entries` field holds them.
+
+A failed API call also fails the sink, with the batch API's own error
+(e.g. `SendMessageBatchError`).
+
+The sink never makes a batch larger than the chunk it receives. To send
+smaller batches, rechunk the stream before running it into the sink:
 
 ```typescript
 yield* Stream.fromIterable(messages).pipe(
-  Stream.rechunk(10), // one SendMessageBatch call per 10 messages
+  Stream.map((message) => ({ MessageBody: message })),
+  Stream.rechunk(5), // at most 5 messages per SendMessageBatch call
   Stream.run(sink),
 );
 ```
+
+Inside an event-source handler, whose error type is `never`, end the
+pipeline with `Effect.orDie`, or handle every error the sink can fail
+with. Catch `BatchRetryExhaustedError` with `Effect.catchTag` to decide
+what happens to the stranded entries.
 
 ## Source → transform → sink
 
@@ -137,13 +175,15 @@ is a `Stream` or a `Sink`, so the whole pipe-and-transform pipeline
 is one expression inside the constructor:
 
 ```typescript
+type OrderImage = { id: { S: string }; status: { S: string } };
+
 export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
   "OrderRelay",
   { main: import.meta.url },
   Effect.gen(function* () {
     const sink = yield* AWS.SQS.QueueSink(OutboundQueue);
 
-    yield* AWS.DynamoDB.consumeTableChanges<Order>(
+    yield* AWS.DynamoDB.consumeTableChanges<OrderImage>(
       OrdersTable,
       {
         streamViewType: "NEW_AND_OLD_IMAGES",
@@ -151,10 +191,15 @@ export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
       },
       (records) =>
         records.pipe(
-          Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
-          Stream.filter((order) => order.status === "PAID"),
-          Stream.map((order) => JSON.stringify({ orderId: order.id })),
+          Stream.map((r) => r.dynamodb.NewImage),
+          Stream.filter(
+            (image): image is OrderImage => image?.status.S === "PAID",
+          ),
+          Stream.map((image) => ({
+            MessageBody: JSON.stringify({ orderId: image.id.S }),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
   }).pipe(
@@ -166,6 +211,13 @@ export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
   ),
 ) {}
 ```
+
+Stream records arrive as DynamoDB attribute-value maps. Alchemy does
+not unmarshall them, so `OrderImage` describes the raw shape
+(`{ S: string }` per string attribute) and the filter reads
+`status.S`. The type guard on `Stream.filter` also drops records with
+no `NewImage`, such as deletes. `Effect.orDie` turns the sink's error
+into a defect, because the handler's error type is `never`.
 
 The pipeline uses two binding calls. The provided Layers attach both
 sides of the policy to the Function's role. These are

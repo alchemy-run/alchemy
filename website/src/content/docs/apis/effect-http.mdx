@@ -151,15 +151,15 @@ Assemble the API Layer and convert it into the `HttpEffect` that
 
 ```typescript
 // src/ApiService.ts — end of the Construction phase
+import * as Http from "alchemy/Http";
 import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 
-// platform = the host's platform service Layers — differs per host
 return {
   fetch: yield* HttpRouter.toHttpEffect(
     HttpApiBuilder.layer(TaskApi).pipe(
       Layer.provide(tasksGroup),
-      Layer.provide(platform),
+      Layer.provide(Http.Platform),
     ),
   ),
 };
@@ -167,11 +167,26 @@ return {
 
 `HttpRouter.toHttpEffect` builds the Layer once at boot and yields
 the request handler. This is the same `{ fetch }` shape a Worker or a
-Lambda Function with `functionUrl: true` serves. The `platform` Layers are
-the host-specific part of the wiring. See
-[Workers](/cloudflare/apis/effect-http-api) and
-[Lambda](/aws/apis/effect-http-api) for the exact set, plus storage
-bindings and deploy (and CORS, on Workers).
+Lambda Function serves. `Http.Platform` supplies the `HttpPlatform`,
+`Etag`, `Path`, and no-op `FileSystem` services that
+`HttpApiBuilder.layer` needs on runtimes without a filesystem
+(Workers, Lambda). File responses die there.
+
+A Lambda Function's Function URL is on by default and public
+(`authType: "NONE"`). Set `functionUrl: { authType: "AWS_IAM" }` to
+require signed callers. Because the default endpoint is public, the
+schema validation here is your input boundary. Add auth for anything
+that isn't public.
+
+For browser consumers,
+`Layer.provide(HttpRouter.cors({ allowedOrigins: [...] }))` adds a
+global CORS middleware on any host (see the
+[Workers page](/cloudflare/apis/effect-http-api) for the full
+example). On Lambda you can instead set CORS on the Function URL
+with `functionUrl: { cors: ... }`.
+
+See [Workers](/cloudflare/apis/effect-http-api) and
+[Lambda](/aws/apis/effect-http-api) for storage bindings and deploy.
 
 ## Plain HTTP for everyone else
 
@@ -202,6 +217,7 @@ drives a typed client with no codegen and no string URLs:
 ```typescript
 // src/ApiClient.ts
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { TaskApi } from "./ApiSchema.ts";
 
@@ -217,14 +233,21 @@ const program = Effect.gen(function* () {
   const task = yield* client.Tasks.getTask({
     params: { id: created.id },
   });
+  console.log(task.title);
 });
+
+Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)));
 ```
 
-Request keys mirror the declarations. `payload` is for bodies and
-`params` is for path parameters. `client.Tasks.getTask` returns
-`Effect<Task, TaskNotFound | HttpClientError>`, so the 404 arrives as
-a typed value you pattern-match on. There is no status code to
-interpret.
+`HttpApiClient.make` needs an `HttpClient`, which
+`FetchHttpClient.layer` provides. Request keys mirror the
+declarations. `payload` is for bodies and `params` is for path
+parameters. `client.Tasks.getTask` returns
+`Effect<Task, TaskNotFound | HttpClientError | SchemaError>`, so the
+404 arrives as a typed value you pattern-match on. There is no status
+code to interpret. `SchemaError` is raised when a payload fails to
+encode or a response fails to decode.
+
 The client can also use a Binding instead of a URL. See the
 [Durable Object bridge](/cloudflare/apis/effect-http-api#bridge-the-do-into-a-typed-client)
 on the Workers page.

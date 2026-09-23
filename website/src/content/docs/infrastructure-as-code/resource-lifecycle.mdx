@@ -66,6 +66,13 @@ between in-place updates and replacements.
 Use `alchemy plan` (or `alchemy deploy --dry-run`) to see the plan
 without applying it.
 
+Plan diffs your code against saved state, not the live cloud. A
+change someone made in the cloud console doesn't show up in a normal
+plan. To find and repair changes made outside Alchemy, run
+`alchemy deploy --detect-drift` or `alchemy drift` (see
+[drift](/cli/drift)). To reconcile resources that would otherwise be
+a no-op, pass `--force`.
+
 ## Reconcile
 
 Alchemy calls one function, `provider.reconcile`, whether a resource
@@ -76,8 +83,11 @@ Reconcile must be **convergent**. Given the desired props, it
 observes live cloud state and brings it to that state from any
 starting point. It must also be safe to retry. A partial reconcile
 that crashed midway resumes correctly on the next run. Physical
-names are deterministic from `stack/stage/logical-id`, so the
-reconciler finds the existing resource and does not duplicate it.
+names come from the stack name, logical ID, stage, and the instance
+ID saved in state before the first provider call. A retry computes
+the same name, so the reconciler finds the existing resource and does
+not duplicate it. See
+[Resources › Physical name](/infrastructure-as-code/resource#physical-name).
 The parameter contract (`news`/`output`/`olds`/`bindings`) and the
 observe → ensure → sync shape are the provider's concern. See
 [Provider › reconcile](/infrastructure-as-code/provider#reconcile).
@@ -184,9 +194,10 @@ example, the network drops between "bucket created" and "state
 saved". Alchemy handles this by requiring `reconcile` and `delete` to
 be safe to retry:
 
-- **Reconcile**: deterministic physical names and the observe step
-  let a retry find the existing resource without creating a
-  duplicate. The retry also re-syncs any aspect that drifted.
+- **Reconcile**: physical names built from the saved instance ID,
+  plus the observe step, let a retry find the existing resource
+  without creating a duplicate. The retry also re-syncs any aspect
+  that drifted.
 - **Delete**: a missing resource is treated as already deleted.
 - **Read**: providers can implement `read` so alchemy can recover
   state from the live cloud when persistence fails partway. `read`
@@ -218,11 +229,15 @@ how providers signal ownership through `read`'s return value. See
 ## Errors
 
 - **Retryable errors** (eventual consistency, dependency races) are
-  retried automatically with backoff.
-- **Non-retryable errors** (validation, authorization) fail
-  immediately and surface in the plan output.
-- **Partial failures** are safe to re-run because operations are
-  idempotent.
+  retried inside each provider's lifecycle operations. The engine
+  itself does not retry a failed operation.
+- **Non-retryable errors** (validation, authorization) fail the
+  operation. Errors from `diff` and `read` surface during plan.
+  Errors from `reconcile` and `delete` surface during apply.
+- **Partial failures** are safe to re-run. The engine saves each
+  resource's in-progress state (such as `creating` with its instance
+  ID) before calling the provider, and operations are idempotent, so
+  the next deploy resumes where the last one stopped.
 
 ## Driving the lifecycle from the CLI
 

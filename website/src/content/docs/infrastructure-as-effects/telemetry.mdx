@@ -18,8 +18,28 @@ Effect. Merge it into the single `Effect.provide` alongside the other
 binding layers:
 
 ```typescript
-import * as Alchemy from "alchemy";
 import * as Axiom from "alchemy/Axiom";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const Traces = Axiom.Dataset("Traces", {
+  name: "app-traces",
+  kind: "otel:traces:v1",
+});
+
+export const Logs = Axiom.Dataset("Logs", {
+  name: "app-logs",
+  kind: "otel:logs:v1",
+});
+
+export const Ingest = Axiom.ApiToken("Ingest", {
+  name: "app-ingest",
+  datasetCapabilities: {
+    "app-traces": { ingest: ["create"] },
+    "app-logs": { ingest: ["create"] },
+  },
+});
 
 export default Cloudflare.Worker(
   "Worker",
@@ -36,6 +56,12 @@ export default Cloudflare.Worker(
   ),
 );
 ```
+
+`token` is an ingest [`ApiToken`](/providers/axiom/apitoken) with
+`ingest: ["create"]` on each dataset. Each signal (`traces`, `logs`,
+`metrics`) takes a [`Dataset`](/providers/axiom/dataset) of the
+matching `otel:*:v1` kind. Omit a signal to skip exporting it. Here
+metrics are not exported.
 
 Without a telemetry layer, nothing exports. Effect's default tracer
 is a no-op, so all instrumentation stays free.

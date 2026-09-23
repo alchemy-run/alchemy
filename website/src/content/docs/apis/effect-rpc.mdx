@@ -89,6 +89,17 @@ export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
 
 `TaskRpcs` is a value-level description. Nothing executes yet.
 
+A procedure can also stream its results. Add `stream: true`:
+
+```typescript
+const watchTasks = Rpc.make("watchTasks", { success: Task, stream: true });
+```
+
+The handler for a streaming procedure returns a `Stream` of `Task`
+values, and the client method returns a `Stream` too. Streaming needs
+a framed serialization such as NDJSON on both server and client (see
+[Serve it](#serve-it)).
+
 ## Handlers
 
 `TaskRpcs.toLayer` takes one handler per procedure and produces a
@@ -134,14 +145,31 @@ export const ApiHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
 );
 ```
 
-`toHttpEffect` compiles the group into the `{ fetch }` value every
-host serves. It imports nothing cloud-specific. `layerJson` buffers
-one body per request and suits plain request/response. Streaming
-rpcs require `RpcSerialization.layerNdjson`. Whichever you pick, the
-client's serialization layer must match the server's. A Lambda
-Function with `functionUrl: true` or a Cloudflare Worker returns it
-as `{ fetch }`. Host wiring, storage binding Layers, and deploy live
-on [Workers](/cloudflare/apis/effect-rpc) and
+`toHttpEffect` returns an Effect that starts the RPC server and
+yields the request handler. It imports nothing cloud-specific.
+`layerJson` buffers one body per request and suits plain
+request/response. It collects a streamed rpc into that one body, so
+nothing arrives until the stream ends. Streaming rpcs need a framed
+serialization such as `RpcSerialization.layerNdjson`, which writes one
+frame per line. Whichever you pick, the client's serialization layer
+must match the server's.
+
+The host returns the handler as `fetch`:
+
+```typescript
+// src/ApiService.ts — inside the host's Effectful Constructor
+return { fetch: yield* ApiHttpEffect };
+```
+
+`yield*` it once in the constructor so the server is built at boot.
+`fetch` also accepts the un-yielded Effect, but then the server is
+rebuilt on every request.
+
+The host can be a Cloudflare Worker or a Lambda Function. A Lambda
+Function's URL is on by default and public (`authType: "NONE"`). Set
+`functionUrl: { authType: "AWS_IAM" }` to require signed callers.
+Host wiring, storage binding Layers, and
+deploy live on [Workers](/cloudflare/apis/effect-rpc) and
 [Lambda](/aws/apis/effect-rpc).
 
 ## A typed client
@@ -182,7 +210,9 @@ Effect.runPromise(
 
 `RpcClient.make(TaskRpcs)` derives the whole client from the same
 group value with no codegen. Errors are typed: `client.getTask`
-returns `Effect<Task, TaskNotFound>`. The client runs inside
+returns `Effect<Task, TaskNotFound | RpcClientError>`. `RpcClientError`
+covers transport and protocol failures, and `TaskNotFound` is your
+declared error. The client runs inside
 `Effect.scoped`, and the serialization layer must match the server's.
 
 ## Where next

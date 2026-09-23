@@ -5,8 +5,8 @@ prev:
   link: /getting-started
   label: Getting started
 next:
-  link: /infrastructure-as-effects/runtime
-  label: Runtime
+  link: /infrastructure-as-code/stack
+  label: Stacks
 ---
 
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
@@ -19,8 +19,8 @@ resources the way Terraform or Pulumi does. Infrastructure as Effects
 lets the code that runs on those resources live in the same program,
 as typed Effects and Layers.
 
-This file is the whole application. It declares an R2 Bucket and a
-Worker that serves files from it:
+This file holds the whole application: an R2 Bucket and a Worker that
+serves files from it. A small Stack file deploys it (below).
 
 ```typescript
 // src/api.ts
@@ -49,8 +49,10 @@ export default Cloudflare.Worker(
 ```
 
 The Bucket is declared next to the Worker that uses it. `bucket` is a
-typed client the handler closes over. This page covers Infrastructure
-as Code first, then what Infrastructure as Effects adds on top.
+typed client the handler closes over. Binding `Uploads` inside the
+Worker adds the Bucket to the Stack, so you don't yield it separately.
+This page covers Infrastructure as Code first, then what
+Infrastructure as Effects adds on top.
 
 ## Infrastructure as Code
 
@@ -86,14 +88,17 @@ bun alchemy deploy
 ```
 
 Alchemy creates the Bucket, bundles the Worker, wires the binding
-between them, and prints the URL. Every deploy targets a stage. A
-stage is an isolated environment with its own copy of every resource,
-so `dev` and `prod` never touch each other:
+between them, and prints the URL. Every deploy targets a
+[stage](/environments/stages). A stage is an isolated environment with
+its own copy of every resource, so `dev` and `prod` never touch each
+other:
 
 ```sh
-alchemy deploy              # dev_$USER by default
+alchemy deploy              # live_$USER by default
 alchemy deploy --stage prod
 ```
+
+`alchemy dev` uses `dev_$USER` instead.
 
 Alchemy reads the current state, diffs it against your program, shows
 the plan, and applies it in dependency order. The terminal below shows
@@ -105,6 +110,9 @@ bound to both:
 **State** is where the result persists between runs, so the next
 deploy only touches what changed. The `state` option above picks
 where it's stored.
+
+See [Stacks](/infrastructure-as-code/stack) and
+[State Store](/state-store).
 
 #### Resource
 
@@ -130,6 +138,9 @@ yield* Cloudflare.Worker("Api", {
   env: { BUCKET_NAME: bucket.bucketName },
 });
 ```
+
+See [Resources](/infrastructure-as-code/resource) and
+[Outputs](/infrastructure-as-code/outputs).
 
 #### Provider
 
@@ -167,6 +178,7 @@ export const Api = Cloudflare.Worker("Api", {
 });
 
 export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+// ...plus the default-exported Alchemy.Stack that yields Api, as above
 ```
 
 ```typescript
@@ -220,7 +232,8 @@ Effect.gen(function* () {
 The outer Effect runs at deploy time and at cold start. What it
 returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, and a Workflow returns its run function.
-Every Runtime in Alchemy is a variation on that one shape.
+Every Runtime in Alchemy is a variation on that one shape. See
+[Runtime](/infrastructure-as-effects/runtime).
 
 #### Binding
 
@@ -243,7 +256,7 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 ```
 
 You don't reach for `env.Uploads` or write a policy by hand. The
-binding is the SDK.
+binding is the SDK. See [Binding](/infrastructure-as-effects/binding).
 
 #### Layers
 
@@ -274,16 +287,25 @@ export const JobServiceKV = Layer.effect(
 ```
 
 You write business logic against the `JobService` contract. The
-Layer decides the infrastructure behind it, so swapping KV for
-DynamoDB is one line:
+Layer decides the infrastructure behind it, so the same handler can
+read jobs from KV in a Worker or from DynamoDB in a Lambda Function.
+Only the provided Layer changes:
 
 ```diff lang="typescript"
  Effect.gen(function* () {
    const jobs = yield* JobService;
    // ...
--}).pipe(Effect.provide(JobServiceKV));     // a KV Namespace, created and bound
-+}).pipe(Effect.provide(JobServiceDynamo)); // now a DynamoDB Table instead
+-}).pipe(Effect.provide(JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding))));
++}).pipe(Effect.provide(JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp))));
 ```
+
+The inner `Layer.provide` supplies the binding implementation the
+service needs: the native KV binding, or DynamoDB over HTTP. A swap
+works only when the host supports every binding in the Layer.
+`AWS.DynamoDB.GetItemHttp` grants IAM only to AWS hosts, so the
+DynamoDB variant can't back a Cloudflare Worker. See
+[Layers](/infrastructure-as-effects/layers) for the full `JobService`
+definition.
 
 The Infrastructure as Effects section goes deeper from here.
 [Event Sources](/infrastructure-as-effects/event-sources) and
@@ -302,6 +324,11 @@ request's traces and logs.
 <a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
   <strong>Runtime</strong>
   <span>The Effectful Constructor in depth: the fetch and RPC interface, and the three ways to declare a Runtime.</span>
+</a>
+
+<a href="/infrastructure-as-code/stack" class="next-card">
+  <strong>Stacks</strong>
+  <span>The unit you deploy: its options, outputs, and multiple providers.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">

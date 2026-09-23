@@ -179,17 +179,22 @@ export default Cloudflare.Worker(
 
     return {
       fetch: Effect.gen(function* () {
-        return HttpServerResponse.json(yield* jobs.getJob("job-1"));
+        return yield* HttpServerResponse.json(yield* jobs.getJob("job-1"));
       }),
     };
-  }).pipe(Effect.provide(JobServiceKV)), // the Layer brings a KV Namespace with it
+  }).pipe(
+    // the Layer brings a KV Namespace with it
+    Effect.provide(
+      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+    ),
+  ),
 );
 ```
 
 On the next deploy the Layer's namespace is created and bound to this
-Worker, and the handler only ever sees `JobService`. Swap
-`JobServiceKV` for a DynamoDB-backed Layer and the handler doesn't
-change. This is the fundamental building block of Infrastructure as
+Worker, and the handler only ever sees `JobService`. Provide a
+different Layer for `JobService`, such as a D1-backed one, and the
+handler doesn't change. This is the fundamental building block of Infrastructure as
 Effects, and [Layers](/infrastructure-as-effects/layers) builds one
 from scratch.
 
@@ -356,6 +361,21 @@ Effect.gen(function* () {
   };
 });
 ```
+
+The types enforce this for the inline and class forms
+(see [Three ways to declare a Runtime](#three-ways-to-declare-a-runtime)). The services
+available to their constructor do not include `Scope`, so an Effect
+that requires one, such as `Effect.acquireRelease` or
+`Effect.addFinalizer`, is a type error there. Handlers get a fresh
+`Scope` per event, so the same acquisition type-checks inside `fetch`.
+The `.make` of a Tag declared with an explicit shape, such as
+`Cloudflare.Worker<Api, {}>()("Api")`, does not apply this check, so
+follow the rule yourself there.
+
+Any Effect in the constructor also runs during `alchemy deploy`.
+One-shot I/O like `fetchSecret` above must succeed in the deploy
+process too. [Phases](/infrastructure-as-effects/phases#what-this-means-for-constructor-code)
+covers what that means for `Config` lookups.
 
 Anything shared across calls within one event is memoized on the
 request scope. `Drizzle.Postgres` opens its pool on the first query of

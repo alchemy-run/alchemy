@@ -28,7 +28,17 @@ capability:
 ```typescript
 import * as Alchemy from "alchemy";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+
+export interface Job {
+  id: string;
+  status: string;
+}
+
+export class JobError extends Data.TaggedError("JobError")<{
+  cause: unknown;
+}> {}
 
 export class JobService extends Context.Service<
   JobService,
@@ -39,8 +49,9 @@ export class JobService extends Context.Service<
 ```
 
 Consumers write `yield* JobService` and get this typed object. The
-signature mentions `Alchemy.RuntimeContext` (covered below) and nothing
-cloud-specific.
+signature mentions `Job`, `JobError`, and `Alchemy.RuntimeContext`
+(covered below). It mentions nothing cloud-specific, so every
+implementation must map its storage errors to `JobError`.
 
 ## The implementation
 
@@ -102,16 +113,31 @@ Implement the contract against the client:
      return {
        getJob: Effect.fn(function* (id: string) {
 -        // TODO: read the job from storage
-+        return yield* kv.get<Job>(id, "json");
++        const job = yield* kv
++          .get<Job>(id, "json")
++          .pipe(Effect.mapError((cause) => new JobError({ cause })));
++        if (job === null) {
++          return yield* new JobError({ cause: `job ${id} not found` });
++        }
++        return job;
        }),
      };
 ```
+
+`kv.get<Job>(id, "json")` returns `Job | null` and fails with the KV
+`NamespaceError`. The implementation maps that error to `JobError` and
+turns a missing key into a `JobError` too, so it matches the contract.
 
 ## The consumer
 
 A Worker yields the service and provides the Layer:
 
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
@@ -120,7 +146,7 @@ export default Cloudflare.Worker(
 
     return {
       fetch: Effect.gen(function* () {
-        return yield* jobs.getJob("job-1");
+        return yield* HttpServerResponse.json(yield* jobs.getJob("job-1"));
       }),
     };
   }).pipe(
@@ -170,16 +196,54 @@ The Stack ends up with one `MyKV` namespace, bound to both `Api` and
 
 ## Swapping implementations
 
-Changing the implementation is a one-line change:
+A second Layer can implement `JobService` over different storage. Say
+`JobServiceDynamo` builds `JobService` the same way `JobServiceKV` does,
+but declares an `AWS.DynamoDB.Table` and binds it with
+`AWS.DynamoDB.GetItem`. An `AWS.Lambda.Function` runs the same handler
+on top of it:
+
+```typescript
+import * as AWS from "alchemy/AWS";
+
+export default AWS.Lambda.Function(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const jobs = yield* JobService;
+
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* jobs.getJob("job-1"));
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
+    ),
+  ),
+);
+```
+
+Compared with the Worker, the handler is unchanged. Only the provided
+Layer differs:
 
 ```diff lang="typescript"
 -      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
 +      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
 ```
 
-This swap crosses clouds. The Worker still runs on Cloudflare, but its
-jobs now come from a DynamoDB table on AWS. The credentials and
-permissions are wired up automatically.
+On the next deploy, `GetItemHttp` grants `dynamodb:GetItem` on the
+table to the Function's role.
+
+A swap works only when every binding inside the Layer supports the
+host. `AWS.DynamoDB.GetItemHttp` grants IAM only to AWS hosts such as
+Lambda Functions and ECS Tasks, and it needs AWS `Credentials` and
+`Region` from the host. So `JobServiceDynamo` can't back a Cloudflare
+Worker. The next section shows the type error you get if you
+try. Some AWS bindings do support a Worker host. For example,
+`AWS.S3.GetObjectHttp` on a Worker creates an IAM user, an access key,
+and a role for the Worker to assume, then signs each call with the
+role's credentials.
 
 Alchemy's own Bindings follow the same tag/Layer split
 ([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
@@ -193,7 +257,11 @@ error:
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
-  handler.pipe(Effect.provide(JobServiceDynamo)),
+  handler.pipe(
+    Effect.provide(
+      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
+    ),
+  ),
   // ✗ Type error: the Layer requires AWS `Credentials` and `Region`,
   //   which a Cloudflare Worker can't provide
 );
@@ -211,7 +279,7 @@ Effect.gen(function* () {
 
   return {
     fetch: Effect.gen(function* () {
-      return yield* jobs.getJob("job-1"); // ✓
+      return yield* HttpServerResponse.json(yield* jobs.getJob("job-1")); // ✓
     }),
   };
 });

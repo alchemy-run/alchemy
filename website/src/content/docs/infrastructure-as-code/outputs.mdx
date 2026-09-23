@@ -48,9 +48,9 @@ Reading a property off a resource (or any `Output`) returns another
 ```typescript
 const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
-bucket.bucketName;        // Output<string>
-bucket.bucketArn;         // Output<string>
-bucket.tags?.environment; // Output<string | undefined>
+bucket.bucketName;   // Output<string>
+bucket.accountId;    // Output<string>
+bucket.publicDomain; // Output<string | undefined>
 ```
 
 Nested access works too. `expr.nested.deep` walks down the object
@@ -163,25 +163,71 @@ const decoded = secret.value.pipe(
     Effect.gen(function* () {
       const result = yield* JwtDecoder.decode(s);
       return result.payload;
-    }),
+    }).pipe(Effect.orDie),
   ),
 );
 // Output<Payload>
 ```
 
+The Effect you return must not fail. Its error type is `never`, so
+handle errors inside the function or turn them into defects with
+`Effect.orDie`, as above.
+
 Chain them like `map`:
 
 ```typescript
-"a".pipe(
+Output.literal("a").pipe(
   Output.mapEffect((s) => Effect.succeed(s + "b")),
   Output.mapEffect((s) => Effect.succeed(s + "c")),
 );
 // resolves to "abc"
 ```
 
+`mapEffect` only has the pipeable form. There is no data-first
+`Output.mapEffect(output, fn)` overload like the one `map` has.
+
 The resulting `Output` tracks the requirements (the `R` channel) of
 the inner Effects. You must provide anything those Effects need
 wherever the Output is finally evaluated.
+
+## `flatMap`
+
+`Output.flatMap` runs a function that returns another `Output`, then
+resolves that `Output` too. Use it when the next value is itself an
+`Output`:
+
+```typescript
+const upper = bucket.bucketName.pipe(
+  Output.flatMap((name) => Output.literal(name.toUpperCase())),
+);
+// Output<string>
+```
+
+Like `map`, it has both a pipeable form and a data-first form
+(`Output.flatMap(output, fn)`).
+
+:::caution
+Dependency edges come only from the source `Output`. Alchemy does not
+look inside the `Output` your function returns when it builds the
+graph. Don't return an `Output` of a resource that isn't already
+upstream of the source, or it may not be deployed yet when the
+function runs.
+:::
+
+## `as`
+
+`.as<T>()` changes the type of an `Output` without changing its
+value. Use it when you know more about the resolved type than
+TypeScript does. A Worker's `url` is typed `string | undefined`
+because some Workers have no URL, but a Worker you serve on
+`workers.dev` or a custom domain always has one:
+
+```typescript
+const url = worker.url.as<string>();
+// Output<string>
+```
+
+It is a type cast only. Nothing is checked or converted at runtime.
 
 ## `all`
 
@@ -218,6 +264,14 @@ Nullish interpolated values render as the empty string.
 This expands to `Output.all(...args).pipe(Output.map(...))`, so the
 dependency graph is wired up automatically.
 
+:::caution
+Don't use a plain template literal or `+` with an Output. JS coercion
+of an Output throws `Cannot coerce Output<…> to a string via JS
+coercion`, because the value isn't known yet. Use
+`` Output.interpolate`…` `` or `Output.map` instead. Arithmetic on an
+Output (`+output`, `output * 2`) throws the same way.
+:::
+
 ## `of`
 
 Alchemy uses this internally to convert resources to `Output`s. You
@@ -225,24 +279,39 @@ rarely call it directly because resources already act like
 `Output`s:
 
 ```typescript
-const bucketOut = Output.of(bucket);          // Output<Bucket>
-const refOut    = Output.of(Ref({ id: "B" })); // for cross-stack refs
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+
+const bucketOut = Output.of(bucket); // Output of the bucket's attributes
+
+const refOut = Output.of(
+  Alchemy.ref<Cloudflare.R2.Bucket>("Bucket", {
+    stack: "shared-infra",
+    stage: "prod",
+  }),
+);
 ```
 
-Use `Output.of(Ref(...))` or [`Output.ref`](#ref) to read a
-resource's attributes from another stack. See below.
+The second form turns a reference built with `Alchemy.ref` into a
+typed `Output`. See [`ref`](#ref) below.
 
 ## `ref`
 
-`Output.ref` produces an `Output` referencing a deployed
-resource's attributes in another stack or stage:
+To read a deployed resource's attributes from another stack or
+stage, use the resource's own `.ref`:
 
 ```typescript
-Output.ref<typeof Bucket>("Bucket", { stack: "shared-infra", stage: "prod" });
+const bucket = yield* Cloudflare.R2.Bucket.ref("Bucket", {
+  stack: "shared-infra",
+  stage: "prod",
+});
 ```
 
-See [References](/infrastructure-as-code/references) for the full reference
-surface (`Output.ref`, `Resource.ref`, `Output.stackRef`,
+When the resource constructor isn't in scope, build the reference
+with `Alchemy.ref<Type>(id, { stack, stage })` and wrap it in
+`Output.of`, as in the previous section. See
+[References](/infrastructure-as-code/references) for the full reference
+surface (`Resource.ref`, `Alchemy.ref`, `Output.stackRef`,
 `Stack.stage`) and how each is resolved.
 
 ## How Outputs compose in props
@@ -254,13 +323,13 @@ before calling the provider.
 
 ```typescript
 const queue = yield* AWS.SQS.Queue("Jobs", {
-  name: Output.interpolate`${bucket.bucketName}-events`,
   tags: {
     bucket: bucket.bucketName,
     region: Output.literal("us-west-2"),
   },
-  deadLetter: {
-    queueUrl: dlq.queueUrl,
+  redrivePolicy: {
+    deadLetterTargetArn: dlq.queueArn,
+    maxReceiveCount: 5,
   },
 });
 ```
@@ -312,7 +381,8 @@ binding. Evaluation works like this:
 3. **Apply / EffectExpr** evaluate the parent first, then run the
    user function.
 4. **All** evaluates its children in parallel.
-5. **Ref** reads from the state store using `{ stack, stage, id }`.
+5. **Ref** reads from the state store using the target's stack,
+   stage, and fully qualified name.
 6. **Plain values** (objects, arrays, primitives) are walked
    recursively so Outputs inside them get evaluated too.
 7. **`Redacted`** values are preserved as-is.
@@ -332,9 +402,11 @@ declared.
 | Coerce a value / Effect / Output to Output  | `Output.asOutput(x)`                         |
 | Transform an Output                         | `output.pipe(Output.map(fn))`                |
 | Transform with an Effect                    | `output.pipe(Output.mapEffect(fn))`          |
+| Transform into another Output               | `output.pipe(Output.flatMap(fn))`            |
+| Narrow an Output's type                     | `output.as<T>()`                             |
 | Combine several Outputs                     | `Output.all(a, b, c)`                        |
 | Build a string from Outputs                 | `` Output.interpolate`a/${b}/c` ``           |
-| Read a resource from another stack          | `Output.ref<typeof X>("id", { stack, stage })` |
+| Read a resource from another stack          | `yield* X.ref("id", { stack, stage })`       |
 | Inspect dependencies                        | `Output.upstream(output)`                    |
 
 ## Where next

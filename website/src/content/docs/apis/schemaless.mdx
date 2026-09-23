@@ -13,10 +13,10 @@ per-request decode cost.
 
 ## The shape
 
-RPC is a feature of every
-[Runtime](/infrastructure-as-effects/runtime)
-runtime. The interface its Effectful Constructor returns may
-include methods alongside `fetch`:
+Every [Runtime](/infrastructure-as-effects/runtime) can return RPC
+methods next to `fetch` from its Effectful Constructor. Whether
+another resource can call them depends on the binder available for
+that pairing (see [The typed client](#the-typed-client)):
 
 ```typescript
 export default class Greeter extends Cloudflare.Worker<Greeter>()(
@@ -102,7 +102,17 @@ const target = yield* Cloudflare.Workers.bindWorker(Greeter);
 const greeting = yield* target.greet(name); // typed from Greeter's Shape
 ```
 
-`bindWorker` is the Cloudflare Worker-to-Worker binder. Each runtime pair has its own bind callable, and the hub pages list them with full callers per pairing. The model is the same everywhere: the stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
+`bindWorker` is the Cloudflare Worker-to-Worker binder. Each pairing that has a stub has its own binder. The common ones:
+
+- Worker → Worker: `Cloudflare.Workers.bindWorker(Class)`
+- Worker → Durable Object: `yield* DOClass`, then `.getByName(name)`
+- Durable Object → Container: `yield* ContainerClass` inside the Durable Object, with `Cloudflare.Containers.layer(...)` provided
+- Lambda → MicroVM: `AWS.Lambda.connectMicrovm(Image, { endpoint, authToken })`
+- Railway Service or Function: `Railway.bindService(Class)` / `Railway.bindFunction(Class)`
+
+Lambda → Lambda and ECS Tasks have no schemaless stub. Use the `AWS.Lambda.InvokeFunction` binding or [Effect RPC](/apis/effect-rpc) there. The hub pages show full callers per pairing.
+
+The model is the same for every binder: the stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call. The only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
 
 ## How a call travels
 
@@ -117,6 +127,8 @@ export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 ```
 
 Per-call protocol overhead is sub-millisecond. The wire-protocol test suite benchmarks it.
+
+Railway Services and Functions use a lighter dispatcher on the private mesh. It supports value methods only (no Streams) and times out after 25 seconds. The callee's typed failures pass through. Transport failures surface as `Railway.RpcCallError`, and a rejected token as `Railway.RpcUnauthorized`. See [Railway Services](/railway/compute/services#schemaless-rpc).
 
 ## Streams
 
@@ -149,7 +161,7 @@ get: (key: string) =>
     ),
   ),
 
-// caller — `_tag` and `key` survive the wire; class identity does not:
+// caller — `_tag` and `key` survive the wire:
 const value = yield* stub.get(key).pipe(
   Effect.catchTag("KeyMissing", (e) =>
     Effect.succeed(`missing: ${e.key}`),
@@ -157,11 +169,22 @@ const value = yield* stub.get(key).pipe(
 );
 ```
 
-The codec keeps `_tag` and all own enumerable fields on tagged errors, which arrive as plain structs. `Effect.catchTag` matches because it keys on `_tag`. Class identity does not survive, so `e instanceof KeyMissing` is `false`. Plain `Error`s keep `name`, `message`, and `stack`. Calling an unknown method fails with `RpcCallError`. Defects are not enveloped. The call rejects and surfaces as `RpcCallError`.
+The codec keeps `_tag` and all own enumerable fields on tagged errors, which arrive as plain structs. `Effect.catchTag` matches because it keys on `_tag`. By default class identity does not survive, so `e instanceof KeyMissing` is `false`. Plain `Error`s keep `name`, `message`, and `stack`. Calling an unknown method fails with `RpcCallError`. Defects are not enveloped. The call rejects and surfaces as `RpcCallError`.
+
+A Cloudflare Durable Object can declare the error classes its methods fail with. The calling side then rebuilds each matching failure as a real instance, so `instanceof` and schema encoders see the class too:
+
+```typescript
+export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
+  "Repo",
+  { errors: [RepoNotFound] },
+) {}
+```
+
+A failure matches a declared class by the class's static `identifier` (Schema tagged errors) or otherwise by its class name, so the name must equal the `_tag`. Undeclared errors still arrive as plain structs.
 
 ## Limits, and why there is no validation
 
-Arguments and results must survive the wire codec. The codec is structured clone on the native channel and JSON on the fetch transport. Stream elements must be JSON values or `Uint8Array`. Binary is base64-tagged on the fetch transport so it round-trips. Functions and callbacks don't serialize. Class identity is always stripped. Every property access on a stub dispatches remotely, except the host's own `fetch`/`connect` pass-through, so a stub has no local fields and consists only of its methods.
+Arguments and results must survive the wire codec. The codec is structured clone on the native channel and JSON on the fetch transport. Stream elements must be JSON values or `Uint8Array`. Binary is base64-tagged on the fetch transport so it round-trips. Functions and callbacks don't serialize. Class identity is stripped, except for Durable Object errors declared in `errors`. Every property access on a stub dispatches remotely, except the host's own `fetch`/`connect` pass-through, so a stub has no local fields and consists only of its methods.
 
 Neither the stub nor the server does any runtime validation. This is deliberate, because it removes the schema to maintain and the per-request decode cost. The trade-off is that nothing sanitizes what arrives. Both sides are your code, deployed together and typed from the same Shape, so the trade is safe for internal calls. At a trust boundary, such as external callers, versioned APIs, or untrusted input, use schema-validated [Effect RPC](/apis/effect-rpc).
 
@@ -169,4 +192,5 @@ Neither the stub nor the server does any runtime validation. This is deliberate,
 
 - [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc): every Cloudflare pairing: Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
 - [Schemaless RPC on AWS](/aws/apis/schemaless-rpc): Lambda → MicroVM, plus what AWS does not yet have a schemaless stub for.
+- [Schemaless RPC on Railway](/railway/compute/services#schemaless-rpc): Service and Function stubs over the private mesh.
 - [Effect RPC](/apis/effect-rpc): schema-validated RPC for trust boundaries.

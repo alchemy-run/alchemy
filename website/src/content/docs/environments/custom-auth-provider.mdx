@@ -13,6 +13,11 @@ whole provider from a field list. The in-repo
 [Neon provider](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/AuthProvider.ts)
 has this shape.
 
+Alchemy already ships `alchemy/Stripe` with its own `Stripe` auth provider.
+This guide rebuilds it as a teaching example. For a real integration, pick a
+registry name that no built-in provider uses, because the registry is keyed by
+name and a second registration under the same name overwrites the first.
+
 For the profile method contract, CI resolver, registry, and lazy resolution,
 see [Auth Providers](/environments/auth-providers).
 
@@ -43,15 +48,17 @@ tags).
 
 `makeStoredAuthProvider` turns a field list into a complete provider. It
 includes interactive prompts, flag-driven configuration
-(`--method stored --set apiKey=...`), schema-validated persistence at
-`~/.alchemy/credentials/{profile}/stripe-stored.json`, `login`/`logout`,
-structured `details` for `alchemy profile show`, and a typed `NeedsReauth`
-failure when the credential file is missing.
+(`--method stored --set apiKey=...`), and structured `details` for
+`alchemy profile show`. The values are schema-validated and persisted inline
+as the provider's values in `~/.alchemy/profiles/{profile}/stripe.json`.
 
 ```typescript
 // src/stripe/AuthProvider.ts
 import { AuthError } from "alchemy/Auth/AuthProvider";
-import { makeStoredAuthProvider } from "alchemy/Auth/StoredAuthProvider";
+import {
+  makeStoredAuthProvider,
+  storedSecret,
+} from "alchemy/Auth/StoredAuthProvider";
 import { getEnvRedactedRequired } from "alchemy/Auth/Env";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -78,7 +85,7 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
     ],
     toResolved: (values, source) => ({
       type: "apiKey",
-      apiKey: Redacted.make(values.apiKey!),
+      apiKey: storedSecret(values.apiKey) ?? Redacted.make(""),
       source: { type: source },
     }),
     readEnvironment: getEnvRedactedRequired("STRIPE_API_KEY").pipe(
@@ -100,22 +107,25 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
 ```
 
 `fields` drive interactive prompts and `--set`. Each field name is also the
-property persisted in the credentials file, alongside `method: "stored"`
+property persisted in the profile, alongside `method: "stored"`
 (the `--method` value). Validation applies to both paths.
 The generated `storedSchema` validates credential reads and writes.
+`storedSecret` wraps a stored string in `Redacted` and passes an
+already-redacted value through unchanged.
 `readEnvironment` resolves CI credentials, and `environment` documents
-the variables it consumes. Missing stored credentials appear as
-`NeedsReauth` in the profile UI.
+the variables it consumes. An invalid or incomplete stored entry fails with an
+`AuthError` that tells you to run
+`alchemy profile edit --profile <profile> --reconfigure Stripe`.
 
 ## Bridge the Auth Provider to the credentials service
 
 `fromAuthProvider()` connects the two. It looks up the registered provider,
-loads (or interactively configures) the Profile's `{ method }`, runs `read`,
-and provides the result as the `StripeCredentials` Effect:
+loads the Profile's `{ method }` config, runs `read`, and provides the result
+as the `StripeCredentials` Effect:
 
 ```typescript
 // src/stripe/Credentials.ts (additions)
-import { resolveProviderConfig } from "alchemy/Auth/Profile";
+import { resolveProviderConfig } from "alchemy/Auth";
 import type { StoredAuthConfig } from "alchemy/Auth/StoredAuthProvider";
 import * as Layer from "effect/Layer";
 import {
@@ -141,9 +151,12 @@ export const fromAuthProvider = () =>
   );
 ```
 
-Outside CI, `resolveProviderConfig` applies the standard profile selection
-order. It then returns the stored config, or runs `configure` and persists the
-answer. In CI it bypasses profiles and returns `readEnvironment`. A missing
+When the provider's environment variables aren't set, and outside CI,
+`resolveProviderConfig` loads the provider's stored config from the selected
+profile. If the provider isn't configured, it fails with the exact
+`alchemy profile edit --profile <profile> --add Stripe` command to run. It
+never prompts. In CI it
+bypasses profiles and returns `readEnvironment`. A missing
 explicit local Profile fails with a command to create it. The value returned
 to `Layer.effect` is the *Effect* (closed by `Effect.cached`), not its result.
 Nothing resolves until a handler runs it. Within one process, `read` and its
@@ -210,13 +223,14 @@ operation runs and never at Layer construction.
 ## Try it
 
 ```sh
-alchemy deploy             # first run: prompts for credentials, saves them to the profile
+alchemy profile edit --add Stripe   # connect the account once
+alchemy deploy
 alchemy profile refresh --provider Stripe    # re-authenticate without changing the method
 alchemy profile edit --reconfigure Stripe    # replace the stored credentials interactively
 
 # non-interactive (agents, scripts): value from env, stdin, or a literal
-alchemy profile edit --add stripe --method stored --set apiKey=env:STRIPE_API_KEY
-op read op://vault/stripe/key | alchemy profile edit --add stripe --method stored --set apiKey=-
+alchemy profile edit --add Stripe --method stored --set apiKey=env:STRIPE_API_KEY
+op read op://vault/stripe/key | alchemy profile edit --add Stripe --method stored --set apiKey=-
 
 alchemy profile show       # renders your provider's details
 alchemy provider check-env --provider stripe   # CI preflight for STRIPE_API_KEY

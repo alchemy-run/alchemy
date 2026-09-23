@@ -13,33 +13,19 @@ the PR that you can review, revert, and trace with `git blame`.
 
 ## OTel everywhere
 
-Every `Effect.withSpan` opens a span, every `Metric` update records a
-data point, and every `Effect.logInfo` ships a log line. Each fetch,
-queue message, cron fire, and invocation also gets an
-`http.server`-style root span automatically. A telemetry Layer
-provided on the Function/Worker decides where the signals go:
+Provide a telemetry Layer on the Function/Worker and the built-in
+exporter ships Effect's traces, metrics, and logs. Without one,
+nothing is exported:
 
 ```typescript
-import * as Alchemy from "alchemy";
-
-Effect.provide(
-  Layer.mergeAll(
-    Cloudflare.R2.ReadWriteBucketBinding,
-    Alchemy.Telemetry.layerOtlp({
-      url: "https://collector.example.com",
-      headers: { "x-api-key": apiKey },
-    }),
-  ),
-)
+Alchemy.Telemetry.layerOtlp({ url: "https://collector.example.com" })
 ```
 
-Any OTLP endpoint works, including Axiom, an OTel collector, or any
-OTLP-compatible vendor. Swap the layer to ship somewhere else. The
-code emitting the signals never changes. Buffered telemetry is
-flushed when each request's scope closes (via `waitUntil` on Cloudflare, so
-export never delays a response). See
-[Telemetry](/infrastructure-as-effects/telemetry) for the full
-mechanics.
+Any OTLP/HTTP endpoint works. Swap the layer to ship somewhere else,
+and the code emitting the signals stays the same. See
+[Telemetry](/infrastructure-as-effects/telemetry) for the mechanics,
+passing an API key as a `Config.Redacted` header, and how buffered
+telemetry is flushed.
 
 ## Provision the receiving end
 
@@ -102,23 +88,43 @@ each signal to its dataset. The Worker contains no exporter code.
 
 On Cloudflare you can skip the in-process exporter. An
 `ObservabilityDestination` has Cloudflare push Workers Logs telemetry
-(traces, logs, or metrics) to an OTLP collector. The Worker needs no
-code changes:
+(traces, logs, or metrics) to an OTLP collector:
 
 ```typescript
 // in the Stack's generator
+import * as Output from "alchemy/Output";
+import * as Redacted from "effect/Redacted";
+import { Ingest, Traces } from "./src/observability.ts";
+
 const traces = yield* Traces;
+const ingest = yield* Ingest;
 
 yield* Cloudflare.Workers.ObservabilityDestination("TracesExport", {
   url: traces.otelTracesEndpoint,
-  headers: { authorization: `Bearer ${process.env.AXIOM_TOKEN}` },
+  headers: {
+    authorization: Output.map(ingest.token, (t) => `Bearer ${Redacted.value(t)}`),
+    "x-axiom-dataset": traces.name,
+  },
   logpushDataset: "opentelemetry-traces",
 });
 ```
 
+The `authorization` header is derived from the ingest token's
+`Redacted` output. The `x-axiom-dataset` header tells Axiom's OTLP
+endpoint which dataset receives the data.
+
+Workers Traces are opt-in. Set
+`observability: { traces: { enabled: true } }` on each Worker whose
+traces you want to export.
+
 Create one destination per signal (`opentelemetry-traces`,
 `opentelemetry-logs`, `opentelemetry-metrics`). The endpoint URL and
-headers update in place. Changing the dataset triggers a replacement.
+headers update in place. Changing `name` or `logpushDataset` replaces
+the destination. Cloudflare preflights the `url` with a `POST` on
+create (skippable with `skipPreflightCheck`) and on every update, so
+the collector must answer `2xx`. The
+[Axiom observability guide](/cloudflare/observability/axiom-observability)
+covers the details.
 
 ## Alerts in code
 
@@ -203,9 +209,20 @@ yield* AWS.CloudWatch.Dashboard("ApiHealth", {
 ```
 
 `AWS.CloudWatch.CompositeAlarm` combines alarm states with AND/OR
-into a higher-level alert (`AlarmRule: 'ALARM("HighErrors") OR
-ALARM("HighLatency")'`). Stacks are per-stage, so `prod`, `staging`,
-and `pr-42` each get their own dashboards and alarms.
+into a higher-level alert. Alchemy generates alarm names from the
+app, stage, and logical ID unless you set `name`, so reference them
+through the `alarmName` output:
+
+```typescript
+import * as Output from "alchemy/Output";
+
+yield* AWS.CloudWatch.CompositeAlarm("HighSeverity", {
+  AlarmRule: Output.interpolate`ALARM("${errors.alarmName}")`,
+});
+```
+
+Stacks are per-stage, so `prod`, `staging`, and `pr-42` each get
+their own dashboards and alarms.
 
 ## Where next
 

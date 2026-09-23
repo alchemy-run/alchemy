@@ -7,10 +7,9 @@ This page shows the end-to-end pattern for integration-testing a deployed Stack 
 
 ## Set up the harness
 
-Configure Providers and state once per file. `Test.make` returns everything the file needs:
+Configure Providers once per file. `Test.make` returns everything the file needs:
 
 ```typescript
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Neon from "alchemy/Neon";
@@ -26,9 +25,10 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     Drizzle.providers(),
     Neon.providers(),
   ),
-  state: Alchemy.localState(),
 });
 ```
+
+`deploy(Stack)` stores state in the store declared on the Stack itself, so `Test.make` needs no `state` option here. See [State store](/state-store).
 
 Switching between Bun and Vitest is a two-line import change. See [Bun vs Vitest](/testing/test-harness#bun-vs-vitest).
 
@@ -68,19 +68,6 @@ bun test test/integ.test.ts
 ```
 
 The first run deploys. Re-runs diff and skip unchanged Resources. Tests default to the isolated `test_$USER` [stage](/environments/stages), so they never overwrite your `live_$USER` or `dev_$USER` deployments.
-
-## Run it locally with dev mode
-
-The same suite can run entirely on your machine. `dev: true` gives the file [`alchemy dev`](/environments/local-development) semantics. Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in workerd. AWS Lambda and its emulated services run in Docker. `deploy(Stack)` boots local simulators, and the `url` output points at `http://localhost:<port>`:
-
-```typescript
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
-  dev: true,
-});
-```
-
-Every assertion below works unchanged against the local stack. To keep one file that runs locally on your laptop and live in CI, omit the flag and set `ALCHEMY_DEV=1` in your shell. See [Test harness → dev](/testing/test-harness#dev) for the full semantics and [Tutorial Part 4](/cloudflare/tutorial/part-4) for the walkthrough.
 
 ## Drive the live URL
 
@@ -123,8 +110,11 @@ test(
     const response = yield* getWhenReady(url);
     expect(response.status).toBe(200);
   }),
+  { timeout: 90_000 },
 );
 ```
+
+Per-test timeouts default to the runner's 5s, which is shorter than the retry window. Give tests that retry or poll more time with the third argument. See [Test harness → Timeouts](/testing/test-harness#timeouts).
 
 `getWhenReady` retries only 404 and 5xx responses, and `executeWhenReady` does the same for arbitrary requests. The default is 20 attempts with exponential backoff starting at 500ms. Because only 404 and 5xx are retried, deliberate `400`, `401`, or `403` assertions observe those statuses immediately. For arbitrary effects, use a bounded manual retry:
 
@@ -136,19 +126,57 @@ const response = yield* HttpClient.get(`${url}/health`).pipe(
 );
 ```
 
-## Poll async effects
+## Drive an RPC Worker
 
-Queues drain, workflows complete, and crons fire asynchronously. Never poll them with a deadline loop. Use a bounded declarative schedule:
+A Worker that serves [Effect RPC](/apis/effect-rpc) needs an RPC client instead of plain HTTP calls. Build it on `Test.rpcClientLayer`:
 
 ```typescript
-const status = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`).pipe(
-  Effect.flatMap((res) => res.json),
-  Effect.map((body) => body as { status: string }),
-  Effect.repeat({
-    schedule: Schedule.spaced("2 seconds"),
-    until: (s) => s.status === "complete",
-    times: 30,
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import { MyRpcs } from "../src/rpcs.ts";
+
+test(
+  "worker answers RPC calls",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    yield* Effect.gen(function* () {
+      const client = yield* RpcClient.make(MyRpcs);
+      const pong = yield* client.Ping({ message: "hi" });
+      expect(pong.echo).toBe("hi");
+    }).pipe(Effect.scoped, Effect.provide(Test.rpcClientLayer(url)));
   }),
+  { timeout: 60_000 },
+);
+```
+
+`Test.rpcClientLayer(url)` is an HTTP transport for the RPC client, using ndjson serialization by default. A plain RPC transport never checks the response's content type. On a fresh `workers.dev` URL it would decode Cloudflare's HTML placeholder page, which is served with status 200, and fail with an opaque `RpcClientDefect`. The layer rejects any response with the wrong content type and retries the request through the cold-start window: 5 retries by default, backing off exponentially from 500ms with a 3s cap.
+
+Pass `{ times, schedule }` to tune the retry, `serialization` to use another RPC serialization, or `{ guard: false }` to turn the guard off and assert on raw edge behavior. For other protocol clients that need the same guard, `Test.guardedFetchLayer(contentType)` provides a guarded fetch-backed `HttpClient`.
+
+## Poll async effects
+
+Queues drain, workflows complete, and crons fire asynchronously. Never poll them with a deadline loop. Use a bounded declarative schedule, and give the test a timeout longer than the whole schedule:
+
+```typescript
+test(
+  "workflow completes",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const started = yield* HttpClient.post(`${url}/workflow/start`);
+    const { instanceId } = (yield* started.json) as { instanceId: string };
+
+    const status = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`).pipe(
+      Effect.flatMap((res) => res.json),
+      Effect.map((body) => body as { status: string }),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s.status === "complete",
+        times: 30,
+      }),
+    );
+    expect(status.status).toBe("complete");
+  }),
+  { timeout: 90_000 },
 );
 ```
 
@@ -179,18 +207,32 @@ const stack = beforeAll(
 
 ## Share one Stack across files
 
-Give every file's `Test.make` the same remote state and the same stage. With identical state and stage, the second file's `deploy(Stack)` is a no-op diff. The default `test_$USER` stage already does this for a single developer. Pin an explicit stage when files must share a stack across users or CI jobs:
+Files share a Stack instance when they deploy the same Stack at the same stage. The same Stack has the same name, so it uses the same `state` store from its definition, and the second file's `deploy(Stack)` is a no-op diff. The default `test_$USER` stage already does this for a single developer.
+
+When files must share a stack across users or CI jobs, pin the stage in each file:
 
 ```typescript
 // test/api.integ.test.ts AND test/queue.integ.test.ts
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
-  state: Cloudflare.state(), // remote, shared across files and runners
-  stage: "shared",           // same stage → same Stack instance
+  stage: "shared", // same stage → same Stack instance
 });
 ```
 
-See [State store](/state-store) for choosing a remote store.
+Then give the Stack a remote store, such as `Cloudflare.state()`, in its own options so every machine reads the same state. See [State store](/state-store) for choosing a remote store.
+
+## Run it locally with dev mode
+
+Set `dev: true` in `Test.make` to run the same suite against local emulators. The `url` output then points at `http://localhost:<port>`:
+
+```typescript
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
+```
+
+See [Test harness → dev](/testing/test-harness#dev) for the full semantics and [Tutorial Part 4](/cloudflare/tutorial/part-4) for a walkthrough.
 
 ## CI
 

@@ -39,9 +39,9 @@ export const WorkerProvider = () =>
   });
 ```
 
-`dual` registers the run's default mode eagerly and builds the other
-lazily. For example, a deploy constructs the local provider only if it has
-an instance to tear down.
+Neither variant is built at registration. Each is built and memoized the
+first time a plan, delete, or nuke needs it. For example, a deploy
+constructs the local provider only if it has an instance to tear down.
 
 ### Route deploy-time data-plane calls: `dataPlane`
 
@@ -64,6 +64,11 @@ routed to the emulator even when the ambient profile carries live
 credentials. A client bound to an `Alchemy.remote()` resource keeps
 hitting the real cloud. Routing is decided per bound resource, within the
 same Action.
+
+`liveDataPlane` is the inverse. During `alchemy dev` the ambient
+environment is the emulator, so pass the live mode's environment as
+`liveDataPlane` to make clients bound to `Alchemy.remote()` resources use
+the real cloud. Pass a module-memoized layer reference for both options.
 
 ### Compose local deps inside the thunk
 
@@ -108,6 +113,15 @@ export const DevProviderLocal = () =>
       } satisfies LocalProvider.LocalProviderSpec<Dev>;
     }),
   );
+```
+
+The second argument is the URL of a module whose default export is this
+provider's layer. The dev sidecar imports it to serve the provider over
+RPC. `Command.Dev` points it at a small `Local.ts`:
+
+```typescript
+// Local.ts
+export default DevProviderLocal().pipe(Layer.provide(CommandExecutorLive()));
 ```
 
 `start` boots one instance in the ambient `Scope` and returns Attributes at
@@ -166,15 +180,16 @@ descriptors here, and build runtime-rich structures from them inside
    resolveConfig: ({ news }) => ...,
    start: Effect.fn(function* ({ config, invalidate }) { ... }),
 +  // Delete-only: NOT called on restarts.
-+  stop: Effect.fn(function* ({ id }) {
-+    yield* stopProxy(id);
++  stop: Effect.fn(function* ({ fqn }) {
++    yield* stopProxy(fqn);
 +  }),
  };
 ```
 
 Anything `start` acquires dies with the instance scope. `stop` is only for
 state that intentionally survives restarts, like a URL proxy kept so the
-address stays stable across rebuilds.
+address stays stable across rebuilds. Key cross-restart state by `fqn`.
+Logical ids can repeat across namespaces.
 
 ### What the runner generates
 
@@ -191,7 +206,7 @@ address stays stable across rebuilds.
 - **`list`** returns every running instance's Attributes.
 
 :::note[The dev sidecar]
-The second argument (`serverEntryUrl`) serves the provider over RPC. During
+The second argument (`providersUrl`) serves the provider over RPC. During
 `alchemy dev`, the registry of running processes lives in a sidecar that
 survives user-code hot reloads. Outside dev, the provider is constructed
 in-process and no sidecar is spawned.
@@ -223,6 +238,14 @@ test.provider("promotes a dev worker to a live worker", (stack) =>
 
 `Test.make({ dev: true })` gives the file `alchemy dev` semantics.
 `remote()` works in tests the same way it works in programs.
+
+With `dev: true`, RPC-backed local providers run in a sidecar process by
+default, the same topology as `alchemy dev`. This catches a local provider
+that needs services only the main process has. See
+[Test harness › sidecar](/testing/test-harness#sidecar) for the
+`sidecar: false` opt-out, and
+[Test harness › dev](/testing/test-harness#dev) for the
+`ALCHEMY_TEST_DEV` override.
 
 ## Reference implementations
 

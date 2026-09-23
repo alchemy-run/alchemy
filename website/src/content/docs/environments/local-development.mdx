@@ -95,11 +95,8 @@ the real cloud when local fidelity isn't enough.
 
 ## Debugging
 
-Because your code runs locally, you can attach a debugger:
-
-- Set breakpoints in your IDE
-- Inspect variables and call stacks
-- Profile performance
+Your code runs on your machine, so logs and stack traces come
+straight from the local process (workerd or the Docker container).
 
 ## Running a resource live in dev
 
@@ -152,7 +149,7 @@ state.
 | Everything else     | Deployed to cloud (personal stage)       | Deployed to cloud  |
 | Application code    | Runs locally (workerd, Docker)           | Deployed to cloud  |
 | File watching       | Hot reload on change                     | Manual redeploy    |
-| Debugging           | Attach local debugger                    | Tail logs          |
+| Debugging           | Local logs and stack traces              | Tail logs          |
 | Speed               | Milliseconds                             | Seconds to minutes |
 
 To automate the deploy side, see the [CI guide](/environments/ci).

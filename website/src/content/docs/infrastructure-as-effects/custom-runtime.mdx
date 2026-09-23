@@ -25,7 +25,7 @@ A runtime resource splits into a **constructor** and a **provider**:
 // 1. The constructor — what users call. Built on `Platform`.
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
-    createRuntimeContext: createHostRuntimeContext("AWS.ECS.Task"),
+    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Task"),
   });
 
 // 2. The provider — the lifecycle Layer. Ordinary `Provider.effect`.
@@ -45,9 +45,16 @@ type parameter is the **Binding Contract**. It is the data shape that
 upstream capabilities attach to this host:
 
 ```typescript
+export interface TaskBindingContract {
+  env?: Record<string, any>;
+  policyStatements?: PolicyStatement[];
+  volumes?: ecs.Volume[];
+  mountPoints?: ecs.MountPoint[];
+}
+
 export interface Task extends Resource<
   "AWS.ECS.Task",
-  TaskProps, // main, cpu, memory, port, env, ...
+  TaskProps, // main | context | image, cpu, memory, port, env, ...
   {
     taskDefinitionArn: string;
     imageUri: string;
@@ -55,20 +62,22 @@ export interface Task extends Resource<
     // ...
     code: { hash: string };
   },
-  {
-    env?: Record<string, any>;
-    policyStatements?: PolicyStatement[];
-  }
+  TaskBindingContract,
+  Providers
 > {}
 ```
 
-On AWS the contract is env vars and IAM statements. A Cloudflare
+For the Task, the contract is env vars and IAM statements, plus the
+volumes and mount points a binding such as `AWS.EFS.Mount` requests.
+The fifth type parameter, `Providers`, is the provider set a Stack
+must supply to deploy the resource. A Cloudflare
 Worker accepts `{ bindings: Worker.Binding[] }`. Your contract is
 whatever your platform needs from a binding.
 
 ## The `Platform` type
 
-`Platform` takes four type parameters:
+`Platform` takes four main type parameters. Two more, `BaseShape` and
+`InlineProps`, have defaults:
 
 ```typescript
 export interface Platform<
@@ -76,6 +85,8 @@ export interface Platform<
   Services,
   MainShape,
   RuntimeContext extends BaseRuntimeContext,
+  BaseShape = {},
+  InlineProps extends Resource["Props"] = Resource["Props"],
 > extends Effect.Effect<Resource & RuntimeContext, never, Resource> { /* ... */ }
 ```
 
@@ -83,7 +94,7 @@ export interface Platform<
 | ---------------- | ------------------------------------------------------- | -------------------------------------------------------------- |
 | `Resource`       | `Task`                                                  | The Resource contract above                                     |
 | `Services`       | `Credentials \| Region \| ServerHost \| AWSEnvironment` | Services the runtime provides to the user's constructor Effect        |
-| `MainShape`      | `Main<TaskServices>`                                    | What the constructor Effect may return: `{ fetch?: HttpEffect }`     |
+| `MainShape`      | `TaskShape`                                             | What the constructor Effect may return: `{ fetch?, run? }`     |
 | `RuntimeContext` | `TaskRuntimeContext extends HostRuntimeContext`         | The mutable context that collects handlers, env, and exports   |
 
 The value-level factory takes the type string and a
@@ -94,15 +105,27 @@ async bindings:
 ```typescript
 import { Platform, type Main } from "alchemy";
 
-export type TaskShape = Main<TaskServices>;
+export type TaskShape =
+  | void
+  | (Exclude<Main<TaskServices>, void> & {
+      // runs to completion when the container starts, then the container exits
+      run?: Effect.Effect<
+        void,
+        never,
+        TaskServices | PlatformServices | RuntimeContext | Scope
+      >;
+    });
 
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
-    createRuntimeContext: createHostRuntimeContext("AWS.ECS.Task") as (
+    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Task") as (
       id: string,
     ) => TaskRuntimeContext,
   });
 ```
+
+`Main<TaskServices>` allows a `fetch` handler. The Task adds a one-shot
+`run` entry for tasks that do a job and exit.
 
 ## The RuntimeContext
 
@@ -136,9 +159,9 @@ export interface BaseRuntimeContext {
 
 Server-style platforms can reuse `createHostRuntimeContext` in
 [`Server/Process.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Server/Process.ts).
-It is the shared implementation used by `AWS.ECS.Task` and
-`AWS.EC2.Instance`. It folds `run` (background loops) and `serve`
-(HTTP handlers) into one list of runners:
+`AWS.EC2.Instance` uses it directly, through the alias
+`createEc2HostRuntimeContext`. It folds `run` (background loops) and
+`serve` (HTTP handlers) into one list of runners:
 
 ```typescript
 run: (effect) => Effect.sync(() => {
@@ -152,8 +175,17 @@ exports: Effect.sync(() => ({
 })),
 ```
 
+This is a simplified view. The real `program` also coordinates
+graceful HTTP shutdown on hosts that manage it.
+
+Container platforms such as `AWS.ECS.Task` use
+`createContainerRuntimeContext`, which wraps `createHostRuntimeContext`.
+It registers a returned `run` as a one-shot runner, so the container
+exits when `run` completes. It boots the HTTP server only when the
+constructor returns a `fetch` handler.
+
 After it runs the constructor Effect, `Platform` hands any returned `fetch`
-handler to `serve`. It then folds the context back onto the resource's
+handler to `serve`, along with the whole returned shape. It then folds the context back onto the resource's
 Props, so everything the constructor recorded reaches your provider:
 
 ```typescript
@@ -179,21 +211,43 @@ reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
   const taskRoleArn = output?.taskRoleArn
     ?? (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
 
-  // 2. Apply the Binding Contract data (IAM policy + env).
-  const bindingEnv = yield* attachBindings({
-    roleName: taskRoleName,
-    policyName: taskPolicyName,
-    bindings,
+  // 2. Apply the Binding Contract data (IAM policy, env, volumes).
+  const { env: bindingEnv, volumes: bindingVolumes, mountPoints: bindingMountPoints } =
+    yield* attachTaskBindings({
+      roleName: taskRoleName,
+      policyName: taskPolicyName,
+      bindings,
+    });
+
+  // 3. Bundle the runtime Effect into an image and push it.
+  const resolved = yield* imageSource.resolve({
+    id,
+    source: news,
+    repositoryName,
+    tags,
+    bootstrap: makeBunBootstrap(news.handler ?? "default"),
+    session,
+    // ...
   });
 
-  // 3. Bundle the runtime Effect and ship it.
-  const { files, hash } = yield* bundleProgram(id, news);
-  const imageUri = yield* buildAndPushImage({ id, repositoryUri, hash, files, props });
-  const taskDefinition = yield* registerTaskDefinition({ /* ... */ });
+  // 4. Register a task definition revision that runs the image.
+  const taskDefinition = yield* registerTaskDefinitionRevision({
+    props: { ...news, env: { ...bindingEnv, ...alchemyEnv, ...news.env } },
+    imageUri: resolved.imageUri,
+    taskRoleArn,
+    bindingVolumes,
+    bindingMountPoints,
+    // ...
+  });
 
   return { taskDefinitionArn: taskDefinition.taskDefinitionArn!, /* ... */ };
 }),
 ```
+
+`imageSource.resolve` builds the image from whichever source the props
+declare (`main`, `context`, or `image`). For `main`, it bundles the
+program with the generated entrypoint that `bootstrap` returns (see
+[Bundle the handler](#bundle-the-handler)).
 
 Each step is independently idempotent. The same observe → ensure →
 sync flow works for greenfield creates, updates, and adoption. Don't
@@ -221,14 +275,15 @@ const bundleOutput = yield* Bundle.build(
 
 Ship every file in `files`, including the chunks. Dynamic imports split
 into chunks, and a missing chunk crashes the artifact at boot. Use
-`hash` as the immutable artifact version. The Task tags its Docker
-image `${repositoryUri}:${hash}`.
+`hash` as the immutable artifact version. The Task hashes the bundle
+together with its generated Dockerfile and target platform, and tags
+the image `${repositoryUri}:${codeHash}`.
 
 The user's `main` module exports the platform class. It does not export
 a runnable program, so the bundle needs a generated entrypoint.
-`Bundle.virtualEntryPlugin` wraps `main` in a bootstrap. The bootstrap
-resolves the class, pulls `RuntimeContext.exports`, and runs the
-collected program under your platform's Layers:
+`Bundle.virtualEntryPlugin` wraps `main` in one. Keep that generated
+entry to a three-line shim that imports only your bootstrap module and
+the user's `main`:
 
 ```typescript
 const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -236,24 +291,84 @@ const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 yield* Bundle.build({
   input: realMain,
   plugins: [virtualEntryPlugin((importPath) => `
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Ecs";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-const program = handler.pipe(
-  Effect.flatMap((task) => task.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(/* HTTP server + platform Layers */),
-  Effect.scoped,
-);
-
-Effect.runPromise(program);
+await bootstrap(entrypoint);
 `)],
 }, { format: "esm", entryFileNames: "index.mjs" });
 ```
 
-The bootstrap is the one place the Effect world meets the process
-entrypoint. For the Task it provides a Bun HTTP server bound to
+This is the Task's `makeBunBootstrap(handler)` from
+[`AWS/ECR/ImageSource.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/ECR/ImageSource.ts).
+The generated entry is a virtual module with no location on disk. Under
+an isolated install (pnpm, or bun with `--linker=isolated`), no
+directory can resolve both alchemy's own dependencies and the user's,
+so a bootstrap written inline in the template dies at boot with
+`Cannot find module`. `Bundle.build` turns an unresolved bare import
+from a generated entry into a build error for this reason. The shim
+avoids the problem. `alchemy` is a direct dependency of the user's
+project, so `alchemy/Runtime/Bootstrap/Ecs` resolves, and the bootstrap
+module is a real file whose own imports resolve normally.
+
+The bootstrap module is the one place the Effect world meets the
+process entrypoint. It composes helpers from
+`alchemy/Runtime/Bootstrap/Process` with your platform's Layers.
+[`Runtime/Bootstrap/Ecs.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Runtime/Bootstrap/Ecs.ts)
+is the reference:
+
+```typescript
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "alchemy/Runtime/Bootstrap/Process";
+
+export const bootstrap = (entrypoint: unknown): Promise<void> => {
+  const program = resolveProgram("program", { telemetry: true }).pipe(
+    Effect.provide(
+      entrypointLayer(entrypoint).pipe(
+        Layer.provideMerge(stackFromEnv),
+        Layer.provideMerge(Credentials.fromChain()),
+        Layer.provideMerge(Region.fromEnv()),
+        Layer.provideMerge(Endpoint.fromEnv()), // AWS_ENDPOINT_URL override, if set
+        Layer.provideMerge(BunHttpServer()),
+        Layer.provideMerge(platform), // Bun services, HTTP client, logger
+        // ...plus a ConfigProvider over process.env
+      ),
+    ),
+    Effect.scoped,
+  );
+
+  return runProcess("Task", program);
+};
+```
+
+- **`entrypointLayer`** turns the user's default export into a Layer
+  that provides the platform instance.
+- **`resolveProgram("program")`** reads `RuntimeContext.exports` from
+  that instance and returns an Effect that runs its `program`.
+- **`stackFromEnv`** provides the `Stack` from the
+  `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` your provider ships.
+- **`runProcess`** runs the program as the process entry. It exits
+  with code 1 on failure.
+
+For the Task, the platform Layers include a Bun HTTP server bound to
 `PORT`. That server serves the `{ fetch }` handler and keeps `host.run`
 loops alive. Your platform provides whatever its host needs.
+
+Long-lived hosts build telemetry exporters once per process.
+`resolveProgram("program", { telemetry: true })` wraps the program in
+`provideProcessTelemetry(self.RuntimeContext)`, so exporters batch on
+their intervals and flush when the root scope closes on graceful
+shutdown. See [Telemetry](/infrastructure-as-effects/telemetry) for
+how exporters are configured.
+
+A runtime published outside alchemy can't add files under
+`alchemy/Runtime/Bootstrap`. Ship your own bootstrap module in your
+package, resolvable from the user's project, that composes the same
+helpers. Point the shim at it.
 
 ## Honor the phase split
 
@@ -289,8 +404,11 @@ phase. At `plan` it captures every config lookup into the
 RuntimeContext via `ctx.set`. At `runtime` the same lookup resolves
 through `ctx.get`, which reads back the env var your provider shipped.
 Because of this round-trip, `set`/`get` must agree on how values are
-encoded. The host context JSON-serializes on `set` and
-`JSON.parse`s on `get`.
+encoded. The host context packs values with `packEnvValue` on `set`
+and unpacks them with `unpackEnvValue` on `get`. A string stays as-is
+unless it would parse as JSON (such as `"123"` or `"null"`). Other
+values become JSON, and `Redacted` values get a marker.
+Both come from `alchemy/RuntimeContext`.
 
 ## Bindings flow through the host
 
@@ -300,7 +418,7 @@ data matching your Binding Contract. The engine collects those and
 hands them to `reconcile` as the `bindings` argument:
 
 ```typescript
-const attachBindings = Effect.fn(function* ({ roleName, policyName, bindings }) {
+const attachTaskBindings = Effect.fn(function* ({ roleName, policyName, bindings }) {
   const activeBindings = bindings.filter((binding) => binding.action !== "delete");
 
   const env = activeBindings
@@ -311,6 +429,8 @@ const attachBindings = Effect.fn(function* ({ roleName, policyName, bindings }) 
     (binding) => binding?.data?.policyStatements ?? [],
   );
 
+  // volumes and mountPoints are collected the same way (deduplicated)
+
   if (policyStatements.length > 0) {
     yield* iam.putRolePolicy({
       RoleName: roleName,
@@ -320,16 +440,23 @@ const attachBindings = Effect.fn(function* ({ roleName, policyName, bindings }) 
         Statement: policyStatements,
       }),
     });
+  } else {
+    yield* iam
+      .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
   }
 
-  return env; // merged into the shipped environment
+  return { env, volumes, mountPoints }; // merged into the task definition
 });
 ```
 
 Your provider decides what the contract data means. Here IAM
-policies attach to the task role and env vars land in the container
+policies attach to the task role, env vars land in the container
+definition, and volumes and mount points are added to the task
 definition. A binding removed from code arrives with
-`action: "delete"`, so you can remove permissions as well as add them.
+`action: "delete"`. `attachTaskBindings` skips those and rewrites the
+whole policy from the rest, deleting it when no statements remain, so
+removed permissions go away.
 
 ## What users get
 
@@ -340,6 +467,7 @@ infrastructure props, a constructor Effect, and a `{ fetch }` handler:
 import * as AWS from "alchemy/AWS";
 import { ServerHost } from "alchemy/Server";
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
   "ApiTask",

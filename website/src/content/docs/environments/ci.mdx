@@ -116,7 +116,7 @@ if: "${{ github.event.action != 'closed' }}",
           },
           {
             name: "Deploy",
-            run: `${cfg.run} deploy --stage \${{ env.STAGE }}`,
+            run: `${cfg.run} deploy --stage \${{ env.STAGE }} --yes`,
             env: {
               PULL_REQUEST: "${{ github.event.number }}",
               GITHUB_SHA: "${{ github.sha }}",
@@ -150,7 +150,7 @@ fi`,
           },
           {
             name: "Destroy Preview Environment",
-            run: `${cfg.destroy} destroy --stage \${{ env.STAGE }}`,
+            run: `${cfg.destroy} destroy --stage \${{ env.STAGE }} --yes`,
             env: {
               PULL_REQUEST: "${{ github.event.number }}",
 },
@@ -167,6 +167,12 @@ The core idea is **credentials as code**. Alchemy provisions exactly
 the credentials your CI needs, such as a scoped Cloudflare API token
 or an AWS IAM role for OIDC. It writes them into the repo as
 encrypted secrets. You don't copy-paste API keys into the GitHub UI.
+
+In CI, Alchemy doesn't read profiles. With `CI=true` (set
+automatically by GitHub Actions), each provider resolves its
+credentials from environment variables. See
+[Profiles › CI](/environments/profiles#ci) for the variables each
+provider needs.
 
 ## Preflight: verify the environment
 
@@ -200,7 +206,7 @@ Open a PR. Alchemy does the rest.
    `GitHub.Comment` resource keeps its logical id stable, so the
    comment updates in place on each push.
 4. **PR is merged or closed → cleanup runs.** A second job runs
-   `alchemy destroy --stage pr-{n}`. The resources are deleted and
+   `alchemy destroy --stage pr-{n} --yes`. The resources are deleted and
    stop costing money.
 
 ## What we'll build
@@ -214,6 +220,28 @@ By the end you'll have:
 3. A PR-comment resource in your `alchemy.run.ts` that posts the
    preview URL on each push.
 
+## Use a remote state store
+
+A preview deploy and its cleanup job run on different runners. Local
+`.alchemy/` state starts empty on every runner, so the cleanup job
+would find nothing to destroy. Give the app stack a remote
+[state store](/state-store) so every run reads and writes the same
+state:
+
+```typescript
+export default Alchemy.Stack(
+  "my-app",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(), // or AWS.state()
+  },
+  // ...
+);
+```
+
+With `Cloudflare.state()`, the first CI run deploys the state-store
+worker without a prompt when the command passes `--yes`.
+
 ## GitHub Actions Workflow
 
 <Steps>
@@ -226,13 +254,19 @@ By the end you'll have:
 
    ```diff lang="typescript"
    import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
    +import * as GitHub from "alchemy/GitHub";
    +import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
+   +import * as Layer from "effect/Layer";
 
    export default Alchemy.Stack(
      "my-app",
-     { providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()) },
+   -  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+   +  {
+   +    providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()),
+   +    state: Cloudflare.state(),
+   +  },
      Effect.gen(function* () {
        const app = yield* App;
    +    const github = yield* GitHub.GitHubEnv;
@@ -296,6 +330,11 @@ By the end you'll have:
    The cleanup job includes a safety check so it can't destroy the
    production environment by accident.
    :::
+
+   CI has no terminal to approve the plan, so every command passes
+   `--yes`. Without it, Alchemy changes nothing and exits with code 1.
+   With `Cloudflare.state()`, `--yes` also lets the run deploy or
+   upgrade the state store without a prompt.
 
 3. **Add provider credentials**
 
@@ -472,7 +511,7 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 
 ```diff lang="yaml"
       - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
 +         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 +         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -483,7 +522,7 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 
 ```diff lang="yaml"
       - name: Destroy Preview Environment
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
         env:
 +         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 +         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -583,7 +622,7 @@ pair:
 
 ```diff lang="yaml"
       - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
 +         CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
 +         CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
@@ -621,6 +660,7 @@ export default Alchemy.Stack(
       AWS.providers(),
       GitHub.providers(),
     ),
+    state: AWS.state(),
   },
   Effect.gen(function* () {
     const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
@@ -708,7 +748,7 @@ the `configure-aws-credentials` step. No secrets are needed:
 +           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 +           aws-region: ${{ vars.AWS_REGION }}
         - name: Deploy
-          run: bun alchemy deploy --stage ${{ env.STAGE }}
+          run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
 ```
 
 ```diff lang="yaml"
@@ -726,7 +766,7 @@ the `configure-aws-credentials` step. No secrets are needed:
 +           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 +           aws-region: ${{ vars.AWS_REGION }}
         - name: Destroy Preview Environment
-          run: bun alchemy destroy --stage ${{ env.STAGE }}
+          run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
 ```
 
 ## AWS with access keys
@@ -741,6 +781,7 @@ step in the AWS console.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -750,6 +791,7 @@ export default Alchemy.Stack(
   "github",
   {
     providers: GitHub.providers(),
+    state: AWS.state(),
   },
   Effect.gen(function* () {
     const accessKeyId = yield* Config.String("AWS_ACCESS_KEY_ID");
@@ -783,7 +825,7 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 
 ```diff lang="yaml"
       - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
 +         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
 +         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -795,7 +837,7 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 
 ```diff lang="yaml"
       - name: Destroy Preview Environment
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
         env:
 +         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
 +         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

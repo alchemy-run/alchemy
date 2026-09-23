@@ -60,7 +60,7 @@ can run.
   nodes={[
     { id: "Plan", label: "alchemy deploy", type: "plantime", tone: "accent" },
     { id: "ConstructP", label: "construct()", type: "records bindings" },
-    { id: "Apply", label: "apply", type: "create / update" },
+    { id: "Apply", label: "apply", type: "reconcile" },
     { id: "Deploy", label: "deployed", type: "Worker / Lambda" },
     { id: "Cold", label: "cold start", type: "runtime", tone: "accent", layer: 0 },
     { id: "ConstructR", label: "construct()", type: "builds SDK clients", layer: 1 },
@@ -85,6 +85,18 @@ can run.
   executes at plantime, so you can put real per-request work there
   without affecting deploy speed.
 
+### What this means for constructor code
+
+A `Config` lookup in the constructor is captured at plantime and bound
+onto the Runtime as a secret. At runtime the same lookup reads the
+value back from the Runtime's environment. See
+[Secrets](/environments/secrets).
+
+Any other Effect in the constructor also runs during `alchemy deploy`,
+`alchemy plan`, and `alchemy dev`. One-shot I/O there, such as fetching
+a value to cache for every request, must succeed in the deploy process
+too. If it can't, move it into the handler.
+
 ## `ALCHEMY_PHASE`
 
 Alchemy exposes the current phase as the `ALCHEMY_PHASE` environment
@@ -95,9 +107,13 @@ variable or config key:
 | `plan`    | Default. Running `alchemy deploy`, `alchemy plan`, or `alchemy dev`. |
 | `runtime` | Running inside a deployed Worker or Lambda Function.                 |
 
-Most user code never reads this directly. Providers and
-[Bindings](/infrastructure-as-effects/binding) use it internally to behave
-differently across phases.
+Runtime providers set `ALCHEMY_PHASE=runtime` in the deployed
+environment. Alchemy reads it to decide whether a `Config` lookup in
+the constructor is captured as a binding (`plan`) or read back from the
+environment (`runtime`). [Bindings](/infrastructure-as-effects/binding)
+instead check `globalThis.__ALCHEMY_RUNTIME__`, which the bundler folds
+to `true` at build time, so their deploy-only code is removed from the
+bundle ([see below](#the-__alchemy_runtime__-guard)).
 
 ## `ALCHEMY_DEV`
 
@@ -158,6 +174,6 @@ The Construction/Runtime split lets you write code that:
 
 ## Where next
 
-- [Circular Bindings](/infrastructure-as-effects/circular-bindings): the two-pass plan this phase split makes possible. Next page.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings): the cycle resolution this phase split makes possible. Next page.
 - [Layers](/infrastructure-as-effects/layers): `RuntimeContext` as a type-level boundary, and infrastructure behind service interfaces.
 - [State Store](/state-store): where deploy results persist between runs.
