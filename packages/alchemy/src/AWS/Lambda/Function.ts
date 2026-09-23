@@ -2056,7 +2056,15 @@ export const FunctionProvider = () =>
           // Effect-native runtime exports remain unevaluated during planning.
           // Their identity is represented by the bundle hash, so they must not
           // prevent source changes from reaching the hash comparison below.
-          const news = stripEffects(desired);
+          const news =
+            typeof desired === "object" &&
+            desired !== null &&
+            "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {

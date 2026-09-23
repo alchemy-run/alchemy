@@ -20,9 +20,16 @@ test.provider(
         prefix: "alchemy-lambda-function-diff-",
       });
       const main = path.join(directory, "handler.ts");
+      const dependency = path.join(directory, "dependency.ts");
       const source = (value: string) =>
-        `export const handler = () => ${JSON.stringify(value)};\n`;
+        `import { dependency } from "./dependency.ts";\nexport const handler = () => dependency + ${JSON.stringify(value)};\n`;
+      yield* fs.writeFileString(
+        dependency,
+        'export const dependency = "dependency";\n',
+      );
       yield* fs.writeFileString(main, source("before"));
+
+      const external = (moduleId: string) => moduleId.endsWith("dependency.ts");
 
       const persisted = {
         main,
@@ -30,12 +37,16 @@ test.provider(
         isExternal: true,
         functionUrl: false,
         exports: {},
+        build: {},
       } as unknown as AWS.Lambda.FunctionProps;
       const desired = {
         ...persisted,
         // Platform injects runtime handlers as Effects for Effect-native
         // functions. They are runtime wiring, not unresolved IaC inputs.
         exports: { handler: Effect.void },
+        // User-supplied build callbacks are real bundler configuration and
+        // must survive removal of the runtime Effects above.
+        build: { external },
       } as unknown as AWS.Lambda.FunctionProps;
       const originalHash = (yield* (yield* makeFunctionBundler).bundleCode(
         "EffectFunction",
@@ -44,6 +55,7 @@ test.provider(
           handler: "handler",
           isExternal: true,
           functionUrl: false,
+          build: { external },
         },
       )).identityHash;
       const provider = yield* Provider.findProvider(AWS.Lambda.Function);
