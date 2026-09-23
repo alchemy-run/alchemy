@@ -10,6 +10,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import { MinimumLogLevel } from "effect/References";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -766,7 +767,19 @@ test.provider(
           : yield* zeroTrust
               .syncAccessAiControlMcpServer({ accountId, id: initial.serverId })
               .pipe(
-                Effect.catchTag("SyncFailure", () => Effect.void),
+                Effect.catchTag("UnknownCloudflareError", (error) =>
+                  Schema.is(
+                    Schema.Struct({
+                      success: Schema.Literal(false),
+                      result: Schema.Struct({
+                        status: Schema.Literal("error"),
+                        error: Schema.String,
+                      }),
+                    }),
+                  )(error.body)
+                    ? Effect.void
+                    : Effect.fail(error),
+                ),
                 Effect.andThen(
                   zeroTrust.readAccessAiControlMcpServer({
                     accountId,
@@ -784,6 +797,34 @@ test.provider(
       expect(ready.tools.map((tool) => tool.name)).toContain(
         "authenticated_v1",
       );
+      // A rejected upstream credential must retain the complete failure body.
+      yield* zeroTrust.updateAccessAiControlMcpServer({
+        accountId,
+        id: initial.serverId,
+        authCredentials: "invalid-credential",
+      });
+      const failure = yield* zeroTrust
+        .syncAccessAiControlMcpServer({
+          accountId,
+          id: initial.serverId,
+        })
+        .pipe(
+          Effect.catchTag("UnknownCloudflareError", (error) =>
+            Effect.succeed(error.body),
+          ),
+        );
+      const body = Schema.decodeUnknownSync(
+        Schema.Struct({
+          success: Schema.Literal(false),
+          result: Schema.Struct({
+            status: Schema.Literal("error"),
+            error: Schema.String,
+            error_details: Schema.Struct({ status_code: Schema.Number }),
+          }),
+        }),
+      )(failure);
+      expect(body.result.error).toContain("Unauthorized");
+      expect(body.result.error_details.status_code).toEqual(401);
       const rotated = yield* deploy("v2");
       expect(rotated.serverId).toEqual(initial.serverId);
       expect(rotated.createdAt).toEqual(initial.createdAt);

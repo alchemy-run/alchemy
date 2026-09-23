@@ -2,6 +2,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -421,7 +422,7 @@ export const McpServerProvider = () =>
       //    when sync is enabled, and never while an administrator still
       //    has to complete the OAuth flow.
       //    Upstream discovery problems come back in the response body
-      //    (`status`/`error`) and are decoded as SyncFailure.
+      //    (`status`/`error`) inside an unknown API error's raw body.
       if (
         (changed || olds?.sync === false) &&
         news.sync !== false &&
@@ -430,11 +431,13 @@ export const McpServerProvider = () =>
         yield* zeroTrust
           .syncAccessAiControlMcpServer({ accountId, id: serverId })
           .pipe(
-            Effect.catchTag("SyncFailure", (error) =>
-              Effect.logDebug(
-                `capability sync for MCP server ${serverId} failed`,
-                error,
-              ),
+            Effect.catchTag("UnknownCloudflareError", (error) =>
+              Schema.is(syncFailureResponse)(error.body)
+                ? Effect.logDebug(
+                    `capability sync for MCP server ${serverId} failed`,
+                    error.body.result,
+                  )
+                : Effect.fail(error),
             ),
           );
         // 5. Return — re-read so the discovered capabilities are reported.
@@ -582,4 +585,13 @@ const toAttributes = (
   lastSynced: server.lastSynced ?? undefined,
   lastSuccessfulSync: server.lastSuccessfulSync ?? undefined,
   createdAt: server.createdAt ?? undefined,
+});
+
+// Discovery failures use result instead of Cloudflare's normal errors array.
+const syncFailureResponse = Schema.Struct({
+  success: Schema.Literal(false),
+  result: Schema.Struct({
+    status: Schema.Literal("error"),
+    error: Schema.String,
+  }),
 });
