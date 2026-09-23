@@ -5,4 +5,4 @@ level: error
 ignorecase: true
 tokens:
   - 'Bun \(recommended\)'
-  - 'recommend Bun'
+  - "recommend Bun"

@@ -5,4 +5,4 @@ level: warning
 scope: paragraph
 nonword: true
 tokens:
-  - '[a-z0-9)]: [a-z]'
+  - "[a-z0-9)]: [a-z]"

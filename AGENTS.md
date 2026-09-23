@@ -1103,6 +1103,7 @@ Use `pnpm build:clean` when you encounter stale build artifacts or dependency is
 
 - Every page is one Diátaxis type (`tutorial`, `how-to`, `reference`, or `explanation`), declared as `type` in its frontmatter. Material for a different type goes on another page and is linked.
 - Each concept has one canonical page. Other pages summarize it in one sentence and link there.
+- Show, then tell. Teach each idea as one or two sentences plus the code snippet that shows it. Paragraphs are at most three sentences, and options and defaults live in the snippet.
 - Short sentences, active voice, "you". No marketing words, no "it's not X, it's Y" framing, no colons joining clauses, and at most one em dash per paragraph.
 - Tutorials change one thing per step, with one `##` heading, one `diff` snippet, and one short paragraph each.
 - Every code example uses real APIs from `packages/alchemy/src`.

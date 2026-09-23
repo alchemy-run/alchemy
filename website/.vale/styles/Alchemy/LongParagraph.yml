@@ -1,0 +1,7 @@
+extends: occurrence
+message: "Paragraph has more than three sentences. Show the detail in a snippet or a list."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#3-show-then-tell
+level: warning
+scope: paragraph
+max: 3
+token: '\S[.!?](?:\s|$)'

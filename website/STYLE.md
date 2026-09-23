@@ -56,7 +56,7 @@ to it.
 - Explain only what the reader needs for the next step. Link to
   explanations for the rest.
 - End by saying what the reader built and where to go next.
-- Change one thing per step. See [Tutorial steps](#6-tutorial-steps).
+- Change one thing per step. See [Tutorial steps](#7-tutorial-steps).
 
 ### How-to guides
 
@@ -112,7 +112,54 @@ to it.
   page's reader has. Detail for a different reader goes on that
   reader's page.
 
-## 3. Write sentences
+## 3. Show, then tell
+
+Readers scan docs. Walls of prose are hard to read, so most of a page
+is short prose plus code. Teach each idea as one or two sentences and
+the snippet that shows it.
+
+- **Code carries the detail.** Options, defaults, and variations go in
+  the snippet, with a short comment where needed. Prose says what the
+  snippet does and why you would use it.
+- **Keep paragraphs short.** Three sentences at most. If you need more,
+  the idea needs a snippet, a list, or its own heading.
+- **Break up prose.** Never put more than two paragraphs in a row
+  without a code block, list, or heading.
+- **Link out for depth.** When a topic needs more than a short
+  paragraph and a snippet here, it belongs on its own page.
+
+**Before**
+
+> A Lambda Function's Function URL is on by default and public
+> (`authType: "NONE"`). Set `functionUrl: { authType: "AWS_IAM" }` to
+> require signed callers. Because the default endpoint is public, the
+> schema validation here is your input boundary. Add auth for anything
+> that isn't public.
+>
+> For browser consumers, `Layer.provide(HttpRouter.cors({ allowedOrigins:
+> [...] }))` adds a global CORS middleware on any host (see the Workers
+> page for the full example). On Lambda you can instead set CORS on the
+> Function URL with `functionUrl: { cors: ... }`.
+
+**After**
+
+> The Function URL is public by default. Require signed callers and
+> allow your browser origin on the URL itself:
+>
+> ```typescript
+> const api = yield* AWS.Lambda.Function("Api", {
+>   main: import.meta.url,
+>   functionUrl: {
+>     authType: "AWS_IAM", // default "NONE" is public
+>     cors: { AllowOrigins: ["https://app.example.com"] },
+>   },
+> });
+> ```
+>
+> On a Worker, use `HttpRouter.cors(...)`. See
+> [Effect HTTP on Workers](/cloudflare/apis/effect-http-api).
+
+## 4. Write sentences
 
 - **Lead with the point.** Put the fact or instruction first and the
   reason second.
@@ -140,7 +187,7 @@ to it.
 > You now have a live R2 Bucket on Cloudflare. See [CLI](/cli) for the
 > full command reference.
 
-## 4. Use the same words
+## 5. Use the same words
 
 Use one term for one concept, every time. Write concept names in
 lowercase in prose. Use code formatting for the TypeScript symbol.
@@ -162,7 +209,7 @@ lowercase in prose. Use code formatting for the TypeScript symbol.
 Capitalize product and resource-type names the way the vendor does:
 Worker, Durable Object, R2 Bucket, Lambda Function, DynamoDB Table.
 
-## 5. Alchemy house rules
+## 6. Alchemy house rules
 
 These rules are stricter than the Google guide. The Vale `Alchemy`
 style checks most of them.
@@ -239,7 +286,7 @@ rhetorical questions, and triplets written for rhythm.
 Present Bun and Node.js as equal options. Write "[Bun](https://bun.sh)
 or Node.js 22.15+" with no "(recommended)" label.
 
-## 6. Tutorial steps
+## 7. Tutorial steps
 
 Tutorials change one thing per step. Each step gets its own `##`
 heading, one `diff lang="typescript"` snippet, and one short paragraph
@@ -318,7 +365,7 @@ namespace.
   prose.
 - Lists are fine for a recap, prerequisites, or content that is a list.
 
-## 7. Code examples
+## 8. Code examples
 
 - **Use real APIs.** Every identifier, option, import path, and default
   must exist in `packages/alchemy/src`. Check the source before you
@@ -332,7 +379,7 @@ namespace.
 - **Never include real secrets.** Use placeholders such as
   `<your-api-token>`.
 
-## 8. Check your work
+## 9. Check your work
 
 Run the prose linter from `website/`:
 
@@ -348,6 +395,8 @@ generated `/providers` pages and the blog.
 Before you open a PR, also check:
 
 - The page has one `type`, and every section serves that type.
+- No paragraph runs past three sentences, and no more than two
+  paragraphs sit in a row without code, a list, or a heading.
 - Each concept you explain has no other full explanation elsewhere.
 - Every code example uses real APIs.
 - Renamed headings have no broken inbound links.

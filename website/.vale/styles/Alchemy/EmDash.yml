@@ -4,4 +4,4 @@ link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#dashes-a
 level: warning
 scope: paragraph
 max: 1
-token: '—'
+token: "—"
