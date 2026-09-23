@@ -478,7 +478,7 @@ describe(
         className: "AppLensServer",
       };
       const deployedTags = ["alchemy:dos:LENS_DO=AppLensServer"];
-  
+
       test("the same logical id and class name on the same worker yields no migration", () => {
         const plan = planDurableObjectClassIdentity({
           workerName: "host",
@@ -491,7 +491,7 @@ describe(
         expect(plan.unresolved).toEqual([]);
         expect(plan.deletedClassCandidates).toEqual([]);
       });
-  
+
       test("the same logical id with a changed class name yields a rename", () => {
         const plan = planDurableObjectClassIdentity({
           workerName: "host",
@@ -506,7 +506,7 @@ describe(
         expect(plan.unresolved).toEqual([]);
         expect(plan.deletedClassCandidates).toEqual([]);
       });
-  
+
       test("a fresh stage leaves the class unresolved for a single create", () => {
         const plan = planDurableObjectClassIdentity({
           workerName: "host",
@@ -519,7 +519,7 @@ describe(
         expect(plan.renamedClasses).toEqual([]);
         expect(plan.deletedClassCandidates).toEqual([]);
       });
-  
+
       test("a logical id that left the deploy is a delete candidate", () => {
         const plan = planDurableObjectClassIdentity({
           workerName: "host",
@@ -529,7 +529,7 @@ describe(
         });
         expect(plan.deletedClassCandidates).toEqual(["AppLensServer"]);
       });
-  
+
       test("an untagged worker adopts the observed locally-owned class by binding name", () => {
         const plan = planDurableObjectClassIdentity({
           workerName: "host",
