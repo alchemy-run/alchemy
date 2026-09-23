@@ -13,6 +13,13 @@ import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "./Http.ts";
 
 export type { RpcObject, ValidateRpcObject } from "./RpcObject.ts";
+export {
+  pipeline,
+  RpcPipelineStart,
+  type Pending,
+  type RpcPendingCall,
+  type RpcPipelineSource,
+} from "./RpcPipeline.ts";
 
 export type Rpc<Shape> = {
   "~alchemy/rpc": Shape;

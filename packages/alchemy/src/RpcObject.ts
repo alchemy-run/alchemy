@@ -22,23 +22,44 @@ export type RpcObjectServices = Scope | RuntimeContext;
  * results can hide an object's methods. Validate those objects where constructed.
  */
 export interface RpcObject {
-  readonly [method: string]: (
-    ...args: never[]
-  ) =>
-    | Effect.Effect<unknown, unknown, RpcObjectServices>
-    | Stream.Stream<unknown, unknown, RpcObjectServices>;
+  readonly [key: string]: RpcMember;
 }
+
+/** An Effect or Stream method callable over RPC. */
+export type RpcMethod = (
+  ...args: never[]
+) =>
+  | Effect.Effect<unknown, unknown, RpcObjectServices>
+  | Stream.Stream<unknown, unknown, RpcObjectServices>;
+
+/**
+ * A member of a returned RPC object: a method, a nested object or array, or
+ * data. Data fields are copied when the object is returned.
+ */
+export type RpcMember =
+  | RpcMethod
+  | RpcObject
+  | ReadonlyArray<RpcMember>
+  | string
+  | number
+  | boolean
+  | bigint
+  | null
+  | undefined
+  | Exclude<
+      RpcLeaf,
+      Effect.Effect<any, any, any> | Stream.Stream<any, any, any>
+    >;
 
 /**
  * A validation-only intersection for a returned object; never transforms Shape.
- * Only objects whose property values are all callable are method-object
- * candidates. Ordinary data objects and native data containers are left alone.
- * Validation follows methods returning further objects, not capabilities embedded
- * in data fields or containers. Structural types cannot identify own properties
- * or prototypes, and opaque generic results can hide the method-only shape.
+ * Validation follows plain data fields and arrays to methods at any depth, and
+ * methods returning further objects. Objects made only of methods must contain
+ * only Effect or Stream methods. Structural types cannot identify own
+ * properties or prototypes, and opaque generic results can hide methods.
  */
-export type ValidateRpcObject<Shape> =
-  false extends ValidReturnedValue<Shape> ? never : unknown;
+export type ValidateRpcObject<Shape, Allowed = RpcObjectServices> =
+  false extends ValidReturnedValue<Shape, Allowed> ? never : unknown;
 
 /**
  * Validate returned objects without changing a platform's root method services.
@@ -46,8 +67,8 @@ export type ValidateRpcObject<Shape> =
  *
  * @internal
  */
-export type ValidateRpcShape<Shape> =
-  false extends ValidRoot<Shape> ? never : unknown;
+export type ValidateRpcShape<Shape, Allowed = RpcObjectServices> =
+  false extends ValidRoot<Shape, Allowed> ? never : unknown;
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
@@ -63,67 +84,98 @@ type SeenBefore<Value, Seen> = true extends (
   ? true
   : false;
 
-type ValidRoot<Shape> =
+type ValidRoot<Shape, Allowed> =
   IsAny<Shape> extends true
     ? true
     : Shape extends Effect.Effect<infer Inner, any, any>
-      ? ValidRoot<Inner>
+      ? ValidRoot<Inner, Allowed>
       : Shape extends object
-        ? ValidRootMember<Shape[keyof Shape]>
+        ? ValidRootMember<Shape[keyof Shape], Allowed>
         : true;
 
-type ValidRootMember<Member> =
+type ValidRootMember<Member, Allowed> =
   IsAny<Member> extends true
     ? true
     : Member extends (...args: never[]) => infer Result
       ? Result extends
           | Effect.Effect<infer Value, any, any>
           | Stream.Stream<infer Value, any, any>
-        ? ValidReturnedValue<Value>
+        ? ValidReturnedValue<Value, Allowed>
         : true
       : true;
 
-type ValidReturnedValue<Value, Seen = never> =
+type RpcLeaf =
+  | Date
+  | RegExp
+  | ArrayBuffer
+  | ArrayBufferView
+  | ReadonlyMap<unknown, unknown>
+  | ReadonlySet<unknown>
+  | Error
+  | Blob
+  | Request
+  | Response
+  | ReadableStream
+  | WritableStream
+  | Headers
+  | Effect.Effect<any, any, any>
+  | Stream.Stream<any, any, any>;
+
+type AnyFunction = (...args: never[]) => unknown;
+
+/** String keys that hold fields; `~`-prefixed keys are Effect type ids. */
+type FieldKeys<T> = Exclude<Extract<keyof T, string>, `~${string}`>;
+
+/**
+ * Objects made only of methods keep the strict rule: every member must be an
+ * Effect or Stream method. Objects that mix data and methods are walked
+ * through their string-keyed fields, where Effect and Stream methods are
+ * checked and data values are followed.
+ */
+type ValidReturnedValue<Value, Allowed, Seen = never> =
   IsAny<Value> extends true
     ? true
-    : Value extends
-          | readonly unknown[]
-          | Date
-          | RegExp
-          | ArrayBuffer
-          | ArrayBufferView
-          | ReadonlyMap<unknown, unknown>
-          | ReadonlySet<unknown>
-          | Error
-          | Blob
-          | Request
-          | Response
-          | ReadableStream
-          | WritableStream
-          | Headers
+    : Value extends RpcLeaf
       ? true
       : Value extends object
-        ? [Value[keyof Value]] extends [(...args: never[]) => unknown]
-          ? SeenBefore<Value, Seen> extends true
-            ? true
-            : ValidReturnedMember<Value[keyof Value], Seen | Value>
-          : true
+        ? SeenBefore<Value, Seen> extends true
+          ? true
+          : Value extends readonly (infer Element)[]
+            ? ValidDataMember<Element, Allowed, Seen | Value>
+            : [Value[FieldKeys<Value>]] extends [AnyFunction]
+              ? ValidReturnedMember<
+                  Value[FieldKeys<Value>],
+                  Allowed,
+                  Seen | Value
+                >
+              : ValidDataMember<Value[FieldKeys<Value>], Allowed, Seen | Value>
         : true;
 
-type ValidReturnedMember<Member, Seen> =
+type ValidReturnedMember<Member, Allowed, Seen> =
   IsAny<Member> extends true
     ? true
     : Member extends (...args: never[]) => infer Result
-      ? ValidMethodResult<Result, Seen>
+      ? ValidMethodResult<Result, Allowed, Seen>
       : true;
 
-type ValidMethodResult<Result, Seen> =
+type ValidDataMember<Member, Allowed, Seen> =
+  IsAny<Member> extends true
+    ? true
+    : Member extends (...args: never[]) => infer Result
+      ? Result extends
+          | Effect.Effect<any, any, any>
+          | Stream.Stream<any, any, any>
+        ? ValidMethodResult<Result, Allowed, Seen>
+        : true
+      : ValidReturnedValue<Member, Allowed, Seen>;
+
+type ValidMethodResult<Result, Allowed, Seen> =
   IsAny<Result> extends true
     ? true
     : Result extends
           | Effect.Effect<infer Value, any, infer Req>
           | Stream.Stream<infer Value, any, infer Req>
-      ? [Req] extends [RpcObjectServices]
-        ? ValidReturnedValue<Value, Seen>
+      ? [Req] extends [Allowed]
+        ? ValidReturnedValue<Value, Allowed, Seen>
         : false
       : false;

@@ -12,7 +12,7 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
-import type { ValidateRpcShape } from "../../RpcObject.ts";
+import type { RpcObjectServices, ValidateRpcShape } from "../../RpcObject.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
@@ -21,6 +21,9 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
+
+/** Durable Object methods also run with the instance's DurableObjectState. */
+type DurableObjectRpcServices = RpcObjectServices | DurableObjectState;
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import {
@@ -315,7 +318,7 @@ export interface DurableObjectClass extends Effect.Effect<
           never,
           Req
         > &
-          ValidateRpcShape<Shape>,
+          ValidateRpcShape<Shape, DurableObjectRpcServices>,
         // `Exclude` (rather than `DurableObjectServices | Req` inference)
         // so ambient DO services resolved in the outer init effect never
         // leak into the host Worker's requirements — mirrors Worker.make's
@@ -338,7 +341,7 @@ export interface DurableObjectClass extends Effect.Effect<
         never,
         Req
       > &
-        ValidateRpcShape<NoInfer<Shape>>,
+        ValidateRpcShape<NoInfer<Shape>, DurableObjectRpcServices>,
     ): Effect.Effect<
       DurableObject<Self>,
       never,
@@ -351,7 +354,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Shape, InitReq = never>(
     name: string,
     impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq> &
-      ValidateRpcShape<NoInfer<Shape>>,
+      ValidateRpcShape<NoInfer<Shape>, DurableObjectRpcServices>,
   ): Effect.Effect<
     DurableObject<Shape>,
     never,

@@ -218,6 +218,113 @@ describe.concurrent.each([
     );
 
     test(
+      `${transport}: returned objects mix data with nested and array methods`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const body = yield* call<Record<string, unknown>>(url, "mixed");
+        expect(body).toMatchObject({
+          id: idFor("mixed"),
+          createdAt: "2026-01-02T03:04:05.000Z",
+          isDate: true,
+          meta: { owner: "alchemy", tags: ["a", "b"] },
+          label: "visits",
+          names: ["first", "second"],
+          current: 101,
+          echoed: { nested: true },
+          values: [1, 2, 3],
+          rejected: { tag: "ObjectRejected", code: 418 },
+        });
+        expect(body.beforeClose).toEqual(["session:open"]);
+        yield* closed(url, idFor("mixed"), "session");
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: Rpc.pipeline reads data and calls nested methods on a pending result`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const body = yield* call<{
+          result: Record<string, unknown>;
+          events: string[];
+        }>(url, "pipeline");
+        expect(body.result).toEqual({
+          id: idFor("pipeline"),
+          createdAt: "2026-01-02T03:04:05.000Z",
+          owner: "alchemy",
+          tag: "b",
+          label: "visits",
+          incremented: 1,
+          bumped: 11,
+          current: 11,
+          values: [1, 2, 3],
+        });
+        expect(body.events).toEqual(["session:open", "session:close"]);
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: Rpc.pipeline nests through returned child objects`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        expect(yield* call(url, "pipeline-nested")).toEqual({
+          echoed: "nested",
+        });
+        yield* closed(url, idFor("pipeline-nested"), "session");
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: Rpc.pipeline keeps typed failures from the first call and from pipelined calls`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        expect(yield* call(url, "pipeline-failures")).toEqual({
+          first: { tag: "ObjectRejected", code: 401 },
+          method: { tag: "ObjectRejected", code: 418 },
+        });
+        yield* closed(url, idFor("pipeline-failures"), "session");
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: Rpc.pipeline runs the whole chain again on every run`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const body = yield* call<{ values: number[]; events: string[] }>(
+          url,
+          "pipeline-reruns",
+        );
+        expect(body.values).toEqual([1, 1]);
+        expect(count(body.events, "session:open")).toBe(2);
+        expect(count(body.events, "session:close")).toBe(2);
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: Rpc.pipeline performance versus sequential calls`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const body = yield* call<{
+          iterations: number;
+          sequentialMs: number;
+          pipelinedMs: number;
+          values: number[];
+        }>(url, "pipeline-performance");
+        expect(body.values).toEqual(
+          Array.from({ length: body.iterations * 2 }, () => 0),
+        );
+        yield* Console.log(
+          `RPC_PIPELINE_PERFORMANCE ${JSON.stringify({ mode: dev ? "local" : "live", transport, ...body, values: undefined })}`,
+        );
+      }),
+      options,
+    );
+
+    test(
       `${transport}: returned methods run with the host RuntimeContext`,
       Effect.gen(function* () {
         const { url } = yield* stack;

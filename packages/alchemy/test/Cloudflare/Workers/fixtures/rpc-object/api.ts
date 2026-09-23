@@ -241,11 +241,53 @@ export const makeApi = Effect.gen(function* () {
     };
   });
 
+  // A returned object that mixes data with methods nested at any depth.
+  const session = Effect.fn(function* (id: string) {
+    const runtime = yield* RuntimeContext;
+    const record = (event: string) =>
+      stats
+        .append(id, event)
+        .pipe(Effect.provideService(RuntimeContext, runtime), Effect.orDie);
+    yield* Effect.acquireRelease(record("session:open"), () =>
+      record("session:close"),
+    );
+    let count = 0;
+    return {
+      id,
+      createdAt: new Date("2026-01-02T03:04:05.000Z"),
+      meta: { owner: "alchemy", tags: ["a", "b"] },
+      increment: () => Effect.sync(() => ++count),
+      stats: {
+        label: "visits",
+        current: () => Effect.sync(() => count),
+      },
+      items: [
+        { name: "first", bump: () => Effect.sync(() => (count += 10)) },
+        { name: "second", bump: () => Effect.sync(() => (count += 100)) },
+      ],
+      child: () =>
+        Effect.succeed({
+          echo: <T>(value: T): Effect.Effect<T> => Effect.succeed(value),
+        }),
+      values: () => Stream.make(1, 2, 3),
+      reject: () =>
+        Effect.fail(
+          new ObjectRejected({ code: 418, message: "session rejected" }),
+        ),
+    };
+  });
+
   return {
     ready: () => stats.ready(),
     scalar: (value: number) => Effect.succeed(value + 1),
     pure,
     open,
+    session,
+    rejectOpen: (): Effect.Effect<
+      { increment: () => Effect.Effect<number> },
+      ObjectRejected
+    > =>
+      Effect.fail(new ObjectRejected({ code: 401, message: "open rejected" })),
     pending: Effect.fn(function* (id: string) {
       const runtime = yield* RuntimeContext;
       const record = (event: string) =>

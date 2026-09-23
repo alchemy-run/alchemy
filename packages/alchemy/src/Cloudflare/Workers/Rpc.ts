@@ -11,16 +11,16 @@ import {
 } from "effect/unstable/rpc";
 import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import {
-  asEffectOrStream,
   makeRpcErrorReviver,
+  RpcCallError,
   type RpcErrorClass,
 } from "../../Rpc.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import {
-  callNativeRpc,
   isRpcMethodName,
-  NativeInvocation,
+  nativeCall,
+  startRootCall,
 } from "./RpcObjectBridge.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
@@ -69,38 +69,19 @@ export const makeRpcStub = <Shape>(
       let method = methods.get(prop);
       if (method === undefined) {
         method = (...args: any[]) =>
-          asEffectOrStream(
+          nativeCall(
+            prop,
             Effect.gen(function* () {
               const stub = isLazy
                 ? yield* stubSource as Effect.Effect<any>
                 : stubSource;
-              return yield* callNativeRpc(
-                prop,
-                () =>
-                  options?.invocations
-                    ? (stub as any)[NativeInvocation](prop).then(
-                        (value: unknown) =>
-                          value === undefined
-                            ? (stub as any)[prop](...args)
-                            : value,
-                        (error: unknown) => {
-                          if (
-                            error instanceof Error &&
-                            (error.message ===
-                              `The RPC receiver does not implement the method "${NativeInvocation}".` ||
-                              error.message ===
-                                `Method "${NativeInvocation}" not found on worker. Make sure it's returned from the worker's default export.`)
-                          )
-                            return (stub as any)[prop](...args);
-                          throw error;
-                        },
-                      )
-                    : (stub as any)[prop](...args),
-                revive,
-                undefined,
-                args,
-              );
+              return yield* Effect.try({
+                try: () =>
+                  startRootCall(stub, prop, args, options?.invocations),
+                catch: (cause) => new RpcCallError({ method: prop, cause }),
+              });
             }),
+            revive,
           );
         methods.set(prop, method);
       }
