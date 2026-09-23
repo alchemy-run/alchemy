@@ -421,7 +421,7 @@ export const McpServerProvider = () =>
       //    when sync is enabled, and never while an administrator still
       //    has to complete the OAuth flow.
       //    Upstream discovery problems come back in the response body
-      //    (`status`/`error`), not as API failures.
+      //    (`status`/`error`) and are decoded as SyncFailure.
       if (
         (changed || olds?.sync === false) &&
         news.sync !== false &&
@@ -430,13 +430,12 @@ export const McpServerProvider = () =>
         yield* zeroTrust
           .syncAccessAiControlMcpServer({ accountId, id: serverId })
           .pipe(
-            Effect.tapError((error) =>
+            Effect.catchTag("SyncFailure", (error) =>
               Effect.logDebug(
                 `capability sync for MCP server ${serverId} failed`,
                 error,
               ),
             ),
-            Effect.ignore,
           );
         // 5. Return — re-read so the discovered capabilities are reported.
         observed = (yield* observeServer(accountId, serverId)) ?? observed;

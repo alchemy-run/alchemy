@@ -733,10 +733,17 @@ test.provider(
       const upstream = () =>
         Cloudflare.Worker("AuthenticatedUpstream", {
           main: new URL("./fixtures/mcp-auth.ts", import.meta.url).pathname,
+          // Cloudflare discovery can hit Worker-to-Worker error 1042 on
+          // workers.dev. Custom domains support that fetch path.
+          domain: "mcp-credential-rotation.alchemy-test-2.us",
           workersDev: true,
         });
       const worker = yield* stack.deploy(upstream());
-      const health = yield* Test.getWhenReady(`${worker.url}/health`);
+      // Probe the script without negative-caching the new custom domain
+      // in the local DNS resolver. Discovery checks the custom domain below.
+      const health = yield* Test.getWhenReady(
+        `${worker.urls.find((url) => url.endsWith(".workers.dev"))!}/health`,
+      );
       expect(health.status).toEqual(200);
       const deploy = (version: "v1" | "v2") =>
         stack.deploy(
@@ -759,7 +766,7 @@ test.provider(
           : yield* zeroTrust
               .syncAccessAiControlMcpServer({ accountId, id: initial.serverId })
               .pipe(
-                Effect.catchTag("McpServerSyncFailed", () => Effect.void),
+                Effect.catchTag("SyncFailure", () => Effect.void),
                 Effect.andThen(
                   zeroTrust.readAccessAiControlMcpServer({
                     accountId,
@@ -780,6 +787,7 @@ test.provider(
       const rotated = yield* deploy("v2");
       expect(rotated.serverId).toEqual(initial.serverId);
       expect(rotated.createdAt).toEqual(initial.createdAt);
+      expect(rotated.error || undefined).toBeUndefined();
       expect(rotated.status).toEqual("ready");
       expect(rotated.tools.map((tool) => tool.name)).toContain(
         "authenticated_v2",
