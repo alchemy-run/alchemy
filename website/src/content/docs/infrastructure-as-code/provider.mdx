@@ -41,6 +41,7 @@ Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     yield* Cloudflare.R2.Bucket("Bucket");
@@ -71,8 +72,10 @@ deploy time.
 ## Lifecycle operations
 
 A provider is an object that implements some subset of these
-operations. `reconcile` and `delete` are required. The rest are
-optional hooks that alchemy uses for richer behavior.
+operations. `reconcile` and `delete` are always required. `list` is
+required by the typed `Provider.of(...)` constructor but has a
+default otherwise (see [`list`](#list)). The rest are optional hooks
+that alchemy uses for richer behavior.
 
 ### `reconcile`
 
@@ -107,10 +110,10 @@ The reconciler must work for all three combinations. **Do not
 branch the body on `output === undefined`**. That only renames the
 old `create`/`update` split. Trust observed cloud state over `olds`.
 
-`reconcile` must be **idempotent**, because alchemy may retry it
-after a state persistence failure. With deterministic physical names
-and the observe step, a retry finds the existing resource and
-re-syncs any drifted fields.
+`reconcile` must be **idempotent**, because the next deploy runs it
+again after a crash or a state persistence failure. With physical
+names built from the saved instance ID and the observe step, a
+re-run finds the existing resource and re-syncs any drifted fields.
 
 The [custom provider guide](/infrastructure-as-code/custom-provider#implement-reconcile)
 builds a real reconciler against the Stripe API step by step,
@@ -121,35 +124,54 @@ covering observe, ensure, sync, and return.
 Required. Alchemy calls it when a resource is removed from code,
 when it is replaced, or when you run `alchemy destroy`. Like
 `reconcile`, it must be **idempotent**. Treat "already deleted" as
-success.
+success:
 
 ```typescript
 delete: ({ output }) =>
-  Effect.promise(() => stripe.products.del(output.productId));
+  Effect.tryPromise({
+    try: () => stripe.products.del(output.productId),
+    catch: (error) => error as { code?: string },
+  }).pipe(
+    Effect.catch((e) =>
+      e.code === "resource_missing" ? Effect.void : Effect.fail(e),
+    ),
+  ),
 ```
+
+The `catch` option keeps the SDK's error, so you can match its
+`code`. See
+[Custom Provider › Implement delete](/infrastructure-as-code/custom-provider#implement-delete)
+for the full handler.
 
 ### `diff`
 
-Optional. Alchemy calls it during planning to decide what kind of
-change is needed when properties differ. It returns a tagged `Diff`
-that describes the action:
+Optional. Alchemy calls it on every plan of a resource that already
+exists in state, whether or not its properties changed. It returns a
+tagged `Diff` that describes the action, or `undefined` to let the
+engine decide:
 
 ```typescript
+import { isResolved } from "alchemy/Diff";
+
 diff: Effect.fn(function* ({ news, olds }) {
+  if (!isResolved(news)) return undefined;
   if (news.region !== olds.region) {
     return { action: "replace" } as const;
   }
-  if (news.name !== olds.name) {
-    return { action: "update" } as const;
-  }
-  return { action: "noop" } as const;
+  return undefined;
 }),
 ```
 
+This provider only decides that a region change
+needs a replacement. For every other change it returns `undefined`, and the
+engine's default comparison plans an update or a no-op.
+
 The shape is one of:
 
-- **`{ action: "noop" }`**: the properties differ trivially. Don't
-  call `update`.
+- **`void` / `undefined`**: let the engine decide. It compares the
+  old and new props and bindings, and plans `update` if anything
+  changed, otherwise `noop`. This is the right answer for most
+  changes.
 - **`{ action: "update", stables?: [...] }`**: apply an in-place
   update. `stables` lists props that are guaranteed not to change
   during this update.
@@ -157,17 +179,21 @@ The shape is one of:
   recreate (see [Resource Lifecycle › Replace](/infrastructure-as-code/resource-lifecycle#replace)).
   Set `deleteFirst: true` for resources that can't coexist with
   their replacement (e.g. unique-name constraints).
-- **`void` / `undefined`**: fall back to the default behavior,
-  which treats the change as an `update`.
+- **`{ action: "noop" }`**: ignore this change on purpose, even
+  though props differ. This is rare. Returning it as a fallback
+  makes the engine ignore every change your `diff` doesn't check.
+
+`alchemy deploy --force` upgrades every `noop` to `update`, whichever
+way the `noop` was decided.
 
 A provider can also declare top-level `stables` for attributes that
 are immutable across all updates (e.g. ARNs, resource IDs).
 
 To compare nested objects, use the `deepEqual` and
 `anyPropsAreDifferent` helpers from `alchemy/Diff`. An input might
-still be an unresolved `Output` when `diff` runs. In that case,
-guard with `isResolved` first and return `undefined` so the default
-path handles it.
+still be an unresolved `Output` when `diff` runs. Guard with
+`isResolved` first, as in the example above, and return `undefined`
+so the default path handles it.
 
 ### `read`
 
@@ -183,7 +209,7 @@ read: Effect.fn(function* ({ id, olds, output }) {
   if (!output?.productId) return undefined;
   const product = yield* Effect.tryPromise(() =>
     stripe.products.retrieve(output.productId),
-  ).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+  ).pipe(Effect.catch(() => Effect.succeed(undefined)));
   if (!product) return undefined;
   return { productId: product.id, name: product.name };
 }),
@@ -250,7 +276,13 @@ shape that `read` produces, so you can pass each item directly to
 `delete`. This powers account-wide operations like
 [`alchemy unsafe nuke`](/cli/nuke). It must paginate exhaustively.
 Resources with no enumeration API (singletons, existence-only
-resources) return an empty array. Providers can opt out of nuke
+resources) return an empty array.
+
+Whether you must write `list` depends on how you build the provider.
+If you pass a plain object to `Provider.succeed` or `Provider.effect`,
+`list` is optional and defaults to `() => Effect.succeed([])`. The
+typed `MyResource.Provider.of({...})` constructor requires it, so
+write the empty stub yourself there. Providers can opt out of nuke
 with `nuke.singleton` (delete only resets always-present config)
 or `nuke.skip` (the resource can never be deleted).
 

@@ -68,8 +68,8 @@ is the Layer that satisfies it, the same split every binding has
 ## It's a real Effect Stream
 
 `records` is the same `Stream` from any Effect program, so every
-combinator composes. This example maps table changes to JSON and runs
-them into a queue:
+combinator composes. This example maps table changes to SQS messages
+and runs them into a queue:
 
 ```typescript
 const sink = yield* AWS.SQS.QueueSink(Outbound);
@@ -79,16 +79,24 @@ yield* AWS.DynamoDB.consumeTableChanges(
   { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
   (stream) =>
     stream.pipe(
-      Stream.map((record) =>
-        JSON.stringify({
+      Stream.map((record) => ({
+        MessageBody: JSON.stringify({
           eventName: record.eventName,
           keys: record.dynamodb.Keys,
         }),
-      ),
+      })),
       Stream.run(sink),
+      Effect.orDie,
     ),
 );
 ```
+
+Each element is an SQS batch entry, so the message body goes in
+`MessageBody`. A `consumeTableChanges` handler can't fail (its error
+type is `never`), so `Effect.orDie` turns the sink's error into a
+defect. Provide `AWS.Lambda.TableEventSource` and `AWS.SQS.QueueSinkHttp`
+(which needs `AWS.SQS.SendMessageBatchHttp`), as shown on the
+[Sinks](/infrastructure-as-effects/sinks) page.
 
 `Stream.throttle` or `Stream.groupedWithin` drop in anywhere along the
 chain. That `sink` is a [Sink](/infrastructure-as-effects/sinks), the
@@ -225,6 +233,20 @@ yield* Cloudflare.Queues.consumeQueueMessages(queue, fn);
 yield* Cloudflare.Workers.cron(expression, fn);
 yield* GitHub.consumeRepositoryEvents(props, fn);
 ```
+
+Provide the matching Layer on the Function or Worker:
+
+| Call | Layer to provide |
+| ---- | ---------------- |
+| `AWS.SQS.consumeQueueMessages` | `AWS.Lambda.QueueEventSource` |
+| `AWS.Kinesis.consumeStreamRecords` | `AWS.Lambda.StreamEventSource` |
+| `AWS.DynamoDB.consumeTableChanges` | `AWS.Lambda.TableEventSource` |
+| `AWS.S3.consumeBucketEvents` | `AWS.Lambda.BucketEventSource` |
+| `AWS.SNS.consumeTopicNotifications` | `AWS.Lambda.TopicEventSource` |
+| `AWS.EventBridge.consumeBusEvents` | `AWS.Lambda.EventSource` |
+| `Cloudflare.Queues.consumeQueueMessages` | `Cloudflare.Queues.EventSourceLive` |
+| `Cloudflare.Workers.cron` | `Cloudflare.Workers.CronEventSourceLive` |
+| `GitHub.consumeRepositoryEvents` | `Cloudflare.Workers.GitHubRepositoryEventSourceLive` |
 
 EventBridge can also route matching events to another resource instead
 of consuming them locally:

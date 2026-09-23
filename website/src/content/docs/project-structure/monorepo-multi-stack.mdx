@@ -11,8 +11,9 @@ Each package owns its own `alchemy.run.ts`
 ├── package.json           # workspaces: ["frontend", "backend"]
 ├── backend/
 │   ├── alchemy.run.ts     # Backend Stack — deploys the Worker
-│   ├── package.json       # name: "backend"
+│   ├── package.json       # name: "backend", exports "." → src/index.ts
 │   └── src/
+│       ├── index.ts       # re-exports Stack.ts (plus the typed client)
 │       ├── Service.ts     # the Worker
 │       └── Stack.ts       # typed handle — outputs { url: string }
 └── frontend/
@@ -46,8 +47,13 @@ export class Backend extends Alchemy.Stack<
 
 The handle is the contract between the two Stacks. It names the Stack
 (`"Backend"`) and declares its output shape (`{ url: string }`). Both sides
-import this class. The backend deploys against it and the frontend
-references it, so TypeScript enforces the contract in both directions.
+import this class. The backend deploys under its name and the frontend
+references it. The frontend gets typed outputs from the handle. The backend
+side is not type-checked against it.
+
+Keep the handle in its own file that imports only `alchemy`. Importing
+`backend/alchemy.run.ts` instead would pull the backend's Worker and
+Resources into the frontend's program.
 
 ## The backend Stack
 
@@ -72,9 +78,15 @@ export default Backend.make(
 );
 ```
 
-`Backend.make` is `Alchemy.Stack` bound to the handle. If the returned
-object doesn't match `{ url: string }`, this file fails to typecheck. On
-deploy, the resolved `url` is persisted to the state store as the Stack's
+`Backend.make` is `Alchemy.Stack` bound to the handle's name. It does not
+check the returned object against the handle's `{ url: string }`, so keep
+the two in sync by hand.
+
+A Worker's `url` is typed `string | undefined` because a Worker may have no
+public URL. `.as<string>()` narrows the Output's type to what the handle
+declares. It is a type-only cast and does not check the value at runtime.
+
+On deploy, the resolved `url` is persisted to the state store as the Stack's
 output.
 
 ## The frontend Stack
@@ -109,13 +121,30 @@ export default Alchemy.Stack(
 ```
 
 `yield* Backend` reads the backend's persisted outputs from the state store
-at plan time and returns them typed. `backend.url` is the `string` the
-handle declared. It resolves the same stage the frontend deploys to. The
-`sam` frontend reads the `sam` backend, and `pr-42` reads `pr-42`.
+at plan time. It returns a typed proxy whose fields are Outputs, so
+`backend.url` is an `Output<string>`. Pass it to props like any other
+Output. To derive a string, use `Output.map` or `Output.interpolate`,
+because JS string coercion of an Output throws (see
+[Outputs](/infrastructure-as-code/outputs)).
 
-The import works because `frontend/package.json` depends on
-`"backend": "workspace:*"`. The handle travels through the workspace like
-any other export.
+The reference resolves the same stage the frontend deploys to. The `sam`
+frontend reads the `sam` backend, and `pr-42` reads `pr-42`.
+
+:::caution
+The frontend reads the backend's outputs through its own `state` layer, so
+both Stacks must use the same state store. The example uses
+`Cloudflare.state()` on both sides. `Alchemy.localState()` does not work
+here because it writes state to `.alchemy/state` in the directory you run
+`alchemy` from. Running `alchemy` from each package directory gives each package its
+own store, and the frontend's plan fails with `InvalidReferenceError`. See [State Store](/state-store).
+:::
+
+The import works because `frontend/package.json` depends on the backend
+package (`"backend": "workspace:*"`), and `backend/package.json` `exports`
+maps `"."` to `./src/index.ts`, which re-exports the handle. The example maps
+it under the `bun` export condition and points the other conditions at the
+built `lib/` output. The handle travels through the workspace like any other
+export.
 
 ## Deploy in order
 
@@ -128,10 +157,11 @@ The backend must be deployed to the stage first. Otherwise the frontend's
 plan fails with `InvalidReferenceError` because there are no persisted
 outputs to read. Destroy in reverse order, with the frontend first and then the backend.
 
-Each `alchemy.run.ts` runs from its own package directory, so relative paths
-(`main`, `rootDir`) resolve against the package. The
-[root-relative path trap](/project-structure/monorepo-single-stack#anchor-every-path)
-of the single-stack layout doesn't apply here.
+Because you run `alchemy` from each package directory, relative paths
+(`main`, `rootDir`) resolve against that package. If you instead run from
+the workspace root (`alchemy deploy backend/alchemy.run.ts`), they resolve
+from the root. Anchor them with `import.meta` as in the
+[single-stack layout](/project-structure/monorepo-single-stack#anchor-every-path).
 
 ## Pin to a specific stage
 
@@ -154,7 +184,8 @@ example, every frontend preview can point at the production backend:
 
 - [Monorepo](/project-structure/monorepo): the high-level chooser.
 - [Single Stack](/project-structure/monorepo-single-stack): the one-Stack
-  alternative with one plan, one state file, paths anchored to the root.
+  alternative with one plan, one state file, and paths anchored with
+  `import.meta`.
 - [References](/infrastructure-as-code/references): when to split Stacks,
   how a reference resolves (typing, plan-time state reads,
   `InvalidReferenceError`), and stage pinning in depth.

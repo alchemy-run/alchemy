@@ -12,7 +12,9 @@ downstream always sees whatever was actually last deployed.
 ## Reference another stage
 
 `Resource.ref` takes a
-[Logical ID](/infrastructure-as-code/resource#logical-id). Pass
+[Logical ID](/infrastructure-as-code/resource#logical-id) (the full
+namespace path for a namespaced Resource, see
+[Requirements](#requirements)). Pass
 `stage` to read that Resource from a different stage of this stack:
 
 ```typescript
@@ -72,15 +74,23 @@ proxy of typed Outputs, so `(yield* Backend).url` is
 
 ## Escape hatches
 
-When the Resource constructor isn't in scope, `Output.ref` does the
-same lookup:
+When the Resource constructor isn't in scope, `Alchemy.ref` builds
+the same reference and `Output.of` turns it into a typed Output:
 
 ```typescript
-const bucket = Output.ref<typeof Bucket>("Bucket", {
-  stack: "shared-infra",
-  stage: "prod",
-});
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+
+const bucket = Output.of(
+  Alchemy.ref<Cloudflare.R2.Bucket>("Bucket", {
+    stack: "shared-infra",
+    stage: "prod",
+  }),
+);
 ```
+
+The type parameter is the resource's interface type
+(`Cloudflare.R2.Bucket`), not `typeof` its constructor.
 
 When a typed Stack handle isn't in scope, `Output.stackRef` reads
 the output record directly:
@@ -93,6 +103,17 @@ const backend = yield* Output.stackRef<{ url: string }>("Backend", {
 
 Prefer `Resource.ref` and `yield* MyStack`. They do the same
 lookups with real type bindings.
+
+## Requirements
+
+References read the state store of the stack doing the referencing.
+Both stacks must use the same state backend, for example both
+`Cloudflare.state()` in the same account.
+
+The id you pass is the resource's
+[fully qualified name](/infrastructure-as-code/resource#fully-qualified-names).
+For a Resource declared inside `Namespace.push("Site")`, pass
+`"Site/Assets"`, not `"Assets"`.
 
 ## Deploy order
 
@@ -113,14 +134,13 @@ attributes participate in this plan.
 
 ## Where next
 
-- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) covers
-  how the referenced state got persisted in the first place. It is the
-  next page.
-- [Multiple Stacks](/project-structure/monorepo-multi-stack) shows typed
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle): how
+  the referenced state got persisted in the first place. Next page.
+- [Multiple Stacks](/project-structure/monorepo-multi-stack): typed
   Stack handles wiring a monorepo.
-- [Shared database across stages](/cloudflare/data/shared-database)
-  walks through the owner/borrower pattern end to end.
-- [Inputs & Outputs](/infrastructure-as-code/outputs) covers the Output
+- [Shared database across stages](/cloudflare/data/shared-database):
+  the owner/borrower pattern end to end.
+- [Inputs & Outputs](/infrastructure-as-code/outputs): the Output
   model that references plug into.
-- [State Store](/state-store) describes where the persisted state
-  that refs read lives.
+- [State Store](/state-store): where the persisted state that refs
+  read lives.

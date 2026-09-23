@@ -169,25 +169,35 @@ export default Alchemy.Stack(
 );
 ```
 
-`yield* A` and `yield* B` succeed only because `ALive` and `BLive`
-are provided. If you forget one, TypeScript flags the missing layer
-at the call site.
+`yield* A` and `yield* B` get their props and implementation from
+`ALive` and `BLive`. If you forget one, the plan fails before anything
+deploys with a `MissingImplementationError`. Its message names the
+class and shows the `.make(...)` Layer to provide to the Stack. It
+starts like this:
+
+```text
+Cloudflare.Worker<A> was yielded without its implementation.
+```
+
+TypeScript does not catch this case. Yielding a bare Tag only
+requires the resource's providers, so a missing Layer still
+type-checks.
 
 ## How alchemy resolves the cycle
 
-Alchemy plans the cycle in two passes:
+Alchemy applies the cycle in these steps:
 
 <DAG
   nodes={[
     { id: "Decl", label: "declare", type: "A & B Tags" },
     { id: "Pre", label: "precreate", type: "reserve URLs", tone: "accent" },
-    { id: "Create", label: "create", type: "deferred Outputs" },
-    { id: "Wire", label: "update", type: "wire bindings", tone: "accent" },
+    { id: "Reconcile", label: "reconcile", type: "concurrent" },
+    { id: "Converge", label: "converge", type: "re-run reconcile", tone: "accent" },
   ]}
   edges={[
     { from: "Decl", to: "Pre" },
-    { from: "Pre", to: "Create" },
-    { from: "Create", to: "Wire" },
+    { from: "Pre", to: "Reconcile" },
+    { from: "Reconcile", to: "Converge" },
   ]}
 />
 
@@ -195,12 +205,15 @@ Alchemy plans the cycle in two passes:
    and B both exist.
 2. Each provider's [`precreate`](/infrastructure-as-code/provider#precreate) hook
    reserves the resource (and its physical URL) without needing the
-   other side's outputs.
-3. `create` runs in parallel using deferred Outputs. Bindings see
-   `Output<string>` placeholders that resolve later.
-4. A converge pass calls `update` once both sides exist and wires in
-   the real cross-references. Types stay sound throughout because
-   Outputs are typed.
+   other side's outputs. Members of a cycle wait only for this early
+   signal from each other, which breaks the deadlock.
+3. Both sides [`reconcile`](/infrastructure-as-code/resource-lifecycle#reconcile)
+   concurrently. A binding to the other side may see the precreate
+   stub's outputs at this point, not the final ones.
+4. A convergence loop re-resolves each resource's props and bindings
+   against the latest outputs. It calls `reconcile` again for any
+   resource whose inputs changed, and repeats until nothing changes.
+   Types stay sound throughout because Outputs are typed.
 
 The same pattern works for Lambda↔Lambda, Worker↔Container, or any
 mix. The Tag/Layer split is a property of every Function resource
@@ -226,7 +239,7 @@ The tagged-class pattern only pays off when something else needs to
 reference the Worker before its implementation is in scope. For
 non-circular reuse across files, see [Layers](/infrastructure-as-effects/layers).
 
-The deferred `Output` mechanism behind the two-phase plan is covered
+The deferred `Output` mechanism behind these steps is covered
 in [Inputs & Outputs](/infrastructure-as-code/outputs).
 
 ## Where next

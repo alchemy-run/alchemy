@@ -12,7 +12,6 @@ Deploy once in `beforeAll`, share the outputs handle across every test, and dest
 ```typescript
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
 });
 
 const stack = beforeAll(deploy(Stack));

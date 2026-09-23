@@ -72,20 +72,26 @@ alchemy destroy --stage pr-42
 Each stage gets its own:
 
 - **State file**: the persisted record of what's deployed
-- **Physical names**: `myapp-prod-bucket-abc123` vs
-  `myapp-live_sam-bucket-9b2c`
+- **Physical names**: `myapp-bucket-prod-<suffix>` vs
+  `myapp-bucket-live-sam-<suffix>`
 - **Logs and metrics**: scoped per deployed function/worker
 
 As a result, deploying or destroying one stage never touches
 another:
 
 ```sh
-$ alchemy deploy --stage live_sam    # -> myapp-live_sam-photos-a3f1
-$ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
-$ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
+$ alchemy deploy --stage live_sam    # -> myapp-photos-live-sam-<16-char suffix>
+$ alchemy deploy --stage pr-147      # -> myapp-photos-pr-147-...
+$ alchemy deploy --stage prod        # -> myapp-photos-prod-...
 
 $ alchemy destroy --stage pr-147     # only removes pr-147 resources
 ```
+
+By default, generated physical names follow
+`{stack}-{logicalId}-{stage}-{suffix}`. Characters that aren't letters,
+digits, or hyphens (such as the `_` in `live_sam`) become `-` in physical
+names. A provider can lowercase the name or truncate it to fit a service's
+length limit.
 
 ## Per-stage configuration
 

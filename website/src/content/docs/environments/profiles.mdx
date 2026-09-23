@@ -4,9 +4,8 @@ description: Use profiles to select cloud accounts and credentials for each envi
 ---
 
 A **profile** is a named bundle of provider authentication settings.
-The non-secret manifest lives in `~/.alchemy/profiles.json`. Secret
-material lives separately under `~/.alchemy/credentials/<profile>/`.
-Profiles let you:
+Each profile is a directory under `~/.alchemy/profiles/` with one
+document per connected provider. Profiles let you:
 
 - Keep work and personal accounts separate
 - Use a different IAM role for `prod` vs `dev`
@@ -57,13 +56,20 @@ To re-run that flow at any time:
 # Add, re-configure, or remove accounts in the current profile
 alchemy profile edit
 
-# Re-configure one account directly
+# Connect, re-configure, or disconnect one account directly
+alchemy profile edit --add Neon
 alchemy profile edit --profile work --reconfigure Cloudflare
+alchemy profile edit --remove Neon
 
 # Log into a separate profile
 alchemy profile create prod
 alchemy profile edit --profile prod
 ```
+
+For scripts and agents, `--method <m> --set <field>=<value|env:VAR|->`
+configures a provider without prompts. `env:VAR` reads the value from the
+environment, and `-` reads it from stdin. See
+[CLI › profile edit](/cli/profile#profile-edit).
 
 Refreshing credentials is separate from reconfiguration. Refresh preserves the
 selected authentication method, account, and scopes:
@@ -130,6 +136,12 @@ export ALCHEMY_PROFILE=work
 alchemy deploy
 ```
 
+`alchemy profile list` prints every profile and its connected providers,
+with the active one marked. `alchemy profile delete <name>` removes a
+profile and its credentials. The `default` profile can't be deleted. In an
+interactive terminal, a bare `alchemy profile` opens a dashboard for the same
+actions. See [CLI › profile](/cli/profile) for every subcommand.
+
 Rename a profile without disconnecting its accounts. The built-in
 `default` profile cannot be renamed.
 
@@ -137,7 +149,7 @@ Rename a profile without disconnecting its accounts. The built-in
 alchemy profile rename work company
 ```
 
-This moves the profile's credential directory. It does not rewrite an
+This moves the profile's directory. It does not rewrite an
 `ALCHEMY_PROFILE` environment variable.
 
 ### Environment variables outside CI
@@ -191,15 +203,26 @@ written to `~/.alchemy`. GitHub Actions sets `CI=true` automatically:
 | Infisical | `INFISICAL_TOKEN`, or `INFISICAL_IDENTITY_ID` to log in with the platform's OIDC token | `INFISICAL_OIDC_TOKEN`, `INFISICAL_OIDC_AUDIENCE`, `INFISICAL_API_URL`. See [Infisical](/environments/infisical) |
 
 These variables are a CI credential source. They are not a profile
-authentication method and are never persisted into `profiles.json` or the
-credentials directory. Each provider declares machine-readable
+authentication method and are never persisted into the profile. Each provider declares machine-readable
 `environment` metadata for the variables its CI resolver consumes. See
 [Custom Auth Providers](/environments/custom-auth-provider).
 
 ## Where profiles live
 
-Profile settings live in `~/.alchemy/profiles.json`. Credentials live in
-permission-restricted files under `~/.alchemy/credentials/<profile>/`.
+Each profile is a directory, `~/.alchemy/profiles/<profile>/`. It holds one
+JSON document per connected provider, named after the lowercased provider
+(for example `cloudflare.json`). The document stores the chosen `method` and
+its values, including tokens. Alchemy writes these files with owner-only
+permissions (`0600`, in a `0700` directory).
+
+Older Alchemy versions kept a central `~/.alchemy/profiles.json` plus a
+`~/.alchemy/credentials/` directory. Alchemy migrates them into the per-profile
+layout on first use and moves both originals into
+`~/.alchemy/.profiles-v0-<timestamp>/` as a backup.
+
+The [Cloudflare state store](/state-store) still caches its URL and auth
+token per profile under `~/.alchemy/credentials/<profile>/`. Renaming or deleting
+a profile moves or removes that directory too.
 
 Set `ALCHEMY_HOME` to relocate profile data.
 
@@ -207,7 +230,7 @@ Profile names are portable, filesystem-safe identifiers. They must start
 with a letter or number. They may contain letters, numbers, `.`, `_`, and
 `-`. They may be at most 64 characters.
 
-Use `alchemy profile edit` instead of editing the manifest manually.
+Use `alchemy profile edit` instead of editing these files by hand.
 
 ## Where next
 

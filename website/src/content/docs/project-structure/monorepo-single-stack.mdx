@@ -75,7 +75,7 @@ Anchor every path to the file that declares it, using `import.meta`:
 | a Worker whose defining file is its entry  | `main: import.meta.url`                                 |
 | a Worker with a separate entry file        | `main: new URL("./src/worker.ts", import.meta.url).href` |
 | a Vite website in a subdirectory           | `rootDir: path.resolve(import.meta.dirname, "frontend")` |
-| a custom Worker entry inside a Vite app    | `vite: { main: "src/worker.ts" }` (resolves from `rootDir`) |
+| a custom Worker entry inside a Vite app    | `main: "src/worker.ts"` (resolves from `rootDir`)        |
 
 `import.meta.url` and `import.meta.dirname` always point at the file being
 evaluated, so the resource resolves the same way no matter which directory
@@ -152,19 +152,17 @@ ordering to manage.
 
 By default `Website.Vite` deploys the server entry your framework produces.
 If the app ships its own Worker module (extra handlers, Durable Objects),
-point `vite.main` at it:
+point `main` at it:
 
 ```typescript
 const website = yield* Cloudflare.Website.Vite("Website", {
   rootDir: path.resolve(import.meta.dirname, "frontend"),
-  vite: {
-    main: "src/worker.ts",
-  },
+  main: "src/worker.ts",
 });
 ```
 
-`vite.main` is the one relative path that does not resolve from the
-workspace root. It resolves from `rootDir`, so `src/worker.ts` means
+`main` is the one relative path that does not resolve from the workspace
+root. It resolves from `rootDir`, so `src/worker.ts` means
 `frontend/src/worker.ts`.
 
 ## Add more apps

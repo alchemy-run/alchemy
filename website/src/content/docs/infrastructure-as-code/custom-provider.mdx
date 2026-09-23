@@ -15,6 +15,12 @@ bundling it into a `providers()` layer, and writing a test.
 See [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) for the
 semantics of when each lifecycle method fires.
 
+:::note[Prerequisite]
+This guide imports `StripeCredentials` from
+[Custom Auth Provider](/environments/custom-auth-provider). Build that
+first, or replace it with your own credentials service.
+:::
+
 ## Declare props and attributes
 
 Every resource has two sides:
@@ -47,6 +53,13 @@ A `Resource<Type, Props, Attributes>` is a phantom type that ties a
 string `Type` to its props and attributes. The string `Type` (here
 `"Stripe.Product"`) is what Alchemy uses to look up the provider at
 plan time. It must be globally unique.
+
+:::note
+Alchemy ships a full Stripe provider in `alchemy/Stripe`, and it
+already uses the type `"Stripe.Product"`. This guide rebuilds a small
+version to teach the pattern. In your own project, use a type string
+no built-in uses, such as `"MyCo.Product"`.
+:::
 
 ```diff lang="typescript"
 // src/stripe/Product.ts
@@ -100,8 +113,13 @@ for Stripe.Product`. The next step fixes that.
 
 A provider layer is a `Layer<Provider<R>>` produced by
 `Provider.succeed(ResourceClass, service)`. The service is an
-object with `reconcile`, `delete`, and `list` (required) plus
-optional hooks like `diff`, `read`, `precreate`.
+object with lifecycle handlers. `reconcile` and `delete` are
+required. `list` is required by the typed
+`StripeProduct.Provider.of(...)` constructor used below.
+`Provider.succeed`/`Provider.effect` would default it to an empty
+list if you passed a plain object (see
+[Providers › list](/infrastructure-as-code/provider#list)). The
+other hooks, such as `diff`, `read`, and `precreate`, are optional.
 
 Start with stubs so the types compile, then fill them in:
 
@@ -136,7 +154,8 @@ Patterns to know:
   resource's props and attributes.
 - **`Provider.effect`** is for services that need a dependency
   resolved once at construction, such as a logger or `FileSystem`.
-  Never use it for a live one. See the caution below.
+  Don't use it to resolve credentials. Resolve those inside each
+  handler (see [Credentials](#credentials)).
 
 ## Credentials
 
@@ -184,14 +203,15 @@ The following steps build the Stripe reconciler.
 +import Stripe from "stripe";
 +import { StripeCredentials } from "./Credentials.ts";
 +
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
 -  reconcile: () => Effect.die("not implemented"),
 +  reconcile: Effect.fn(function* ({ news, output }) {
 +    const { apiKey } = yield* yield* StripeCredentials;
 +    const stripe = new Stripe(Redacted.value(apiKey));
 +  }),
   delete: () => Effect.die("not implemented"),
-});
+  list: () => Effect.succeed([]),
+}));
 ```
 
 The double-yield resolves credentials lazily, inside the handler. The
@@ -207,7 +227,7 @@ provider layer builds without touching the auth chain.
 +  let product = output?.productId
 +    ? yield* Effect.tryPromise(() =>
 +        stripe.products.retrieve(output.productId),
-+      ).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
++      ).pipe(Effect.catch(() => Effect.succeed(undefined)))
 +    : undefined;
  }),
 ```
@@ -290,8 +310,8 @@ The returned Attributes are persisted to state and become the next run's
 
 ### Why this shape works
 
-The body is idempotent by construction. Alchemy can retry it after a
-failed state write, and it re-converges. Adoption needs no special case.
+The body is idempotent by construction. If a state write fails, the
+next deploy runs it again and it re-converges. Adoption needs no special case.
 `retrieve` finds the imported resource, and the sync step rewrites
 whatever drifted from `news`.
 
@@ -308,30 +328,35 @@ here if your resource is a binding target. See
 when `alchemy destroy` runs.
 
 :::tip[Treat 404 as success]
-Like `reconcile`, `delete` must be idempotent. Alchemy may retry
-it if persistence fails after the cloud call succeeds but before
+Like `reconcile`, `delete` must be idempotent. The next deploy runs
+it again if persistence fails after the cloud call succeeds but before
 state is written. Catch "not found" errors and return `Effect.void`.
 :::
 
 ```diff lang="typescript"
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
 -  delete: () => Effect.die("not implemented"),
 +  delete: Effect.fn(function* ({ output }) {
 +    const { apiKey } = yield* yield* StripeCredentials;
 +    const stripe = new Stripe(Redacted.value(apiKey));
-+    yield* Effect.tryPromise(() =>
-+      stripe.products.del(output.productId),
-+    ).pipe(
-+      Effect.catchAll((cause) =>
-+        cause instanceof Error && cause.message.includes("No such product")
-+          ? Effect.void
-+          : Effect.fail(cause),
++    yield* Effect.tryPromise({
++      try: () => stripe.products.del(output.productId),
++      catch: (error) => error as { code?: string },
++    }).pipe(
++      Effect.catch((e) =>
++        e.code === "resource_missing" ? Effect.void : Effect.fail(e),
 +      ),
 +    );
 +  }),
-});
+  list: () => Effect.succeed([]),
+}));
 ```
+
+Without a `catch` option, `Effect.tryPromise` wraps every rejection
+in an `UnknownError` with a generic message. The `catch` option keeps
+the SDK's error, so you can match its `code`. Stripe reports a
+missing object with `resource_missing`.
 
 ## Implement `diff` (optional)
 
@@ -343,12 +368,13 @@ plan.
 
 `diff` runs at plan time, before `reconcile`, and returns one of:
 
-- `{ action: "noop" }`: the change is trivial, so skip reconciling
+- `undefined` / `void`: let the engine compare props and bindings.
+  It plans an update if anything changed, otherwise a no-op. Return
+  this for any change you don't need to special-case.
 - `{ action: "update", stables?: [...] }`: apply in place
 - `{ action: "replace", deleteFirst?: boolean }`: destroy and
   recreate
-- `undefined` / `void`: fall back to the default (plan an in-place
-  update)
+- `{ action: "noop" }`: ignore this change on purpose. This is rare.
 
 :::note[`diff` runs during planning]
 Props may still be unresolved `Output`s when `diff` is called.
@@ -362,7 +388,7 @@ path when you can't decide.
 +
 // ...
 
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
 +  diff: Effect.fn(function* ({ news, olds }) {
 +    if (!isResolved(news)) return undefined;
 +    if (news.description !== olds.description) {
@@ -372,7 +398,8 @@ return StripeProduct.Provider.of({
 +  }),
   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
   delete: Effect.fn(function* ({ output }) { /* ... */ }),
-});
+  list: () => Effect.succeed([]),
+}));
 ```
 
 For attributes that are immutable across all updates (e.g.
@@ -380,11 +407,11 @@ the Stripe `productId`, an ARN), declare them in
 `stables` at the top level:
 
 ```diff lang="typescript"
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
 +  stables: ["productId"],
   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
   // ...
-});
+}));
 ```
 
 ## Implement `read` (optional, for recovery and adoption)
@@ -396,7 +423,7 @@ pre-existing cloud resources into a fresh state store. Returning
 created.
 
 ```diff lang="typescript"
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
   stables: ["productId"],
   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
 +  read: Effect.fn(function* ({ output }) {
@@ -406,14 +433,15 @@ return StripeProduct.Provider.of({
 +    const product = yield* Effect.tryPromise(() =>
 +      stripe.products.retrieve(output.productId),
 +    ).pipe(
-+      Effect.catchAll(() => Effect.succeed(undefined)),
++      Effect.catch(() => Effect.succeed(undefined)),
 +    );
 +    if (!product) return undefined;
 +    return { productId: product.id, created: product.created };
 +  }),
   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
   delete: Effect.fn(function* ({ output }) { /* ... */ }),
-});
+  list: () => Effect.succeed([]),
+}));
 ```
 
 This example only finds resources by an ID that a previous run saved.
@@ -446,7 +474,7 @@ like [`alchemy unsafe nuke`](/cli/nuke). It must paginate
 exhaustively (see [Providers › list](/infrastructure-as-code/provider#list)):
 
 ```diff lang="typescript"
-return StripeProduct.Provider.of({
+Provider.succeed(StripeProduct, StripeProduct.Provider.of({
   stables: ["productId"],
 -  list: () => Effect.succeed([]),
 +  list: Effect.fn(function* () {
@@ -458,7 +486,7 @@ return StripeProduct.Provider.of({
 +    return products.map((p) => ({ productId: p.id, created: p.created }));
 +  }),
   // ...
-});
+}));
 ```
 
 Resources with no enumeration API (singletons, existence-only
@@ -617,9 +645,12 @@ test.provider(
 );
 ```
 
-To verify replacement semantics, change a `stables` field (or the
-field your `diff` flags as `replace`) and assert that
-`updated.productId !== created.productId`.
+To verify replacement semantics, change a prop that your `diff`
+answers with `{ action: "replace" }` and assert that
+`updated.productId !== created.productId`. `stables` does not trigger
+replacement. It lists the attributes that stay the same across an
+update. See
+[Verify replacement](/testing/testing-providers#verify-replacement).
 
 ## Reference implementations
 

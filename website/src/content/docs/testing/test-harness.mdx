@@ -16,15 +16,14 @@ One call returns a self-contained API for the file:
 const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
   Test.make({
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
   });
 ```
 
 | Helper | Purpose |
 |---|---|
-| `test(name, effect)` | Effect-aware test. `HttpClient` and your providers Layer are in scope. |
+| `test(name, effect, options?)` | Effect-aware test. `HttpClient` is in scope. |
 | `test.skip` / `test.skipIf` / `test.only` / `test.todo` | Skip, focus, and todo modifiers (same shape as `bun.test`). |
-| `test.provider(name, fn)` | [Provider-lifecycle test](/testing/testing-providers) against a scratch in-memory stack. |
+| `test.provider(name, fn, options?)` | [Provider-lifecycle test](/testing/testing-providers) against a private scratch stack. |
 | `beforeAll(effect)` | Run an Effect once. Returns a lazy accessor (`yield* result`) that tests can use. |
 | `beforeEach(effect)` | Run an Effect before every test. |
 | `afterAll(effect)` / `afterAll.skipIf(predicate)` | Cleanup hook with conditional teardown. |
@@ -32,8 +31,15 @@ const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
 | `deploy(Stack, opts?)` | Plan and apply a stack, then resolve to its outputs. |
 | `destroy(Stack, opts?)` | Plan and apply against an empty desired state. |
 
-`Test.getWhenReady` / `Test.executeWhenReady` are module-level HTTP
-cold-start helpers. [Testing a Stack](/testing/testing-a-stack)
+Only `test.provider` bodies get the `providers` Layer, so SDK calls
+such as `DynamoDB.describeTable` work there. In a plain `test` or
+hook, `deploy(Stack)` uses the Stack's own providers, and any other
+SDK call must provide the services it needs itself. The optional
+`options` argument sets a per-test timeout. See [Timeouts](#timeouts).
+
+`Test.getWhenReady`, `Test.executeWhenReady`, and the RPC transport
+`Test.rpcClientLayer` are module-level helpers that ride out a fresh
+URL's cold-start window. [Testing a Stack](/testing/testing-a-stack#retry-the-first-request)
 covers them.
 
 `expect` and `describe` come directly from the underlying runner,
@@ -55,8 +61,10 @@ Test.make({
 
 ### `providers` (required)
 
-The provider Layer that resolves resource implementations.
-It is usually the same one your `Stack` uses:
+The provider Layer that `test.provider` scratch stacks and test
+bodies use to resolve resource implementations and SDK clients.
+`deploy(Stack)` uses the providers declared on the Stack instead.
+It is usually the same Layer your `Stack` uses:
 
 ```typescript
 providers: Cloudflare.providers(),
@@ -70,19 +78,32 @@ the env-var auth methods registered by each provider.
 
 ### `state`
 
-The state store that top-level `deploy(Stack)` and
-`destroy(Stack)` use. `test.provider` does not use it. Defaults to
-`localState()`, which stores state in `.alchemy/` on disk.
+The state store that test bodies and hooks see when they
+`yield* State`. Defaults to `localState()`, which stores state in
+`.alchemy/` on disk. Most files leave it out.
+
+`deploy(Stack)` and `destroy(Stack)` do not use this option. They
+record state in the store declared on the Stack's own required
+`state` option, which takes precedence. `test.provider` uses its own
+scratch store.
 
 ```typescript
-state: Cloudflare.state(),  // R2-backed, survives across CI runners
-state: localState({ path: ".alchemy-test/" }),  // separate dir
-state: undefined,  // omit → defaults to localState()
+// alchemy.run.ts: the store deploy(Stack) and destroy(Stack) use
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(), // Durable Object-backed, shared across CI runners
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
 ```
 
-Persistent state lets `deploy(Stack)` skip recreating unchanged
-resources between runs. [Testing a Stack](/testing/testing-a-stack)
-covers the run-against-an-existing-stack pattern built on it.
+The Stack's persistent store lets `deploy(Stack)` skip recreating
+unchanged resources between runs. See [State store](/state-store)
+for the available stores, and
+[Testing a Stack](/testing/testing-a-stack#share-one-stack-across-files)
+for sharing one deployment across files.
 
 ### `profile`
 
@@ -116,6 +137,16 @@ afterAll.skipIf(!process.env.CI)(destroy(Stack, { stage: "ci-pr-42" }));
 
 A unique stage per PR or test run lets multiple suites run in
 parallel against the same provider account without colliding.
+
+When `stage` is omitted, the harness uses `ALCHEMY_TEST_STAGE` if it
+is set. Otherwise it uses `test_$USER` (`$USERNAME` on Windows, or
+`test_unknown` if neither is set). It does not read `ALCHEMY_STAGE`,
+which is the CLI's deploy and dev stage. The env var isolates
+concurrent CI jobs or worktrees without editing any file:
+
+```sh
+ALCHEMY_TEST_STAGE=pr-42 bun test
+```
 
 ### `dev`
 
@@ -179,7 +210,8 @@ test or other hook returns the resolved value:
 ```typescript
 const stack = beforeAll(deploy(Stack));
 const seed = beforeAll(Effect.gen(function* () {
-  yield* DynamoDB.putItem({ /* ... */ });
+  const { url } = yield* stack;
+  yield* HttpClient.post(`${url}/seed`);
   return Date.now();
 }));
 
@@ -192,6 +224,10 @@ test(
   }),
 );
 ```
+
+The second hook can `yield* stack` because hooks run in registration
+order. It seeds data through the deployed stack's HTTP API because a
+plain hook has no providers Layer in scope.
 
 The default timeout is 120s. Override it with the second argument:
 
@@ -254,6 +290,37 @@ On Vitest, `test.only` is supported. `test.todo` is a stub that
 maps to `it.todo`. `test.skip` / `test.skipIf` work identically.
 :::
 
+## Timeouts
+
+`beforeAll` and `afterAll` default to 120s. `test`, `test.provider`,
+`beforeEach`, and `afterEach` get no default from the harness, so
+the runner's own default applies. Both `bun:test` and Vitest time
+out a test after 5s. Vitest gives hooks 10s. A test that deploys
+through `test.provider` or polls for longer than that fails with a
+timeout.
+
+Pass a timeout as the third argument:
+
+```typescript
+test(
+  "waits for the queue to drain",
+  Effect.gen(function* () { /* ... */ }),
+  { timeout: 90_000 },
+);
+
+test.provider(
+  "create, update, delete",
+  (stack) => Effect.gen(function* () { /* ... */ }),
+  { timeout: 180_000 },
+);
+```
+
+On Bun the adapter types this argument as `bun.TestOptions`, so use
+the object form. On Vitest a plain number (`90_000`) also works.
+`beforeEach` and `afterEach` take the same options as their second
+argument. To raise the default for a whole Bun run, pass
+`bun test --timeout <ms>`.
+
 ## HttpClient is in scope
 
 `HttpClient` is wired into every `test` Effect, so you can call
@@ -289,17 +356,23 @@ The two adapters expose the same API:
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
 });
 ```
 
 - **Bun** uses `bun:test` directly. Every `test(...)` becomes a
   `bun.test(...)` call wrapped with `Effect.runPromise`.
 - **Vitest** uses `@effect/vitest`'s `it.live`, so tests stay
-  Effect-aware. The default hook timeout is the same (120s).
+  Effect-aware. The `beforeAll`/`afterAll` default timeout is the
+  same (120s).
 
 Pick whichever runner your project already uses. The test code
-does not change.
+does not change, with two small differences:
+
+- On Vitest, a failed `test.provider` body still destroys its
+  scratch stack. On Bun it does not, so wrap the body yourself. See
+  [Cleanup when a test fails](/testing/testing-providers#cleanup-when-a-test-fails).
+- On Vitest, a per-test timeout can be a plain number. On Bun it
+  must be `{ timeout }`. See [Timeouts](#timeouts).
 
 ## Where next
 

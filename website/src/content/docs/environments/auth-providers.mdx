@@ -21,21 +21,30 @@ export interface AuthProviderImpl<
   Credentials,
 > {
   readonly configSchema: Schema.Codec<Config>;
-  configure(profileName: string): Effect.Effect<Config, AuthError>;
+  configure(
+    profileName: string,
+    currentConfig?: Config,
+  ): Effect.Effect<Config, AuthError>;
   configureWith?(
     profileName: string,
     input: { method: string; values: Record<string, string> },
   ): Effect.Effect<Config, AuthError>;
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
-  login(profileName: string, config: Config): Effect.Effect<void, AuthError>;
+  login(
+    profileName: string,
+    config: Config,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<Config | void, AuthError>;
   logout(profileName: string, config: Config): Effect.Effect<void, AuthError>;
   details(
     profileName: string,
     config: Config,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth>;
   read(
     profileName: string,
     config: Config,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<Credentials, AuthError | NeedsReauth>;
   readonly readEnvironment?: Effect.Effect<Credentials, AuthError>;
   readonly environment?: ReadonlyArray<EnvironmentVariable>;
@@ -46,6 +55,10 @@ export interface AuthProviderImpl<
 and `--set`, with inputs declared by `configureMethods`. `login` and
 `logout` manage stored secrets. `details` supplies redacted profile status.
 `read` resolves credentials.
+
+`updateConfig` writes changed values (for example a refreshed OAuth token)
+back to the profile. `read` must never prompt. Fail with `NeedsReauth`
+instead.
 
 `configSchema` describes the provider's manifest entry. Stored entries are
 user-editable JSON that may come from another alchemy version. Alchemy decodes
@@ -82,8 +95,8 @@ export class AuthProviders extends Context.Service<
 
 [`alchemy profile edit`](/cli/profile#profile-edit) uses this registry. It
 imports your stack, reads the registry, and runs the selected providers'
-`configure`/`login`. The factory also wraps `read` and `logout` in a
-cross-process file lock, so two processes never refresh credentials at the
+`configure`/`login`. The factory also wraps `read`, `details`, and `logout` in
+the same cross-process file lock, so two processes never refresh credentials at the
 same time. It also serializes interactive flows so prompts from different
 providers don't interleave. The file lock does not cover `configure` or
 `login`, because a browser grant may take minutes and would block every
@@ -170,11 +183,12 @@ active Profile's Auth Provider. The handler only calls the API.
 
 ## How Profiles select an Auth Provider
 
-A Profile stores one `{ method }` config per provider in
-`~/.alchemy/profiles.json`. Secrets live separately under
-`~/.alchemy/credentials/{profile}/`. Each cloud bridges that config
-to its credential service with a `fromProfile`/`fromAuthProvider`
-Layer:
+A Profile stores one document per provider at
+`~/.alchemy/profiles/{profile}/{provider}.json`, holding the chosen `method`
+and its values. See
+[Profiles › Where profiles live](/environments/profiles#where-profiles-live).
+Each cloud bridges that config to its credential service with a
+`fromProfile`/`fromAuthProvider` Layer:
 
 ```typescript
 // alchemy/Cloudflare/CloudflareEnvironment
@@ -223,27 +237,39 @@ stored value. Every resolve checks expiry and refreshes proactively:
 
 ```typescript
 // alchemy/Cloudflare/Auth/AuthProvider — inside read (method: "oauth")
+const now = yield* Clock.currentTimeMillis;
 const fresh =
-  creds.expires > Date.now() + 10_000
+  creds.expires > now + 10_000
     ? creds
     : yield* OAuthClient.refresh(creds).pipe(
-        Effect.tap((refreshed) =>
-          store.write(
-            profileName,
-            "cloudflare-oauth",
-            OAuthClient.OAuthCredentials,
-            refreshed,
-          ),
-        ),
         Effect.mapError(
           (e) =>
-            new AuthError({
-              message: "Cloudflare OAuth refresh failed. Run: alchemy profile refresh --profile default --provider Cloudflare",
+            new NeedsReauth({
+              provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+              profile: profileName,
+              message: `Cloudflare OAuth refresh failed. ${reauth}`,
               cause: e,
             }),
         ),
       );
+if (fresh !== creds) {
+  yield* (
+    updateConfig?.({
+      method: "oauth",
+      accountId,
+      clientId: fresh.clientId,
+      access: Redacted.value(fresh.access),
+      refresh: Redacted.value(fresh.refresh),
+      expires: fresh.expires,
+      scopes: fresh.scopes,
+    }) ?? Effect.void
+  );
+}
 ```
+
+Refreshed tokens are written back to the profile through the `updateConfig`
+callback that Alchemy passes to `read`. A failed refresh surfaces as
+`NeedsReauth`, which the profile UI renders as "needs re-login."
 
 `read` runs under the cross-process file lock, so two concurrent
 deploys can't double-spend the single-use refresh token.

@@ -94,9 +94,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
 The Worker's declaration and its runtime code live in one file.
 There is no separate `wrangler.toml` pointing at a script.
 
-Layers follow the same rule. The `SandboxLive` Layer lives in
-`src/Sandbox.ts` (see
-[Layers](/infrastructure-as-effects/layers)).
+Layers follow the same rule of one Layer per file (see
+[Layers](/infrastructure-as-effects/layers)). Containers are the exception
+to one file per declaration. The class goes in `src/Sandbox.ts` and its
+`.make()` Layer (`SandboxLive`) goes in `src/Sandbox.runtime.ts`, so the
+Durable Object that imports the class does not bundle the container
+runtime (see [Run a Container](/cloudflare/compute/run-a-container)).
 
 ## Group by concern
 
@@ -153,15 +156,31 @@ provisioned once no matter how many units yield it.
 ## Stage-conditional config
 
 When a Resource's props differ by stage, read the stage where the
-Resource is declared:
+Resource is declared. Inside an Effect unit, yield the Stack service:
 
 ```typescript
 const { stage } = yield* Alchemy.Stack;
 
-const sandbox = yield* Cloudflare.Container("Sandbox", {
-  instanceType: stage === "prod" ? "standard-1" : "dev",
+const photos = yield* Cloudflare.R2.Bucket("Photos", {
+  publicAccess: stage !== "prod",
 });
 ```
+
+A module-scope declaration has no `yield*`. Pass `Alchemy.Stack.useSync`
+as the props instead:
+
+```typescript
+export const Photos = Cloudflare.R2.Bucket(
+  "Photos",
+  Alchemy.Stack.useSync(({ stage }) => ({
+    publicAccess: stage !== "prod",
+  })),
+);
+```
+
+A Resource's props can be an Effect. `Stack.useSync` builds one that
+computes the props from the current Stack at plan time (see
+[Stacks](/infrastructure-as-code/stack#stackusesync-for-module-scope-resources)).
 
 The decision lives next to the Resource it affects, outside
 `alchemy.run.ts`. The most common case is `pr-*` stages
@@ -208,9 +227,16 @@ export default Alchemy.Stack(
 );
 ```
 
-It names the Stack, merges Providers, picks a State Store, and
-wires units into outputs. The CLI discovers `alchemy.run.ts` at the
-project root automatically. Pass a path to override it (`alchemy deploy --config ./infra/app.ts`).
+Its four jobs are to name the Stack, merge Providers, pick a State
+Store, and wire units into outputs.
+
+The CLI loads `alchemy.run.ts` from the directory you run it in.
+Pass another path positionally (`alchemy deploy infra/app.ts`) or
+with `--config`. Relative paths in props resolve from that same
+directory, not from the file that declares them. Moving the
+entrypoint does not move them. Anchor paths with `import.meta` when
+that matters (see
+[Anchor every path](/project-structure/monorepo-single-stack#anchor-every-path)).
 
 If `alchemy.run.ts` is growing, something is missing a home in
 `src/`.
@@ -219,14 +245,15 @@ If `alchemy.run.ts` is growing, something is missing a home in
 
 ```
 .
-├── alchemy.run.ts   # composition root — Stack, Providers, State Store, outputs
-├── .alchemy/        # local state — gitignore it
+├── alchemy.run.ts          # composition root — Stack, Providers, State Store, outputs
+├── .alchemy/               # local state — gitignore it
 └── src/
-    ├── Api.ts       # Worker — declaration + runtime code
-    ├── Db.ts        # database unit — Schema + Project + Branch + Hyperdrive
-    ├── Photos.ts    # one-line Resource
-    ├── Sandbox.ts   # Container Layer
-    └── schema.ts    # plain application code (Drizzle schema)
+    ├── Api.ts              # Worker — declaration + runtime code
+    ├── Db.ts               # database unit — Schema + Project + Branch + Hyperdrive
+    ├── Photos.ts           # one-line Resource
+    ├── Sandbox.ts          # Container class
+    ├── Sandbox.runtime.ts  # SandboxLive (.make())
+    └── schema.ts           # plain application code (Drizzle schema)
 ```
 
 Tests mirror the tree under `test/`. The tutorial builds this

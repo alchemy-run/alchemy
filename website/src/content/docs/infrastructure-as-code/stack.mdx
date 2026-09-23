@@ -32,22 +32,24 @@ export default Alchemy.Stack(
 `Alchemy.Stack` takes three arguments:
 
 1. **Name**: identifies this stack in state storage.
-2. **Options**: `providers` and `state`, both required. See
+2. **Options**: `providers` and `state` (required), plus optional
+   `secrets` to choose where `Config` values come from (see
+   [Secret Providers](/environments/secret-providers)). See
    [State Store](/state-store) for the available state layers.
 3. **Effect**: a generator that declares resources and returns outputs.
 
 :::note[`alchemy.run.ts` is a convention]
 The CLI looks for `alchemy.run.ts` by default. Any TypeScript file
 with a default-exported Stack works. Pass the path as the first
-positional argument:
+positional argument, or with `--config` (alias `-c`):
 
 ```sh
+alchemy deploy infra/my-stack.ts
 alchemy deploy --config infra/my-stack.ts
-alchemy destroy --config stacks/github.ts
 ```
 
-See the [CLI reference](/cli/deploy) for the full invocation
-syntax.
+Use one form or the other. Passing both fails. See the
+[CLI reference](/cli/deploy) for the full invocation syntax.
 :::
 
 ## Multiple providers
@@ -117,20 +119,13 @@ The CLI renders them after every successful deploy:
 
 ## Stages
 
-Every deploy targets a **stage**. A stage is an isolated instance of
-the stack, like `dev_sam`, `staging`, or `prod`. The stage defaults
-to `dev_$USER`, so each developer gets their own environment. State
-and physical names are namespaced by stage.
-
-```sh
-# Each stage = its own state file + its own physical names.
-$ alchemy deploy --stage dev_sam     # -> myapp-dev_sam-photos-a3f1
-$ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
-$ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
-
-# Three independent deployments. Destroying one
-# never touches the others.
-```
+Every deploy targets a **stage**, an isolated instance of the stack
+such as `staging` or `prod`. Pass it with `--stage`. Otherwise the
+stage defaults to `$ALCHEMY_STAGE` if set. If not, `alchemy deploy`
+uses `live_$USER` and `alchemy dev` uses `dev_$USER`. Each stage has
+its own state and its own
+[physical names](/infrastructure-as-code/resource#physical-name), so
+destroying one stage never touches another.
 
 See [Stages](/environments/stages) for naming patterns, isolation,
 and per-stage configuration. Manage credentials per environment with
@@ -148,7 +143,7 @@ import * as Console from "effect/Console";
 Effect.gen(function* () {
   const stack = yield* Stack;
   yield* Console.log(stack.name); // "MyApp"
-  yield* Console.log(stack.stage); // "dev_sam"
+  yield* Console.log(stack.stage); // "live_sam"
 
   const queue = yield* SQS.Queue("Jobs").pipe(
     RemovalPolicy.retain(stack.stage === "prod"),
@@ -184,47 +179,14 @@ Use it anywhere a resource accepts a `props` object.
 
 ## Cross-stack references
 
-A typed `Alchemy.Stack` handle lets one stack read another's
-persisted outputs at plan time:
-
-```typescript
-// backend/src/Stack.ts — typed handle shared across packages
-export class Backend extends Alchemy.Stack<
-  Backend,
-  { url: string }
->()("Backend") {}
-```
-
-```typescript
-// frontend/alchemy.run.ts — reads the matching stage of Backend
-import { Backend } from "backend";
-
-export default Alchemy.Stack(
-  "Frontend",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const backend = yield* Backend;
-
-    const website = yield* Cloudflare.Website.Vite("Website", {
-      env: { VITE_API_URL: backend.url },
-    });
-
-    return { url: website.url.as<string>() };
-  }),
-);
-```
-
-`yield* Backend` defaults to the current stage. The `sam` frontend
-reads the `sam` backend, and `pr-42` reads `pr-42`. Use
-`Backend.stage.<name>` to pin a specific stage.
-
-See [References](/infrastructure-as-code/references) for the underlying
-operators and [Monorepo](/project-structure/monorepo) for the
-end-to-end walkthrough (package layout, schema sharing, deploy
-ordering).
+A typed handle, `Alchemy.Stack<Self, Shape>()("Backend")`, deployed
+with `Backend.make(options, effect)`, lets another Stack read its
+persisted outputs at plan time with `yield* Backend`. It reads the
+same stage by default. Use `Backend.stage.<name>` to pin one. See
+[References](/infrastructure-as-code/references#depend-on-a-stacks-outputs)
+for the operators and
+[Multiple Stacks](/project-structure/monorepo-multi-stack) for the
+full walkthrough.
 
 A stack is the container. The things it deploys are
 [Resources](/infrastructure-as-code/resource).

@@ -7,10 +7,9 @@ An **Action** is a node in the stack's dependency graph that runs an
 arbitrary Effect during `apply`. Unlike a [Resource](/infrastructure-as-code/resource), it has
 no provider lifecycle, so there is no replace, read, or delete. The engine
 diffs the resolved input against the last persisted hash and either runs
-the body or skips it. This page builds on
-[Outputs](/infrastructure-as-code/outputs) and
-[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle). Read
-those first if Outputs or the plan/persisted-state model are new to you.
+the body or skips it. This page uses
+[Outputs](/infrastructure-as-code/outputs) and the plan/persisted-state
+model from [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle).
 
 Use Actions for one-off deploy-time work that needs to be reproducible
 and dependency-aware. Examples include seeding a database, posting a
@@ -134,6 +133,13 @@ is already deploying with. The runtime client is identical, so the same
 `db.prepare(...).run()` code works inside a deployed Worker and in a
 deploy-time Action.
 
+Under `alchemy dev`, a `*Local` client follows the resource it is
+bound to. If the resource is emulated locally (its id starts with
+`dev:`, as for D1, KV, and R2), the client talks to the local
+simulator. If the resource is piped through `Alchemy.remote()`, the
+client keeps using the real cloud. See
+[Local by default, live on demand](/environments/local-development#local-by-default-live-on-demand).
+
 Local layers exist for every Cloudflare capability with an HTTP data
 plane. These are D1, KV, R2, Queues, DNS, Vectorize, Tunnel, AI Search,
 Flagship, and Browser Rendering. Worker-runtime-only bindings (Rate
@@ -170,18 +176,29 @@ An Action has only two terminal states:
 
 | Action | Symbol | When |
 | --- | --- | --- |
-| **run**  | `λ` | First time, or `inputHash` differs from the last persisted run, or `--force` is set |
-| **skip** | `·` | Persisted `inputHash` matches the newly resolved input |
+| **run**  | `λ` | Any time the skip conditions below don't all hold |
+| **skip** | `·` | The previous run finished, `--force` is not set, and the hash of the resolved input matches the persisted `inputHash` |
+
+Two cases are worth knowing:
+
+- **The previous run failed** or never finished. Only a completed run
+  can be skipped, so the body runs again.
+- **The input depends on a resource being created or changed in this
+  deploy.** Its Outputs aren't known at plan time, so the plan shows
+  the Action as `run`. At apply time the engine resolves the input and
+  hashes it. If the hash still matches the last completed run, the
+  body is skipped.
 
 There is no `replace` and no `delete`. When you remove an Action from the
 stack, the engine drops its persisted state without invoking the body.
 
 ### Input hashing
 
-After upstream Outputs are resolved, the engine JSON-serializes the
-Action's input and hashes it with SHA-256. The hash is persisted
-alongside the result. On the next plan, a new hash that matches means
-"skip", and a new hash that differs means "run".
+The engine hashes the resolved input as
+`sha256(JSON.stringify(input))` and persists the hash alongside the
+result. On the next plan, a matching hash means "skip", and a
+different hash means "run". Keys are not sorted before hashing, so
+reordering the keys of an object in the input also causes a re-run.
 
 ### Forcing a re-run
 
@@ -198,8 +215,10 @@ Actions live in the same FQN namespace as Resources. They can:
 - Take Resource outputs as input (`{ table: bucket.name }`)
 - Capture a Resource Output in the constructor (`yield* bucket.name`). See
   [Reading a resource's Outputs](#reading-a-resources-outputs)
-- Be referenced by Resources via `action.output`. The downstream resource
-  waits for the action before reconciling
+- Be referenced by Resources. Pass the value returned by
+  `yield* MyAction(...)` (an `Output<Out>`) or a property of it
+  (`rows.rows`) as a resource prop. The resource waits for the action
+  before reconciling
 - Reference other Actions
 
 The engine rejects cycles at plan time, the same as resource cycles.

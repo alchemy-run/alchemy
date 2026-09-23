@@ -20,7 +20,7 @@ Otherwise, read on and you reach it next.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 22.15+ (or 23.5+ / 24+)
 - A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
@@ -83,6 +83,15 @@ export default Alchemy.Stack(
 );
 ```
 
+`"MyApp"` is the Stack's name. `providers: Cloudflare.providers()`
+lets the Stack create Cloudflare resources. `state: Cloudflare.state()`
+picks where Alchemy records what it deployed. Both options are
+required. `yield* Cloudflare.R2.Bucket("Bucket")` declares a Bucket
+with the logical ID `Bucket`. The object you return is printed as the
+Stack's outputs after the deploy. See
+[Stacks](/infrastructure-as-code/stack) and
+[State Store](/state-store).
+
 ## Deploy
 
 Run `alchemy deploy` to create the Bucket on Cloudflare:
@@ -105,10 +114,20 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
 Connect Cloudflare first with `alchemy profile edit --add Cloudflare`.
 Sign in with OAuth in the browser or paste an API token. The
 credentials are saved to your `default`
-[profile](/environments/profiles) at `~/.alchemy/profiles.json`. You
-don't need environment variables. Login only happens through the
-`profile` command. A deploy with nothing configured fails and prints the
-exact command to run.
+[profile](/environments/profiles) in
+`~/.alchemy/profiles/default/cloudflare.json`. You don't need
+environment variables. If `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN` are set in your shell or `.env`, Alchemy uses
+them instead of the profile. See
+[Environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
+Login only happens through the `profile` command. A deploy with
+nothing configured fails and prints the exact command to run.
+
+The first deploy on an account also asks to deploy Alchemy's
+state-store Worker, `alchemy-state-store`. It is created once per
+account and shared by every Stack and stage. Choose Deploy. See
+[First-run bootstrap](/state-store#first-run-bootstrap). To keep state
+on disk instead, use `State.localState()` from `alchemy/State`.
 
 Once you're authenticated, Alchemy shows a plan, asks for
 confirmation, and provisions the resource:
@@ -134,6 +153,31 @@ For a separate profile, run `alchemy profile create prod` followed by
 `alchemy profile edit --profile prod`.
 See [Profiles](/environments/profiles) for the full picture.
 :::
+
+## Clean up
+
+Run `alchemy destroy` to remove what you deployed:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npx alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+This deletes every resource in the Stack for the same default stage
+that `alchemy deploy` used. R2 refuses to delete a Bucket that still
+holds objects (`BucketNotEmpty`) unless the Bucket sets
+`forceDestroy: true`. The shared state-store Worker is not part of your
+Stack and stays. See [destroy](/cli/destroy).
 
 ## Where next
 

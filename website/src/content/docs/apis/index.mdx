@@ -30,11 +30,22 @@ export default class BindingTargetWorker extends Cloudflare.Worker<BindingTarget
 ) {}
 ```
 
-Any other resource that binds this Worker gets a typed client.
+Another Worker binds it and gets a typed client:
+
+```typescript
+// in the calling Worker's Effectful Constructor:
+const target = yield* Cloudflare.Workers.bindWorker(BindingTargetWorker);
+
+// in the interface it returns:
+const greeting = yield* target.greet("world");
+```
+
 `yield* target.greet("world")` is an ordinary Effect call. The return type is
 inferred from the class, and serialization is automatic. The same model holds
-across every pairing, such as a Durable Object bound into a Worker, a Container
-called from a Durable Object, or a MicroVM called from a Lambda Function.
+wherever Alchemy ships a binder for the pairing, such as a Durable Object bound into a
+Worker, a Container called from a Durable Object, a MicroVM called from a
+Lambda Function, a Railway Service called from another.
+[Schemaless RPC](/apis/schemaless#the-typed-client) lists the binders.
 
 That schemaless path is the default for internal communication. Schemas enter
 only when data crosses a **trust boundary**, such as a web app, an external
@@ -81,3 +92,4 @@ Then see it wired up in the hubs:
 
 - **Cloudflare**: [Schemaless RPC](/cloudflare/apis/schemaless-rpc), [Effect RPC](/cloudflare/apis/effect-rpc), [Effect HTTP](/cloudflare/apis/effect-http-api)
 - **AWS**: [Schemaless RPC](/aws/apis/schemaless-rpc), [Effect RPC](/aws/apis/effect-rpc), [Effect HTTP](/aws/apis/effect-http-api)
+- **Railway**: [Schemaless RPC on Services](/railway/compute/services#schemaless-rpc), [on Functions](/railway/compute/functions#schemaless-rpc)

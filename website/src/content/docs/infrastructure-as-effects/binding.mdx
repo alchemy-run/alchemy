@@ -24,7 +24,7 @@ export default AWS.Lambda.Function(
     return {
       fetch: Effect.gen(function* () {
         const job = yield* getItem({ Key: { pk: { S: "job-1" } } });
-        return HttpServerResponse.json(job.Item);
+        return yield* HttpServerResponse.json(job.Item);
       }),
     };
   }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
@@ -166,8 +166,23 @@ deploy time:
 +  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp)),
 ```
 
-The handler doesn't change. A Layer that needs a platform the host
-can't supply is a compile error:
+The handler doesn't change. Cloudflare capabilities ship up to three
+implementations of the same contract:
+
+- `*Binding` (e.g. `ReadWriteBucketBinding`): registers a native binding
+  on the Worker and calls it at runtime.
+- `*Http` (e.g. `ReadWriteBucketHttp`): mints a scoped API token at
+  deploy time and calls the Cloudflare HTTP API with it.
+- `*Local` (e.g. `ReadWriteBucketLocal`): calls the HTTP API with the
+  credentials the CLI is already deploying with. It registers nothing on
+  a host, so it suits [Actions](/infrastructure-as-code/action#binding-resources)
+  and other deploy-time code.
+
+`*Local` Layers exist only for Cloudflare capabilities with an HTTP data
+plane, such as D1, KV, R2, and Queues. AWS bindings have no `*Local`
+variant.
+
+A Layer that needs a platform the host can't supply is a compile error:
 
 ```typescript
 export default AWS.Lambda.Function(
@@ -196,6 +211,13 @@ const image = AWS.EC2.getAmi({ owners: ["amazon"], name: ["al2023-ami-2023.*"] }
 // a helper built on it. Output<string>, fails when nothing matches
 imageId: AWS.EC2.amazonLinux2023(),
 ```
+
+`getAmi` is `GetAmi.execute`. Any binding whose client takes no
+arguments has an `.execute(...)` that runs it at plan time and returns
+an `Output`. The call is hostless, so no IAM or environment is
+attached. Its implementation Layer must be registered on the Stack.
+The cloud `providers()` Layers include the plan-executable ones. A
+failure fails the plan.
 
 The same capability bound inside a Function with
 `yield* AWS.EC2.GetAmi(...)` still grants its IAM and runs at runtime.
