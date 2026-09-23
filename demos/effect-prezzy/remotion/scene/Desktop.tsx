@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { AbsoluteFill, interpolate, spring, useVideoConfig } from "remotion";
+import { AbsoluteFill } from "remotion";
 import { TITLE_BAR, WINDOW, type AppId } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
 import { brand } from "../theme.ts";
@@ -9,6 +9,7 @@ export const APP_NAMES: Record<AppId, string> = {
   terminal: "Ghostty",
   diagram: "Architecture",
   browser: "Google Chrome",
+  slide: "",
 };
 
 /** Dark wallpaper with the brand's moss and ember glows. */
@@ -148,118 +149,3 @@ export const Window = ({
 
 export { TrafficLights };
 
-const AppIcon = ({ app, size }: { app: AppId; size: number }) => {
-  const radius = size * 0.225;
-  if (app === "editor") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 100 100">
-        <rect width="100" height="100" rx={radius} fill="#1f1f1f" />
-        <path d="M70 18 L84 25 V75 L70 82 L34 50 Z" fill="#0065a9" />
-        <path d="M70 18 L30 55 L18 46 L14 50 L30 64 L70 82 Z" fill="#007acc" />
-        <path d="M70 18 V82 L84 75 V25 Z" fill="#1f9cf0" />
-      </svg>
-    );
-  }
-  if (app === "diagram") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 100 100">
-        <rect width="100" height="100" rx={radius} fill="#14110d" />
-        <path d="M30 34 L70 50 L30 66" stroke="#a3c473" strokeWidth="4" fill="none" />
-        <rect x="16" y="24" width="28" height="20" rx="5" fill="#f38020" />
-        <rect x="56" y="40" width="28" height="20" rx="5" fill="#a3c473" />
-        <rect x="16" y="56" width="28" height="20" rx="5" fill="#8b7cf6" />
-      </svg>
-    );
-  }
-  if (app === "terminal") {
-    // Ghostty's ghost on its dark tile.
-    return (
-      <svg width={size} height={size} viewBox="0 0 100 100">
-        <rect width="100" height="100" rx={radius} fill="#282c34" />
-        <path
-          d="M50 18c-15 0-25 11-25 26v36c0 3 3.4 4.6 5.7 2.7l5.6-4.5 5.6 4.5c1.3 1 3.1 1 4.4 0L50 78l3.7 4.7c1.3 1 3.1 1 4.4 0l5.6-4.5 5.6 4.5c2.3 1.9 5.7.3 5.7-2.7V44c0-15-10-26-25-26Z"
-          fill="#f2f2f2"
-        />
-        <rect x="38" y="40" width="6" height="11" rx="3" fill="#282c34" />
-        <rect x="56" y="40" width="6" height="11" rx="3" fill="#282c34" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100">
-      <rect width="100" height="100" rx={radius} fill="#f4f4f4" />
-      <circle cx="50" cy="50" r="34" fill="#db4437" />
-      <path d="M50 50 L79.4 67 A34 34 0 0 1 20.6 67 Z" fill="#0f9d58" />
-      <path d="M50 50 L50 16 A34 34 0 0 1 79.4 67 Z" fill="#f4b400" />
-      <circle cx="50" cy="50" r="15" fill="#fff" />
-      <circle cx="50" cy="50" r="11.5" fill="#4285f4" />
-    </svg>
-  );
-};
-
-const SWITCHER_ORDER: AppId[] = ["editor", "terminal", "diagram", "browser"];
-
-/** The Cmd-Tab app switcher, `frame` frames into a switch from `from` to `to`. */
-export const AppSwitcher = ({
-  frame,
-  duration,
-  from,
-  to,
-}: {
-  frame: number;
-  duration: number;
-  from: AppId;
-  to: AppId;
-}) => {
-  const { fps } = useVideoConfig();
-  const opacity = interpolate(frame, [0, 3, duration - 3, duration], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const scale = 0.96 + 0.04 * spring({ frame, fps, config: { damping: 18, stiffness: 220 } });
-  const selected = frame < 5 ? from : to;
-  const icon = 112;
-  return (
-    <AbsoluteFill style={{ display: "grid", placeItems: "center", opacity }}>
-      <div
-        style={{
-          transform: `scale(${scale})`,
-          display: "flex",
-          gap: 18,
-          padding: 22,
-          borderRadius: 28,
-          background: "rgba(40, 38, 36, 0.72)",
-          backdropFilter: "blur(30px)",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.1), 0 20px 60px rgba(0,0,0,0.5)",
-        }}
-      >
-        {SWITCHER_ORDER.map((app) => (
-          <div
-            key={app}
-            style={{
-              padding: 12,
-              borderRadius: 22,
-              background: app === selected ? "rgba(255,255,255,0.16)" : "transparent",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <AppIcon app={app} size={icon} />
-            <span
-              style={{
-                fontFamily: sans,
-                fontSize: 15,
-                color: "#eee",
-                opacity: app === selected ? 1 : 0,
-              }}
-            >
-              {APP_NAMES[app]}
-            </span>
-          </div>
-        ))}
-      </div>
-    </AbsoluteFill>
-  );
-};

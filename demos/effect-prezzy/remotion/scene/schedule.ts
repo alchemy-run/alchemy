@@ -17,6 +17,8 @@ export const TIMING = {
   diagramPerAdded: 10,
   diagramMax: 240,
   browserUpdate: 30,
+  /** A transition slide animates in over this long, then holds on its step. */
+  slide: 45,
   /** Pointer glides to the element, clicks (or the text lands), the page updates, then a short hold. */
   browserAction: { move: 16, act: 8, hold: 14 },
   /** Click the address bar, paste, press Enter. */
@@ -69,6 +71,8 @@ const appOf = (beat: Beat, current: AppId): AppId => {
       return current;
     case "diagram":
       return "diagram";
+    case "slide":
+      return "slide";
     case "browser.update":
     case "browser.action":
       return "browser";
@@ -123,6 +127,9 @@ export const schedule = async (
           TIMING.diagramMax,
           TIMING.diagram + TIMING.diagramPerAdded * (beat.addedNodes.length + beat.addedEdges.length),
         );
+        break;
+      case "slide":
+        work = TIMING.slide;
         break;
       case "browser.action":
         work = TIMING.browserAction.move + TIMING.browserAction.act + TIMING.browserAction.hold;

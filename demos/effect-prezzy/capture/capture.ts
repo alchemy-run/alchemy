@@ -347,6 +347,14 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         caption(text) {
           beats.push({ kind: "caption", text });
         },
+        slide(heading, opts) {
+          beats.push({ kind: "step", title: heading, notes: opts?.notes ?? opts?.subtitle ?? "" });
+          beats.push({
+            kind: "slide",
+            layout: "section",
+            props: { eyebrow: opts?.eyebrow, heading, subtitle: opts?.subtitle },
+          });
+        },
         step(title, notes) {
           beats.push({ kind: "step", title, notes: notes ?? "" });
         },
@@ -404,8 +412,13 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         },
         async diagram(opts) {
           await flush();
-          // The architecture comes from the state alchemy dev writes as it reloads.
-          if (openedTabs.has("dev")) await waitDev();
+          // Cut to the dev tab to watch alchemy dev pick up the change, then read the state it wrote.
+          if (openedTabs.has("dev")) {
+            await context.terminal(async (term) => {
+              await term.waitDev();
+              await term.sleep(1200);
+            });
+          }
           const stateDir = path.join(dir, ".alchemy", "state", "Shorty");
           const deadline = Date.now() + 120_000;
           let graph: Graph;

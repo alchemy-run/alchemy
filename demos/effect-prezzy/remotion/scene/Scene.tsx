@@ -7,9 +7,11 @@ import {
   useVideoConfig,
   type CalculateMetadataFunction,
 } from "remotion";
-import { VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
+import { CAPTION_BAND, VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
 import { MenuBar, Wallpaper } from "./Desktop.tsx";
+import { Slide } from "../slides/Slide.tsx";
+import { Sequence } from "remotion";
 import { Browser } from "./Browser.tsx";
 import { Diagram } from "./Diagram.tsx";
 import { Editor } from "./Editor.tsx";
@@ -59,8 +61,10 @@ const Caption = ({ text, since }: { text: string; since: number }) => {
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: 72,
+        top: CAPTION_BAND.top,
+        height: CAPTION_BAND.height,
         display: "flex",
+        alignItems: "center",
         justifyContent: "center",
         opacity: t,
         transform: `translateY(${(1 - t) * 12}px)`,
@@ -94,8 +98,17 @@ export const Scene = ({ capture, plan }: SceneProps) => {
   if (!capture || !plan) return null;
 
   const segment = segmentAt(plan.segments, frame);
-  const focused: AppId = segment?.app ?? "editor";
-  const windows: Record<AppId, ReactNode> = {
+  const focused = (segment?.app === "slide" || !segment ? "editor" : segment.app) as Exclude<AppId, "slide">;
+  if (segment?.beat.kind === "slide") {
+    const beat = segment.beat;
+    return (
+      <Sequence from={segment.from} layout="none">
+        <Slide layout={beat.layout} props={beat.props} />
+      </Sequence>
+    );
+  }
+
+  const windows: Record<Exclude<AppId, "slide">, ReactNode> = {
     editor: <Editor capture={capture} plan={plan} frame={frame} />,
     terminal: <Terminal capture={capture} plan={plan} frame={frame} fps={fps} />,
     diagram: <Diagram capture={capture} plan={plan} frame={frame} />,

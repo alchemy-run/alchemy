@@ -44,6 +44,8 @@ export interface SceneContext {
   chapterLines(file: string): Promise<(from: number, to?: number) => string>;
   /** Override the caption at the bottom of the screen (by default each step's title is its caption). */
   caption(text: string): void;
+  /** A full-screen transition slide, as its own step, before building a significant piece. */
+  slide(heading: string, opts?: { eyebrow?: string; subtitle?: string; notes?: string }): void;
   /** Start a new presenter step; it plays when the presenter presses →. Its title is shown as the caption. */
   step(title: string, notes?: string): void;
   editor: {
@@ -58,7 +60,7 @@ export interface SceneContext {
   };
   /** Drive the terminal; everything inside is shown in the terminal window. */
   terminal<T>(fn: (t: Term) => Promise<T>): Promise<T>;
-  /** Show the architecture read from Alchemy's state, once it contains the expected parts. */
+  /** Show alchemy dev picking up the change, then the architecture read from Alchemy's state. */
   diagram(opts: { stage: string; nodes?: string[]; edges?: string[] }): Promise<void>;
   browser: {
     /** Load `url` in a real browser and show it. */

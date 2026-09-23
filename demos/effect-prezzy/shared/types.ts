@@ -10,7 +10,12 @@
 export const VIDEO = { width: 1920, height: 1080, fps: 30 } as const;
 
 /** One desktop window; all windows share the same frame and stack by focus. */
-export const WINDOW = { x: 80, y: 64, width: 1760, height: 976 } as const;
+export const WINDOW = { x: 80, y: 52, width: 1760, height: 900 } as const;
+/** The caption band below the windows: captions live here and never cover content. */
+export const CAPTION_BAND = {
+  top: WINDOW.y + WINDOW.height,
+  height: VIDEO.height - WINDOW.y - WINDOW.height,
+} as const;
 export const TITLE_BAR = 44;
 /** Ghostty's native macOS tab bar, under the title bar. */
 export const TAB_BAR = 34;
@@ -29,7 +34,7 @@ export const BROWSER_VIEWPORT = {
 /** Terminal tabs: `alchemy deploy`, `pnpm test`, and the long-running `alchemy dev`. */
 export type TerminalTab = "deploy" | "test" | "dev";
 
-export type AppId = "editor" | "terminal" | "diagram" | "browser";
+export type AppId = "editor" | "terminal" | "diagram" | "browser" | "slide";
 
 /** The architecture, derived from Alchemy's state files. */
 export interface Graph {
@@ -66,6 +71,8 @@ export type Beat =
   | { kind: "focus"; app: AppId }
   /** Open (or switch to) a file tab. */
   | { kind: "editor.open"; file: string; content: string }
+  /** A full-screen transition slide before building a significant piece. */
+  | { kind: "slide"; layout: "section" | "title" | "bullets"; props: { eyebrow?: string; heading: string; subtitle?: string; bullets?: string[] } }
   /** The narration caption at the bottom of the screen; stays until the next caption. */
   | { kind: "caption"; text: string }
   /** Starts a new presenter step: everything until the next `step` plays on one press of →. */
