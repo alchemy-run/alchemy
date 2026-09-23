@@ -9,9 +9,6 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
-const entitledTest = test.provider.skipIf(
-  process.env.CLOUDFLARE_TEST_MCP !== "1",
-);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -81,9 +78,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
 );
 
-entitledTest(
+test.provider(
   "overlong server IDs surface the typed validation error and remain cleanable",
   (stack) =>
     Effect.gen(function* () {
@@ -109,9 +107,10 @@ entitledTest(
       expect(deployError._tag).toEqual("McpServerInvalidId");
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
 );
 
-entitledTest(
+test.provider(
   "create, update in place, and destroy an MCP server",
   (stack) =>
     Effect.gen(function* () {
@@ -210,12 +209,15 @@ entitledTest(
       const afterDestroy = yield* getLiveServer(accountId, SERVER_ID);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
 );
 
 // `hostname` and `authType` are create-only on the API. Changing either must
 // converge by recreating the server under the same id rather than failing.
-entitledTest(
+test.provider(
   "changing the upstream hostname or auth type recreates the server under the same id",
   (stack) =>
     Effect.gen(function* () {
@@ -274,13 +276,16 @@ entitledTest(
       const afterDestroy = yield* getLiveServer(accountId, RECREATE_SERVER_ID);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
 );
 
 // Canonical `list()` test (account collection): deploy a server, then resolve
 // the provider via the typed helper and assert the deployed server appears in
 // the exhaustively-paginated result.
-entitledTest(
+test.provider(
   "generates a valid server ID and lists the deployed MCP server",
   (stack) =>
     Effect.gen(function* () {
@@ -314,10 +319,13 @@ entitledTest(
       const afterDestroy = yield* getLiveServer(accountId, deployed.serverId);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
 );
 
-entitledTest(
+test.provider(
   "changing the server ID replaces the server and removes the old ID",
   (stack) =>
     Effect.gen(function* () {
@@ -351,14 +359,15 @@ entitledTest(
         yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2),
       ).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
 );
 
 // The default deploy runs a capability sync against the upstream. Against a
 // real public server the discovered tools come back on the attributes.
-test.provider.skipIf(
-  process.env.CLOUDFLARE_TEST_MCP !== "1" || !!process.env.FAST,
-)(
+test.provider(
   "sync discovers the capabilities of a public MCP server",
   (stack) =>
     Effect.gen(function* () {
@@ -385,5 +394,8 @@ test.provider.skipIf(
       const afterDestroy = yield* getLiveServer(accountId, SYNC_SERVER_ID);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 120_000,
+  },
 );
