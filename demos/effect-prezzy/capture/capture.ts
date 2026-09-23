@@ -344,6 +344,9 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
             return `${lines.slice(from - 1, to).join("\n")}\n`;
           };
         },
+        caption(text) {
+          beats.push({ kind: "caption", text });
+        },
         step(title, notes) {
           beats.push({ kind: "step", title, notes: notes ?? "" });
         },

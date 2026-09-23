@@ -252,7 +252,7 @@ export const Diagram = ({
             style={{
               position: "absolute",
               left: 40,
-              bottom: 32,
+              top: 28,
               display: "flex",
               gap: 22,
               fontFamily: sans,

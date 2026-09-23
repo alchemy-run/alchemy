@@ -42,6 +42,8 @@ export interface SceneContext {
    * patches that end exactly at the real code.
    */
   chapterLines(file: string): Promise<(from: number, to?: number) => string>;
+  /** Set the caption at the bottom of the screen; it stays until the next caption. */
+  caption(text: string): void;
   /** Start a new presenter step; it plays when the presenter presses →. */
   step(title: string, notes?: string): void;
   editor: {

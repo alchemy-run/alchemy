@@ -65,6 +65,7 @@ const appOf = (beat: Beat, current: AppId): AppId => {
     case "editor.delete":
       return "editor";
     case "step":
+    case "caption":
       return current;
     case "diagram":
       return "diagram";
@@ -87,7 +88,7 @@ export const schedule = async (
   const segments: Segment[] = [];
   let frame = 0;
   // The scene opens on the first beat's window, without a switch.
-  const firstBeat = capture.beats.find((b) => b.kind !== "pause" && b.kind !== "step");
+  const firstBeat = capture.beats.find((b) => b.kind !== "pause" && b.kind !== "step" && b.kind !== "caption");
   let app: AppId = firstBeat ? appOf(firstBeat, "editor") : "editor";
   for (const beat of capture.beats) {
     const next = appOf(beat, app);
@@ -104,6 +105,7 @@ export const schedule = async (
     switch (beat.kind) {
       case "focus":
       case "step":
+      case "caption":
         break;
       case "pause":
         work = Math.round(beat.seconds * fps);

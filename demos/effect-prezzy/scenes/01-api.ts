@@ -16,6 +16,7 @@ export default defineScene({
       ],
     });
 
+    s.caption("Run the whole stack locally with alchemy dev");
     s.step(
       "Start alchemy dev",
       "alchemy dev runs the whole stack locally and hot-reloads it on every save. It stays up in its own tab for the rest of the talk.",
@@ -28,6 +29,7 @@ export default defineScene({
 
     // src/Link.ts: the domain.
     const link = await s.chapterLines("src/Link.ts");
+    s.caption("Model the data with Effect Schema");
     await s.editor.patch(
       "src/Link.ts",
       "A Link is a Schema",
@@ -44,6 +46,7 @@ export default defineScene({
 
     // src/ShortyApi.ts: the contract.
     const api = await s.chapterLines("src/ShortyApi.ts");
+    s.caption("Describe the API once, as a typed value");
     await s.editor.patch("src/ShortyApi.ts", "Import HttpApi", edit.set(api(1, 5)));
     await s.editor.patch(
       "src/ShortyApi.ts",
@@ -65,6 +68,7 @@ export default defineScene({
 
     // src/Api.ts: the Worker.
     const worker = await s.chapterLines("src/Api.ts");
+    s.caption("Implement it in a Cloudflare Worker");
     await s.editor.patch("src/Api.ts", "Import Cloudflare and Effect", edit.set(worker(1) + worker(3)));
     await s.editor.patch(
       "src/Api.ts",
@@ -72,6 +76,7 @@ export default defineScene({
       edit.append(`\n${worker(10, 13)}${worker(42, 43)}`),
       "A Worker is a class. Its body is an Effect: this outer part is the construction phase. It runs at deploy time, to discover the Worker's infrastructure, and at cold start.",
     );
+    s.caption("Construction phase: runs at deploy time and cold start");
     await s.editor.patch(
       "src/Api.ts",
       "Construction phase: an in-memory store",
@@ -81,6 +86,7 @@ export default defineScene({
       ),
       "A Map that lives in this isolate. It's deliberately naive: a deploy or a second isolate loses it. Chapter 2 fixes that.",
     );
+    s.caption("Handle each endpoint, fully typed");
     await s.editor.patch(
       "src/Api.ts",
       "Handle create",
@@ -100,6 +106,7 @@ export default defineScene({
       ),
       "get fails with LinkNotFound: the compiler checks it's one of the endpoint's declared errors.",
     );
+    s.caption("Runtime phase: serve the API on every request");
     await s.editor.patch(
       "src/Api.ts",
       "Runtime phase: serve the API from fetch",
@@ -112,6 +119,7 @@ export default defineScene({
     );
 
     // alchemy.run.ts: add the Worker to the Stack.
+    s.caption("Add the Worker to the Stack");
     await s.editor.patch(
       "alchemy.run.ts",
       "Add the Api to the Stack",
@@ -121,9 +129,11 @@ export default defineScene({
       ),
       "yield* Api adds the Worker to the Stack.",
     );
+    s.caption("alchemy dev reloads: the Worker is running");
     s.step("The Api joins the architecture", "alchemy dev reloaded: a second local Worker, next to the website.");
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"] });
     s.pause(0.5);
+    s.caption("Connect the website to the API");
     await s.editor.patch(
       "alchemy.run.ts",
       "Output the API's URL",
@@ -136,6 +146,7 @@ export default defineScene({
       edit.after("      dev: { port: 5173 },\n", "      env: { VITE_API_URL: api.url.as<string>() },\n"),
       "api.url is an Output: a value known once the Worker exists. Alchemy orders the deploy so the website is built with it.",
     );
+    s.caption("The website now references the API's URL");
     s.step(
       "The website now depends on the Api",
       "That one line is an edge in the architecture: Web references Api's URL through an Output. It's a reference, not a binding: no permissions are granted.",
@@ -144,9 +155,11 @@ export default defineScene({
     s.pause(0.5);
 
     // The dashboard.
+    s.caption("Call the API from the dashboard with a typed client");
     await s.editor.show("web/src/client.ts", "A typed client, derived from ShortyApi");
     await s.editor.show("web/src/main.tsx", "The dashboard lists and creates links");
 
+    s.caption("Try it in the browser");
     s.step("Open the dashboard", "The dashboard served by alchemy dev, talking to the local Worker.");
     await s.browser.open("http://localhost:5173", { waitFor: /No links yet/ });
     s.pause(0.5);

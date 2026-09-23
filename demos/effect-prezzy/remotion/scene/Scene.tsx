@@ -8,6 +8,8 @@ import {
   type CalculateMetadataFunction,
 } from "remotion";
 import { VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
+import { sans } from "../fonts.ts";
+import { brand } from "../theme.ts";
 import { AppSwitcher, MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Browser } from "./Browser.tsx";
 import { Diagram } from "./Diagram.tsx";
@@ -33,6 +35,56 @@ export const calculateSceneMetadata: CalculateMetadataFunction<SceneProps> = asy
   const { fps } = VIDEO;
   const plan = await schedule(capture, fps);
   return { durationInFrames: plan.durationInFrames, fps, props: { ...props, capture, plan } };
+};
+
+/** The caption in effect at `frame`, and how many frames it has been up. */
+const captionAt = (plan: SceneSchedule, frame: number) => {
+  let caption: { text: string; since: number } | undefined;
+  for (const segment of plan.segments) {
+    if (segment.from > frame) break;
+    if (segment.beat.kind === "caption") caption = { text: segment.beat.text, since: frame - segment.from };
+  }
+  return caption;
+};
+
+const Caption = ({ text, since }: { text: string; since: number }) => {
+  const t = interpolate(since, [0, 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 72,
+        display: "flex",
+        justifyContent: "center",
+        opacity: t,
+        transform: `translateY(${(1 - t) * 12}px)`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "16px 30px",
+          borderRadius: 16,
+          background: "rgba(20, 17, 13, 0.88)",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
+          backdropFilter: "blur(16px)",
+          fontFamily: sans,
+          fontSize: 32,
+          fontWeight: 600,
+          color: brand.fg,
+          letterSpacing: -0.2,
+        }}
+      >
+        <span style={{ width: 10, height: 10, borderRadius: 5, background: brand.moss, flex: "none" }} />
+        {text}
+      </div>
+    </div>
+  );
 };
 
 export const Scene = ({ capture, plan }: SceneProps) => {
@@ -83,6 +135,10 @@ export const Scene = ({ capture, plan }: SceneProps) => {
           to={segment.app}
         />
       ) : null}
+      {(() => {
+        const caption = captionAt(plan, frame);
+        return caption ? <Caption key={caption.text} {...caption} /> : null;
+      })()}
     </AbsoluteFill>
   );
 };

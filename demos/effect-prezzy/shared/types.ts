@@ -66,6 +66,8 @@ export type Beat =
   | { kind: "focus"; app: AppId }
   /** Open (or switch to) a file tab. */
   | { kind: "editor.open"; file: string; content: string }
+  /** The narration caption at the bottom of the screen; stays until the next caption. */
+  | { kind: "caption"; text: string }
   /** Starts a new presenter step: everything until the next `step` plays on one press of →. */
   | { kind: "step"; title: string; notes: string }
   /** Apply one edit to a file, shown as a green/red diff (opens the file first if needed). */
