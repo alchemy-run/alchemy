@@ -1,3 +1,4 @@
+import { SOCIAL_REDIRECTS } from "./social-redirects.ts";
 import type { WorkerEnv } from "../alchemy.run.ts";
 import { referenceDestination } from "./reference-links.ts";
 
@@ -238,13 +239,6 @@ const REDIRECTS: Record<string, string> = {
   "/git/scale": "/git/recipes/scaling",
   "/git/scale/pushes": "/git/blocks/hasher",
   "/git/scale/clones": "/git/blocks/repositories",
-};
-
-const SOCIAL_REDIRECTS: Record<string, string> = {
-  "/discord": "https://discord.gg/jwKw8dBJdN",
-  "/twitter": "https://x.com/alchemy_run",
-  "/x": "https://x.com/alchemy_run",
-  "/gh": "https://github.com/alchemy-run/alchemy",
 };
 
 const resolveRedirect = (url: URL): string | undefined => {
