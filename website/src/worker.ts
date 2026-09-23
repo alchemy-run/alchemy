@@ -227,7 +227,7 @@ const REDIRECTS: Record<string, string> = {
   "/integrations/planetscale": "/planetscale",
   "/integrations/neon": "/neon",
   "/integrations/axiom": "/axiom",
-  "/integrations/github": "/github/overview",
+  "/integrations/github": "/github",
   "/git/auth": "/git/blocks/auth",
   "/git/storage": "/git/blocks/repositories",
   "/git/assemblies": "/git/recipes",
@@ -243,7 +243,7 @@ const REDIRECTS: Record<string, string> = {
 const SOCIAL_REDIRECTS: Record<string, string> = {
   "/discord": "https://discord.gg/jwKw8dBJdN",
   "/twitter": "https://x.com/alchemy_run",
-  "/github": "https://github.com/alchemy-run/alchemy",
+  "/gh": "https://github.com/alchemy-run/alchemy",
 };
 
 const resolveRedirect = (url: URL): string | undefined => {

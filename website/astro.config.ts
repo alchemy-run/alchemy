@@ -34,7 +34,7 @@ function providersSidebarEntry() {
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
-      { label: "GitHub", link: "/github/overview" },
+      { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
@@ -1364,7 +1364,7 @@ export default defineConfig({
         {
           label: "GitHub",
           items: [
-            { label: "Overview", link: "/github/overview" },
+            { label: "Overview", link: "/github" },
             { label: "Setup", link: "/github/setup" },
             { label: "Repositories", link: "/github/repository" },
             {

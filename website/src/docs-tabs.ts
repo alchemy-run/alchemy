@@ -96,7 +96,7 @@ export const DOCS_TABS: DocsTab[] = [
   },
   {
     label: "GitHub",
-    href: "/github/overview",
+    href: "/github",
     prefixes: ["/github", "/providers/github"],
     slot: "more",
     category: "Source & CI",
