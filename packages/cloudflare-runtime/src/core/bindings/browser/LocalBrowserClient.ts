@@ -3,7 +3,6 @@ import puppeteer, { type Page } from "@cloudflare/puppeteer";
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import TurndownService from "turndown";
 import { BrowserError, type BrowserClient } from "./BrowserClient.shared.ts";
 
 const browserError = (cause: unknown) =>
@@ -129,8 +128,6 @@ export const makeLocalBrowserClient = (): BrowserClient => {
     result,
     meta,
   });
-  const markdown = async (page: Page) =>
-    new TurndownService().turndown(await page.content());
   const screenshot = async (
     page: Page,
     options: cf.BrowserRunScreenshotOptions,
@@ -161,7 +158,7 @@ export const makeLocalBrowserClient = (): BrowserClient => {
   const unsupported = (operation: string) =>
     Effect.fail(
       new BrowserError({
-        message: `Local Browser ${operation} is unavailable. Use a Worker Browser binding for sessions, or the hosted Browser Rendering service for AI extraction.`,
+        message: `Local Browser ${operation} is unavailable. Use a Worker Browser binding for sessions, or the hosted Browser Rendering service for Markdown and AI extraction.`,
         cause: new Error("unsupported"),
       }),
     );
@@ -170,8 +167,7 @@ export const makeLocalBrowserClient = (): BrowserClient => {
     fetch: () => unsupported("fetch"),
     content: (options) =>
       run(options, async (page, meta) => success(await page.content(), meta)),
-    markdown: (options) =>
-      run(options, async (page, meta) => success(await markdown(page), meta)),
+    markdown: () => unsupported("Markdown conversion"),
     links: (options) =>
       run(options, async (page, meta) =>
         success(
@@ -228,21 +224,22 @@ export const makeLocalBrowserClient = (): BrowserClient => {
     pdf: (options) =>
       binary(run(options, (page) => page.pdf(options.pdfOptions))),
     snapshot: (options) =>
-      run(options, async (page, meta) => {
-        const formats = options.formats ?? ["content", "screenshot"];
-        const result: cf.BrowserRunSnapshotSuccessResponse["result"] = {};
-        if (formats.includes("content")) result.content = await page.content();
-        if (formats.includes("markdown"))
-          result.markdown = await markdown(page);
-        if (formats.includes("screenshot"))
-          result.screenshot = Buffer.from(
-            await page.screenshot(options.screenshotOptions),
-          ).toString("base64");
-        if (formats.includes("accessibilityTree"))
-          result.accessibilityTree =
-            (await page.accessibility.snapshot()) ?? undefined;
-        return success(result, meta);
-      }),
+      options.formats?.includes("markdown")
+        ? unsupported("Markdown snapshots")
+        : run(options, async (page, meta) => {
+            const formats = options.formats ?? ["content", "screenshot"];
+            const result: cf.BrowserRunSnapshotSuccessResponse["result"] = {};
+            if (formats.includes("content"))
+              result.content = await page.content();
+            if (formats.includes("screenshot"))
+              result.screenshot = Buffer.from(
+                await page.screenshot(options.screenshotOptions),
+              ).toString("base64");
+            if (formats.includes("accessibilityTree"))
+              result.accessibilityTree =
+                (await page.accessibility.snapshot()) ?? undefined;
+            return success(result, meta);
+          }),
     json: () => unsupported("AI JSON extraction"),
     quickAction: ((action, options) =>
       client[action](options as never)) as BrowserClient["quickAction"],

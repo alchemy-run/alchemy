@@ -300,9 +300,12 @@ test.provider(
                 const html =
                   '<html><head><title>Local Action</title></head><body><h1>Hello local Chrome</h1><a href="https://example.test/">Example</a></body></html>';
                 const content = yield* browser.content({ html });
-                const markdown = yield* browser.quickAction("markdown", {
-                  html,
-                });
+                const markdown = yield* Effect.result(
+                  browser.quickAction("markdown", { html }),
+                );
+                const markdownSnapshot = yield* Effect.result(
+                  browser.snapshot({ html, formats: ["content", "markdown"] }),
+                );
                 const links = yield* browser.links({ html });
                 const scraped = yield* browser.scrape({
                   html,
@@ -316,7 +319,7 @@ test.provider(
                 );
                 const snapshot = yield* browser.snapshot({
                   html,
-                  formats: ["content", "markdown"],
+                  formats: ["content"],
                 });
                 const json = yield* Effect.result(
                   browser.json({ html, prompt: "Extract the title" }),
@@ -324,7 +327,12 @@ test.provider(
                 return {
                   title: content.meta.title,
                   content: content.result,
-                  markdown: markdown.result,
+                  markdownError: Result.isFailure(markdown)
+                    ? markdown.failure.message
+                    : undefined,
+                  markdownSnapshotError: Result.isFailure(markdownSnapshot)
+                    ? markdownSnapshot.failure.message
+                    : undefined,
                   links: links.result,
                   heading: scraped.result[0]?.results[0]?.text,
                   png: Array.from(Array.from(png)[0]!.slice(0, 4)),
@@ -342,12 +350,17 @@ test.provider(
       );
       expect(output.title).toBe("Local Action");
       expect(output.content).toContain("Hello local Chrome");
-      expect(output.markdown).toContain("Hello local Chrome");
+      expect(output.markdownError).toContain(
+        "Markdown conversion is unavailable",
+      );
+      expect(output.markdownSnapshotError).toContain(
+        "Markdown snapshots is unavailable",
+      );
       expect(output.links).toEqual(["https://example.test/"]);
       expect(output.heading).toBe("Hello local Chrome");
       expect(output.png).toEqual([137, 80, 78, 71]);
       expect(output.pdf).toEqual([37, 80, 68, 70]);
-      expect(output.snapshot.markdown).toContain("Hello local Chrome");
+      expect(output.snapshot.content).toContain("Hello local Chrome");
       expect(output.jsonError).toContain("hosted Browser Rendering service");
       yield* stack.destroy();
     }).pipe(Effect.provide(noCredentials)),

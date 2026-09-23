@@ -23,14 +23,14 @@ import {
  * `json` — with the same client you'd use inside a Worker; no Worker host, no
  * `host.bind`, no minted token:
  *
- * @example Convert a page to Markdown from an Action
+ * @example Read page HTML from an Action
  * ```typescript
  * const Scrape = Alchemy.Action(
  *   "Scrape",
  *   Effect.gen(function* () {
  *     const browser = yield* Cloudflare.Browser("BROWSER");
  *     return Effect.fn(function* () {
- *       const { result } = yield* browser.markdown({
+ *       const { result } = yield* browser.content({
  *         url: "https://example.com",
  *       });
  *       return result;
@@ -39,8 +39,9 @@ import {
  * );
  * ```
  *
- * Local quick actions support content, Markdown, links, scraping, screenshots,
- * PDFs, and snapshots. AI JSON extraction requires `Alchemy.remote()`.
+ * Local quick actions support content, links, scraping, screenshots,
+ * PDFs, and snapshots without Markdown. Markdown conversion and AI JSON
+ * extraction require `Alchemy.remote()`.
  * `raw` and `fetch` require a Worker Browser binding for session lifetime.
  * The remote HTTP client does not support binary actions.
  */
