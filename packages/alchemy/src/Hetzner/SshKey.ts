@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import type { GetSshKeyResponseSshKey } from "@distilled.cloud/hetzner/ssh_keys";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

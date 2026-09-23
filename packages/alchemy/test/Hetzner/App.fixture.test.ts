@@ -1,7 +1,8 @@
 import * as Hetzner from "@/Hetzner";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { CredentialsFromEnv, Services } from "@distilled.cloud/hetzner";
+import { CredentialsFromEnv } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

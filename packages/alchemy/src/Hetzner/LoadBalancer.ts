@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import type {
   CreateLoadBalancerRequestServicesItem,
   GetLoadBalancerResponseLoadBalancer,

@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import type { GetVolumeResponseVolume } from "@distilled.cloud/hetzner/volumes";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
