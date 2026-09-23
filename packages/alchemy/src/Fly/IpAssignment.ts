@@ -75,6 +75,12 @@ export type IpAssignment = Resource<
     serviceName: string | undefined;
     /** Whether the address is a shared Anycast IPv4. */
     shared: boolean;
+    /**
+     * Named private network a `private_v6` address is reachable from.
+     * `undefined` for the organization's default network and for public
+     * addresses.
+     */
+    network: string | undefined;
     /** RFC3339 creation timestamp, if the API returned one. */
     createdAt: string | undefined;
   },
@@ -287,8 +293,15 @@ const asType = (value: string | undefined): IpAssignmentType | undefined =>
     ? value
     : undefined;
 
-/** Flycast addresses are allocated from Fly's private `fdaa::/16` range. */
-const isPrivateIp = (ip: string) => ip.toLowerCase().startsWith("fdaa:");
+/**
+ * Fly omits `type` from IP assignment responses. Only Flycast addresses carry
+ * a `network` (its name is empty for the organization's default network).
+ */
+const isFlycast = (assignment: FlyIPAssignment) =>
+  assignment.network !== undefined && assignment.network !== null;
+
+const networkOf = (assignment: FlyIPAssignment) =>
+  assignment.network?.name || undefined;
 
 const inferType = (
   assignment: FlyIPAssignment,
@@ -297,8 +310,8 @@ const inferType = (
   const wire = asType(assignment.type);
   if (wire !== undefined) return wire;
   if (assignment.shared === true) return "shared_v4";
+  if (isFlycast(assignment)) return "private_v6";
   const ip = assignment.ip ?? "";
-  if (isPrivateIp(ip)) return "private_v6";
   if (ip.includes(":")) return "v6";
   if (fallback !== undefined) return fallback;
   return ip.length > 0 ? "v4" : (fallback ?? "v4");
@@ -317,15 +330,18 @@ const toAttrs = (
     region: assignment.region,
     serviceName: assignment.service_name,
     shared: type === "shared_v4" || assignment.shared === true,
+    network: networkOf(assignment),
     createdAt: assignment.created_at,
   };
 };
 
 const matchesDesired = (
   assignment: FlyIPAssignment,
-  news: Pick<IpAssignmentProps, "type" | "region" | "serviceName">,
+  news: Pick<IpAssignmentProps, "type" | "region" | "serviceName" | "network">,
 ): boolean => {
   if (inferType(assignment, news.type) !== news.type) return false;
+  if (news.type === "private_v6" && networkOf(assignment) !== news.network)
+    return false;
   if (news.region !== undefined && assignment.region !== news.region) {
     return false;
   }
@@ -353,7 +369,7 @@ const findByIp = (appName: string, ip: string) =>
 
 const findMatching = (
   appName: string,
-  news: Pick<IpAssignmentProps, "type" | "region" | "serviceName">,
+  news: Pick<IpAssignmentProps, "type" | "region" | "serviceName" | "network">,
 ) =>
   listAssignments(appName).pipe(
     Effect.map((ips) => ips.find((item) => matchesDesired(item, news))),
@@ -386,9 +402,7 @@ export const IpAssignmentProvider = () =>
         news.serviceName !== undefined &&
         news.serviceName !== output.serviceName;
       const networkChanged =
-        olds !== undefined &&
-        news.network !== undefined &&
-        news.network !== olds.network;
+        news.network !== (olds !== undefined ? olds.network : output.network);
       if (
         appChanged ||
         typeChanged ||

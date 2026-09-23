@@ -89,8 +89,8 @@ export const BackendIp = Fly.IpAssignment("Flycast", {
 
 Yield `BackendIp` in the Stack and allocate no `shared_v4`, `v4`, or
 `v6` on that App. The Service still publishes a port for the proxy to
-forward to. Flycast is HTTP-only, so publish plain HTTP on port 80
-without `forceHttps`:
+forward to. Fly issues no TLS certificate for `.flycast`, so publish
+plain HTTP on port 80 without `forceHttps`:
 
 ```typescript
 export default class Api extends Fly.Service<Api>()(
@@ -116,7 +116,9 @@ it ignores service checks, `autostart`, and the traffic switch of a
 [blue/green deployment](/fly/compute/deployments).
 
 `network` places the address on a named private network instead of the
-organization default. Changing it replaces the assignment.
+organization default. The network must already exist: an App created with
+the same `network` creates it, and an unknown name fails with
+`NetworkNotFound`. Changing `network` replaces the assignment.
 
 ## Use your own hostname
 
