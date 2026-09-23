@@ -10,8 +10,9 @@
  *   (cwd = project root), then writes a serve entry that
  *   `import("next")` + `next({ dev: false, conf }).prepare()` +
  *   `getRequestHandler()`, answers `GET /health`, and listens on `PORT`
- *   (default 3000). `conf` is the resolved build config, so production never
- *   recompiles a TypeScript config or downloads SWC into a read-only bundle.
+ *   (default 3000). The built config is also passed through Next's standalone
+ *   config path, so internal config loads never recompile TypeScript or
+ *   download SWC into a read-only bundle.
  * - **`dev`** runs the real `next dev` CLI (plain Node), scoped.
  *
  * Composites should load this module as the framework specifier (same
@@ -81,7 +82,6 @@ import * as http from "node:http";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import next from "next";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number.parseInt(process.env.PORT ?? "${String(NODE_DEFAULT_PORT)}", 10);
@@ -90,6 +90,8 @@ const HOST = process.env.HOST ?? "0.0.0.0";
 const { config } = JSON.parse(
   await readFile(path.join(dir, ".next", "required-server-files.json"), "utf8"),
 );
+process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(config);
+const { default: next } = await import("next");
 const app = next({ dev: false, dir, conf: config });
 const handle = app.getRequestHandler();
 await app.prepare();
