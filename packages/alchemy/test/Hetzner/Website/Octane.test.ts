@@ -1,6 +1,6 @@
 import * as Hetzner from "@/Hetzner";
 import * as Test from "@/Test/Alchemy";
-import * as Services from "@distilled.cloud/hetzner";
+import * as servers from "@distilled.cloud/hetzner/servers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -36,7 +36,7 @@ const fixtureEntries = [
 ];
 
 const waitUntilGone = (id: number) =>
-  Services.servers.getServer({ id }).pipe(
+  servers.getServer({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({

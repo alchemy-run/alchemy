@@ -1,4 +1,4 @@
-import * as Services from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type {
   ZonePrimary,
   ZoneSecondary,
@@ -199,7 +199,7 @@ const toAttrs = (zone: CloudZone): ZoneAttributes => ({
 });
 
 const getZoneBy = (idOrName: string) =>
-  Services.zones.getZone({ id_or_name: idOrName }).pipe(
+  Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -228,7 +228,7 @@ export const ZoneProvider = () =>
   Provider.succeed(Zone, {
     stables: ["zoneId", "name", "mode"],
     list: Effect.fn(function* () {
-      const zones = yield* Services.zones.listZones
+      const zones = yield* Hetzner.zones.listZones
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(Stream.runCollect);
       return [...zones].map(toAttrs);
@@ -269,7 +269,7 @@ export const ZoneProvider = () =>
         const expected = yield* createInternalLabels(id);
         const selector = labelSelector(expected);
         if (selector.length > 0) {
-          zone = yield* Services.zones.listZones
+          zone = yield* Hetzner.zones.listZones
             .items({
               label_selector: selector,
               per_page: 50,
@@ -305,7 +305,7 @@ export const ZoneProvider = () =>
       if (current === undefined) {
         const labels = yield* desiredLabels(id, news.labels);
         const created = yield* retryLocked(
-          Services.zones
+          Hetzner.zones
             .createZone({
               name,
               mode,
@@ -314,7 +314,7 @@ export const ZoneProvider = () =>
             })
             .pipe(
               Effect.catchTag("Conflict", () =>
-                Services.zones
+                Hetzner.zones
                   .getZone({ id_or_name: name })
                   .pipe(
                     Effect.map(({ zone }) => ({ zone, action: undefined })),
@@ -338,7 +338,7 @@ export const ZoneProvider = () =>
       const observedLabels = tagRecord(current.labels);
       if (!recordsEqual(observedLabels, labels)) {
         const updated = yield* retryLocked(
-          Services.zones.updateZone({
+          Hetzner.zones.updateZone({
             id_or_name: zoneRef,
             labels,
           }),
@@ -353,7 +353,7 @@ export const ZoneProvider = () =>
         current.mode === "primary"
       ) {
         const { action } = yield* retryLocked(
-          Services.zoneActions.changeZoneTtl({
+          Hetzner.zoneActions.changeZoneTtl({
             id_or_name: zoneRef,
             ttl: news.ttl,
           }),
@@ -366,7 +366,7 @@ export const ZoneProvider = () =>
       const desiredProtection = news.deleteProtection ?? false;
       if (current.protection.delete !== desiredProtection) {
         const { action } = yield* retryLocked(
-          Services.zoneActions.changeZoneProtection({
+          Hetzner.zoneActions.changeZoneProtection({
             id_or_name: zoneRef,
             delete: desiredProtection,
           }),
@@ -384,7 +384,7 @@ export const ZoneProvider = () =>
 
       if (current.protection.delete) {
         const { action } = yield* retryLocked(
-          Services.zoneActions.changeZoneProtection({
+          Hetzner.zoneActions.changeZoneProtection({
             id_or_name: idOrName,
             delete: false,
           }),
@@ -393,7 +393,7 @@ export const ZoneProvider = () =>
       }
 
       const deleted = yield* retryLocked(
-        Services.zones
+        Hetzner.zones
           .deleteZone({ id_or_name: idOrName })
           .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
       );

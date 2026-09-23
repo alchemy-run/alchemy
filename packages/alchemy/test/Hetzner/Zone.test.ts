@@ -1,7 +1,7 @@
 import * as Hetzner from "@/Hetzner";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as Services from "@distilled.cloud/hetzner";
+import * as zones from "@distilled.cloud/hetzner/zones";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (zoneId: number) =>
-  Services.zones.getZone({ id_or_name: String(zoneId) }).pipe(
+  zones.getZone({ id_or_name: String(zoneId) }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -51,7 +51,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.assignedNameservers.length).toBeGreaterThan(0);
       expect(created.created).toEqual(expect.any(String));
 
-      const fetched = yield* Services.zones.getZone({
+      const fetched = yield* zones.getZone({
         id_or_name: String(created.zoneId),
       });
       expect(fetched.zone.id).toEqual(created.zoneId);
@@ -77,7 +77,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.deleteProtection).toEqual(true);
       expect(updated.labels).toMatchObject({ env: "prod", role: "dns" });
 
-      const refetched = yield* Services.zones.getZone({
+      const refetched = yield* zones.getZone({
         id_or_name: String(updated.zoneId),
       });
       expect(refetched.zone.ttl).toEqual(7200);
@@ -132,7 +132,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.zoneId).not.toEqual(created.zoneId);
       expect(replaced.name).toEqual(replacementName);
 
-      const fetched = yield* Services.zones.getZone({
+      const fetched = yield* zones.getZone({
         id_or_name: String(replaced.zoneId),
       });
       expect(fetched.zone.id).toEqual(replaced.zoneId);

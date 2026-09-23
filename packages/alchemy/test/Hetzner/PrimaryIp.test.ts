@@ -1,7 +1,7 @@
+import * as primaryIps from "@distilled.cloud/hetzner/primary_ips";
 import * as Hetzner from "@/Hetzner";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as Services from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
-  Services.primaryIps.getPrimaryIp({ id }).pipe(
+  primaryIps.getPrimaryIp({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -54,7 +54,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.assigneeId).toBeNull();
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.primaryIps.getPrimaryIp({
+      const fetched = yield* primaryIps.getPrimaryIp({
         id: created.id,
       });
       expect(fetched.primary_ip.id).toEqual(created.id);
@@ -81,7 +81,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.autoDelete).toEqual(true);
       expect(updated.labels).toMatchObject({ env: "prod", role: "web" });
 
-      const refetched = yield* Services.primaryIps.getPrimaryIp({
+      const refetched = yield* primaryIps.getPrimaryIp({
         id: updated.id,
       });
       expect(refetched.primary_ip.auto_delete).toEqual(true);
@@ -138,7 +138,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.location).toEqual("fsn1");
       expect(replaced.assigneeId).toBeNull();
 
-      const fetched = yield* Services.primaryIps.getPrimaryIp({
+      const fetched = yield* primaryIps.getPrimaryIp({
         id: replaced.id,
       });
       expect(fetched.primary_ip.location.name).toEqual("fsn1");
@@ -182,7 +182,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.type).toEqual("ipv6");
       expect(created.assigneeId).toBeNull();
 
-      const fetched = yield* Services.primaryIps.getPrimaryIp({
+      const fetched = yield* primaryIps.getPrimaryIp({
         id: created.id,
       });
       expect(fetched.primary_ip.location.name).toEqual("nbg1");
