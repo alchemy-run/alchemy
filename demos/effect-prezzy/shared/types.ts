@@ -24,8 +24,8 @@ export const BROWSER_VIEWPORT = {
   height: WINDOW.height - BROWSER_CHROME,
 } as const;
 
-/** Terminal tabs: `dev` runs `alchemy dev`, `shell` runs deploys, tests and curls. */
-export type TerminalTab = "dev" | "shell";
+/** Terminal tabs: `alchemy deploy`, `pnpm test`, and the long-running `alchemy dev`. */
+export type TerminalTab = "deploy" | "test" | "dev";
 
 export type AppId = "editor" | "terminal" | "diagram" | "browser";
 
@@ -123,8 +123,6 @@ export interface SceneCapture {
     | {
         clip: string;
         duration: number;
-        /** Which tab is on screen from each clip time on. */
-        tabs: { at: number; tab: TerminalTab }[];
       }
     | undefined;
   beats: Beat[];

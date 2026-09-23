@@ -11,7 +11,7 @@ export default defineScene({
     s.pause(1);
 
     await s.terminal(async (t) => {
-      await t.run("pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
+      await t.run("test", "pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
       await t.sleep(1500);
     });
   },

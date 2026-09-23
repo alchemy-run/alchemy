@@ -17,8 +17,8 @@ export default defineScene({
     await s.terminal(async (t) => {
       await t.waitDev();
       await t.sleep(800);
-      await t.run(`CODE=$(curl -s --json '{"url":"https://alchemy.run"}' localhost:1337/links | jq -r .code)`);
-      await t.run(`curl -s -o /dev/null -w '%{http_code} → %{redirect_url}\\n' localhost:1337/$CODE`);
+      await t.run("deploy", `CODE=$(curl -s --json '{"url":"https://alchemy.run"}' localhost:1337/links | jq -r .code)`);
+      await t.run("deploy", `curl -s -o /dev/null -w '%{http_code} → %{redirect_url}\\n' localhost:1337/$CODE`);
     });
 
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Db"], edges: ["Api->Db"] });

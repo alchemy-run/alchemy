@@ -13,11 +13,11 @@ export default defineScene({
     s.pause(1);
 
     const url = await s.terminal(async (t) => {
-      await t.type("shell", "alchemy deploy");
-      await t.waitFor("shell", /Deploy\?/, { timeout: 120_000 });
+      await t.type("deploy", "alchemy deploy");
+      await t.waitFor("deploy", /Deploy\?/, { timeout: 120_000 });
       await t.sleep(1200);
-      await t.key("shell", "Enter");
-      const text = await t.waitFor("shell", /Stack deployed[\s\S]*❯\s*$/, { timeout: 300_000 });
+      await t.key("deploy", "Enter");
+      const text = await t.waitFor("deploy", /Stack deployed[\s\S]*❯\s*$/, { timeout: 300_000 });
       await t.sleep(1500);
       const found = text.match(/https:\/\/shorty-web-[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev/)?.[0];
       if (!found) throw new Error("deployed URL not found in the terminal output");

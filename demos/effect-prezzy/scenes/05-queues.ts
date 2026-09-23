@@ -15,7 +15,7 @@ export default defineScene({
     await s.terminal(async (t) => {
       await t.waitDev();
       await t.sleep(800);
-      await t.run(`for i in $(seq 10); do curl -s -o /dev/null localhost:1337/$CODE; done`);
+      await t.run("deploy", `for i in $(seq 10); do curl -s -o /dev/null localhost:1337/$CODE; done`);
     });
 
     await s.browser.open("http://localhost:5173", { waitFor: /alchemy\.run\s+\/\w+\s+1\d\b/ });
@@ -28,7 +28,7 @@ export default defineScene({
     s.pause(1);
 
     await s.terminal(async (t) => {
-      await t.run("pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
+      await t.run("test", "pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
       await t.sleep(1500);
     });
   },

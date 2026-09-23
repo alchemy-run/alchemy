@@ -54,15 +54,14 @@ const tmuxConf = path.join(root, "capture", "tmux.conf");
 const zdot = path.join(root, "work", ".zdot");
 const SOCKET = "shorty-demo";
 const SESSION = "shorty";
-/** Terminal tabs are tmux windows: 0 for deploys and tests, 1 for `alchemy dev`. */
-const PANES: Record<Pane, string> = { shell: `${SESSION}:0`, dev: `${SESSION}:1` };
+/** Terminal tabs are tmux windows, drawn by tmux's own status line so tab and content always agree. */
+const TABS: Pane[] = ["deploy", "test", "dev"];
+const PANES: Record<Pane, string> = { deploy: `${SESSION}:0`, test: `${SESSION}:1`, dev: `${SESSION}:2` };
 /** The tab on screen; persists across scenes like the real terminal would. */
-let currentTab: Pane = "shell";
+let currentTab: Pane = "deploy";
 
 /** Beat markers written into the tcut recording around terminal beats. */
 const BEAT = "prezzy-beat:";
-/** Markers recording which terminal tab is on screen. */
-const TAB = "prezzy-tab:";
 
 /** Never copied into the project or shown in the explorer. */
 const IGNORED = new Set(["node_modules", ".alchemy", "dist", ".DS_Store", "tsconfig.tsbuildinfo"]);
@@ -121,11 +120,13 @@ const startTmux = async (cols: number, rows: number) => {
   );
   await tmux("kill-server");
   const shell = `ZDOTDIR=${zdot} zsh -i`;
-  await sh(["tmux", "-f", tmuxConf, "-L", SOCKET, "new-session", "-d", "-s", SESSION,
+  await sh(["tmux", "-f", tmuxConf, "-L", SOCKET, "new-session", "-d", "-s", SESSION, "-n", "deploy",
     "-x", String(cols), "-y", String(rows), "-c", dir, shell]);
-  await tmux("new-window", "-d", "-t", PANES.dev, "-c", dir, shell);
-  await tmux("select-window", "-t", PANES.shell);
-  currentTab = "shell";
+  for (const tab of TABS.slice(1)) {
+    await tmux("new-window", "-d", "-t", PANES[tab], "-n", tab, "-c", dir, shell);
+  }
+  await tmux("select-window", "-t", PANES.deploy);
+  currentTab = "deploy";
   await Bun.sleep(800);
 };
 
@@ -188,7 +189,7 @@ const boxOf = async (view: Bun.WebView, selector: string) => {
 };
 
 /** Window contents carried from scene to scene. */
-let desk: Desk = { files: [], tabs: [], active: undefined, terminalTabs: ["shell"] };
+let desk: Desk = { files: [], tabs: [], active: undefined, terminalTabs: [] };
 const state: Record<string, string> = {};
 
 const captureScene = async (id: string, scene: SceneDefinition) => {
@@ -204,7 +205,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
   let browser = desk.browser;
   let diagram = desk.diagram;
   let terminalBeats = 0;
-  const openedTabs = new Set<Pane>(desk.terminalTabs ?? ["shell"]);
+  /** Tabs used so far; "dev" in here means `alchemy dev` is running. */
+  const openedTabs = new Set<Pane>(desk.terminalTabs ?? []);
   let shots = 0;
   /** One real browser tab per scene, driven like a user would. */
   let view: Bun.WebView | undefined;
@@ -266,15 +268,13 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         await t.enter();
         await t.sleep("1500ms");
       });
-      await t.marker(`${TAB}${currentTab}`);
 
-      /** Click over to a terminal tab (a tmux window) and note it for the tab strip. */
+      /** Click over to a terminal tab (a tmux window). */
       const showTab = async (pane: Pane) => {
+        openedTabs.add(pane);
         if (pane === currentTab) return;
         await tmux("select-window", "-t", PANES[pane]);
         currentTab = pane;
-        openedTabs.add(pane);
-        await t.marker(`${TAB}${pane}`);
         await t.sleep("700ms");
       };
 
@@ -290,13 +290,13 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         async key(pane, key) {
           await tmux("send-keys", "-t", PANES[pane], key);
         },
-        async run(command, opts) {
+        async run(tab, command, opts) {
           const prompts = (text: string) => text.split("\n").filter((line) => /❯/.test(line)).length;
-          const before = prompts(await paneText("shell"));
-          await term.type("shell", command);
+          const before = prompts(await paneText(tab));
+          await term.type(tab, command);
           const deadline = Date.now() + (opts?.timeout ?? 120_000);
           for (;;) {
-            const text = await paneText("shell");
+            const text = await paneText(tab);
             const lines = text.trimEnd().split("\n");
             // Finished once a fresh, empty prompt follows the command.
             const finished = opts?.until
@@ -307,7 +307,7 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
             await Bun.sleep(300);
           }
           await t.sleep("1200ms");
-          return paneText("shell");
+          return paneText(tab);
         },
         async waitDev(opts) {
           // Watch alchemy dev pick up the change on its own tab.
@@ -527,11 +527,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       maxPause: video.config.maxPause,
     });
     const at = new Map<string, number>();
-    const tabTimeline: { at: number; tab: Pane }[] = [];
     for (const e of timeline.events) {
-      if (e.type !== "m") continue;
-      if (e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
-      if (e.data.startsWith(TAB)) tabTimeline.push({ at: e.vt, tab: e.data.slice(TAB.length) as Pane });
+      if (e.type === "m" && e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
     }
     let index = 0;
     for (const beat of beats) {
@@ -545,7 +542,6 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
     capture.terminal = {
       clip: `${id}/terminal.mp4`,
       duration: result.durationSeconds,
-      tabs: tabTimeline,
     };
   }
 
@@ -603,7 +599,7 @@ if (!args.only) {
       await waitDev(300_000);
       await tmux("send-keys", "-t", PANES.dev, "C-l");
     }
-    currentTab = "shell";
+    currentTab = "deploy";
   }
 }
 

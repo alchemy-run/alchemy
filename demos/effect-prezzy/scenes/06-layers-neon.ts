@@ -20,8 +20,8 @@ export default defineScene({
     await s.terminal(async (t) => {
       await t.waitDev({ timeout: 240_000 });
       await t.sleep(800);
-      await t.run(`CODE=$(curl -s --json '{"url":"https://neon.com"}' localhost:1337/links | jq -r .code)`);
-      await t.run("curl localhost:1337/links");
+      await t.run("deploy", `CODE=$(curl -s --json '{"url":"https://neon.com"}' localhost:1337/links | jq -r .code)`);
+      await t.run("deploy", "curl localhost:1337/links");
     });
 
     await s.browser.open("http://localhost:5173", { waitFor: /neon\.com/ });
@@ -36,7 +36,7 @@ export default defineScene({
     await s.editor.show("test/api.test.ts");
     s.pause(0.5);
     await s.terminal(async (t) => {
-      await t.run("pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
+      await t.run("test", "pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
       await t.sleep(1500);
     });
   },

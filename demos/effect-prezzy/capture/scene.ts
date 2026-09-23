@@ -7,8 +7,8 @@ export interface Term {
   type(pane: Pane, command: string): Promise<void>;
   /** Press a key in a tab, e.g. `Enter`. */
   key(pane: Pane, key: string): Promise<void>;
-  /** Type a command in the shell tab and wait for it to finish (or for `until`). Returns the tab text. */
-  run(command: string, opts?: { until?: RegExp; timeout?: number }): Promise<string>;
+  /** Run a command in a tab and wait for it to finish (or for `until`). Returns the tab text. */
+  run(pane: Pane, command: string, opts?: { until?: RegExp; timeout?: number }): Promise<string>;
   /** Switch to the dev tab and wait until `alchemy dev` has settled after a change. */
   waitDev(opts?: { timeout?: number }): Promise<void>;
   /** Wait until a tab shows `pattern`. */
