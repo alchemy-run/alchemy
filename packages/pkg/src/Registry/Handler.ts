@@ -81,24 +81,26 @@ const isFork = (run: Run) => run.headRepo !== run.repo;
 /**
  * Tags every package in a publication receives, all derived from the run.
  * Runs on the repository's own commits get the head commit, the short
- * commit, `branch:<name>`, and `pr:N` for pull requests. A fork's run gets
- * only `pr:N`: commit tags are shared by every publisher, and a fork can
+ * commit, `branch:<name>`, and `pr:N` plus `pr:N:<short-sha>` for pull requests.
+ * A fork's run gets only `pr:N:<short-sha>`: commit tags are shared by every publisher, and a fork can
  * run any commit it likes, including one already published from the
  * repository, so letting it write them would let it repoint them.
  */
 export const tagsFor = (run: Run): string[] => {
   if (isFork(run)) {
-    return run.pr === null ? [] : [`pr:${run.pr}`];
+    return run.pr === null ? [] : [installTag(run)];
   }
   const tags = [run.headSha, run.headSha.slice(0, SHORT)];
-  if (run.pr !== null) tags.push(`pr:${run.pr}`);
+  if (run.pr !== null) tags.push(`pr:${run.pr}`, installTag(run));
   if (run.headBranch) tags.push(`branch:${run.headBranch}`);
   return tags;
 };
 
 /** The tag install commands are written against. */
 export const installTag = (run: Run) =>
-  isFork(run) ? `pr:${run.pr}` : run.headSha.slice(0, SHORT);
+  run.pr !== null
+    ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}`
+    : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
   new Upstream({ message: GitHub.describe(e) });
@@ -138,18 +140,28 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   const headRepo = data.head_repository?.full_name ?? data.repository.full_name;
   let pr: number | null = null;
   if (data.event === "pull_request") {
+    if (data.head_branch === null) {
+      return yield* new BadRequest({
+        message: `pull request run ${ref.runId} has no head branch`,
+      });
+    }
     // The pull request whose head is this run's head, from the repository
     // the run's head lives in. The same commit can head several pull
     // requests, including one opened from a fork against a commit the
     // repository already published; matching the head repository keeps a
     // run's publication on its own pull request.
     const pulls = yield* github
-      .pullRequestsForCommit(ref.repo, headRepo, data.head_sha)
+      .pullRequestsForCommit(
+        ref.repo,
+        headRepo,
+        data.head_branch,
+        data.head_sha,
+      )
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
       return yield* new BadRequest({
-        message: `no pull request from ${headRepo} has head ${data.head_sha}`,
+        message: `no open pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
     pr = first.number;
@@ -444,7 +456,7 @@ const install = Effect.gen(function* () {
 
 const banner = Effect.map(origin, (base) =>
   HttpServerResponse.text(
-    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N>\n`,
+    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N|pr:N:short-sha>\n`,
   ),
 );
 

@@ -37,7 +37,10 @@ import {
   type RailwayLocalContextSource,
 } from "./local-context.ts";
 import { uploadDeployTarball } from "./Up.ts";
+import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { Service } from "./Service.ts";
+
+export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 type Builder = railway.Scalars["Builder"];
 type RestartPolicyType = railway.Scalars["RestartPolicyType"];
@@ -269,7 +272,6 @@ const instanceSettingsDelta = (input: {
   sourceRepo: string | undefined;
   registryCredentials: { username: string; password: string } | undefined;
   props: {
-    region?: string;
     rootDirectory?: string;
     buildCommand?: string;
     preDeploy?: { command: string | null };
@@ -310,9 +312,8 @@ const instanceSettingsDelta = (input: {
     changed = true;
   }
 
-  changed =
-    assignIfChanged(delta, "region", input.props.region, instance?.region) ||
-    changed;
+  // Placement is `deploy.multiRegionConfig`, not ServiceInstance.region.
+  // Writing `region` here leaves the workspace default in place.
   changed =
     assignIfChanged(
       delta,
@@ -854,6 +855,7 @@ const toAttrs = (input: {
   port: number | undefined;
   codeHash: string;
   rpcToken: string;
+  region: string | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -868,7 +870,7 @@ const toAttrs = (input: {
   startCommand: input.instance?.startCommand ?? undefined,
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
-  region: input.instance?.region ?? undefined,
+  region: input.region,
   port: input.port,
   url: input.domain?.url,
   domain: input.domain?.domain,
@@ -982,6 +984,15 @@ export const ServiceProvider = () =>
                   domainId: output.domainId,
                 })
               : undefined;
+          const region =
+            resolvedEnvId.length > 0
+              ? yield* readServiceRegion({
+                  environmentId: resolvedEnvId,
+                  projectId: resolvedProjectId,
+                  serviceId: found.id,
+                  legacy: instance?.region,
+                })
+              : undefined;
           const attrs = toAttrs({
             service: found,
             instance,
@@ -991,6 +1002,7 @@ export const ServiceProvider = () =>
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
+            region,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -1027,6 +1039,7 @@ export const ServiceProvider = () =>
                       port: undefined,
                       codeHash: "",
                       rpcToken: "",
+                      region: undefined,
                     }),
                   ),
               ),
@@ -1324,6 +1337,20 @@ export const ServiceProvider = () =>
               (yield* getInstance(environmentId, current.id)) ?? instance;
           }
 
+          // Pin `deploy.multiRegionConfig` before the build, then again after,
+          // in case the deploy wrote the workspace default back.
+          const serviceId = current.id;
+          const placeRegion = () =>
+            syncServiceRegion({
+              environmentId,
+              projectId,
+              serviceId,
+              region: props.region,
+              legacy: instance?.region,
+              fallbackReplicas: instance?.numReplicas,
+            });
+          let region = yield* placeRegion();
+
           if (sourceRepo !== undefined) {
             const branchChanged = yield* syncBranch({
               projectId,
@@ -1457,6 +1484,8 @@ export const ServiceProvider = () =>
               (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
 
+          region = yield* placeRegion();
+
           return toAttrs({
             service: current,
             instance,
@@ -1466,6 +1495,7 @@ export const ServiceProvider = () =>
             port,
             codeHash,
             rpcToken,
+            region,
           });
         }),
 

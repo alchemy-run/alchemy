@@ -25,6 +25,7 @@ import { Sign, type SignRequest } from "./Sign.ts";
  * ```
  *
  * @layer
+ * @product Secret Key
  * @provides Fly.Sign
  */
 export const SignHttp = Layer.effect(

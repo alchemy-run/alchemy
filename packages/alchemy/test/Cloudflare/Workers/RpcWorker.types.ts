@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import type { Named } from "@/Named";
+import type { Named, PlatformIdentity } from "@/index.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
@@ -24,7 +24,28 @@ class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   Effect.succeed(RpcServer.toHttpEffect(PingRpcs)),
 ) {}
 
+class OrdinaryWorker extends Cloudflare.Worker<OrdinaryWorker>()(
+  "OrdinaryWorker",
+  {},
+) {}
+
+const identity = <const Id extends string>(
+  declaration: PlatformIdentity<Id>,
+): Id => declaration.LogicalId;
+
+export const _ordinaryIdentity: "OrdinaryWorker" = identity(OrdinaryWorker);
+export const _modularIdentity: "ModularRpcWorker" = identity(ModularRpcWorker);
+export const _inlineIdentity: "InlineRpcWorker" = identity(InlineRpcWorker);
+
+// @ts-expect-error RpcWorker identity is readonly.
+ModularRpcWorker.LogicalId = "ModularRpcWorker";
+
 type Assert<T extends true> = T;
+type _PhantomInstances = Assert<
+  "LogicalId" extends keyof ModularRpcWorker | keyof InlineRpcWorker
+    ? false
+    : true
+>;
 
 type _ModularNamed = Assert<
   ModularRpcWorker extends Named<"ModularRpcWorker"> ? true : false

@@ -41,7 +41,7 @@ const sampleEnv = () =>
 // process, and two of them deliberately wait out the sidecar's ~10s
 // parent-connect self-termination. Run serially (the file default) those
 // two waits alone would stack to ~20s of wall clock.
-describe.concurrent("Local.RpcServer", () => {
+describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
   for (const runtime of runtimes()) {
     describe.concurrent.skipIf(!runtime.available)(runtime.name, () => {
       const [bin, ...args] = runtime.argv(FIXTURE_TS);

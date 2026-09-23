@@ -788,6 +788,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```
  *
  * @resource
+ * @product Compute
  */
 export const Compute: Platform<
   Compute,
@@ -2219,6 +2220,7 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
 
   const cwd = dev.cwd ? path.resolve(dev.cwd) : path.resolve(props.path ?? ".");
   const env = {
+    NODE_ENV: "development",
     ...processEnv(props.env),
     ...processEnv(dev.env),
     ...((dev.port ?? props.port)

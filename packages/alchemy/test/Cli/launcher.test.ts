@@ -51,7 +51,7 @@ const runPublishedLauncher = (
       import.meta.url,
     ).href;
     yield* fs.writeFileString(
-      path.join(bin, "alchemy.ts"),
+      path.join(bin, "alchemy.js"),
       `await import(${JSON.stringify(fixture)});\n`,
     );
     if (jsx !== undefined) {
@@ -116,17 +116,21 @@ const runPublishedLauncher = (
     );
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe.sequential("published Bun launcher", () => {
-  it.live.skipIf(!nodeSupportsDevMode)(
-    "renders production progress through the Node shebang handoff",
-    () => runPublishedLauncher("development", "preserve", nodePath!),
-  );
-  for (const nodeEnv of [undefined, "development", "production"]) {
-    for (const jsx of [undefined, "react-jsx", "react-jsxdev", "preserve"]) {
-      it.live(
-        `renders production progress with NODE_ENV=${nodeEnv} and jsx=${jsx}`,
-        () => runPublishedLauncher(nodeEnv, jsx),
-      );
+describe.sequential(
+  "published Bun launcher",
+  { tags: ["unit", "local"] },
+  () => {
+    it.live.skipIf(!nodeSupportsDevMode)(
+      "renders production progress through the Node shebang handoff",
+      () => runPublishedLauncher("development", "preserve", nodePath!),
+    );
+    for (const nodeEnv of [undefined, "development", "production"]) {
+      for (const jsx of [undefined, "react-jsx", "react-jsxdev", "preserve"]) {
+        it.live(
+          `renders production progress with NODE_ENV=${nodeEnv} and jsx=${jsx}`,
+          () => runPublishedLauncher(nodeEnv, jsx),
+        );
+      }
     }
-  }
-});
+  },
+);

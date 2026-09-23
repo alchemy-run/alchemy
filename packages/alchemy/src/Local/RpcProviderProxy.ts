@@ -73,8 +73,7 @@ export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
 
 /**
  * The one sidecar entry every RPC-backed provider is served from.
- * Resolve through package exports so this also works when the proxy is
- * bundled into `bin/exec.js`. The active export conditions select `src/`
+ * Resolve through package exports. The active export conditions select `src/`
  * under Bun or the dev loader and `lib/` in a published Node install.
  */
 export const SIDECAR_ENTRY_URL = import.meta.resolve("alchemy/Local/Sidecar");

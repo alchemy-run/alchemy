@@ -81,7 +81,7 @@ it.live(
         );
       }
     }).pipe(Effect.scoped),
-  { timeout: 60_000, exclusive: true },
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
 
 it.live(
@@ -109,7 +109,7 @@ it.live(
       expect(closed._tag).toBe("Failure");
       expect(yield* Core.sidecarDiagnostics).toEqual(baseline);
     }).pipe(Effect.scoped),
-  { timeout: 30_000, exclusive: true },
+  { tags: ["local"], timeout: 30_000, exclusive: true },
 );
 
 it.live(
@@ -153,7 +153,7 @@ it.live(
       yield* queued.close;
       expect(yield* Core.sidecarDiagnostics).toEqual(baseline);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, exclusive: true },
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
 
 it.live(
@@ -217,7 +217,7 @@ it.live(
       expect((yield* inspect)?.contexts).toBe(baseline!.contexts);
       yield* first.close;
     }).pipe(Effect.scoped),
-  { timeout: 60_000, exclusive: true },
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
 
 it.live(
@@ -249,7 +249,7 @@ it.live(
       expect(yield* recovered.value.processId()).not.toBe(pid);
       yield* handle.close;
     }).pipe(Effect.scoped),
-  { timeout: 60_000, exclusive: true },
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
 
 it.live(
@@ -308,7 +308,7 @@ it.live(
       yield* successor.close;
       expect(yield* inspect).toEqual(baseline);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, exclusive: true },
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
 
 it.live(
@@ -345,5 +345,5 @@ it.live(
         });
       }
     }).pipe(Effect.scoped),
-  { timeout: 90_000, exclusive: true },
+  { tags: ["local"], timeout: 90_000, exclusive: true },
 );

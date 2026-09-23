@@ -4,7 +4,6 @@ import * as Apps from "@distilled.cloud/github/apps";
 import * as Checks from "@distilled.cloud/github/checks";
 import * as Issues from "@distilled.cloud/github/issues";
 import * as Pulls from "@distilled.cloud/github/pulls";
-import * as Repos from "@distilled.cloud/github/repos";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -243,15 +242,22 @@ const make = Effect.gen(function* () {
       ).pipe(Effect.map((page) => page.artifacts)),
 
     /**
-     * Pull requests against `repo` whose head is `sha` in `headRepo`, the
-     * repository the commit was pushed to.
+     * Open pull requests against `repo` whose head is `sha` in `headRepo`, the
+     * repository the commit was pushed to. Commit-associated PR lookups can
+     * return no results for forks, so discover candidates by owner and branch.
      */
-    pullRequestsForCommit: (repo: string, headRepo: string, sha: string) =>
+    pullRequestsForCommit: (
+      repo: string,
+      headRepo: string,
+      headBranch: string,
+      sha: string,
+    ) =>
       asInstallation(
         repo,
-        Repos.listPullRequestsAssociatedWithCommit({
+        Pulls.list({
           ...split(repo),
-          commit_sha: sha,
+          head: `${split(headRepo).owner}:${headBranch}`,
+          state: "open",
           per_page: 100,
         }),
       ).pipe(
@@ -259,6 +265,7 @@ const make = Effect.gen(function* () {
           pulls.filter(
             (pr) =>
               pr.head.sha === sha &&
+              pr.head.ref === headBranch &&
               pr.head.repo?.full_name === headRepo &&
               pr.base.repo.full_name === repo,
           ),

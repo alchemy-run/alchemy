@@ -232,6 +232,7 @@ export interface WikiPage extends Resource<
  * ```
  *
  * @resource
+ * @product Repository
  */
 export const WikiPage = Resource<WikiPage>("GitHub.WikiPage");
 

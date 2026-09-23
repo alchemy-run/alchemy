@@ -159,7 +159,16 @@ test.provider(
         ).toBe("PendingDeletion");
       }
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:kms",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 for (const blocked of ["SSE-C", "NONE"] as const) {
@@ -226,7 +235,15 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
           );
         expect(absent).toBe(true);
       }),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "provider:aws",
+        "provider:aws:s3",
+        "provider:aws:statestore",
+        "live",
+      ],
+      timeout: 120_000,
+    },
   );
 }
 
@@ -378,7 +395,15 @@ test.provider(
         expect(absent).toBe(true);
       }
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const STACK = "S3StateStoreTestStack";
@@ -457,7 +482,15 @@ test.provider(
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -560,7 +593,15 @@ test.provider(
         );
       }).pipe(Effect.ensuring(deleteBucket));
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -599,7 +640,15 @@ test.provider(
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -646,5 +695,13 @@ test.provider(
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

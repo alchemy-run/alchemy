@@ -350,6 +350,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * @resource
+ * @product Workloads
  */
 export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
   Platform("Kubernetes.Job", {

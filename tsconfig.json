@@ -38,6 +38,12 @@
     {
       "path": "./submodules/distilled/packages/github/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/zerossl/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
@@ -64,9 +70,6 @@
       "path": "./packages/alchemy/tsconfig.json"
     },
     {
-      "path": "./packages/alchemy/tsconfig.bin.json"
-    },
-    {
       "path": "./packages/alchemy/tsconfig.test.json"
     },
     {
@@ -81,6 +84,9 @@
     // },
     {
       "path": "./examples/cloudflare-git-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-better-auth/tsconfig.json"
     },
     {
       "path": "./examples/aws-ec2/tsconfig.json"
@@ -116,6 +122,12 @@
       "path": "./examples/aws-rds/tsconfig.json"
     },
     {
+      "path": "./examples/aws-aurora-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-dsql-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-static-site/tsconfig.json"
     },
     {
@@ -123,6 +135,9 @@
     },
     {
       "path": "./examples/cloudflare-agent/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
@@ -146,6 +161,12 @@
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-neon-prisma/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {
@@ -161,10 +182,16 @@
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-service-bindings/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-website-waku/tsconfig.json"
@@ -186,6 +213,12 @@
     },
     {
       "path": "./examples/prisma-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-vinext/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-website-vinext/tsconfig.json"
     },
     {
       "path": "./examples/prisma-website-nuxt/tsconfig.json"
@@ -266,6 +299,9 @@
       "path": "./examples/fly-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-website-nuxt/tsconfig.json"
     },
     {
@@ -296,6 +332,9 @@
       "path": "./examples/hetzner-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-website-nuxt/tsconfig.json"
     },
     {
@@ -324,6 +363,9 @@
     },
     {
       "path": "./examples/railway-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-vinext/tsconfig.json"
     },
     {
       "path": "./examples/railway-website-nuxt/tsconfig.json"
@@ -364,6 +406,20 @@
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
+    { "path": "./examples/neon/tsconfig.json" },
+    { "path": "./examples/neon-website-astro/tsconfig.json" },
+    { "path": "./examples/neon-website-foldkit/tsconfig.json" },
+    { "path": "./examples/neon-website-nextjs/tsconfig.json" },
+    { "path": "./examples/neon-website-nuxt/tsconfig.json" },
+    { "path": "./examples/neon-website-octane/tsconfig.json" },
+    { "path": "./examples/neon-website-react-router/tsconfig.json" },
+    { "path": "./examples/neon-website-solidstart/tsconfig.json" },
+    { "path": "./examples/neon-website-static/tsconfig.json" },
+    { "path": "./examples/neon-website-sveltekit/tsconfig.json" },
+    { "path": "./examples/neon-website-tanstack-start/tsconfig.json" },
+    { "path": "./examples/neon-website-vite/tsconfig.json" },
+    { "path": "./examples/neon-website-vocs/tsconfig.json" },
+    { "path": "./examples/neon-website-waku/tsconfig.json" },
     {
       "path": "./benchmark/container/tsconfig.json"
     }

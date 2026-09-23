@@ -31,13 +31,20 @@ export const fromProfile = () =>
   Layer.effect(
     CloudflareEnvironment,
     Effect.gen(function* () {
-      // In CI this resolves directly from environment variables. Otherwise it
-      // reads the persisted config under the canonical provider name and only
-      // configures/persists when no local config exists.
-      const { resolve } = yield* resolveProviderConfig<
+      // Building providers must work before Cloudflare is configured. Capture
+      // the resolver's services now, but read profiles/credentials only when
+      // a cloud operation actually evaluates this environment.
+      const resolve = resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
-      >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      return yield* resolve.pipe(Effect.orDie, Effect.cached);
+      >(CLOUDFLARE_AUTH_PROVIDER_NAME).pipe(
+        Effect.flatMap(({ resolve }) => resolve),
+      );
+      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
+      return yield* resolve.pipe(
+        Effect.provideContext(context),
+        Effect.orDie,
+        Effect.cached,
+      );
     }),
   );

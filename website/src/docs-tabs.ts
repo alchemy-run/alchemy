@@ -142,6 +142,14 @@ export const DOCS_TABS: DocsTab[] = [
     category: "Toolchain",
     hint: "build · dev · exec",
   },
+  {
+    label: "ACME",
+    href: "/acme",
+    prefixes: ["/acme", "/providers/acme"],
+    slot: "more",
+    category: "Certificates",
+    hint: "accounts · DNS-01 · certificate issuance",
+  },
   // A provider's reference pages belong to its hub tab (the prefixes
   // above claim /providers/{provider} first) — the Reference tab owns
   // only the directory landing plus providers without a hub.

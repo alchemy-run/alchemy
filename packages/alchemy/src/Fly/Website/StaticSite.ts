@@ -17,7 +17,7 @@ import { initialCwd } from "../../Util/Node.ts";
 import { App } from "../App.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
-import { Service } from "../Service.ts";
+import { Service, type ServiceProps } from "../Service.ts";
 import {
   type FrameworkSite,
   type Ref,
@@ -31,6 +31,14 @@ const resolveRef = <T>(ref: Ref<T>) =>
   Effect.isEffect(ref) ? ref : Effect.succeed(ref);
 
 export interface StaticSiteProps {
+  /** Deployment strategy forwarded to the hosted Fly Service. */
+  deploy?: ServiceProps["deploy"];
+  /** Process shutdown policy for the generated server. */
+  shutdown?: ServiceProps["shutdown"];
+  /** Named Machine readiness checks. */
+  checks?: ServiceProps["checks"];
+  /** Override proxy services and their routing health checks. */
+  services?: ServiceProps["services"];
   /**
    * Path to the local site directory (working directory for
    * {@link build.command}).
@@ -249,6 +257,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     // Hashed `/assets` still go to Tigris on FrameworkSite.
     const service = yield* Service(id, {
       app,
+      deploy: props.deploy,
+      shutdown: props.shutdown,
+      checks: props.checks,
+      services: props.services,
       main,
       port: DEFAULT_PORT,
       // Generated static-file server is a complete bun/node program.
@@ -256,7 +268,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
       extraFiles: [
         {
-          source: outdir,
+          // Keep the build dependency so planning cannot hash the previous artifact.
+          source: Output.map(build.outdir, (dir) =>
+            path.resolve(initialCwd, dir),
+          ),
           dest: path.basename(outdir),
         },
       ],

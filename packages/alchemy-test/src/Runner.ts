@@ -1,9 +1,8 @@
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
- * collector rides AsyncLocalStorage, so registration attribution survives
- * concurrent imports — see Registry.ts), then executes every collected
+ * Discovers `*.test.ts` files, imports them concurrently with an AsyncLocalStorage
+ * per-file collector (see Registry.ts), then executes every collected
  * test as an Effect — files run concurrently up to a limit, tests within a
  * file run sequentially unless their suite is `describe.concurrent`. Each
  * test gets a buffering Effect Logger + Console so its output can be shown
@@ -33,7 +32,9 @@ import {
   makeFileSuite,
   titlePath,
 } from "./Model.ts";
+import type { TestPlan } from "./Plan.ts";
 import * as Registry from "./Registry.ts";
+import { compileTagsFilter, type TagsFilter } from "./Tags.ts";
 import {
   Reporter,
   type RunController,
@@ -65,6 +66,10 @@ export interface RunOptions {
    * (`file > describe chain > name`).
    */
   readonly filter?: ((fullTitle: string) => boolean) | undefined;
+  /** Match the combined suite and test tags, in addition to other filters. */
+  readonly tagsFilter?: ReadonlyArray<string>;
+  readonly plan?: TestPlan | undefined;
+  readonly dryRun?: boolean;
   /** Default per-test timeout in ms. */
   readonly timeout: number;
   /** Times a failing test body is re-run before being reported as failed. */
@@ -299,7 +304,10 @@ const collectFile = (
         relative,
         async () => {
           await import(pathToFileURL(absolute).href);
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          // Flush microtasks + one macrotask so registrations deferred with
+          // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
+          // tree — their AsyncLocalStorage context resolves this file's collector.
+          await new Promise<void>((resolve) => setImmediate(resolve));
         },
         suite,
       );
@@ -332,7 +340,11 @@ const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
   hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
 
 interface ExecContext {
-  readonly options: RunOptions;
+  readonly options: Omit<RunOptions, "tagsFilter"> & {
+    readonly tagsFilter: TagsFilter;
+    readonly selectedTests?: ReadonlySet<TestCase>;
+  };
+  readonly suiteStates?: Map<Suite, Exit.Exit<void, unknown>>;
   readonly onlyMode: boolean;
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   readonly fileLogs: Array<LogEntry>;
@@ -369,6 +381,8 @@ const metaOf = (file: string, test: TestCase): TestMeta => {
     file,
     titlePath: parts,
     name: test.name,
+    tags: test.tags,
+    optInTags: test.optInTags,
   };
 };
 
@@ -377,6 +391,17 @@ const included = (
   test: TestCase,
   ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
+  if (
+    ctx.options.selectedTests !== undefined &&
+    !ctx.options.selectedTests.has(test)
+  )
+    return false;
+  if (
+    ctx.options.tagsFilter !== undefined &&
+    !ctx.options.tagsFilter(test.tags, test.optInTags)
+  ) {
+    return false;
+  }
   if (ctx.options.filter !== undefined) {
     // Match against the full nested title, so `-t` finds a test by any
     // fragment regardless of how it's nested in describe blocks.
@@ -614,7 +639,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     );
   };
 
-  const start = Date.now();
+  let durationMs = 0;
   let retries = 0;
   const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
 
@@ -624,9 +649,25 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     Effect.Effect<any>,
     Exit.Exit<TestAttempt, unknown>
   > {
-    const fiber = yield* Effect.forkChild(withLock(attempt()), {
-      startImmediately: true,
-    });
+    const fiber = yield* Effect.forkChild(
+      withLock(
+        Effect.suspend(() => {
+          // Queue time behind an exclusive test is not execution time. Sum only
+          // attempts (including their hooks), retaining time spent on retries.
+          const start = Date.now();
+          return attempt().pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                durationMs += Date.now() - start;
+              }),
+            ),
+          );
+        }),
+      ),
+      {
+        startImmediately: true,
+      },
+    );
     ctx.running.set(meta.id, fiber);
     return yield* Fiber.await(fiber).pipe(
       Effect.ensuring(Fiber.interrupt(fiber)),
@@ -645,7 +686,6 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     ctx.capture.release(logs);
     exit = yield* runAttempt();
   }
-  const durationMs = Date.now() - start;
 
   let status: TestResult["status"];
   let error: string | undefined;
@@ -753,10 +793,18 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
       return;
     }
 
-    return yield* Effect.gen(function* () {
+    // A plan runs a suite's beforeAll once, in the first phase that reaches
+    // it; later phases reuse (or re-report the failure of) that setup.
+    const previousSetup = ctx.suiteStates?.get(suite);
+    if (previousSetup !== undefined && Exit.isFailure(previousSetup)) {
+      yield* failSubtree(suite, ctx, prettyCause(previousSetup.cause));
+      return;
+    }
+
+    const body = Effect.gen(function* () {
       // beforeAll — captured into the file-level log buffer. Emits hook events
       // so the TUI can show "setting up" instead of an unexplained queue.
-      if (suite.beforeAll.length > 0) {
+      if (previousSetup === undefined && suite.beforeAll.length > 0) {
         yield* ctx.emit({
           _tag: "HookStart",
           file: ctx.file,
@@ -771,11 +819,15 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
           )
           .pipe(withCapture(ctx.fileLogs), Effect.exit);
         yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
+        ctx.suiteStates?.set(suite, exit);
         if (Exit.isFailure(exit)) {
           yield* failSubtree(suite, ctx, prettyCause(exit.cause));
           return;
         }
       }
+
+      if (ctx.suiteStates !== undefined && !ctx.suiteStates.has(suite))
+        ctx.suiteStates.set(suite, Exit.succeed(undefined));
 
       const sequential = suite.sequential || ctx.options.sequential;
       yield* Effect.forEach(
@@ -784,7 +836,20 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
           child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
         { concurrency: sequential ? 1 : "unbounded", discard: true },
       );
-    }).pipe(Effect.ensuring(runAfterAll(suite, ctx)));
+    });
+
+    if (ctx.suiteStates === undefined)
+      return yield* body.pipe(Effect.ensuring(runAfterAll(suite, ctx)));
+    // Planned runs defer afterAll to the file's last phase. Record a setup
+    // interrupted before it settled so that teardown still covers it.
+    return yield* body.pipe(
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          if (!ctx.suiteStates!.has(suite))
+            ctx.suiteStates!.set(suite, Exit.interrupt());
+        }),
+      ),
+    );
   });
 
 const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
@@ -849,7 +914,11 @@ const suiteHasRunnableTests = (
 // run
 // ---------------------------------------------------------------------------
 
-export const run = Effect.fn(function* (options: RunOptions) {
+export const run = Effect.fn(function* (input: RunOptions) {
+  const options = {
+    ...input,
+    tagsFilter: compileTagsFilter(input.tagsFilter ?? []),
+  };
   const reporter = yield* Reporter;
   const path = yield* Path.Path;
   const startedAt = Date.now();
@@ -861,7 +930,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const emit = (event: TestEvent): Effect.Effect<void> =>
     reporter.emit(event).pipe(Effect.andThen(fileLog.append(event)));
 
-  const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
+  const absoluteFiles = yield* discover(input).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
   const roots = relative.map(makeFileSuite);
@@ -932,19 +1001,9 @@ export const run = Effect.fn(function* (options: RunOptions) {
     }),
   );
 
-  // Phase 1 — import EVERY file before running anything, in parallel.
-  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
-  // registration stays correctly attributed under concurrent imports.
-  // Collecting fully up-front keeps run semantics simple: `.only` applies
-  // across the whole run, and the full test list is known before the first
-  // test starts.
-  //
-  // Concurrency is BOUNDED: kicking off every import at once floods the
-  // main thread with synchronous parse/link/evaluate work — timers and the
-  // progress line starve (a slow start becomes indistinguishable from a
-  // hang), and it maximizes exposure to loader races under concurrent
-  // dynamic imports. The shared dependency graph is deduped by the module
-  // cache, so a modest bound keeps nearly all of the speedup.
+  // Import every file before running anything so `.only` applies across
+  // the whole run. AsyncLocalStorage keeps registrations attached to their
+  // file while imports overlap. Bound collection to avoid loader saturation.
   const collectConcurrency =
     options.concurrency === "unbounded"
       ? 32
@@ -966,22 +1025,96 @@ export const run = Effect.fn(function* (options: RunOptions) {
     (c) => c.error === undefined && containsOnly(c.suite),
   );
 
-  // Announce the full test list before execution starts (drives the TUI).
-  const allMetas: Array<TestMeta> = [];
+  // Assign each case once, in phase/branch declaration order, before execution.
+  const assigned = new Set<TestCase>();
+  const lastFilePhase = new Map<string, number>();
+  const candidates: Array<{ file: string; test: TestCase }> = [];
+  const candidateOptions = {
+    ...options,
+    tagsFilter: (
+      tags: ReadonlyArray<string>,
+      optInTags: ReadonlyArray<string> = [],
+    ) => options.tagsFilter([...tags, ...optInTags], []),
+  };
   for (const c of collected) {
-    if (c.error !== undefined) continue;
-    const walk = (suite: Suite) => {
-      for (const child of suite.children) {
-        if (child.type === "test") {
-          if (included(child, { onlyMode, options, file: c.file })) {
-            allMetas.push(metaOf(c.file, child));
-          }
-        } else {
-          walk(child);
+    // Import-failed files keep their partial suite (for cleanup) but run nothing.
+    if (c.error === undefined)
+      forEachTest(c.suite, (test) => {
+        if (
+          included(test, { onlyMode, options: candidateOptions, file: c.file })
+        )
+          candidates.push({ file: c.file, test });
+      });
+  }
+  const phases = (input.plan ?? [{ tags: [] }]).map((phase, phaseIndex) =>
+    (Array.isArray(phase) ? phase : [phase]).map((branch) => {
+      const tagsFilter = compileTagsFilter([
+        ...(input.tagsFilter ?? []),
+        ...branch.tags,
+      ]);
+      const selectedTests = new Set<TestCase>();
+      for (const { file, test } of candidates) {
+        if (!assigned.has(test) && tagsFilter(test.tags, test.optInTags)) {
+          assigned.add(test);
+          lastFilePhase.set(file, phaseIndex);
+          selectedTests.add(test);
         }
       }
+      return {
+        ...options,
+        tagsFilter,
+        expressions: [...(input.tagsFilter ?? []), ...branch.tags],
+        selectedTests,
+        concurrency: branch.concurrency ?? options.concurrency,
+      };
+    }),
+  );
+  const allMetas = candidates
+    .filter(({ test }) => assigned.has(test))
+    .map(({ file, test }) => metaOf(file, test));
+  if (input.dryRun) {
+    yield* emit({
+      _tag: "PlanPreview",
+      phases: phases.map((branches) =>
+        branches.map((branch) => {
+          const matched = candidates.filter(({ test }) =>
+            branch.selectedTests.has(test),
+          );
+          return {
+            tags: branch.expressions,
+            concurrency: branch.concurrency,
+            tests: matched.length,
+            files: new Set(matched.map(({ file }) => file)).size,
+            skipped: matched.filter(({ test }) => isSkipped(test) !== undefined)
+              .length,
+          };
+        }),
+      ),
+    });
+    const fileFailures = collected.flatMap((c) =>
+      c.error === undefined ? [] : [{ file: c.file, error: c.error }],
+    );
+    for (const failure of fileFailures)
+      yield* emit({ _tag: "FileEnd", ...failure, logs: [] });
+    const summary: RunSummary = {
+      dryRun: true,
+      files: collected.length,
+      plan: {
+        found: candidates.length,
+        selected: assigned.size,
+        excluded: candidates.length - assigned.size,
+      },
+      passed: 0,
+      failed: fileFailures.length,
+      skipped: 0,
+      todo: 0,
+      durationMs: Date.now() - startedAt,
+      failures: [],
+      fileFailures,
     };
-    walk(c.suite);
+    yield* emit({ _tag: "RunEnd", summary });
+    // The run finalizer closes the log after disposing partially imported files.
+    return summary;
   }
   yield* emit({
     _tag: "RunStart",
@@ -1031,73 +1164,187 @@ export const run = Effect.fn(function* (options: RunOptions) {
     yield* reporter.attachController(controller);
   }
 
-  const runFile = Effect.fn(function* (c: CollectedFile) {
-    const fileLogs = capture.create((entry) =>
-      fileLog.appendHookLine(c.file, entry),
-    );
-    const fileErrors: Array<string> = [];
+  interface FileRun {
+    readonly suite: FileSuite;
+    /** Context of the latest branch; buffers and suite states are shared. */
+    ctx: ExecContext;
+    /** Import, stop, and runner errors, reported once when the file finishes. */
+    readonly errors: Array<string>;
+    retryable: boolean;
+    tornDown: boolean;
+    finished: boolean;
+  }
+  const fileRuns = new Map<string, FileRun>();
+  const fileLocks = new Map<string, Semaphore.Semaphore>();
+  for (const c of collected) fileLocks.set(c.file, yield* Semaphore.make(1));
+
+  // Planned runs close cached suites child-first once, after the file's last phase.
+  const teardownSuites = Effect.fn(function* (run: FileRun) {
+    if (run.tornDown || run.ctx.suiteStates === undefined) return;
+    run.tornDown = true;
+    for (const suite of [...run.ctx.suiteStates.keys()].reverse())
+      yield* runAfterAll(suite, run.ctx);
+  });
+
+  const finishFile = Effect.fn(function* (run: FileRun) {
+    if (run.finished) return;
+    run.finished = true;
+    const { ctx } = run;
+    yield* teardownSuites(run);
+    if (!run.retryable)
+      yield* disposeFile(run.suite).pipe(withCapture(ctx.fileLogs));
+    const errors = [...run.errors];
+    if (ctx.fileErrors.length > 0) errors.push(ctx.fileErrors.join("\n\n"));
+    const cleanupError = cleanupErrors.get(ctx.file);
+    cleanupErrors.delete(ctx.file);
+    if (cleanupError !== undefined) errors.push(cleanupError);
+    const fileError = errors.length === 0 ? undefined : errors.join("\n\n");
+    if (fileError !== undefined) {
+      fileFailures.push({ file: ctx.file, error: fileError });
+    }
+    yield* emit({
+      _tag: "FileEnd",
+      file: ctx.file,
+      logs: ctx.fileLogs,
+      error: fileError,
+    });
+    yield* Deferred.succeed(ctx.fileFinished, undefined);
+  });
+
+  const runFile = Effect.fn(function* (
+    c: CollectedFile,
+    branchOptions: ExecContext["options"],
+  ) {
+    const previous = fileRuns.get(c.file);
+    if (previous?.finished) return;
+    const fileLogs =
+      previous?.ctx.fileLogs ??
+      capture.create((entry) => fileLog.appendHookLine(c.file, entry));
     // Shares the LIVE hook-log buffer so the TUI can tail deploys.
-    yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
-    let fileError =
+    if (previous === undefined)
+      yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
+    const ctx: ExecContext = {
+      options: branchOptions,
+      suiteStates:
+        input.plan === undefined
+          ? undefined
+          : (previous?.ctx.suiteStates ?? new Map()),
+      onlyMode,
+      emit,
+      fileLogs,
+      fileErrors: previous?.ctx.fileErrors ?? [],
+      results: allResults,
+      file: c.file,
+      lock,
+      running,
+      completed,
+      interactive,
+      abandoned,
+      capture,
+      fileLog,
+      fileFinished:
+        previous?.ctx.fileFinished ?? (yield* Deferred.make<void>()),
+    };
+    const run: FileRun = previous ?? {
+      suite: c.suite,
+      ctx,
+      errors: [],
+      retryable: false,
+      tornDown: false,
+      finished: false,
+    };
+    run.ctx = ctx;
+    fileRuns.set(c.file, run);
+    const stopError =
       c.error ??
       (abandoned.size > 0
         ? "run stopped because a test teardown did not settle"
         : undefined);
-    let retryable = false;
-    const fileFinished = yield* Deferred.make<void>();
-    if (fileError === undefined) {
-      const ctx: ExecContext = {
-        options,
-        onlyMode,
-        emit,
-        fileLogs,
-        fileErrors,
-        results: allResults,
-        file: c.file,
-        lock,
-        running,
-        completed,
-        interactive,
-        abandoned,
-        capture,
-        fileLog,
-        fileFinished,
-      };
-      retryable = interactive && suiteHasRunnableTests(c.suite, ctx);
-      if (retryable)
+    if (stopError !== undefined) {
+      if (!run.errors.includes(stopError)) run.errors.push(stopError);
+    } else {
+      if (interactive && suiteHasRunnableTests(c.suite, ctx)) {
+        run.retryable = true;
         forEachTest(c.suite, (test) => {
           if (included(test, ctx) && isSkipped(test) === undefined) {
             testIndex.set(metaOf(c.file, test).id, { test, ctx });
           }
         });
-      const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
-      if (Exit.isFailure(exit)) {
-        fileError = prettyCause(exit.cause);
-      } else if (fileErrors.length > 0) {
-        fileError = fileErrors.join("\n\n");
       }
+      const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
+      if (Exit.isFailure(exit)) run.errors.push(prettyCause(exit.cause));
     }
-    if (!retryable) yield* disposeFile(c.suite).pipe(withCapture(fileLogs));
-    const cleanupError = cleanupErrors.get(c.file);
-    cleanupErrors.delete(c.file);
-    if (cleanupError !== undefined)
-      fileError = [fileError, cleanupError].filter(Boolean).join("\n\n");
-    if (fileError !== undefined) {
-      fileFailures.push({ file: c.file, error: fileError });
-    }
-    yield* emit({
-      _tag: "FileEnd",
-      file: c.file,
-      logs: fileLogs,
-      error: fileError,
-    });
-    yield* Deferred.succeed(fileFinished, undefined);
+    // Planned files finish after their last phase (see below).
+    if (input.plan === undefined || c.error !== undefined)
+      yield* finishFile(run);
   });
 
-  yield* Effect.forEach(collected, runFile, {
-    concurrency: options.concurrency,
-    discard: true,
-  });
+  if (input.plan === undefined) {
+    // Unplanned runs visit every file in order so each finishes (and disposes
+    // its cleanups) as soon as it completes, even when nothing in it runs.
+    const branch = phases[0]![0]!;
+    yield* Effect.forEach(collected, (c) => runFile(c, branch), {
+      concurrency: options.concurrency,
+      discard: true,
+    });
+  } else {
+    // Import errors are reported once even if no branch selects that file.
+    yield* Effect.forEach(
+      collected.filter((c) => c.error !== undefined),
+      (c) => runFile(c, options),
+      { discard: true },
+    );
+    yield* Effect.gen(function* () {
+      for (const [index, branches] of phases.entries()) {
+        yield* emit({
+          _tag: "PlanPhaseStart",
+          phase: index + 1,
+          phases: phases.length,
+          tests: branches.reduce(
+            (count, branch) => count + branch.selectedTests.size,
+            0,
+          ),
+        });
+        yield* Effect.forEach(
+          branches,
+          (branch) =>
+            Effect.forEach(
+              collected.filter(
+                (c) =>
+                  c.error === undefined &&
+                  suiteHasIncludedTests(c.suite, {
+                    file: c.file,
+                    onlyMode,
+                    options: branch,
+                  }),
+              ),
+              (c) => fileLocks.get(c.file)!.withPermits(1)(runFile(c, branch)),
+              { concurrency: branch.concurrency, discard: true },
+            ),
+          { concurrency: "unbounded", discard: true },
+        );
+        // Keep cached scopes across phases; finish each file as soon as its
+        // final phase completes (before starting the next phase).
+        yield* Effect.forEach(
+          [...fileRuns.values()].filter(
+            (run) => lastFilePhase.get(run.ctx.file) === index,
+          ),
+          finishFile,
+          { concurrency: options.concurrency, discard: true },
+        );
+      }
+    }).pipe(
+      // An interrupted plan still owes every started suite its afterAll.
+      Effect.ensuring(
+        Effect.suspend(() =>
+          Effect.forEach([...fileRuns.values()], teardownSuites, {
+            concurrency: options.concurrency,
+            discard: true,
+          }),
+        ),
+      ),
+    );
+  }
 
   const count = (status: TestResult["status"]) => {
     let total = 0;
@@ -1107,6 +1354,14 @@ export const run = Effect.fn(function* (options: RunOptions) {
   };
   const summary: RunSummary = {
     files: collected.length,
+    plan:
+      input.plan === undefined
+        ? undefined
+        : {
+            found: candidates.length,
+            selected: assigned.size,
+            excluded: candidates.length - assigned.size,
+          },
     get passed() {
       return count("pass");
     },

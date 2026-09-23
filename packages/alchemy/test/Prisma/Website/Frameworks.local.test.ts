@@ -15,6 +15,7 @@ const frameworks = [
   ["solidstart", "SolidStart", Prisma.Website.SolidStart],
   ["sveltekit", "SvelteKit", Prisma.Website.SvelteKit],
   ["tanstack-start", "TanStack Start", Prisma.Website.TanStackStart],
+  ["vinext", "vinext", Prisma.Website.Vinext],
   ["vite", "Vite", Prisma.Website.Vite],
   ["vocs", "Prisma", Prisma.Website.Vocs],
   ["waku", "Waku", Prisma.Website.Waku],
@@ -41,35 +42,39 @@ const frameworks = [
   ],
 ] as const;
 
-describe.sequential("Prisma Website native frameworks", () => {
-  for (const [slug, title, website] of frameworks) {
-    const { test } = Test.make({ providers: Prisma.providers(), dev: true });
-    test.provider(
-      slug,
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const path = yield* Path.Path;
-          const rootDir = yield* path.fromFileUrl(
-            new URL(
-              `../../../../../examples/prisma-website-${slug === "static-built" ? "static" : slug}/`,
-              import.meta.url,
-            ),
-          );
-          const { site } = yield* stack.deploy(
-            Effect.gen(function* () {
-              return { site: yield* website("Web", { rootDir }) };
-            }),
-          );
-          expect(site.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+/);
-          expect(site.compute).toBeUndefined();
-          expect(site.project).toBeUndefined();
-          const url = String(site.url).replace(/\/+$/, "");
-          yield* bodyContaining(`${url}/`, title);
-          yield* bodyContaining(`${url}/example.json`, "framework");
-          yield* stack.destroy();
-        }),
-      { timeout: 120_000 },
-    );
-  }
-});
+describe.sequential(
+  "Prisma Website native frameworks",
+  { tags: ["provider:prisma", "provider:prisma:website", "local"] },
+  () => {
+    for (const [slug, title, website] of frameworks) {
+      const { test } = Test.make({ providers: Prisma.providers(), dev: true });
+      test.provider(
+        slug,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const path = yield* Path.Path;
+            const rootDir = yield* path.fromFileUrl(
+              new URL(
+                `../../../../../examples/prisma-website-${slug === "static-built" ? "static" : slug}/`,
+                import.meta.url,
+              ),
+            );
+            const { site } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { site: yield* website("Web", { rootDir }) };
+              }),
+            );
+            expect(site.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+/);
+            expect(site.compute).toBeUndefined();
+            expect(site.project).toBeUndefined();
+            const url = String(site.url).replace(/\/+$/, "");
+            yield* bodyContaining(`${url}/`, title);
+            yield* bodyContaining(`${url}/example.json`, "framework");
+            yield* stack.destroy();
+          }),
+        { timeout: 120_000 },
+      );
+    }
+  },
+);

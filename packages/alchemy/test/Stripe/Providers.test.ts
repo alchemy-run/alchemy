@@ -54,4 +54,5 @@ it.live(
       ),
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:stripe", "local"] },
 );
