@@ -227,7 +227,7 @@ const REDIRECTS: Record<string, string> = {
   "/integrations/planetscale": "/planetscale",
   "/integrations/neon": "/neon",
   "/integrations/axiom": "/axiom",
-  "/integrations/github": "/github",
+  "/integrations/github": "/github/overview",
   "/git/auth": "/git/blocks/auth",
   "/git/storage": "/git/blocks/repositories",
   "/git/assemblies": "/git/recipes",
@@ -240,7 +240,15 @@ const REDIRECTS: Record<string, string> = {
   "/git/scale/clones": "/git/blocks/repositories",
 };
 
+const SOCIAL_REDIRECTS: Record<string, string> = {
+  "/discord": "https://discord.gg/jwKw8dBJdN",
+  "/twitter": "https://x.com/alchemy_run",
+  "/github": "https://github.com/alchemy-run/alchemy",
+};
+
 const resolveRedirect = (url: URL): string | undefined => {
+  const social = SOCIAL_REDIRECTS[url.pathname.replace(/\/$/, "")];
+  if (social) return social;
   const reference = referenceDestination(url.pathname + url.search);
   if (reference) return reference;
   let p = url.pathname.replace(/\/$/, "");
