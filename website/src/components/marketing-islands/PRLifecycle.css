@@ -271,6 +271,18 @@
   font-size: 12px;
   line-height: 1;
 }
+/* Optical alignment: center each icon on its row's cap height (what the
+   eye reads as the text's middle), not the line box, which carries extra
+   room for descenders. Offsets measured per font and size. */
+.prf-check > .prf-si,
+.prf-job__head > .prf-si,
+.prf-mergebox__ok > .prf-si {
+  translate: 0 -0.5px;
+}
+.prf-job__step > .prf-si,
+.prf-xstep__head > .prf-si {
+  translate: 0 -1px;
+}
 .prf-si--queued {
   border: 1.5px solid rgba(232, 220, 192, 0.3);
   width: 12px;

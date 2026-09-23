@@ -441,7 +441,10 @@ function StatusIcon({ status }: { status: Status }) {
       <span className="prf-si prf-si--ok" role="img" aria-label="passed">
         <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden>
           <path
-            d="M3.5 8.5l3 3 6-7"
+            // Optically centered: the stroke's visual mass (not its box)
+            // sits at the circle's center, so the check doesn't read as
+            // low-left.
+            d="M4 8l3 3 6-7"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.2"
