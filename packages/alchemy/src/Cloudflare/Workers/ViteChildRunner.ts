@@ -16,6 +16,7 @@ import {
 } from "../../Artifacts.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
+import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
@@ -47,12 +48,18 @@ const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* readConfig;
     const credentials = Credentials.fromAuthProvider().pipe(
+      Layer.provideMerge(CloudflareEnvironment.fromProfile()),
       Layer.provide(CloudflareAuth),
     );
-    const runtimeContext = yield* layerRuntime({
-      api: { accountId: config.accountId },
-      storage: { directory: config.storageDirectory },
-    }).pipe(
+    const runtimeContext = yield* Layer.unwrap(
+      Effect.gen(function* () {
+        const environment = yield* CloudflareEnvironment.CloudflareEnvironment;
+        return layerRuntime({
+          api: { accountId: Effect.map(environment, (env) => env.accountId) },
+          storage: { directory: config.storageDirectory },
+        });
+      }),
+    ).pipe(
       Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)),
       Layer.build,
     );
