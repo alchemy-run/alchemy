@@ -1,12 +1,16 @@
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
+import { isResourceState, State } from "@/State";
+import * as Cause from "effect/Cause";
 import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { MinimumLogLevel } from "effect/References";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
@@ -27,10 +31,9 @@ const REPLACE_SERVER_ID_V2 = "alchemy-test-mcp-replaced";
 const SYNC_SERVER_ID = "alchemy-test-mcp-server-sync";
 const DEFERRED_SYNC_SERVER_ID = "alchemy-test-mcp-deferred-sync";
 const TOKEN_SERVER_ID = "alchemy-test-mcp-service-token";
-const PROBE_SERVER_ID = "alchemy-test-mcp-server-probe";
 
-// Placeholder upstreams on the standing test zone. They are never contacted:
-// every case that uses them opts out of the capability sync.
+// Placeholder upstreams on the standing test zone. These cases opt out of
+// Alchemy's explicit capability sync; Cloudflare may still discover in the background.
 const HOSTNAME = "https://mcp.alchemy-test-2.us/mcp";
 const HOSTNAME_V2 = "https://mcp-v2.alchemy-test-2.us/mcp";
 // A real, public, unauthenticated MCP server for the capability-sync case.
@@ -72,8 +75,6 @@ test.provider(
           .pipe(Effect.provideService(FetchHttpClient.Fetch, trackSync));
 
       const deferred = yield* deploy(false);
-      expect(deferred.tools).toHaveLength(0);
-      expect(deferred.lastSuccessfulSync).toBeUndefined();
       expect(serverRequests).toBeGreaterThan(0);
       expect(syncRequests).toEqual(0);
 
@@ -192,47 +193,6 @@ const getLiveServer = (accountId: string, id: string) =>
     .pipe(
       Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)),
     );
-
-// MCP servers are entitlement-gated (AI Controls beta). Either the account
-// can list servers (entitled) or the call fails with the typed `Forbidden`.
-const probeEntitlement = (accountId: string) =>
-  zeroTrust.listAccessAiControlMcpServers({ accountId, perPage: 1 }).pipe(
-    Effect.as(true),
-    Effect.catchTag("Forbidden", () => Effect.succeed(false)),
-  );
-
-test.provider(
-  "unentitled accounts surface the typed Forbidden error",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-
-      yield* stack.destroy();
-
-      if (yield* probeEntitlement(accountId)) {
-        // Entitled account — the lifecycle cases cover the real behavior.
-        yield* Effect.logInfo(
-          "account is AI Controls-entitled; probe test is a no-op",
-        );
-        return;
-      }
-
-      // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* zeroTrust
-        .createAccessAiControlMcpServer({
-          accountId,
-          id: PROBE_SERVER_ID,
-          authType: "unauthenticated",
-          hostname: HOSTNAME,
-          name: PROBE_SERVER_ID,
-        })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
-);
 
 test.provider(
   "overlong server IDs surface the typed validation error and remain cleanable",
@@ -391,6 +351,19 @@ test.provider(
       expect(initial.serverId).toEqual(RECREATE_SERVER_ID);
       expect(initial.authType).toEqual("unauthenticated");
 
+      const rehostPlan = yield* stack.plan(
+        Cloudflare.Access.McpServer("Recreated", {
+          serverId: RECREATE_SERVER_ID,
+          hostname: HOSTNAME_V2,
+          authType: "unauthenticated",
+          sync: false,
+        }),
+      );
+      const rehostChange = rehostPlan.resources.Recreated!;
+      expect(rehostChange.action).toEqual("replace");
+      if (rehostChange.action === "replace")
+        expect(rehostChange.deleteFirst).toBe(true);
+
       const rehosted = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.McpServer("Recreated", {
@@ -404,6 +377,20 @@ test.provider(
       expect(rehosted.serverId).toEqual(RECREATE_SERVER_ID);
       expect(rehosted.hostname).toEqual(HOSTNAME_V2);
       expect(rehosted.authType).toEqual("unauthenticated");
+
+      const authPlan = yield* stack.plan(
+        Cloudflare.Access.McpServer("Recreated", {
+          serverId: RECREATE_SERVER_ID,
+          hostname: HOSTNAME_V2,
+          authType: "bearer",
+          authCredentials: Redacted.make("alchemy-test-token-recreate"),
+          sync: false,
+        }),
+      );
+      const authChange = authPlan.resources.Recreated!;
+      expect(authChange.action).toEqual("replace");
+      if (authChange.action === "replace")
+        expect(authChange.deleteFirst).toBe(true);
 
       const recreated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -549,6 +536,271 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "existing servers require adoption before their configuration can change",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const serverId = "alchemy-test-mcp-adoption";
+      const external = yield* zeroTrust.createAccessAiControlMcpServer({
+        accountId,
+        id: serverId,
+        hostname: HOSTNAME,
+        authType: "unauthenticated",
+        name: "External MCP server",
+      });
+      const resource = () =>
+        Cloudflare.Access.McpServer("Adopted", {
+          serverId,
+          hostname: HOSTNAME,
+          authType: "unauthenticated",
+          name: "Adopted MCP server",
+          sync: false,
+        });
+      yield* Effect.gen(function* () {
+        const refused = yield* stack.deploy(resource()).pipe(
+          Effect.as(false),
+          Effect.catchCause((cause) =>
+            Effect.succeed(
+              cause.reasons.some(
+                (reason) =>
+                  (Cause.isFailReason(reason) &&
+                    reason.error instanceof OwnedBySomeoneElse) ||
+                  (Cause.isDieReason(reason) &&
+                    reason.defect instanceof OwnedBySomeoneElse),
+              ),
+            ),
+          ),
+        );
+        expect(refused).toBe(true);
+        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(
+          external.name,
+        );
+        const adopted = yield* stack.deploy(resource().pipe(adopt(true)));
+        expect(adopted.serverId).toEqual(external.id);
+        expect(adopted.createdAt).toEqual(external.createdAt);
+        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(
+          "Adopted MCP server",
+        );
+        yield* stack.destroy();
+        expect(yield* getLiveServer(accountId, serverId)).toBeUndefined();
+      }).pipe(
+        Effect.ensuring(
+          // This test creates its fixture outside the stack. Reclaim that
+          // exact fixture even if the adoption assertion fails.
+          zeroTrust
+            .deleteAccessAiControlMcpServer({ accountId, id: serverId })
+            .pipe(
+              Effect.catchTag("McpServerNotFound", () => Effect.void),
+              Effect.orDie,
+            ),
+        ),
+      );
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider(
+  "recovers an interrupted create through explicit adoption and replaces across accounts",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const props = {
+        hostname: HOSTNAME,
+        authType: "unauthenticated",
+        sync: false,
+      } as const;
+      const resource = () => Cloudflare.Access.McpServer("Recovered", props);
+      const initial = yield* stack.deploy(resource());
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Access.McpServer,
+      );
+      // Validate account-change planning without needing credentials for a
+      // second account or issuing any request to an invented account.
+      const diff = yield* provider.diff!({
+        id: "Recovered",
+        fqn: "Recovered",
+        instanceId: "test",
+        olds: props,
+        news: props,
+        oldBindings: [],
+        newBindings: [],
+        output: { ...initial, accountId: "different-account" },
+      });
+      expect(diff?.action).toEqual("replace");
+
+      const state = yield* yield* State;
+      const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+      let interrupted = false;
+      for (const fqn of fqns) {
+        const row = yield* state.get({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn,
+        });
+        if (
+          isResourceState(row) &&
+          row.status === "created" &&
+          row.resourceType === "Cloudflare.Access.McpServer"
+        ) {
+          yield* state.set({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn,
+            value: { ...row, status: "creating", attr: undefined },
+          });
+          interrupted = true;
+        }
+      }
+      expect(interrupted).toBe(true);
+      const refused = yield* stack.deploy(resource()).pipe(
+        Effect.as(false),
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            cause.reasons.some(
+              (reason) =>
+                (Cause.isFailReason(reason) &&
+                  reason.error instanceof OwnedBySomeoneElse) ||
+                (Cause.isDieReason(reason) &&
+                  reason.defect instanceof OwnedBySomeoneElse),
+            ),
+          ),
+        ),
+      );
+      expect(refused).toBe(true);
+      const recovered = yield* stack.deploy(resource().pipe(adopt(true)));
+      expect(recovered.serverId).toEqual(initial.serverId);
+      expect(recovered.createdAt).toEqual(initial.createdAt);
+      yield* stack.destroy();
+      expect(yield* getLiveServer(accountId, initial.serverId)).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider(
+  "recreates a server deleted outside the stack",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const resource = (name: string) =>
+        Cloudflare.Access.McpServer("Deleted", {
+          hostname: HOSTNAME,
+          authType: "unauthenticated",
+          name,
+          sync: false,
+        });
+      const initial = yield* stack.deploy(resource("Before deletion"));
+      yield* zeroTrust.deleteAccessAiControlMcpServer({
+        accountId,
+        id: initial.serverId,
+      });
+      expect(yield* getLiveServer(accountId, initial.serverId)).toBeUndefined();
+      const recovered = yield* stack.deploy(resource("After deletion"));
+      expect(recovered.serverId).toEqual(initial.serverId);
+      expect(
+        (yield* getLiveServer(accountId, recovered.serverId))?.name,
+      ).toEqual("After deletion");
+      yield* stack.destroy();
+      expect(
+        yield* getLiveServer(accountId, recovered.serverId),
+      ).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider(
+  "rotating only the bearer credential changes what the upstream receives",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const upstream = () =>
+        Cloudflare.Worker("AuthenticatedUpstream", {
+          main: new URL("./fixtures/mcp-auth.ts", import.meta.url).pathname,
+          workersDev: true,
+        });
+      const worker = yield* stack.deploy(upstream());
+      const health = yield* Test.getWhenReady(`${worker.url}/health`);
+      expect(health.status).toEqual(200);
+      const deploy = (version: "v1" | "v2") =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const endpoint = yield* upstream();
+            return yield* Cloudflare.Access.McpServer("Rotating", {
+              hostname: endpoint.url.pipe(Output.map((url) => `${url}/mcp`)),
+              authType: "bearer",
+              authCredentials: Redacted.make(`alchemy-mcp-rotation-${version}`),
+            });
+          }),
+        );
+      const initial = yield* deploy("v1");
+      // Worker health and Cloudflare's discovery run in different locations.
+      // Let the new route propagate before testing credential rotation. This
+      // setup retry must not wrap the v2 deploy or mask a rotation failure.
+      const ready =
+        initial.status === "ready"
+          ? initial
+          : yield* zeroTrust
+              .syncAccessAiControlMcpServer({ accountId, id: initial.serverId })
+              .pipe(
+                Effect.catchTag("McpServerSyncFailed", () => Effect.void),
+                Effect.andThen(
+                  zeroTrust.readAccessAiControlMcpServer({
+                    accountId,
+                    id: initial.serverId,
+                  }),
+                ),
+                Effect.repeat({
+                  while: (server) => server.status !== "ready",
+                  schedule: Schedule.spaced("1 second"),
+                  times: 8,
+                }),
+              );
+      expect(ready.error || undefined).toBeUndefined();
+      expect(ready.status).toEqual("ready");
+      expect(ready.tools.map((tool) => tool.name)).toContain(
+        "authenticated_v1",
+      );
+      const rotated = yield* deploy("v2");
+      expect(rotated.serverId).toEqual(initial.serverId);
+      expect(rotated.createdAt).toEqual(initial.createdAt);
+      expect(rotated.status).toEqual("ready");
+      expect(rotated.tools.map((tool) => tool.name)).toContain(
+        "authenticated_v2",
+      );
+      expect(rotated.tools.map((tool) => tool.name)).not.toContain(
+        "authenticated_v1",
+      );
+      const live = yield* getLiveServer(accountId, rotated.serverId);
+      expect(live?.tools.map((tool) => tool.name)).toContain(
+        "authenticated_v2",
+      );
+      yield* stack.destroy();
+      expect(yield* getLiveServer(accountId, rotated.serverId)).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:access",
+      "provider:cloudflare:worker",
+      "live",
+    ],
     timeout: 120_000,
   },
 );

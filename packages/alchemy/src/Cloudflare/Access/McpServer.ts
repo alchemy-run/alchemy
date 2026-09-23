@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -81,14 +82,12 @@ export interface McpServerProps {
   name?: string;
   /**
    * URL of the upstream MCP endpoint, e.g. `https://mcp.example.com/mcp`.
-   * Create-only on the API: changing it recreates the server under the
-   * same id.
+   * Create-only on the API: changing it triggers a delete-first replacement.
    */
   hostname: string;
   /**
    * Authentication method used to connect to the upstream MCP server.
-   * Create-only on the API: changing it recreates the server under the
-   * same id.
+   * Create-only on the API: changing it triggers a delete-first replacement.
    */
   authType: McpServerAuthType;
   /**
@@ -138,7 +137,8 @@ export interface McpServerProps {
    * enabled after being disabled. Discovery
    * problems are reported on the `status` and `error` attributes and never
    * fail the deploy. Skipped while the server still requires an
-   * administrator to complete its OAuth authentication.
+   * administrator to complete its OAuth authentication. Cloudflare may
+   * independently discover capabilities even when this option is false.
    * @default true
    */
   sync?: boolean;
@@ -202,9 +202,11 @@ export type McpServer = Resource<
  * The product surface is in beta and requires the AI Controls
  * entitlement; accounts without it receive the typed `Forbidden` error
  * on all writes. The upstream `hostname` and `authType` are create-only
- * on the API — changing either recreates the server under the same id.
+ * on the API — changing either triggers a delete-first replacement.
  * Credentials are write-only: the API never returns them, so a rotation
  * is detected by comparing against the previously deployed value.
+ * Existing servers without saved stack state require explicit adoption;
+ * their IDs alone do not prove ownership.
  *
  * ### Registering an MCP server
  * **Example:** Public server without authentication
@@ -259,7 +261,7 @@ export type McpServer = Resource<
  * });
  * ```
  *
- * **Example:** Register without contacting the upstream
+ * **Example:** Register without an explicit capability sync
  * ```typescript
  * const deferred = yield* Cloudflare.Access.McpServer("Deferred", {
  *   hostname: "https://mcp.example.com/mcp",
@@ -267,6 +269,16 @@ export type McpServer = Resource<
  *   authCredentials: yield* Config.Redacted("MCP_BEARER_TOKEN"),
  *   sync: false,
  * });
+ * ```
+ *
+ * ### Adopting an existing server
+ * **Example:** Take ownership of a server registered outside Alchemy
+ * ```typescript
+ * const server = yield* Cloudflare.Access.McpServer("Existing", {
+ *   serverId: "existing-server",
+ *   hostname: "https://mcp.example.com/mcp",
+ *   authType: "unauthenticated",
+ * }).pipe(adopt(true));
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/
@@ -310,11 +322,12 @@ export const McpServerProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
       // The server id is the API identity — changing it is a replacement.
-      // `hostname` and `authType` are create-only too, but they are
-      // converged inside `reconcile` (delete + create under the same id)
-      // because a create-first replacement would collide on the id.
       const oldId = output?.serverId ?? olds?.serverId;
       if (
         news.serverId !== undefined &&
@@ -322,6 +335,12 @@ export const McpServerProvider = () =>
         oldId !== news.serverId
       ) {
         return { action: "replace" } as const;
+      }
+      if (
+        (output?.hostname ?? olds?.hostname) !== news.hostname ||
+        (output?.authType ?? olds?.authType) !== news.authType
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -341,7 +360,11 @@ export const McpServerProvider = () =>
           output === undefined ? Effect.succeed(undefined) : Effect.fail(error),
         ),
       );
-      return observed ? toAttributes(observed, acct) : undefined;
+      if (!observed) return undefined;
+      const attrs = toAttributes(observed, acct);
+      // MCP servers carry no ownership tags. An ID match alone does not
+      // authorize taking over a server when the stack has no saved output.
+      return output === undefined ? Unowned(attrs) : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -353,20 +376,8 @@ export const McpServerProvider = () =>
       // 1. Observe.
       let observed = yield* observeServer(accountId, serverId);
 
-      // 2. Ensure — the upstream URL and auth method are create-only, so a
-      //    server observed with a different one is torn down and recreated
-      //    under the same id; a missing server is simply created.
+      // 2. Ensure — immutable changes are handled by engine replacement.
       let changed = false;
-      if (
-        observed !== undefined &&
-        (observed.hostname !== news.hostname ||
-          observed.authType !== news.authType)
-      ) {
-        yield* zeroTrust
-          .deleteAccessAiControlMcpServer({ accountId, id: serverId })
-          .pipe(Effect.catchTag("McpServerNotFound", () => Effect.void));
-        observed = undefined;
-      }
       if (observed === undefined) {
         observed = yield* zeroTrust.createAccessAiControlMcpServer({
           accountId,
@@ -457,25 +468,7 @@ type ObservedOverride = {
 /**
  * Structural shape shared by create/read/update/list responses.
  */
-type ObservedServer = {
-  id: string;
-  authType: McpServerAuthType;
-  hostname: string;
-  name: string;
-  prompts: ReadonlyArray<McpServerCapability>;
-  tools: ReadonlyArray<McpServerCapability>;
-  authenticationStatus?: McpServerAuthenticationStatus | null;
-  createdAt?: string | null;
-  description?: string | null;
-  error?: string | null;
-  isSharedOauthCallbackEnabled?: boolean | null;
-  lastSuccessfulSync?: string | null;
-  lastSynced?: string | null;
-  secureWebGateway?: boolean | null;
-  status?: McpServerStatus | null;
-  updatedPrompts?: ReadonlyArray<ObservedOverride> | null;
-  updatedTools?: ReadonlyArray<ObservedOverride> | null;
-};
+type ObservedServer = zeroTrust.ReadAccessAiControlMcpServerResponse;
 
 /**
  * Read a server by id, mapping "gone" to `undefined`.
@@ -535,9 +528,6 @@ const secretRotated = (
   (previous === undefined ||
     Redacted.value(previous) !== Redacted.value(desired));
 
-const isDefined = <T>(value: T | null | undefined): value is T =>
-  value !== null && value !== undefined;
-
 /**
  * Drop null/undefined members so API echoes and desired overrides compare
  * structurally.
@@ -546,11 +536,11 @@ const normalizeOverride = (
   override: ObservedOverride,
 ): McpServerCapabilityOverride => ({
   name: override.name,
-  ...(isDefined(override.alias) ? { alias: override.alias } : {}),
-  ...(isDefined(override.description)
+  ...(override.alias != null ? { alias: override.alias } : {}),
+  ...(override.description != null
     ? { description: override.description }
     : {}),
-  ...(isDefined(override.enabled) ? { enabled: override.enabled } : {}),
+  ...(override.enabled != null ? { enabled: override.enabled } : {}),
 });
 
 const normalizeOverrides = (
