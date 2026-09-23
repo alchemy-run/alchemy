@@ -17,11 +17,14 @@ describe("makeNodeTarget", () => {
     expect(node.bundle?.external ?? []).not.toContain("@aws-sdk/");
   });
 
-  it("writes a next({ dev: false }) serve entry with /health, not OpenNext", () => {
+  it("serves with the built Next config and /health, not OpenNext", () => {
     const source = makeNextServeEntrySource();
     expect(SERVER_ENTRY_NAME).toBe("serve-node.mjs");
     expect(source).toContain('import next from "next"');
-    expect(source).toContain("next({ dev: false, dir })");
+    expect(source).toContain(
+      'readFile(path.join(dir, ".next", "required-server-files.json")',
+    );
+    expect(source).toContain("next({ dev: false, dir, conf: config })");
     expect(source).toContain("getRequestHandler()");
     expect(source).toContain("/health");
     expect(source).toContain("process.env.PORT");
