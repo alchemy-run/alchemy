@@ -1,0 +1,250 @@
+---
+title: R2 presigned URLs
+description: Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
+---
+
+A presigned URL grants temporary access to one object in an
+[R2 bucket](/cloudflare/data/r2). The Worker signs the URL, hands it
+to a client, and the client uploads or downloads the object directly
+from R2. The request body never passes through the Worker, and the
+client needs no credentials.
+
+Presigning is a SigV4 signature over a request to R2's S3-compatible
+API. The native R2 binding on a Worker has no presign method, because
+signing needs S3 credentials. Alchemy provides those credentials and
+the right endpoint for you:
+
+- **Deployed**, Alchemy mints a scoped account API token for the
+  Worker and derives S3 credentials from it. URLs point at
+  `https://{accountId}.r2.cloudflarestorage.com`.
+- **Under `alchemy dev`**, the local bucket is served on the Worker's
+  local S3 endpoint, and URLs point at
+  `http://localhost:{port}/cdn-cgi/local/r2/s3`. Objects uploaded
+  through a presigned URL land in the same local bucket the Worker's
+  bindings read.
+
+Your code is identical in both modes.
+
+## Create the bucket
+
+```typescript
+// src/uploads.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads", {
+  cors: [
+    {
+      allowedMethods: ["GET", "PUT"],
+      allowedOrigins: ["https://app.example.com"],
+      allowedHeaders: ["content-type"],
+    },
+  ],
+});
+```
+
+Browsers only need `cors` when they call the presigned URL from
+another origin. The local S3 endpoint always allows cross-origin
+requests, so a dev frontend on another port works without extra
+configuration.
+
+## Effect-native Workers
+
+`Cloudflare.R2.PresignPutObject` and `Cloudflare.R2.PresignGetObject`
+bind a bucket and return a function that mints URLs. Provide their
+`*Token` implementations on the Worker:
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Uploads } from "./uploads.ts";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const presignPut = yield* Cloudflare.R2.PresignPutObject(Uploads);
+    const presignGet = yield* Cloudflare.R2.PresignGetObject(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://worker");
+        const key = url.searchParams.get("key")!;
+
+        if (url.pathname === "/upload-url") {
+          return yield* HttpServerResponse.json({
+            url: yield* presignPut({ key, contentType: "image/png" }),
+          });
+        }
+        if (url.pathname === "/download-url") {
+          return yield* HttpServerResponse.json({
+            url: yield* presignGet({ key, expiresIn: 60 }),
+          });
+        }
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.R2.PresignPutObjectToken,
+        Cloudflare.R2.PresignGetObjectToken,
+      ),
+    ),
+  ),
+);
+```
+
+The client uploads with a plain `fetch`, sending exactly the
+`Content-Type` that was signed into the URL:
+
+```typescript
+// browser
+const { url } = await (await fetch(`/upload-url?key=${key}`)).json();
+await fetch(url, {
+  method: "PUT",
+  body: file,
+  headers: { "content-type": "image/png" },
+});
+```
+
+Each request accepts these options:
+
+- `key` is the object key.
+- `expiresIn` is how many seconds the URL stays valid, 900 by default
+  and 7 days at most.
+- `contentType` on `PresignPutObject` is the `Content-Type` the
+  uploader must send. On `PresignGetObject` it is the `Content-Type`
+  the object is served with.
+- `contentDisposition` (`PresignGetObject` only) is the
+  `Content-Disposition` the object is served with, for example
+  `attachment; filename="report.pdf"` to force a download.
+
+Signing happens inside the Worker with SigV4. No request is made to
+R2 until the client uses the URL. `PresignPutObjectToken` grants the
+token `Workers R2 Storage Write`, and `PresignGetObjectToken` grants
+`Workers R2 Storage Read`.
+
+## Async Workers
+
+Async Workers declare `Cloudflare.R2.S3Credentials` on `env` and sign
+with any S3 client. The entry resolves per mode like the Effect
+bindings do:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { Uploads } from "./src/uploads.ts";
+
+export const Api = Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  env: {
+    UPLOADS_S3: Cloudflare.R2.S3Credentials(Uploads, { access: "write" }),
+  },
+});
+
+export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+```
+
+The value arrives as a JSON string, delivered as a secret when
+deployed. Parse it into `Cloudflare.R2.S3CredentialsValue`, which
+holds `endpoint`, `bucketName`, `region`, `accessKeyId`, and
+`secretAccessKey`. This Worker presigns with
+[`aws4fetch`](https://github.com/mhart/aws4fetch):
+
+```typescript
+// src/worker.ts
+import { AwsClient } from "aws4fetch";
+import type * as Cloudflare from "alchemy/Cloudflare";
+import type { ApiEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: ApiEnv) {
+    const key = new URL(request.url).searchParams.get("key")!;
+    const s3: Cloudflare.R2.S3CredentialsValue = JSON.parse(env.UPLOADS_S3);
+    const client = new AwsClient({ ...s3, service: "s3" });
+
+    const path = key.split("/").map(encodeURIComponent).join("/");
+    const url = new URL(
+      `${s3.endpoint}/${encodeURIComponent(s3.bucketName)}/${path}`,
+    );
+    url.searchParams.set("X-Amz-Expires", "900");
+    const signed = await client.sign(url.toString(), {
+      method: "PUT",
+      headers: { "content-type": "image/png" },
+      aws: { signQuery: true, allHeaders: true },
+    });
+
+    return Response.json({ url: signed.url });
+  },
+};
+```
+
+Use path-style URLs, `{endpoint}/{bucketName}/{key}`, with region
+`auto`. `allHeaders: true` signs the `content-type` header into the
+URL, so the uploader must send it unchanged. `access` selects the
+token's permissions: `"read"`, `"write"`, or `"read-write"` (the
+default).
+
+The same credentials work with other S3 clients such as
+`@aws-sdk/client-s3`, both for presigning and for ordinary S3 calls.
+
+## Using S3 credentials in an Effect Worker
+
+`Cloudflare.R2.S3Credentials` also works in Effect-native Workers when
+you want to bring your own S3 client. Yield it during construction to
+get an accessor, then read it in a handler:
+
+```typescript
+const credentials = yield* Cloudflare.R2.S3Credentials(Uploads);
+
+// inside a handler
+const { endpoint, bucketName, accessKeyId, secretAccessKey } =
+  yield* credentials;
+```
+
+## Local development
+
+`alchemy dev` needs no extra configuration. Every local bucket bound
+to a Worker is also served on that Worker's local S3 endpoint:
+
+```
+http://localhost:{port}/cdn-cgi/local/r2/s3/{bucket}/{key}
+```
+
+The endpoint verifies SigV4 signatures, both from the `Authorization`
+header and from presigned query parameters. It rejects expired or
+tampered URLs the same way R2 does, and it supports `GET`, `HEAD`,
+`PUT`, `DELETE`, listing, copying, and multipart uploads. Local
+credentials are a fixed pair that only guards localhost.
+
+A bucket piped through `Alchemy.remote()` stays on real Cloudflare
+during dev, so its URLs point at R2 and a token is minted as in
+production.
+
+Two differences from production remain:
+
+- The local endpoint never answers `Expect: 100-continue`, so an S3
+  client that sends that header on uploads (the AWS SDK v3 can) waits
+  forever. Disable the header in the client when you call the local
+  endpoint directly. Presigned URLs used from `fetch` or a browser
+  are unaffected.
+- Presigned POST (HTML form) uploads are not implemented. Use
+  presigned `PUT` URLs.
+
+## Where next
+
+- [R2](/cloudflare/data/r2) — buckets and the Read/Write bindings.
+- [Local development](/cloudflare/local-development) — what
+  `alchemy dev` emulates.
+- [Workers › Async Workers](/cloudflare/compute/workers#async-workers)
+  — `env` bindings and `InferEnv`.
+
+Reference:
+
+- [R2 API reference](/providers/cloudflare/r2) — `PresignGetObject`,
+  `PresignPutObject`, and `S3Credentials`.

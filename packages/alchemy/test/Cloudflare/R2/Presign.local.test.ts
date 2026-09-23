@@ -87,7 +87,8 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Cloudflare.R2.Bucket("PresignAsyncBucket", {
+          // The declaration form, as in async Worker modules
+          const Bucket = Cloudflare.R2.Bucket("PresignAsyncBucket", {
             forceDestroy: true,
           });
           const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
@@ -96,10 +97,11 @@ test.provider(
               "fixtures/presign/async-worker.ts",
             ),
             env: {
-              BUCKET: bucket,
-              BUCKET_S3: Cloudflare.R2.S3Credentials(bucket),
+              BUCKET: Bucket,
+              BUCKET_S3: Cloudflare.R2.S3Credentials(Bucket),
             },
           });
+          const bucket = yield* Bucket;
           return { bucket, worker };
         }),
       );

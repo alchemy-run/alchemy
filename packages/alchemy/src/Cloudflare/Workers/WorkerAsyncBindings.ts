@@ -34,6 +34,7 @@ import { isBucket } from "../R2/Bucket.ts";
 import {
   bindS3Credentials,
   isS3Credentials,
+  resolveBucket,
 } from "../R2/S3CredentialsBinding.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
@@ -161,7 +162,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         yield* bindS3Credentials(
           resource,
           bindingName,
-          bindingEff.bucket,
+          yield* resolveBucket(bindingEff.bucket),
           bindingEff.access,
         );
         continue;

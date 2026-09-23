@@ -95,6 +95,18 @@ export const bindS3Credentials = Effect.fn(function* (
   yield* host.bind`${bindingName}`({ bindings: [binding] });
 });
 
+/**
+ * A bucket, or its declaration (`Cloudflare.R2.Bucket("Uploads")`), which
+ * is resolved when the credentials are bound.
+ */
+export type BucketInput = Bucket | Effect.Effect<Bucket, never, any>;
+
+/** Resolve a {@link BucketInput} to the bucket resource. */
+export const resolveBucket = (bucket: BucketInput) =>
+  (Effect.isEffect(bucket)
+    ? bucket
+    : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
+
 const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
   read: ["Workers R2 Storage Read"],
   write: ["Workers R2 Storage Write"],

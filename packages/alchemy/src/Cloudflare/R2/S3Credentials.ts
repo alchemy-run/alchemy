@@ -4,7 +4,11 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { sanitizeKey } from "../../RuntimeContext.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
-import { bindS3Credentials } from "./S3CredentialsBinding.ts";
+import {
+  bindS3Credentials,
+  type BucketInput,
+  resolveBucket,
+} from "./S3CredentialsBinding.ts";
 
 export { isS3Credentials } from "./S3CredentialsBinding.ts";
 
@@ -51,7 +55,7 @@ export interface S3Credentials extends Effect.Effect<
   WorkerEnvironment
 > {
   readonly "~alchemy/Kind": "Cloudflare.R2.S3Credentials";
-  readonly bucket: Bucket;
+  readonly bucket: BucketInput;
   readonly access: S3CredentialsAccess;
 }
 
@@ -76,29 +80,41 @@ export interface S3Credentials extends Effect.Effect<
  * The Effect-native presign bindings (`PresignGetObjectToken`,
  * `PresignPutObjectToken`) are built on it.
  *
+ * ### Effect-native Workers
+ * **Example:** Read the credentials at runtime
+ * ```typescript
+ * const credentials = yield* Cloudflare.R2.S3Credentials(Uploads);
+ * // inside a handler:
+ * const { endpoint, bucketName, accessKeyId, secretAccessKey } =
+ *   yield* credentials;
+ * ```
+ *
  * ### Async Workers
  * **Example:** Presign an upload with aws4fetch
  * ```typescript
  * // alchemy.run.ts
- * const uploads = yield* Cloudflare.R2.Bucket("Uploads");
- * yield* Cloudflare.Worker("Api", {
+ * export const Uploads = Cloudflare.R2.Bucket("Uploads");
+ * export const Api = Cloudflare.Worker("Api", {
  *   main: "./src/worker.ts",
  *   env: {
- *     UPLOADS_S3: Cloudflare.R2.S3Credentials(uploads, { access: "write" }),
+ *     UPLOADS_S3: Cloudflare.R2.S3Credentials(Uploads, { access: "write" }),
  *   },
  * });
+ * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
  *
  * // src/worker.ts
  * import { AwsClient } from "aws4fetch";
- * import type { Cloudflare } from "alchemy";
+ * import type * as Cloudflare from "alchemy/Cloudflare";
+ * import type { ApiEnv } from "../alchemy.run.ts";
  *
  * export default {
- *   async fetch(request: Request, env: Env) {
+ *   async fetch(request: Request, env: ApiEnv) {
+ *     // `UPLOADS_S3` is a JSON string (a secret when deployed)
  *     const s3: Cloudflare.R2.S3CredentialsValue = JSON.parse(env.UPLOADS_S3);
  *     const client = new AwsClient({ ...s3, service: "s3" });
  *     const url = new URL(`${s3.endpoint}/${encodeURIComponent(s3.bucketName)}/avatar.png`);
  *     url.searchParams.set("X-Amz-Expires", "900");
- *     const signed = await client.sign(url, {
+ *     const signed = await client.sign(url.toString(), {
  *       method: "PUT",
  *       aws: { signQuery: true },
  *     });
@@ -107,22 +123,12 @@ export interface S3Credentials extends Effect.Effect<
  * };
  * ```
  *
- * ### Effect-native Workers
- * **Example:** Read the credentials at runtime
- * ```typescript
- * const uploads = yield* Uploads;
- * const credentials = yield* Cloudflare.R2.S3Credentials(uploads);
- * // inside a handler:
- * const { endpoint, bucketName, accessKeyId, secretAccessKey } =
- *   yield* credentials;
- * ```
- *
  * @binding
  * @product R2
  * @category Storage & Databases
  */
 export const S3Credentials = (
-  bucket: Bucket,
+  bucket: BucketInput,
   options: S3CredentialsOptions = {},
 ): S3Credentials => {
   const access = options.access ?? "read-write";
@@ -132,7 +138,7 @@ export const S3Credentials = (
       return yield* makeS3Credentials(
         isWorker(host) ? host : undefined,
         yield* WorkerEnvironment,
-        bucket,
+        yield* resolveBucket(bucket),
         access,
       );
     }),
