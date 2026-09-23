@@ -1,0 +1,15 @@
+extends: existence
+message: "Chatty narration ('%s'). State the fact directly."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#no-chatty-narration
+level: warning
+ignorecase: true
+tokens:
+  - "let['’]s"
+  - "here['’]s the thing"
+  - notice that
+  - "it['’]s worth noting"
+  - under the hood
+  - "that['’]s it"
+  - the key insight
+  - in other words
+  - put simply

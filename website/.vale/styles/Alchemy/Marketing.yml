@@ -1,0 +1,27 @@
+extends: existence
+message: "Remove '%s'. It adds tone without adding a fact."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#no-marketing-language
+level: warning
+ignorecase: true
+tokens:
+  - powerful
+  - seamless(?:ly)?
+  - simply
+  - easily
+  - effortless(?:ly)?
+  - robust
+  - blazing(?:ly)?
+  - magic(?:al|ally)?
+  - elegant(?:ly)?
+  - beautiful(?:ly)?
+  - first-class
+  - incredibly
+  - truly
+  - out of the box
+  - supercharge
+  - unlock
+  - empower
+  - leverage
+  - utilize
+  - delve
+  - foster

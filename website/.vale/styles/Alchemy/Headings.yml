@@ -1,0 +1,58 @@
+extends: capitalization
+message: "'%s' should use sentence case."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#2-structure-a-page
+level: warning
+scope: heading
+match: $sentence
+exceptions:
+  - Alchemy
+  - Effect
+  - Effects
+  - Infrastructure as Code
+  - Infrastructure as Effects
+  - API
+  - APIs
+  - AWS
+  - Axiom
+  - Bun
+  - CI
+  - CLI
+  - Cloudflare
+  - CloudWatch
+  - Container
+  - Containers
+  - D1
+  - Docker
+  - Doppler
+  - Durable Object
+  - Durable Objects
+  - DynamoDB
+  - ECS
+  - Fly
+  - GitHub
+  - GitHub Actions
+  - Hetzner
+  - HTTP
+  - Infisical
+  - JSON
+  - KV
+  - Lambda
+  - Lambda Function
+  - Neon
+  - Node.js
+  - OAuth
+  - OIDC
+  - OpenTelemetry
+  - OTLP
+  - Postgres
+  - R2
+  - Railway
+  - RPC
+  - S3
+  - SNS
+  - SQS
+  - TypeScript
+  - Vite
+  - Vitest
+  - Worker
+  - Workers
