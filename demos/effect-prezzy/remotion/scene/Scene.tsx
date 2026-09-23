@@ -9,7 +9,6 @@ import {
 } from "remotion";
 import { VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
-import { brand } from "../theme.ts";
 import { AppSwitcher, MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Browser } from "./Browser.tsx";
 import { Diagram } from "./Diagram.tsx";
@@ -64,23 +63,20 @@ const Caption = ({ text, since }: { text: string; since: number }) => {
     >
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "16px 30px",
-          borderRadius: 16,
-          background: "rgba(20, 17, 13, 0.88)",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
-          boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
-          backdropFilter: "blur(16px)",
+          maxWidth: 1500,
+          textAlign: "center",
           fontFamily: sans,
-          fontSize: 32,
+          fontSize: 38,
           fontWeight: 600,
-          color: brand.fg,
+          lineHeight: 1.25,
+          color: "#ffffff",
           letterSpacing: -0.2,
+          // Subtitle style: plain text, legible over any window.
+          textShadow:
+            "0 0 2px rgba(0,0,0,0.95), 0 2px 4px rgba(0,0,0,0.9), 0 0 18px rgba(0,0,0,0.75)",
+          WebkitTextStroke: "0.5px rgba(0,0,0,0.6)",
         }}
       >
-        <span style={{ width: 10, height: 10, borderRadius: 5, background: brand.moss, flex: "none" }} />
         {text}
       </div>
     </div>
