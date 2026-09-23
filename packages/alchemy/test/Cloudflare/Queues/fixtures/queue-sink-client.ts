@@ -8,8 +8,13 @@ import type { RecorderSnapshot } from "./queue-sink-worker.ts";
 /** Test-side HTTP helpers shared by the live and local QueueSink suites. */
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
+  run: string;
   status: number;
-}> {}
+}> {
+  override get message() {
+    return `POST /produce for run "${this.run}" answered ${this.status}`;
+  }
+}
 
 class NotDrained extends Data.TaggedError("NotDrained")<{
   run: string;
@@ -21,7 +26,11 @@ class NotDrained extends Data.TaggedError("NotDrained")<{
   }
 }
 
-/** `POST /produce`, retrying while a fresh workers.dev URL comes up. */
+/**
+ * `POST /produce`, retrying while a fresh workers.dev URL comes up: its 404
+ * placeholder has been observed to outlast 40 seconds. Bounded to roughly
+ * 85 seconds.
+ */
 export const produce = (
   url: string,
   params: { run: string; count: number; padding?: number },
@@ -32,7 +41,9 @@ export const produce = (
     Effect.flatMap((res) =>
       res.status === 202
         ? Effect.succeed(res)
-        : Effect.fail(new WorkerNotReady({ status: res.status })),
+        : Effect.fail(
+            new WorkerNotReady({ run: params.run, status: res.status }),
+          ),
     ),
     Effect.retry({
       schedule: Schedule.max([
@@ -40,7 +51,7 @@ export const produce = (
           Schedule.exponential("500 millis"),
           Schedule.spaced("3 seconds"),
         ]),
-        Schedule.recurs(10),
+        Schedule.recurs(30),
       ]),
     }),
   );

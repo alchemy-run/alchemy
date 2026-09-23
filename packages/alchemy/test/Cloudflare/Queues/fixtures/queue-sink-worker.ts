@@ -50,6 +50,23 @@ export class QueueSinkRecorder extends Cloudflare.DurableObject<QueueSinkRecorde
   }),
 ) {}
 
+/**
+ * For up to ~12 seconds after a fresh deploy, Cloudflare can still run the
+ * precreate placeholder version: queue batches fail with "Handler does not
+ * export a queue() function", and a newly started recorder DO rejects
+ * `record` ("The RPC receiver does not implement the method"). With the
+ * default `retryDelay` of 0 the redeliveries are immediate, so a batch already
+ * waiting (the Action's seed, the first `/produce`) can exhaust `maxRetries`
+ * and be dropped before the real version takes over. Spacing the retries
+ * gives each batch a ~30 second budget.
+ */
+const consumerSettings = {
+  batchSize: 100,
+  maxWaitTime: "1 second",
+  maxRetries: 10,
+  retryDelay: "3 seconds",
+} as const;
+
 const groupByRun = (clicks: ReadonlyArray<EnrichedClick>) => {
   const runs = new Map<string, EnrichedClick[]>();
   for (const click of clicks) {
@@ -85,7 +102,7 @@ export default class QueueSinkWorker extends Cloudflare.Worker<QueueSinkWorker>(
 
     yield* Cloudflare.Queues.consumeQueueMessages<Click>(
       source,
-      { batchSize: 100, maxWaitTime: "1 second", maxRetries: 3 },
+      consumerSettings,
       (messages) =>
         messages.pipe(
           Stream.map((message): EnrichedClick => ({
@@ -98,7 +115,7 @@ export default class QueueSinkWorker extends Cloudflare.Worker<QueueSinkWorker>(
 
     yield* Cloudflare.Queues.consumeQueueMessages<EnrichedClick>(
       results,
-      { batchSize: 100, maxWaitTime: "1 second", maxRetries: 3 },
+      consumerSettings,
       (messages) =>
         messages.pipe(
           Stream.map((message) => message.body),
