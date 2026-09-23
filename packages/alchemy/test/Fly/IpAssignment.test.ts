@@ -238,6 +238,73 @@ test.provider(
 );
 
 test.provider(
+  "Flycast serves another App over the private network",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const backend = yield* Fly.App("FlycastBackend");
+          const flycast = yield* Fly.IpAssignment("BackendFlycast", {
+            app: backend,
+            type: "private_v6",
+          });
+          yield* Fly.Machine("BackendWeb", {
+            app: backend,
+            region: "iad",
+            image: "nginx:alpine",
+            guest: { cpus: 1, memoryMb: 256 },
+            services: [
+              {
+                protocol: "tcp",
+                internalPort: 80,
+                ports: [{ port: 80, handlers: ["http"] }],
+              },
+            ],
+          });
+          const client = yield* Fly.App("FlycastClient");
+          const caller = yield* Fly.Machine("Caller", {
+            app: client,
+            region: "iad",
+            image: "nginx:alpine",
+            guest: { cpus: 1, memoryMb: 256 },
+          });
+          return { backend, flycast, caller };
+        }),
+      );
+      expect(deployed.flycast.type).toEqual("private_v6");
+
+      // Call the backend from a Machine in a different App through Fly's proxy.
+      const response = yield* machines
+        .execMachine({
+          app_name: deployed.caller.appName,
+          machine_id: deployed.caller.machineId,
+          command: [
+            "sh",
+            "-c",
+            `wget -qO- -T 5 http://${deployed.backend.appName}.flycast/ || true`,
+          ],
+          timeout: 15,
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            times: 20,
+            until: (result) =>
+              result.stdout?.includes("Welcome to nginx") === true,
+          }),
+        );
+      expect(response.stdout).toContain("Welcome to nginx");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilAppGone(deployed.backend.appName)).toEqual("gone");
+      expect(yield* waitUntilAppGone(deployed.caller.appName)).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
   "list enumerates the deployed assignment",
   (stack) =>
     Effect.gen(function* () {
