@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import type {
   GetServerResponseServer,
   ListServersResponseServersItem,

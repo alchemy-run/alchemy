@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

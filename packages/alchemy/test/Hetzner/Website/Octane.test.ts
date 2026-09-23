@@ -1,6 +1,6 @@
 import * as Hetzner from "@/Hetzner";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as Services from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
