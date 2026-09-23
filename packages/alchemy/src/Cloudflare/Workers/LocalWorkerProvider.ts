@@ -44,7 +44,7 @@ import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
   LOCAL_PROVIDERS_URL,
@@ -160,7 +160,6 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
-      const cloudflareEnv = yield* CloudflareEnvironment;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
 
@@ -587,7 +586,7 @@ export const LocalWorkerProvider = () =>
         config: WorkerConfig,
         selfUrl: string | undefined,
       ) {
-        const { accountId } = yield* cloudflareEnv;
+        const accountId = yield* localAccountId;
         return yield* materializeRuntimeBindings(
           {
             ...config,
@@ -1254,7 +1253,7 @@ export const LocalWorkerProvider = () =>
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(rootDir ?? process.cwd());
-              const { accountId } = yield* cloudflareEnv;
+              const accountId = yield* localAccountId;
               // Queue-consumer wiring can change while the child is starting
               // (a sibling `Consumer` reconcile), before the restart hook
               // below exists to pick it up. We hold the serve lock, so a
@@ -1471,7 +1470,7 @@ export const LocalWorkerProvider = () =>
               }
             }
           }
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* localAccountId;
           const urls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
@@ -1503,7 +1502,7 @@ export const LocalWorkerProvider = () =>
         }),
 
         start: Effect.fn(function* ({ fqn, config, invalidate }) {
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* localAccountId;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
           // entirely — typically because an external dev process

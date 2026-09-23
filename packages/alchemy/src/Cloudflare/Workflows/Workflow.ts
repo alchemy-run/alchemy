@@ -17,6 +17,7 @@ import { Resource } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import {
   Worker,
@@ -1387,7 +1388,7 @@ export const ProviderLocal = () =>
   Provider.succeed(WorkflowResource, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news, output, oldBindings, newBindings }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.workflowId) return { action: "update" } as const;
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -1414,7 +1415,7 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ news, output, bindings }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       const scriptName = yield* resolveWorkflowScriptName(news, bindings);
       if (
         news.workflowName !== undefined &&
