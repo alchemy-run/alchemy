@@ -62,6 +62,8 @@ let currentTab: Pane = "deploy";
 
 /** Beat markers written into the tcut recording around terminal beats. */
 const BEAT = "prezzy-beat:";
+/** Markers recording which terminal tab is on screen. */
+const TAB = "prezzy-tab:";
 
 /** Never copied into the project or shown in the explorer. */
 const IGNORED = new Set(["node_modules", ".alchemy", "dist", ".DS_Store", "tsconfig.tsbuildinfo"]);
@@ -249,11 +251,12 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       scale: 1,
       fps: VIDEO.fps,
       margin: 0,
-      padding: 20,
+      padding: 14,
       windowBar: "none",
       borderRadius: 0,
-      theme: "dark-modern",
-      font: { family: "JetBrains Mono", size: 16, lineHeight: 1.4 },
+      // Ghostty's defaults: its built-in dark theme and JetBrains Mono.
+      theme: "ghostty-default-style-dark",
+      font: { family: "JetBrains Mono", size: 16, lineHeight: 1.35 },
       cursor: { blink: false },
       typingSpeed: "40ms",
       typingJitter: 0.4,
@@ -268,13 +271,24 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         await t.enter();
         await t.sleep("1500ms");
       });
+      await t.marker(`${TAB}${currentTab}`);
 
-      /** Click over to a terminal tab (a tmux window). */
+      /**
+       * Click over to a terminal tab (a tmux window). The tab marker is written
+       * only once the recorded screen shows the new tab's content, so the tab
+       * bar and the terminal can't disagree.
+       */
       const showTab = async (pane: Pane) => {
         openedTabs.add(pane);
         if (pane === currentTab) return;
+        const visible = (text: string) =>
+          text.split("\n").map((line) => line.trimEnd()).join("\n").trimEnd();
         await tmux("select-window", "-t", PANES[pane]);
+        const target = visible(await tmux("capture-pane", "-p", "-t", PANES[pane]));
+        const deadline = Date.now() + 3_000;
+        while (visible(t.screen()) !== target && Date.now() < deadline) await t.sleep("30ms");
         currentTab = pane;
+        await t.marker(`${TAB}${pane}`);
         await t.sleep("700ms");
       };
 
@@ -527,8 +541,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       maxPause: video.config.maxPause,
     });
     const at = new Map<string, number>();
+    const tabTimeline: { at: number; tab: Pane }[] = [];
     for (const e of timeline.events) {
-      if (e.type === "m" && e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
+      if (e.type !== "m") continue;
+      if (e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
+      if (e.data.startsWith(TAB)) tabTimeline.push({ at: e.vt, tab: e.data.slice(TAB.length) as Pane });
     }
     let index = 0;
     for (const beat of beats) {
@@ -542,6 +559,7 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
     capture.terminal = {
       clip: `${id}/terminal.mp4`,
       duration: result.durationSeconds,
+      tabs: tabTimeline,
     };
   }
 

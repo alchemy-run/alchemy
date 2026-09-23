@@ -12,10 +12,12 @@ export const VIDEO = { width: 1920, height: 1080, fps: 30 } as const;
 /** One desktop window; all windows share the same frame and stack by focus. */
 export const WINDOW = { x: 80, y: 64, width: 1760, height: 976 } as const;
 export const TITLE_BAR = 44;
-/** The terminal clip fills the window below its title bar. */
+/** Ghostty's native macOS tab bar, under the title bar. */
+export const TAB_BAR = 34;
+/** The terminal clip fills the window below its title and tab bars. */
 export const TERMINAL = {
   width: WINDOW.width,
-  height: WINDOW.height - TITLE_BAR,
+  height: WINDOW.height - TITLE_BAR - TAB_BAR,
 } as const;
 /** Chrome-style tab strip + toolbar above the page. */
 export const BROWSER_CHROME = 92;
@@ -123,6 +125,8 @@ export interface SceneCapture {
     | {
         clip: string;
         duration: number;
+        /** Which tab is on screen from each clip time on (marked once the screen has repainted). */
+        tabs: { at: number; tab: TerminalTab }[];
       }
     | undefined;
   beats: Beat[];

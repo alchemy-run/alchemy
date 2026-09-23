@@ -6,7 +6,7 @@ import { brand } from "../theme.ts";
 
 export const APP_NAMES: Record<AppId, string> = {
   editor: "Code",
-  terminal: "Terminal",
+  terminal: "Ghostty",
   diagram: "Architecture",
   browser: "Google Chrome",
 };
@@ -172,7 +172,20 @@ const AppIcon = ({ app, size }: { app: AppId; size: number }) => {
     );
   }
   if (app === "terminal") {
+    // Ghostty's ghost on its dark tile.
     return (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <rect width="100" height="100" rx={radius} fill="#282c34" />
+        <path
+          d="M50 18c-15 0-25 11-25 26v36c0 3 3.4 4.6 5.7 2.7l5.6-4.5 5.6 4.5c1.3 1 3.1 1 4.4 0L50 78l3.7 4.7c1.3 1 3.1 1 4.4 0l5.6-4.5 5.6 4.5c2.3 1.9 5.7.3 5.7-2.7V44c0-15-10-26-25-26Z"
+          fill="#f2f2f2"
+        />
+        <rect x="38" y="40" width="6" height="11" rx="3" fill="#282c34" />
+        <rect x="56" y="40" width="6" height="11" rx="3" fill="#282c34" />
+      </svg>
+    );
+  }
+  return (
       <svg width={size} height={size} viewBox="0 0 100 100">
         <rect width="100" height="100" rx={radius} fill="#2b2b2b" />
         <rect x="6" y="6" width="88" height="88" rx={radius - 4} fill="#111" />
