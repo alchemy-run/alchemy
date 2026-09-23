@@ -331,7 +331,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      if (!plan.output) {
+      if (plan.selectedFqns !== undefined || !plan.output) {
         return undefined;
       }
 
@@ -749,13 +749,13 @@ const executeNode = (
           `removal policy ${node.state.removalPolicy} → ${node.resource.RemovalPolicy}`,
         );
       }
-      yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
         props: node.state.props,
         bindings: node.state.bindings ?? [],
         instanceId: node.state.instanceId,
       });
+      yield* signalReadyStable;
       return;
     }
 
@@ -1582,23 +1582,33 @@ const executeActionNode = (
     const signalReady = Deferred.succeed(ready[fqn], void 0);
     const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
-    if (node.action === "noop") {
-      tracker[fqn] = {
-        output: node.state.output,
-        props: { __input: node.state.input },
-        bindings: [],
-        instanceId: fqn,
-      };
-      yield* signalReady;
-      yield* signalReadyStable;
-      terminalStatuses.set(fqn, {
-        fqn,
-        id: logicalId,
-        type: task.Type,
-        status: "skipped",
+    const skip = (state: RanActionState) =>
+      Effect.gen(function* () {
+        if (!sameSet(state.downstream ?? [], node.downstream)) {
+          yield* commit<RanActionState>({
+            ...state,
+            downstream: node.downstream,
+          });
+        }
+        tracker[fqn] = {
+          output: state.output,
+          props: { __input: state.input },
+          bindings: [],
+          instanceId: fqn,
+        };
+        yield* signalReady;
+        yield* signalReadyStable;
+        terminalStatuses.set(fqn, {
+          fqn,
+          id: logicalId,
+          type: task.Type,
+          status: "skipped",
+        });
+        yield* report("skipped");
       });
-      yield* report("skipped");
-      return;
+
+    if (node.action === "noop") {
+      return yield* skip(node.state);
     }
 
     // ── run ──
@@ -1619,6 +1629,15 @@ const executeActionNode = (
     const outputs = getOutputs();
     const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
     const inputHashValue = yield* hashInput(resolvedInput);
+
+    // Inputs unknown during planning may resolve to the last successful input.
+    if (
+      !node.forced &&
+      node.state?.status === "ran" &&
+      node.state.inputHash === inputHashValue
+    ) {
+      return yield* skip(node.state);
+    }
 
     yield* commit<RunningActionState>({
       kind: "action",
@@ -2461,7 +2480,12 @@ const collectGarbage = Effect.fn(function* (
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    })).filter((replaced) => !unresolved.has(replaced.fqn));
+    })).filter(
+      (replaced) =>
+        !unresolved.has(replaced.fqn) &&
+        (plan.selectedFqns === undefined ||
+          plan.selectedFqns.has(replaced.fqn)),
+    );
     const deletionGraph: Record<
       string,
       Delete | ReplacementResourceState | undefined

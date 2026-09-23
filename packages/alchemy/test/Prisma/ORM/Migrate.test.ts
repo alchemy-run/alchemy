@@ -165,5 +165,15 @@ test.provider(
       // here by the destroy completing even though tables exist.
       yield* stack.destroy();
     }),
-  { timeout: HOOK_TIMEOUT },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: HOOK_TIMEOUT,
+  },
 );

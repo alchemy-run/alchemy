@@ -56,6 +56,7 @@ it.live(
       ),
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:cloudflare", "local"] },
 );
 
 it.live(
@@ -96,4 +97,5 @@ it.live(
       ),
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:cloudflare", "local"] },
 );

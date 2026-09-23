@@ -82,7 +82,17 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:aigateway",
+      "provider:neon:branch",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(
@@ -145,5 +155,14 @@ test.provider.skipIf(
       expect(response.status).toBe(200);
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 90_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:aigateway",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 90_000,
+  },
 );

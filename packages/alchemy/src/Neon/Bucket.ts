@@ -83,6 +83,7 @@ const BucketResource = Resource<Bucket>("Neon.Bucket");
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Bucket: typeof BucketResource = Object.assign(
   (

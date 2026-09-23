@@ -151,6 +151,11 @@ export type PlatformServices =
   | StackServices
   | Stage;
 
+/** A platform declaration's logical identity, readable without yielding it. */
+export interface PlatformIdentity<Id extends string = string> {
+  readonly LogicalId: Id;
+}
+
 export interface Platform<
   Resource extends ResourceLike<string, PlatformProps>,
   Services,
@@ -170,7 +175,8 @@ export interface Platform<
       never,
       Resource["Providers"]
     > &
-      Named<Id> & {
+      Named<Id> &
+      PlatformIdentity<Id> & {
         make<PropsReq = never, InitReq = never>(
           props:
             | InputProps<InlineProps>
@@ -219,7 +225,8 @@ export interface Platform<
       | Exclude<PropsReq, Services | PlatformServices | Resource>
       | Exclude<InitReq, Services | PlatformServices | Resource>
     > &
-      Named<Id> & {
+      Named<Id> &
+      PlatformIdentity<Id> & {
         new (
           _: never,
         ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
@@ -228,7 +235,8 @@ export interface Platform<
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self>, never, Resource["Providers"]> &
-      Named<Id> & {
+      Named<Id> &
+      PlatformIdentity<Id> & {
         make<
           PropsReq = never,
           InitReq extends Services | PlatformServices | Resource = never,
@@ -252,8 +260,12 @@ export interface Platform<
         new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
   };
-  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
-    id: string,
+  <
+    PropsReq = never,
+    InitReq extends Services | PlatformServices = never,
+    const Id extends string = string,
+  >(
+    id: Id,
     props:
       | InputProps<Resource["Props"]>
       | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
@@ -263,7 +275,8 @@ export interface Platform<
     | Resource["Providers"]
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
-  >;
+  > &
+    PlatformIdentity<Id>;
   <
     const Id extends string,
     Shape extends MainShape,
@@ -283,7 +296,8 @@ export interface Platform<
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
   > &
-    Named<Id>;
+    Named<Id> &
+    PlatformIdentity<Id>;
 }
 
 export const Platform = <

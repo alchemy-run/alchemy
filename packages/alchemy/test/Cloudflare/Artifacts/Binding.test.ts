@@ -164,7 +164,15 @@ test.skipIf(!ARTIFACTS_ENABLED)(
     const out = yield* stack;
     yield* exercise("effect", out.effectWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:artifacts",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // Async worker: namespace declared on `env: { REPOS }`, used from plain async fetch.
@@ -174,5 +182,13 @@ test.skipIf(!ARTIFACTS_ENABLED)(
     const out = yield* stack;
     yield* exercise("async", out.asyncWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:artifacts",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

@@ -11,10 +11,11 @@ import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
+import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
- * hub's "Resources" group and its reference URLs belong to the hub tab
+ * hub's "API Reference" group and its reference URLs belong to the hub tab
  * (see docs-tabs.ts). The Reference tab is a directory — its sidebar is
  * just the list of providers, each linking to its hub.
  */
@@ -44,11 +45,10 @@ function providersSidebarEntry() {
 }
 
 /**
- * A cloud hub's "Resources" section: that provider's slice of the generated
- * reference tree below Guides, expanded one level (categories/services show,
- * everything inside them stays collapsed) so each hub is self-sufficient.
+ * A cloud hub's "API Reference" section: that provider's slice of the generated
+ * alphabetical list of reference pages below Guides.
  * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
- * them all and gets one merged Resources group.
+ * them all and gets one merged API Reference group.
  *
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
@@ -71,7 +71,7 @@ function providerResourcesEntry(...providers: string[]) {
           collapsed: true,
           items: entryItems(provider),
         }));
-  return { label: "Resources", collapsed: false, items };
+  return { label: "API Reference", collapsed: false, items };
 }
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {
@@ -163,7 +163,10 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.copyFile(full, target);
+              await fs.writeFile(
+                target,
+                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
+              );
             }),
           );
         }
@@ -221,6 +224,7 @@ export default defineConfig({
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
+        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -356,6 +360,12 @@ export default defineConfig({
                   link: "/environments/custom-auth-provider",
                 },
                 { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Secret providers",
+                  link: "/environments/secret-providers",
+                },
+                { label: "Doppler", link: "/environments/doppler" },
+                { label: "Infisical", link: "/environments/infisical" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",

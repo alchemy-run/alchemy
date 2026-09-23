@@ -129,7 +129,15 @@ test(
     const { effectWorkerUrl } = yield* stack;
     yield* exercise("effect", effectWorkerUrl);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:vectorize",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -138,5 +146,13 @@ test(
     const { asyncWorkerUrl } = yield* stack;
     yield* exercise("async", asyncWorkerUrl);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:vectorize",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

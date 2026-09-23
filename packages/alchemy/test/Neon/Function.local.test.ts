@@ -42,7 +42,10 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:function", "local"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -82,5 +85,13 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

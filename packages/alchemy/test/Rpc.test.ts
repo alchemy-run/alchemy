@@ -72,7 +72,7 @@ const shape = {
     ),
 };
 
-describe("Rpc fetch protocol", () => {
+describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
   describe("value methods (Effect)", () => {
     it.effect("returns a primitive value", () =>
       withRpc(shape, (stub) =>

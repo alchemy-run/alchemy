@@ -19,6 +19,7 @@ export interface ReadWriteBucketClient
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface ReadWriteBucket extends Binding.Service<
   ReadWriteBucket,

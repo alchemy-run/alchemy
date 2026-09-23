@@ -121,12 +121,19 @@ const closed = Effect.fn(function* (url: string, id: string, owner = "parent") {
   return settled.events;
 });
 
-const options = { timeout: 90_000, retry: 0 };
-
 describe.concurrent.each([
   { dev: true, stage: "rpc-object-local" },
   { dev: false, stage: "rpc-object-live" },
 ])("returned RPC objects (dev: $dev)", ({ dev, stage }) => {
+  const options = {
+    timeout: 90_000,
+    retry: 0,
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      dev ? "local" : "live",
+    ],
+  };
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
@@ -159,10 +166,26 @@ describe.concurrent.each([
   for (const transport of ["worker", "do"] as const) {
     const idFor = (scenario: string) => `${transport}-${scenario}`;
     const call = <T = Record<string, unknown>>(url: string, scenario: string) =>
-      requestJson<T>(
-        `${url}/${transport}/${scenario}/${idFor(scenario)}`,
-        "POST",
-      );
+      Effect.gen(function* () {
+        if (transport === "do") {
+          // Probe the actual object; a different ID can be served by another isolate.
+          const ready = yield* requestJson<{ ready: string[] }>(
+            `${url}/ready/${idFor(scenario)}`,
+          ).pipe(
+            Effect.timeout("5 seconds"),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 8 }),
+          );
+          expect(ready.ready).toEqual([
+            "metrics-ready",
+            "metrics-ready",
+            "metrics-ready",
+          ]);
+        }
+        return yield* requestJson<T>(
+          `${url}/${transport}/${scenario}/${idFor(scenario)}`,
+          "POST",
+        );
+      });
 
     test(
       `${transport}: legacy receivers fall back before application execution`,

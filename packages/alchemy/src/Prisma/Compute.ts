@@ -788,6 +788,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```
  *
  * @resource
+ * @product Compute
  */
 export const Compute: Platform<
   Compute,

@@ -94,6 +94,9 @@ for (const slug of ["nextjs", "vocs"] as const) {
           stderr,
         }).toMatchObject({ completed: true });
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    { timeout: 120_000 },
+    {
+      tags: ["provider:neon", "provider:neon:website", "local"],
+      timeout: 120_000,
+    },
   );
 }

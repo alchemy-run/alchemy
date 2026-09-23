@@ -115,6 +115,15 @@ for (const kind of ["Service", "Function"] as const) {
         expect(updatedHash).not.toBe(originalHash);
         expect(yield* diff(updatedHash)).toBeUndefined();
       }),
-    { timeout: 30_000 },
+    {
+      tags: [
+        "unit",
+        "provider:railway",
+        "provider:railway:function",
+        "provider:railway:service",
+        "local",
+      ],
+      timeout: 30_000,
+    },
   );
 }

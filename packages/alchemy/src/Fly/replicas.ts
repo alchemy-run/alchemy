@@ -21,6 +21,10 @@ import {
   type MachineCheck,
 } from "./Deployment.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
+import {
+  classifyDeploymentState,
+  validProtocol2Generation,
+} from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
@@ -1574,6 +1578,17 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       const count = Number(
         group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
       );
+      if (
+        group.some(
+          (machine) => classifyDeploymentState(machine).protocol === "invalid",
+        )
+      )
+        return false;
+      const protocol2 = group.some(
+        (machine) =>
+          machine.config?.metadata?.[alchemyMetadataKeys.protocol] === "2",
+      );
+      if (protocol2 && !validProtocol2Generation(group)) return false;
       return (
         Number.isSafeInteger(count) &&
         count > 0 &&
@@ -1589,7 +1604,8 @@ export const observeReplicaSet = Effect.fn(function* (input: {
             metadata?.[alchemyMetadataKeys.phase] === "active" &&
             machine.cordoned === false &&
             (metadata[alchemyMetadataKeys.protocol] === undefined ||
-              (metadata[alchemyMetadataKeys.protocol] === "1" &&
+              ((metadata[alchemyMetadataKeys.protocol] === "1" ||
+                metadata[alchemyMetadataKeys.protocol] === "2") &&
                 metadata[alchemyMetadataKeys.restored] === "true" &&
                 (metadata[alchemyMetadataKeys.role] === "idle" ||
                   (machine.instance_id !== undefined &&
@@ -1604,7 +1620,11 @@ export const observeReplicaSet = Effect.fn(function* (input: {
         Number(b[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0) -
         Number(a[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0),
     );
-  const listed = (committed[0]?.[1] ?? groups.get(undefined) ?? []).sort(
+  const legacy = (groups.get(undefined) ?? []).filter((machine) => {
+    const { protocol } = classifyDeploymentState(machine);
+    return protocol === "legacy" || protocol === "1";
+  });
+  const listed = (committed[0]?.[1] ?? legacy).sort(
     (a, b) => replicaIndexOf(a) - replicaIndexOf(b),
   );
   const rolloutPending = owned.some((machine) => !listed.includes(machine));

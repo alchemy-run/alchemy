@@ -39,6 +39,7 @@ test.effect(
       });
       expect(prebuilt.codeHash).toBe(first.codeHash);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
 
 for (const name of [
@@ -49,40 +50,46 @@ for (const name of [
   "native.node",
   "nested//duplicate",
 ])
-  test.effect(`rejects unsafe artifact path ${name}`, () =>
-    Effect.gen(function* () {
-      const zip = yield* zipFiles([
-        { path: "index.mjs", content: "export default {};" },
-        { path: name, content: "secret" },
-      ]);
-      const rejected = yield* validateFunctionZip(zip).pipe(
-        Effect.as(false),
-        Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
-      );
-      expect(rejected).toBe(true);
-    }),
+  test.effect(
+    `rejects unsafe artifact path ${name}`,
+    () =>
+      Effect.gen(function* () {
+        const zip = yield* zipFiles([
+          { path: "index.mjs", content: "export default {};" },
+          { path: name, content: "secret" },
+        ]);
+        const rejected = yield* validateFunctionZip(zip).pipe(
+          Effect.as(false),
+          Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
+        );
+        expect(rejected).toBe(true);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 for (const machine of [183, 62]) {
-  test.effect(`Function ZIP validates native ELF architecture ${machine}`, () =>
-    Effect.gen(function* () {
-      const content = yield* Effect.sync(() => {
-        const bytes = new Uint8Array(64);
-        bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
-        bytes[16] = 3;
-        bytes[18] = machine;
-        return bytes;
-      });
-      const zip = yield* zipFiles([
-        { path: "index.mjs", content: "export default {};" },
-        { path: "node_modules/addon/addon.node", content },
-      ]);
-      const accepted = yield* validateFunctionZip(zip).pipe(
-        Effect.as(true),
-        Effect.catchTag("FunctionArtifactError", () => Effect.succeed(false)),
-      );
-      expect(accepted).toBe(machine === 183);
-    }),
+  test.effect(
+    `Function ZIP validates native ELF architecture ${machine}`,
+    () =>
+      Effect.gen(function* () {
+        const content = yield* Effect.sync(() => {
+          const bytes = new Uint8Array(64);
+          bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
+          bytes[16] = 3;
+          bytes[18] = machine;
+          return bytes;
+        });
+        const zip = yield* zipFiles([
+          { path: "index.mjs", content: "export default {};" },
+          { path: "node_modules/addon/addon.node", content },
+        ]);
+        const accepted = yield* validateFunctionZip(zip).pipe(
+          Effect.as(true),
+          Effect.catchTag("FunctionArtifactError", () => Effect.succeed(false)),
+        );
+        expect(accepted).toBe(machine === 183);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 }
 
@@ -91,14 +98,36 @@ for (const [name, bytes] of [
   ["windows.dll", [0x4d, 0x5a]],
   ["library.so.1", [0]],
 ] as const) {
-  test.effect(`Function ZIP rejects incompatible native file ${name}`, () =>
+  test.effect(
+    `Function ZIP rejects incompatible native file ${name}`,
+    () =>
+      Effect.gen(function* () {
+        const zip = yield* zipFiles([
+          { path: "index.mjs", content: "export default {};" },
+          {
+            path: name,
+            content: yield* Effect.sync(() => new Uint8Array(bytes)),
+          },
+        ]);
+        expect(
+          yield* validateFunctionZip(zip).pipe(
+            Effect.as(false),
+            Effect.catchTag("FunctionArtifactError", () =>
+              Effect.succeed(true),
+            ),
+          ),
+        ).toBe(true);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
+  );
+}
+
+test.effect(
+  "requires index.mjs at the ZIP root",
+  () =>
     Effect.gen(function* () {
       const zip = yield* zipFiles([
-        { path: "index.mjs", content: "export default {};" },
-        {
-          path: name,
-          content: yield* Effect.sync(() => new Uint8Array(bytes)),
-        },
+        { path: "dist/index.mjs", content: "export default {};" },
       ]);
       expect(
         yield* validateFunctionZip(zip).pipe(
@@ -107,46 +136,38 @@ for (const [name, bytes] of [
         ),
       ).toBe(true);
     }),
-  );
-}
-
-test.effect("requires index.mjs at the ZIP root", () =>
-  Effect.gen(function* () {
-    const zip = yield* zipFiles([
-      { path: "dist/index.mjs", content: "export default {};" },
-    ]);
-    expect(
-      yield* validateFunctionZip(zip).pipe(
-        Effect.as(false),
-        Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
-      ),
-    ).toBe(true);
-  }),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
 
 for (const tamper of ["local-header", "inflated-size"] as const)
-  test.effect(`rejects ZIP ${tamper} size disagreement`, () =>
-    Effect.gen(function* () {
-      const archive = yield* zipFiles([
-        { path: "index.mjs", content: "export default {};".repeat(1000) },
-      ]);
-      yield* Effect.sync(() => {
-        const view = new DataView(
-          archive.buffer,
-          archive.byteOffset,
-          archive.byteLength,
-        );
-        const directory = view.getUint32(archive.byteLength - 6, true);
-        view.setUint32(22, 1, true);
-        if (tamper === "inflated-size") view.setUint32(directory + 24, 1, true);
-      });
-      expect(
-        yield* validateFunctionZip(archive).pipe(
-          Effect.as(false),
-          Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
-        ),
-      ).toBe(true);
-    }),
+  test.effect(
+    `rejects ZIP ${tamper} size disagreement`,
+    () =>
+      Effect.gen(function* () {
+        const archive = yield* zipFiles([
+          { path: "index.mjs", content: "export default {};".repeat(1000) },
+        ]);
+        yield* Effect.sync(() => {
+          const view = new DataView(
+            archive.buffer,
+            archive.byteOffset,
+            archive.byteLength,
+          );
+          const directory = view.getUint32(archive.byteLength - 6, true);
+          view.setUint32(22, 1, true);
+          if (tamper === "inflated-size")
+            view.setUint32(directory + 24, 1, true);
+        });
+        expect(
+          yield* validateFunctionZip(archive).pipe(
+            Effect.as(false),
+            Effect.catchTag("FunctionArtifactError", () =>
+              Effect.succeed(true),
+            ),
+          ),
+        ).toBe(true);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 test.effect(
@@ -171,6 +192,7 @@ test.effect(
       expect(entry).toContain("bare-v2");
       expect(entry).not.toContain("native-v1");
     }).pipe(Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
 
 test.effect(
@@ -191,4 +213,5 @@ test.effect(
       expect(entry).not.toContain("workerd");
       expect(entry).toContain("node:module");
     }).pipe(Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );

@@ -311,36 +311,46 @@ export const CommandExecutorLive = () =>
       const spawn = (props: CommandProps) =>
         parseCommand(props).pipe(
           Effect.flatMap(({ bin, args }) =>
-            spawner.spawn(
-              ChildProcess.make(bin, args, {
-                // Anchored: a live `process.cwd()` read can race a
-                // concurrent tool's transient chdir (see Util/Node.ts).
-                cwd: path.resolve(initialCwd, props.cwd ?? "."),
-                shell: props.shell ?? false,
-                env: Object.fromEntries(
-                  Object.entries(props.env ?? {})
-                    .filter(
-                      (
-                        entry,
-                      ): entry is [
-                        string,
-                        string | Redacted.Redacted<string>,
-                      ] => entry[1] !== undefined,
-                    )
-                    .map(([k, v]) => [
-                      k,
-                      Redacted.isRedacted(v) ? Redacted.value(v) : v,
-                    ]),
-                ),
-                extendEnv: true,
-                stdin: isNonInteractive() ? "ignore" : "inherit",
-                stdout: "pipe",
-                stderr: "pipe",
-                // The Effect process runtime creates a detached process group
-                // by default on POSIX. Preserve that default so timeouts and
-                // scoped interruption can terminate every descendant.
-                killSignal: "SIGKILL",
-              }),
+            Effect.acquireRelease(
+              spawner.spawn(
+                ChildProcess.make(bin, args, {
+                  // Anchored: a live `process.cwd()` read can race a
+                  // concurrent tool's transient chdir (see Util/Node.ts).
+                  cwd: path.resolve(initialCwd, props.cwd ?? "."),
+                  shell: props.shell ?? false,
+                  env: Object.fromEntries(
+                    Object.entries(props.env ?? {})
+                      .filter(
+                        (
+                          entry,
+                        ): entry is [
+                          string,
+                          string | Redacted.Redacted<string>,
+                        ] => entry[1] !== undefined,
+                      )
+                      .map(([k, v]) => [
+                        k,
+                        Redacted.isRedacted(v) ? Redacted.value(v) : v,
+                      ]),
+                  ),
+                  extendEnv: true,
+                  stdin: isNonInteractive() ? "ignore" : "inherit",
+                  stdout: "pipe",
+                  stderr: "pipe",
+                  // The Effect process runtime creates a detached process group
+                  // by default on POSIX. Preserve that default so timeouts and
+                  // scoped interruption can terminate every descendant.
+                  // Preserve hard cleanup when the leader exits with an error.
+                  killSignal: "SIGKILL",
+                }),
+              ),
+              (child) =>
+                child
+                  .kill({
+                    killSignal: "SIGTERM",
+                    forceKillAfter: TERMINATION_GRACE_PERIOD,
+                  })
+                  .pipe(Effect.ignore),
             ),
           ),
           Effect.map((child) =>

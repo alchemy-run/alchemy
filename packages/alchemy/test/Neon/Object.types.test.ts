@@ -97,4 +97,13 @@ test.effect(
     Effect.sync(() => {
       expect(typeof typeCases).toBe("function");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "local",
+    ],
+  },
 );

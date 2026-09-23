@@ -99,7 +99,15 @@ test.provider(
       yield* verifyDeleted("update");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -130,7 +138,15 @@ test.provider(
       yield* verifyDeleted("state");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -161,7 +177,15 @@ test.provider(
       yield* verifyDeleted("replace");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -199,7 +223,15 @@ test.provider(
       yield* verifyDeleted("list");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -221,7 +253,15 @@ test.provider(
       yield* verifyDeleted("duedate");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -252,5 +292,13 @@ test.provider(
       yield* verifyDeleted("defaults");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:milestone",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

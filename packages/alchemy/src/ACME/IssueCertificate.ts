@@ -67,7 +67,7 @@ import type {
  * from the runtime where issuance will run.
  *
  * @binding
- * @product ACME
+ * @product Certificate
  * @category Certificates
  */
 export interface IssueCertificate extends Binding.Service<

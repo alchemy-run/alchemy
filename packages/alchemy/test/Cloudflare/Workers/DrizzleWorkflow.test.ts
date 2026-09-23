@@ -112,7 +112,19 @@ test(
     expect(last.output?.widget).toMatchObject({ id: 1, name: "widget-1" });
     expect(last.output?.inserted).toMatchObject({ id: 1, name: "widget-1" });
   }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );
 
 /**
@@ -166,5 +178,17 @@ test(
       expect(body.rowCount).toBeTypeOf("number");
     }
   }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

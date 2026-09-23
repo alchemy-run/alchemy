@@ -648,10 +648,14 @@ export default class RpcObjectCaller extends Cloudflare.Worker<RpcObjectCaller>(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://rpc-object");
-        if (request.method === "GET" && url.pathname === "/ready") {
+        if (
+          request.method === "GET" &&
+          (url.pathname === "/ready" || url.pathname.startsWith("/ready/"))
+        ) {
+          const name = url.pathname.slice("/ready/".length) || "readiness";
           const ready = yield* Effect.all([
             worker.ready(),
-            objects.getByName("readiness").ready(),
+            objects.getByName(name).ready(),
             stats.ready(),
           ]);
           return yield* HttpServerResponse.json({ ready });
