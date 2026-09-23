@@ -58,7 +58,7 @@ const Cache = Fly.Redis("Cache");
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, port: 3000 },
+  { main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const cache = yield* Fly.ReadWriteRedis(Cache);
     return {

@@ -385,6 +385,49 @@ const waitUntilGone = (appName: string, ip: string) =>
     }),
   );
 
+/** Whether the App has any address reachable from the internet. */
+export const hasPublicAddress = (appName: string) =>
+  listAssignments(appName).pipe(
+    Effect.map((ips) => ips.some((item) => inferType(item) !== "private_v6")),
+  );
+
+/**
+ * Converge the addresses of an App a {@link Service} owns. Every owned App
+ * gets a Flycast address on the organization's default network. A public
+ * App also gets a shared IPv4 and an IPv6; a private one has every public
+ * address released. All three types are free.
+ */
+export const syncOwnedAppAddresses = Effect.fn(function* (
+  appName: string,
+  isPublic: boolean,
+) {
+  const observed = yield* listAssignments(appName);
+  const has = (type: IpAssignmentType) =>
+    observed.some(
+      (item) =>
+        inferType(item) === type &&
+        (type !== "private_v6" || networkOf(item) === undefined),
+    );
+  const desired: IpAssignmentType[] = isPublic
+    ? ["private_v6", "shared_v4", "v6"]
+    : ["private_v6"];
+  for (const type of desired) {
+    if (has(type)) continue;
+    yield* machines
+      .createAppIPAssignment({ app_name: appName, type })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+  }
+  if (isPublic) return;
+  for (const item of observed) {
+    const type = inferType(item);
+    if (type === "private_v6" || item.ip === undefined) continue;
+    yield* machines
+      .deleteAppIPAssignment({ app_name: appName, ip: item.ip })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    yield* waitUntilGone(appName, item.ip);
+  }
+});
+
 export const IpAssignmentProvider = () =>
   Provider.succeed(IpAssignment, {
     stables: ["ip", "appName", "type", "region"],

@@ -17,7 +17,7 @@ somewhere else.
 ```typescript
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, region: "lhr", port: 3000 },
+  { main: import.meta.url, region: "lhr", port: 3000 },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -61,10 +61,26 @@ on the mount.
 
 ## Several regions, one App
 
-Put two Services on the same App with different `region` values.
-Each Service is its own file. Fly's Anycast proxy sends a request
-to a nearby Machine that published the service. They share
-`{app}.fly.dev`.
+A Service runs in one region. To serve the same program from several
+regions behind one hostname,
+[group Services in one App](/fly/compute/services#group-services-in-one-app):
+declare a `Fly.App` with a
+[`shared_v4` address](/fly/networking#addresses-for-a-shared-app) and
+give each Service `app: Site` and its own `region`. Fly's Anycast
+proxy sends a request to a nearby Machine that published the
+service. They share `{app}.fly.dev`.
+
+```typescript
+// src/app.ts
+export const Site = Fly.App("Site");
+
+export const PublicIp = Fly.IpAssignment("Shared", {
+  app: Site,
+  type: "shared_v4",
+});
+```
+
+Each Service is its own file:
 
 ```typescript
 // src/api-iad.ts
@@ -94,7 +110,9 @@ export default class ApiLhr extends Fly.Service<ApiLhr>()(
 ) {}
 ```
 
-Yield both in the Stack.
+Yield `PublicIp` and both Services in the Stack. Both Services
+publish the same ports on one App, so they must serve the same
+program.
 
 ## Which region is this?
 

@@ -86,15 +86,17 @@ export type App = Resource<
 
 /**
  * A Fly.App is a global namespace in your account. It contains Machines,
- * Services, Secrets, IPs, and certificates.
+ * Secrets, IPs, and certificates. A {@link Service} creates its own App,
+ * so declare an App yourself for {@link Machine}s, or to group Services
+ * that share Secrets or a custom domain (the Service `app` prop).
  *
  * @see https://fly.io/docs/machines/api/apps-resource/
  *
  * ### Create an App
  * Alchemy generates a unique name unless you pass one. `url` is
  * `https://{appName}.fly.dev`. Nothing answers there until a
- * {@link Service} or {@link Machine} publishes a proxy service and the App
- * has an {@link IpAssignment}.
+ * {@link Machine} (or a Service with `app`) publishes a proxy service and
+ * the App has an {@link IpAssignment}.
  *
  * **Example:** Generated name
  * ```typescript
@@ -294,6 +296,132 @@ export const listOwnedApps = Effect.fn(function* () {
   return flagged.filter((attrs) => attrs !== undefined);
 });
 
+/**
+ * Observe an App by name and create it when missing. Shared by
+ * {@link App} and by Services that own their App.
+ */
+export const ensureApp = Effect.fn(function* (input: {
+  name: string;
+  orgSlug?: string;
+  network?: string;
+  enableSubdomains?: boolean;
+  /** Physical name from a previous reconcile, observed first. */
+  previousName?: string;
+}) {
+  let current =
+    input.previousName !== undefined
+      ? yield* getByName(input.previousName)
+      : undefined;
+  if (current === undefined && input.previousName !== input.name) {
+    current = yield* getByName(input.name);
+  }
+  if (current === undefined) {
+    const orgSlug = input.orgSlug ?? (yield* resolveOrgSlug());
+    yield* machines
+      .createApp({
+        name: input.name,
+        org_slug: orgSlug,
+        network: input.network,
+        enable_subdomains: input.enableSubdomains,
+      })
+      .pipe(
+        Effect.catchTag(["Conflict", "UnprocessableEntity"], () => Effect.void),
+      );
+    current = yield* getByName(input.name);
+  }
+  if (current === undefined) {
+    return yield* new AppNotCreated({ name: input.name });
+  }
+  return current;
+});
+
+/**
+ * Delete an App and the Alchemy-owned Volumes in it. Idempotent: a missing
+ * App is not an error. Fly deletes the App's Machines, addresses, secrets,
+ * and certificates with it.
+ */
+export const deleteApp = Effect.fn(function* (appName: string) {
+  if (appName.length === 0) return;
+  const volumes = yield* machines
+    .listVolumes({ app_name: appName })
+    .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])));
+  yield* Effect.forEach(
+    volumes,
+    (volume) => {
+      const volumeId = volume.id;
+      if (
+        volumeId === undefined ||
+        volumeId.length === 0 ||
+        !matchesAlchemyPhysicalName(volume.name)
+      ) {
+        return Effect.void;
+      }
+      return machines
+        .deleteVolume({ app_name: appName, volume_id: volumeId })
+        .pipe(
+          Effect.asVoid,
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
+        );
+    },
+    { concurrency: 4 },
+  );
+  const http = yield* HttpClient.HttpClient;
+  const fetchOptions = yield* Effect.serviceOption(FetchHttpClient.RequestInit);
+  yield* machines.deleteApp({ app_name: appName }).pipe(
+    Retry.none,
+    // Bun can replay DELETE on a reused socket below the SDK retry policy.
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(
+        http,
+        HttpClientRequest.setHeader("connection", "close"),
+      ),
+    ),
+    Effect.provideService(FetchHttpClient.RequestInit, {
+      ...Option.getOrUndefined(fetchOptions),
+      keepalive: false,
+      redirect: "error",
+    }),
+    Effect.timeout("30 seconds"),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catchTag(
+      [
+        "HttpClientError",
+        "TimeoutError",
+        "InternalServerError",
+        "BadGateway",
+        "ServiceUnavailable",
+        "GatewayTimeout",
+      ],
+      (error) =>
+        Effect.fail(
+          new AppDeletionAmbiguous({ appName, evidence: error._tag }),
+        ),
+    ),
+  );
+  const gone = yield* getByName(appName).pipe(
+    Effect.map((app) => app === undefined),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (gone) => gone,
+      times: 8,
+    }),
+    Effect.timeout("30 seconds"),
+    Effect.mapError(
+      (error) =>
+        new AppDeletionAmbiguous({
+          appName,
+          evidence: `delete accepted but absence verification failed: ${error._tag}`,
+        }),
+    ),
+  );
+  if (!gone)
+    return yield* new AppDeletionAmbiguous({
+      appName,
+      evidence: "delete accepted but absence not observed",
+    });
+});
+
 export const AppProvider = () =>
   Provider.succeed(App, {
     stables: ["appId", "appName", "orgSlug", "network", "internalNumericId"],
@@ -337,126 +465,18 @@ export const AppProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? {};
       const name = yield* resolveAppName(id, props.name, output?.appName);
-      const orgSlug = props.orgSlug ?? (yield* resolveOrgSlug());
-
-      // Observe by the cached name, then the desired name.
-      let current =
-        output?.appName !== undefined
-          ? yield* getByName(output.appName)
-          : undefined;
-      if (current === undefined && output?.appName !== name) {
-        current = yield* getByName(name);
-      }
-
-      if (current === undefined) {
-        yield* machines
-          .createApp({
-            name,
-            org_slug: orgSlug,
-            network: props.network,
-            enable_subdomains: props.enableSubdomains,
-          })
-          .pipe(
-            Effect.catchTag(
-              ["Conflict", "UnprocessableEntity"],
-              () => Effect.void,
-            ),
-          );
-        current = yield* getByName(name);
-      }
-
-      if (current === undefined) {
-        return yield* new AppNotCreated({ name });
-      }
-
+      const current = yield* ensureApp({
+        name,
+        orgSlug: props.orgSlug,
+        network: props.network,
+        enableSubdomains: props.enableSubdomains,
+        previousName: output?.appName,
+      });
       // No update API. enableSubdomains is create-only.
       return toAttrs(current, name);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const appName = output.appName;
-      if (appName.length === 0) return;
-      const volumes = yield* machines
-        .listVolumes({ app_name: appName })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
-        );
-      yield* Effect.forEach(
-        volumes,
-        (volume) => {
-          const volumeId = volume.id;
-          if (
-            volumeId === undefined ||
-            volumeId.length === 0 ||
-            !matchesAlchemyPhysicalName(volume.name)
-          ) {
-            return Effect.void;
-          }
-          return machines
-            .deleteVolume({ app_name: appName, volume_id: volumeId })
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
-            );
-        },
-        { concurrency: 4 },
-      );
-      const http = yield* HttpClient.HttpClient;
-      const fetchOptions = yield* Effect.serviceOption(
-        FetchHttpClient.RequestInit,
-      );
-      yield* machines.deleteApp({ app_name: appName }).pipe(
-        Retry.none,
-        // Bun can replay DELETE on a reused socket below the SDK retry policy.
-        Effect.provideService(
-          HttpClient.HttpClient,
-          HttpClient.mapRequest(
-            http,
-            HttpClientRequest.setHeader("connection", "close"),
-          ),
-        ),
-        Effect.provideService(FetchHttpClient.RequestInit, {
-          ...Option.getOrUndefined(fetchOptions),
-          keepalive: false,
-          redirect: "error",
-        }),
-        Effect.timeout("30 seconds"),
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag(
-          [
-            "HttpClientError",
-            "TimeoutError",
-            "InternalServerError",
-            "BadGateway",
-            "ServiceUnavailable",
-            "GatewayTimeout",
-          ],
-          (error) =>
-            Effect.fail(
-              new AppDeletionAmbiguous({ appName, evidence: error._tag }),
-            ),
-        ),
-      );
-      const gone = yield* getByName(appName).pipe(
-        Effect.map((app) => app === undefined),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (gone) => gone,
-          times: 8,
-        }),
-        Effect.timeout("30 seconds"),
-        Effect.mapError(
-          (error) =>
-            new AppDeletionAmbiguous({
-              appName,
-              evidence: `delete accepted but absence verification failed: ${error._tag}`,
-            }),
-        ),
-      );
-      if (!gone)
-        return yield* new AppDeletionAmbiguous({
-          appName,
-          evidence: "delete accepted but absence not observed",
-        });
+      yield* deleteApp(output.appName);
     }),
   });

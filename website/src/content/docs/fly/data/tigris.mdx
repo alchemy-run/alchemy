@@ -45,7 +45,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, port: 3000 },
+  { main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const putObject = yield* Fly.PutObject(Data);
     const getObject = yield* Fly.GetObject(Data);

@@ -223,9 +223,15 @@ export const collectBindingState = (
   return { env, mounts, redis, buckets, postgres };
 };
 
+/**
+ * HTTP 80 → HTTPS redirect plus HTTPS 443 for public Services. Private
+ * (Flycast-only) Services publish plain HTTP on 80: Fly issues no
+ * certificate for `.flycast`, so a redirect to HTTPS would break callers.
+ */
 export const defaultHttpServices = (
   port: number,
   count = 1,
+  isPublic = true,
 ): FlyMachineService[] => [
   {
     protocol: "tcp",
@@ -233,10 +239,12 @@ export const defaultHttpServices = (
     autostart: true,
     autostop: "off",
     min_machines_running: count,
-    ports: [
-      { port: 80, handlers: ["http"], force_https: true },
-      { port: 443, handlers: ["tls", "http"] },
-    ],
+    ports: isPublic
+      ? [
+          { port: 80, handlers: ["http"], force_https: true },
+          { port: 443, handlers: ["tls", "http"] },
+        ]
+      : [{ port: 80, handlers: ["http"] }],
     // Wait until the process is listening before the proxy sends traffic.
     // Without this, fly.dev hangs (status 0) while Node is still booting.
     checks: [

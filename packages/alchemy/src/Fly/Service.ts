@@ -19,7 +19,7 @@ import type { Input } from "../Input.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
-import { App } from "./App.ts";
+import { App, deleteApp, ensureApp } from "./App.ts";
 import {
   deploymentPolicy,
   validateDeployment,
@@ -32,7 +32,9 @@ import type {
   MachineImageRef,
   MachineService,
 } from "./Machine.ts";
+import { hasPublicAddress, syncOwnedAppAddresses } from "./IpAssignment.ts";
 import {
+  createFlyAppName,
   createFlyResourceName,
   diffMachineMetadata,
   sanitizeFlyAppName,
@@ -55,6 +57,7 @@ import { attachPostgresSecrets } from "./Postgres.ts";
 import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,
+  hasPublishedService,
   listReplicaSets,
   observeReplicaSet,
   reconcileReplicas,
@@ -85,11 +88,26 @@ export interface ServiceProps extends PlatformProps {
   /** Named readiness checks for workers without public services. */
   checks?: Record<string, MachineCheck>;
   /**
-   * Parent Fly App. Accepts a `Fly.App` or an Effect that produces one
-   * (module-scope `const Site = Fly.App("Site")` is valid). Changing the
-   * App replaces the Service.
+   * Run inside an existing {@link App} instead of the Service's own App.
+   * The Service then shares that App's hostname, addresses, and secrets,
+   * and Alchemy does not manage addresses for it. Accepts a `Fly.App` or
+   * an Effect that produces one. Changing it, or adding or removing it,
+   * replaces the Service.
+   *
+   * By default each Service owns its App, so it gets its own
+   * `{name}.fly.dev` hostname, addresses, logs, and metrics.
    */
-  app: Ref<App>;
+  app?: Ref<App>;
+  /**
+   * Whether the Service is reachable from the internet. A public Service
+   * gets a shared IPv4 and an IPv6 and serves `https://{name}.fly.dev`. A
+   * private Service is reachable only from other Apps in the organization,
+   * at `http://{name}.flycast`. Every address is free. Only applies when
+   * the Service owns its App (no `app`).
+   *
+   * @default true
+   */
+  public?: boolean;
   /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
@@ -154,9 +172,13 @@ export interface ServiceProps extends PlatformProps {
    */
   services?: MachineService[];
   /**
-   * Machine name. Unique per App. If omitted, a unique name is generated
-   * from the stack, stage and logical ID. Changing it replaces the Service.
-   * In blue/green mode this is a base for generation-qualified physical names.
+   * Name of the Service's App, which is its `{name}.fly.dev` and
+   * `{name}.flycast` hostname. Globally unique across Fly. If omitted, a
+   * unique name is generated from the stack, stage and logical ID.
+   * Changing it replaces the Service.
+   *
+   * When `app` is set, this is instead the Machine name (unique per App;
+   * in blue/green mode a base for generation-qualified physical names).
    */
   name?: string;
   /**
@@ -193,8 +215,10 @@ export type Service = Resource<
   {
     /** Whether recovery must finish an interrupted deployment. */
     rolloutPending?: boolean;
-    /** Parent Fly App name. */
+    /** Fly App name the Machines run in. */
     appName: string;
+    /** Whether the Service created and manages {@link appName}. */
+    ownsApp?: boolean;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
@@ -208,10 +232,20 @@ export type Service = Resource<
     /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
     state: string;
     /**
-     * Public `https://{appName}.fly.dev` URL when a proxy service is
-     * configured.
+     * Public endpoint: `https://{appName}.fly.dev` for the default
+     * services. `undefined` for a private Service or when nothing is
+     * published. When `app` is set, `https://{appName}.fly.dev` whenever
+     * a port is published, since the App's addresses are managed elsewhere.
      */
     url: string | undefined;
+    /**
+     * Endpoint for other Apps in the organization over Fly's private
+     * network: `http://{appName}.flycast`, routed by Fly's proxy. Set when
+     * the Service owns its App and publishes a plain-HTTP port (every
+     * private Service does; a public one only when its `services` publish
+     * HTTP without `forceHttps`). `undefined` when `app` is set.
+     */
+    privateUrl: string | undefined;
     /** Parsed image reference from Fly. */
     imageRef: MachineImageRef | undefined;
     /** Number of Machines in the replica set. */
@@ -241,8 +275,10 @@ export type ServiceShape = Main<ServiceServices>;
 export type ServiceRuntimeContext = FlyHostRuntimeContext;
 
 /**
- * A Service is an Effect program running in a Fly.io Machine. Set
- * `count` to scale it up or down. Several Services share one {@link App}.
+ * A Service is an Effect program running on Fly.io Machines in its own
+ * Fly App. It gets its own `{name}.fly.dev` hostname, addresses, logs,
+ * and metrics, the way each Cloudflare Worker is its own endpoint. Set
+ * `count` to scale it up or down.
  *
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
@@ -250,31 +286,25 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * A Service is a class. Props describe the Machine. The Effect is the
  * program that runs on it.
  *
- * `app` is the parent {@link App}. Pass the declaration directly,
- * yielded or module-scope. `main: import.meta.url` is the bundle
- * entrypoint. Alchemy bundles this file with Rolldown, builds a
- * Docker image (default `node:26-slim`), and pushes it to
- * `registry.fly.io/{app}:{id}-{hash}`.
+ * The Service creates its Fly App, and deleting the Service deletes it.
+ * `main: import.meta.url` is the bundle entrypoint. Alchemy bundles this
+ * file with Rolldown, builds a Docker image (default `node:26-slim`), and
+ * pushes it to `registry.fly.io/{app}:{id}-{hash}`.
  *
- * **Example:** Class + App + main
+ * **Example:** Class + main
  * ```typescript
  * // src/api.ts
  * import * as Fly from "alchemy/Fly";
  * import * as Effect from "effect/Effect";
- * import { Site } from "./app.ts";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     return {};
  *   }),
  * ) {}
  * ```
- *
- * :::caution[Changing `app` replaces the Service]
- * The new App gets a new replica set. The old Machines are deleted.
- * :::
  *
  * ### Serve HTTP with fetch
  * Return `fetch` from the init Effect to boot an HTTP server. Omit
@@ -284,7 +314,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -301,7 +331,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad" },
+ *   { main: import.meta.url, region: "iad" },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -323,7 +353,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+ *   { main: import.meta.url, region: "iad", port: 3000 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -333,10 +363,9 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * ### The public URL
- * Yield the Service in the Stack. `api.url` is
- * `https://{appName}.fly.dev`. Alchemy does not create this hostname.
- * It is the parent {@link App}'s fly.dev name. The Service does not
- * get its own URL.
+ * A Service is public by default. Alchemy allocates a shared IPv4 and
+ * an IPv6 on its App (both free) and `api.url` is
+ * `https://{appName}.fly.dev`.
  *
  * **Example:** Stack output
  * ```typescript
@@ -353,10 +382,55 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * `url` is `undefined` when you pass `services: []` (nothing is
  * published).
  *
- * :::note[One fly.dev hostname per App]
- * Every published Service on the App shares `{appName}.fly.dev`. Put
- * one public Service on an App. Use `services: []` for workers.
- * :::
+ * ### Private Services
+ * `public: false` keeps a Service off the internet. It gets only a
+ * Flycast address, publishes plain HTTP on port 80 (Fly issues no
+ * certificate for `.flycast`), and `privateUrl` is
+ * `http://{appName}.flycast`. Every App in the organization can reach
+ * it there through Fly's proxy, so service checks, `autostart`, and
+ * blue/green cutover still apply.
+ *
+ * **Example:** An internal service called by the public API
+ * ```typescript
+ * export default class Users extends Fly.Service<Users>()(
+ *   "Users",
+ *   { main: import.meta.url, public: false },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.json([{ id: 1 }])),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Pass `privateUrl` to a caller through `env`. Declaring props as an
+ * Effect that yields `Users` also makes the caller deploy after it.
+ *
+ * **Example:** Call a private Service
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const users = yield* Users;
+ *     return {
+ *       main: import.meta.url,
+ *       env: { USERS_URL: users.privateUrl },
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const usersUrl = yield* Config.String("USERS_URL");
+ *         const response = yield* HttpClient.get(usersUrl);
+ *         return HttpServerResponse.text(yield* response.text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Turning `public` on or off updates the Service in place. Its App and
+ * hostname stay the same.
  *
  * ### Fly's proxy is the load balancer
  * There is no LoadBalancer resource. Fly runs an Anycast proxy at
@@ -366,7 +440,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+ *   { main: import.meta.url, region: "iad", port: 3000 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -398,7 +472,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     port: 3000,
  *     services: [
@@ -432,31 +505,10 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * ### An address so it answers
- * `{app}.fly.dev` does not answer over IPv4 until the App has an
- * {@link IpAssignment}. Allocate a shared Anycast IPv4 on the same
- * App and yield it next to the Service.
- *
- * **Example:** shared_v4
- * ```typescript
- * export const PublicIp = Fly.IpAssignment("Shared", {
- *   app: Site,
- *   type: "shared_v4",
- * });
- * ```
- *
- * ```typescript
- * Effect.gen(function* () {
- *   const api = yield* Api;
- *   const ip = yield* PublicIp;
- *   return { url: api.url, ip: ip.ip };
- * });
- * ```
- *
  * ### Scale with count
  * `count` is how many Machines to provision, including idle capacity.
  * Default is `1`. Replicas publish the same proxy service behind
- * `{app}.fly.dev`; Fly's proxy picks an available Machine per request.
+ * `{appName}.fly.dev`; Fly's proxy picks an available Machine per request.
  * Each replica gets its own Volume from every {@link MountVolume} binding;
  * attached volumes require rolling updates.
  *
@@ -464,7 +516,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+ *   { main: import.meta.url, region: "iad", count: 3, port: 3000 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -475,15 +527,16 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Config
  * Yield `Config` in init. Alchemy reads the value from the env of
- * whoever deploys and writes it onto the Machine. Do not pass
- * `env: { ... }` on a Service.
+ * whoever deploys and writes it onto the Machine, so there is no need
+ * to copy it into `env`. Use `env` for values from other resources,
+ * such as another Service's `privateUrl`.
  *
  * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
  *
  * Alchemy also injects `PORT` (when `port` is set) and stack metadata.
- * For a secret Fly should own and inject into every Machine on the
- * App, use {@link Secret}.
+ * For a secret Fly should own and inject into every Machine on an App,
+ * run the Service in an {@link App} (`app`) and use {@link Secret}.
  *
  * **Example:** Config.Redacted
  * ```typescript
@@ -492,7 +545,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, port: 3000 },
+ *   { main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
  *     const apiKey = yield* Config.Redacted("API_KEY");
  *
@@ -515,7 +568,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+ *   { main: import.meta.url, region: "iad", count: 3, port: 3000 },
  *   Effect.gen(function* () {
  *     const disk = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
  *     const fs = yield* FileSystem.FileSystem;
@@ -539,7 +592,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     region: "iad",
  *     port: 3000,
@@ -553,15 +605,16 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * ### A stable name
- * Machine names are unique per App. Omit `name` and Alchemy generates
- * one from the stack, stage, and logical ID.
+ * ### A stable hostname
+ * `name` names the Service's App, so it is the `{name}.fly.dev`
+ * hostname. App names are globally unique across Fly. Omit `name` and
+ * Alchemy generates one from the stack, stage, and logical ID.
  *
  * **Example:** Explicit name
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, name: "api", port: 3000 },
+ *   { main: import.meta.url, name: "api", port: 3000 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -571,8 +624,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * :::caution[Changing `name` replaces the Service]
- * Fly cannot rename a Machine. Alchemy creates the new name, then
- * deletes the old replica set.
+ * Fly cannot rename an App. Alchemy creates the Service under the new
+ * name, then deletes the old App.
  * :::
  *
  * ### Named export
@@ -583,7 +636,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, handler: "api", port: 3000 },
+ *   { main: import.meta.url, handler: "api", port: 3000 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
@@ -602,7 +655,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     image: "node:26",
  *     port: 3000,
@@ -616,15 +668,16 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * ### Custom proxy services
- * `services` defaults to HTTP 80 + HTTPS 443 toward `port`. Pass a
- * custom list to change handlers or autostop. Pass `[]` so Fly does
- * not publish a proxy.
+ * `services` defaults to HTTP 80 (redirecting to HTTPS) + HTTPS 443
+ * toward `port`, or plain HTTP 80 for a private Service. Pass a custom
+ * list to change handlers or autostop. Pass `[]` so Fly does not
+ * publish a proxy.
  *
  * **Example:** Unpublished process
  * ```typescript
  * export default class Worker extends Fly.Service<Worker>()(
  *   "Worker",
- *   { app: Site, main: import.meta.url, region: "iad", services: [] },
+ *   { main: import.meta.url, region: "iad", services: [] },
  *   Effect.gen(function* () {
  *     return {};
  *   }),
@@ -641,7 +694,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * export default class Worker extends Fly.Service<Worker>()(
  *   "Worker",
- *   { app: Site, main: import.meta.url, region: "iad", services: [] },
+ *   { main: import.meta.url, region: "iad", services: [] },
  *   Effect.gen(function* () {
  *     const host = yield* ServerHost;
  *
@@ -664,7 +717,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     port: 3000,
  *     build: { input: { external: ["sharp"] } },
@@ -685,7 +737,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     port: 3000,
  *     build: { install: ["pg"] },
@@ -703,12 +754,19 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * ### Multiple Services, one App
- * Each Service has its own Machines, image, and lifecycle. Point
- * several at the same `app`.
+ * ### Group Services in one App
+ * Pass `app` to run a Service inside an existing {@link App} instead of
+ * its own. The Services share the App's hostname, addresses, and
+ * {@link Secret}s, and a {@link Certificate} on the App covers them.
+ * Alchemy manages no addresses for a Service in a shared App: allocate
+ * an {@link IpAssignment} on the App, and `url` is
+ * `https://{appName}.fly.dev` whenever a port is published. `public`
+ * does not apply.
  *
- * **Example:** API and worker
+ * **Example:** API and worker sharing a secret
  * ```typescript
+ * export const Site = Fly.App("Site");
+ *
  * class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
@@ -728,6 +786,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * :::caution[One public HTTP Service per App]
+ * Fly's proxy routes an App's traffic by port only. Two Services that
+ * publish 443 in the same App receive each other's requests.
+ * :::
+ *
  * ### Blue/green deployments
  * Opt into healthy replacement Machines instead of in-place updates.
  * The default TCP service check proves the server is listening; supply
@@ -738,7 +801,6 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
- *     app: Site,
  *     main: import.meta.url,
  *     deploy: { strategy: "bluegreen" },
  *     shutdown: { timeout: "30 seconds" },
@@ -796,6 +858,12 @@ export class ServiceNotCreated extends Data.TaggedError(
 )<{
   name: string;
   appName: string;
+}> {}
+
+export class InvalidServiceProps extends Data.TaggedError(
+  "Fly.InvalidServiceProps",
+)<{
+  message: string;
 }> {}
 
 export class ServiceAppNotResolved extends Data.TaggedError(
@@ -994,8 +1062,82 @@ const configDrifted = (
   );
 };
 
-const toAttrs = (set: ReplicaSet, codeHash: string): Service["Attributes"] => ({
+const portsOf = (services: FlyMachineService[] | undefined) =>
+  (services ?? []).flatMap((service) => service.ports ?? []);
+
+const withPort = (base: string, port: number, standard: number) =>
+  port === standard ? base : `${base}:${port}`;
+
+/** HTTPS on the first TLS port, else HTTP on the first HTTP port. */
+const publicUrlOf = (
+  appName: string,
+  services: FlyMachineService[] | undefined,
+) => {
+  const ports = portsOf(services).filter((entry) => entry.port !== undefined);
+  const tls = ports.find(
+    (entry) =>
+      entry.handlers?.includes("tls") && entry.handlers.includes("http"),
+  );
+  if (tls?.port !== undefined)
+    return withPort(`https://${appName}.fly.dev`, tls.port, 443);
+  const http = ports.find((entry) => entry.handlers?.includes("http"));
+  if (http?.port !== undefined)
+    return withPort(`http://${appName}.fly.dev`, http.port, 80);
+  return undefined;
+};
+
+/** Fly issues no certificate for `.flycast`: only plain HTTP qualifies. */
+const privateUrlOf = (
+  appName: string,
+  services: FlyMachineService[] | undefined,
+) => {
+  const http = portsOf(services).find(
+    (entry) =>
+      entry.port !== undefined &&
+      entry.handlers?.includes("http") &&
+      !entry.handlers.includes("tls") &&
+      entry.force_https !== true,
+  );
+  return http?.port === undefined
+    ? undefined
+    : withPort(`http://${appName}.flycast`, http.port, 80);
+};
+
+/** `public` manages the Service's own addresses; a shared App has none. */
+const validateOwnership = (
+  props: Partial<Pick<ServiceProps, "app" | "public">>,
+) =>
+  props.app !== undefined && props.public !== undefined
+    ? Effect.fail(
+        new InvalidServiceProps({
+          message:
+            "Fly.Service `public` only applies when the Service owns its App; remove `app` or `public`.",
+        }),
+      )
+    : Effect.void;
+
+const endpointsOf = (
+  set: ReplicaSet,
+  access: { ownsApp: boolean; isPublic: boolean },
+) => {
+  if (!hasPublishedService(set.services))
+    return { url: undefined, privateUrl: undefined };
+  if (!access.ownsApp)
+    return { url: `https://${set.appName}.fly.dev`, privateUrl: undefined };
+  return {
+    url: access.isPublic ? publicUrlOf(set.appName, set.services) : undefined,
+    privateUrl: privateUrlOf(set.appName, set.services),
+  };
+};
+
+const toAttrs = (
+  set: ReplicaSet,
+  codeHash: string,
+  access: { ownsApp: boolean; isPublic: boolean },
+): Service["Attributes"] => ({
   appName: set.appName,
+  ownsApp: access.ownsApp,
+  ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
   machineId: set.machineId,
   machineIds: set.machineIds,
@@ -1003,7 +1145,6 @@ const toAttrs = (set: ReplicaSet, codeHash: string): Service["Attributes"] => ({
   baseName: set.baseName,
   region: set.region,
   state: set.state,
-  url: set.url,
   imageRef: set.imageRef,
   count: set.count,
   mounts: set.mounts,
@@ -1039,7 +1180,10 @@ export const ServiceProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, output }) {
           if (news === undefined) return;
-          if ("app" in news) {
+          const shape = news as Partial<Pick<ServiceProps, "app" | "public">>;
+          const ownsApp = shape.app === undefined;
+          yield* validateOwnership(shape);
+          if ("main" in news) {
             const settings: Input<
               Pick<
                 ServiceProps,
@@ -1049,6 +1193,7 @@ export const ServiceProvider = () =>
                 | "services"
                 | "port"
                 | "isExternal"
+                | "public"
               >
             > = {
               deploy: news.deploy,
@@ -1057,6 +1202,7 @@ export const ServiceProvider = () =>
               checks: news.checks,
               port: news.port,
               isExternal: news.isExternal,
+              public: news.public,
             };
             if (
               isResolved<
@@ -1068,6 +1214,7 @@ export const ServiceProvider = () =>
                   | "services"
                   | "port"
                   | "isExternal"
+                  | "public"
                 >
               >(settings)
             ) {
@@ -1080,7 +1227,11 @@ export const ServiceProvider = () =>
                 {
                   services:
                     settings.services?.map(toFlyService) ??
-                    defaultHttpServices(settings.port ?? DEFAULT_PORT),
+                    defaultHttpServices(
+                      settings.port ?? DEFAULT_PORT,
+                      1,
+                      !ownsApp || settings.public !== false,
+                    ),
                   checks: settings.checks,
                 },
                 false,
@@ -1088,7 +1239,27 @@ export const ServiceProvider = () =>
             }
           }
           if (output === undefined) return;
-          if (isResolved(news)) {
+          // Moving into or out of a shared App changes the hostname.
+          if (ownsApp !== (output.ownsApp === true)) {
+            return { action: "replace" as const, deleteFirst: false };
+          }
+          if (ownsApp && isResolved(news)) {
+            const desiredAppName =
+              news.name !== undefined
+                ? sanitizeFlyAppName(news.name)
+                : output.appName;
+            const nameChanged = desiredAppName !== output.appName;
+            const regionChanged =
+              (news.region ?? DEFAULT_REGION) !== output.region;
+            if (nameChanged || regionChanged) {
+              return {
+                action: "replace" as const,
+                // A pinned App name cannot exist twice.
+                deleteFirst: !nameChanged && news.name !== undefined,
+              };
+            }
+          }
+          if (!ownsApp && isResolved(news)) {
             const desiredAppName = appNameOf(news.app);
             const appChanged =
               desiredAppName !== undefined && desiredAppName !== output.appName;
@@ -1142,10 +1313,17 @@ export const ServiceProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
-          const appName = appNameOf(olds?.app) ?? output?.appName;
+          const ownsApp =
+            output?.ownsApp ?? (olds !== undefined && olds.app === undefined);
+          const appName = ownsApp
+            ? (output?.appName ??
+              (olds?.name !== undefined
+                ? sanitizeFlyAppName(olds.name)
+                : yield* createFlyAppName(id)))
+            : (appNameOf(olds?.app) ?? output?.appName);
           const name = yield* resolveMachineName(
             id,
-            olds?.name,
+            ownsApp ? undefined : olds?.name,
             output?.baseName ?? output?.name,
           );
           const found = yield* observeReplicaSet({
@@ -1158,12 +1336,18 @@ export const ServiceProvider = () =>
             baseName: name,
           });
           if (found === undefined) return undefined;
-          return toAttrs(found, output?.code.hash ?? "");
+          return toAttrs(found, output?.code.hash ?? "", {
+            ownsApp,
+            isPublic: ownsApp && (yield* hasPublicAddress(found.appName)),
+          });
         }),
 
         list: Effect.fn(function* () {
           const sets = yield* listReplicaSets("Fly.Service");
-          return sets.map((set) => toAttrs(set, ""));
+          // Owned Apps are also listed (and nuked) as Fly.App rows.
+          return sets.map((set) =>
+            toAttrs(set, "", { ownsApp: false, isPublic: true }),
+          );
         }),
 
         reconcile: Effect.fn(function* ({
@@ -1181,7 +1365,27 @@ export const ServiceProvider = () =>
             props.shutdown,
             !props.isExternal,
           );
-          const appName = appNameOf(props.app) ?? output?.appName;
+          yield* validateOwnership(props);
+          const ownsApp = props.app === undefined;
+          const isPublic = !ownsApp || props.public !== false;
+          let appName: string | undefined;
+          if (ownsApp) {
+            const desired =
+              props.name !== undefined
+                ? sanitizeFlyAppName(props.name)
+                : output?.ownsApp === true
+                  ? output.appName
+                  : yield* createFlyAppName(id);
+            const app = yield* ensureApp({
+              name: desired,
+              previousName:
+                output?.ownsApp === true ? output.appName : undefined,
+            });
+            appName = app.name ?? desired;
+            yield* syncOwnedAppAddresses(appName, isPublic);
+          } else {
+            appName = appNameOf(props.app) ?? output?.appName;
+          }
           if (appName === undefined) {
             return yield* new ServiceAppNotResolved({
               message: "Fly.Service requires a resolved App with appName.",
@@ -1189,7 +1393,7 @@ export const ServiceProvider = () =>
           }
           const name = yield* resolveMachineName(
             id,
-            props.name,
+            ownsApp ? undefined : props.name,
             output?.baseName ?? output?.name,
           );
           const region = props.region ?? output?.region ?? DEFAULT_REGION;
@@ -1228,7 +1432,7 @@ export const ServiceProvider = () =>
           const services =
             props.services !== undefined
               ? props.services.map(toFlyService)
-              : defaultHttpServices(port, count);
+              : defaultHttpServices(port, count, isPublic);
           const statics = toFlyStatics(props.statics);
 
           const { imageRef, codeHash } = yield* hosted.resolveImage({
@@ -1286,7 +1490,7 @@ export const ServiceProvider = () =>
               ),
             ),
           );
-          return toAttrs(set, codeHash);
+          return toAttrs(set, codeHash, { ownsApp, isPublic });
         }),
 
         delete: Effect.fn(function* ({
@@ -1309,6 +1513,7 @@ export const ServiceProvider = () =>
             volumeIds: volumeIdsOf(output),
             force,
           });
+          if (output.ownsApp === true) yield* deleteApp(appName);
         }),
       });
     }),

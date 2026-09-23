@@ -12,6 +12,10 @@ import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
+import { fetchFrom, nginx } from "./fixtures/flycast.ts";
+import GatewayApi from "./fixtures/gateway-api.ts";
+import UsersApi, { USERS_BODY } from "./fixtures/users-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -302,4 +306,192 @@ test.provider(
     ],
     timeout: 180_000,
   },
+);
+
+const ownedTags = [
+  "provider:fly",
+  "provider:fly:app",
+  "provider:fly:machine",
+  "provider:fly:service",
+  "live",
+];
+
+/** Observed address kinds on an App. */
+const addressKinds = (appName: string) =>
+  machines
+    .listAppIPAssignments({ app_name: appName })
+    .pipe(
+      Effect.map((res) =>
+        (res.ips ?? [])
+          .map((ip) =>
+            ip.network !== undefined && ip.network !== null
+              ? "flycast"
+              : ip.shared === true
+                ? "shared_v4"
+                : (ip.ip ?? "").includes(":")
+                  ? "v6"
+                  : "v4",
+          )
+          .sort(),
+      ),
+    );
+
+const appGone = (appName: string) =>
+  machines.getApp({ app_name: appName }).pipe(
+    Effect.as(false),
+    Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (gone) => gone,
+      times: 10,
+    }),
+  );
+
+const getText = (url: string) =>
+  HttpClient.get(url).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? res.text
+        : Effect.fail(new Error(`${url} returned ${res.status}`)),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 15 }),
+  );
+
+test.provider(
+  "a Service owns its App and serves its public url",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const owned = yield* stack.deploy(Echo());
+      expect(owned.ownsApp).toBe(true);
+      expect(owned.url).toEqual(`https://${owned.appName}.fly.dev`);
+      expect(owned.privateUrl).toBeUndefined();
+      expect(yield* addressKinds(owned.appName)).toEqual([
+        "flycast",
+        "shared_v4",
+        "v6",
+      ]);
+      expect(yield* getText(owned.url!)).toEqual(ECHO_BODY);
+
+      // Moving into a shared App replaces the Service and deletes its App.
+      const moved = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Fly.App("EchoSharedSite");
+          return yield* Echo({ app: site });
+        }),
+      );
+      expect(moved.ownsApp).toBe(false);
+      expect(moved.appName).not.toEqual(owned.appName);
+      expect(moved.url).toEqual(`https://${moved.appName}.fly.dev`);
+      expect(moved.privateUrl).toBeUndefined();
+      expect(yield* appGone(owned.appName)).toBe(true);
+
+      yield* stack.destroy();
+      expect(yield* appGone(moved.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 300_000 },
+);
+
+test.provider(
+  "a private Service answers over Flycast and turning it public keeps its App",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (isPublic: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const client = yield* Fly.App("EchoCallerSite");
+            const caller = yield* Fly.Machine("Caller", {
+              app: client,
+              ...nginx,
+            });
+            const echo = yield* Echo({ public: isPublic });
+            return { caller, echo };
+          }),
+        );
+
+      const hidden = yield* deploy(false);
+      expect(hidden.echo.ownsApp).toBe(true);
+      expect(hidden.echo.url).toBeUndefined();
+      expect(hidden.echo.privateUrl).toEqual(
+        `http://${hidden.echo.appName}.flycast`,
+      );
+      expect(yield* addressKinds(hidden.echo.appName)).toEqual(["flycast"]);
+      expect(
+        yield* fetchFrom(hidden.caller, hidden.echo.privateUrl!, ECHO_BODY),
+      ).toContain(ECHO_BODY);
+
+      const shown = yield* deploy(true);
+      expect(shown.echo.appName).toEqual(hidden.echo.appName);
+      expect(shown.echo.url).toEqual(`https://${shown.echo.appName}.fly.dev`);
+      expect(yield* addressKinds(shown.echo.appName)).toEqual([
+        "flycast",
+        "shared_v4",
+        "v6",
+      ]);
+      expect(yield* getText(shown.echo.url!)).toEqual(ECHO_BODY);
+
+      const hiddenAgain = yield* deploy(false);
+      expect(hiddenAgain.echo.appName).toEqual(hidden.echo.appName);
+      expect(hiddenAgain.echo.url).toBeUndefined();
+      expect(yield* addressKinds(hiddenAgain.echo.appName)).toEqual([
+        "flycast",
+      ]);
+
+      yield* stack.destroy();
+      expect(yield* appGone(hidden.echo.appName)).toBe(true);
+      expect(yield* appGone(hidden.caller.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
+);
+
+test.provider(
+  "public on a Service in a shared App is rejected before anything is created",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = yield* stack.deploy(Fly.App("EchoInvalidSite"));
+      const failed = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const site = yield* Fly.App("EchoInvalidSite");
+            return yield* Echo({ app: site, public: false });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failed).toMatchObject({ _tag: "Fly.InvalidServiceProps" });
+      expect(yield* machines.listMachines({ app_name: app.appName })).toEqual(
+        [],
+      );
+      yield* stack.destroy();
+      expect(yield* appGone(app.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 120_000 },
+);
+
+test.provider(
+  "a public Service calls a private Service at its privateUrl",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const users = yield* UsersApi;
+          const gateway = yield* GatewayApi;
+          return { users, gateway };
+        }),
+      );
+      expect(deployed.users.url).toBeUndefined();
+      expect(deployed.users.privateUrl).toEqual(
+        `http://${deployed.users.appName}.flycast`,
+      );
+      expect(deployed.gateway.appName).not.toEqual(deployed.users.appName);
+      expect(yield* getText(deployed.gateway.url!)).toEqual(USERS_BODY);
+
+      yield* stack.destroy();
+      expect(yield* appGone(deployed.users.appName)).toBe(true);
+      expect(yield* appGone(deployed.gateway.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
 );

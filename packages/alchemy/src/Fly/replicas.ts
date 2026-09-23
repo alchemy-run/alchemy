@@ -105,7 +105,8 @@ export interface ReplicaSet {
   privateIp: string | undefined;
   imageRef: MachineImageRef | undefined;
   guest: MachineGuest | undefined;
-  url: string | undefined;
+  /** Observed proxy services published by replica 0. */
+  services: FlyMachineService[] | undefined;
   count: number;
   mounts: MountedDisk[];
   replicas: Replica[];
@@ -1020,9 +1021,7 @@ export const toReplicaSet = (
     privateIp: primary?.privateIp,
     imageRef: primary?.imageRef,
     guest: primary?.guest,
-    url: hasPublishedService(services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
+    services,
     count: replicas.length,
     mounts: primary?.mounts ?? [],
     replicas,

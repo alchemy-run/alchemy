@@ -100,7 +100,6 @@ test.provider(
       expect(created.privateIp).toEqual(expect.any(String));
       expect(created.guest?.cpus).toEqual(1);
       expect(created.guest?.memoryMb).toEqual(256);
-      expect(created.url).toBeUndefined();
 
       const fetched = yield* machines.getMachine({
         app_name: created.appName,
@@ -166,7 +165,6 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.region).toEqual("iad");
       expect(updated.state).toEqual("started");
-      expect(updated.url).toEqual(`https://${created.appName}.fly.dev`);
 
       const refetched = yield* machines.getMachine({
         app_name: updated.appName,
