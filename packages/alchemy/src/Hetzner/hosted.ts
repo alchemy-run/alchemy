@@ -1,4 +1,4 @@
-import * as Services from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -417,7 +417,7 @@ WantedBy=multi-user.target
     volumes: Array<{ volumeId: number; path: string }>;
   }) {
     for (const { volumeId, path } of input.volumes) {
-      let volume = yield* Services.volumes.getVolume({ id: volumeId }).pipe(
+      let volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
         Effect.map(({ volume }) => volume),
         Effect.retry({
           while: hetznerTransient,
@@ -433,7 +433,7 @@ WantedBy=multi-user.target
 
       if (volume.server !== input.serverId) {
         if (volume.server !== null) {
-          yield* Services.volumeActions.detachVolume({ id: volumeId }).pipe(
+          yield* Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
             Effect.tap(({ action }) =>
               waitForAction(action).pipe(
                 Effect.catchTag("ActionTimeout", () => Effect.void),
@@ -445,7 +445,7 @@ WantedBy=multi-user.target
             ),
           );
         }
-        yield* Services.volumeActions
+        yield* Hetzner.volumeActions
           .attachVolume({
             id: volumeId,
             server: input.serverId,
@@ -474,7 +474,7 @@ WantedBy=multi-user.target
               () => Effect.void,
             ),
           );
-        volume = yield* Services.volumes.getVolume({ id: volumeId }).pipe(
+        volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
           Effect.flatMap(({ volume }) =>
             volume.server === input.serverId
               ? Effect.succeed(volume)
@@ -494,7 +494,7 @@ WantedBy=multi-user.target
           Effect.catchIf(
             (e) => e._tag === "AttachPending",
             () =>
-              Services.volumes.getVolume({ id: volumeId }).pipe(
+              Hetzner.volumes.getVolume({ id: volumeId }).pipe(
                 Effect.map(({ volume }) => volume),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               ),
