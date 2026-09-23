@@ -93,7 +93,10 @@ yield* presignGet({
 
 ## Async Workers
 
-Declare `S3Credentials` on `env`:
+Async Workers can't use the Effect presign functions, so they sign URLs
+themselves with an S3 client. `S3Credentials` gives that client the S3
+keys and endpoint for the bucket, for both local and deployed runs.
+Declare it on `env`:
 
 ```typescript
 // alchemy.run.ts
