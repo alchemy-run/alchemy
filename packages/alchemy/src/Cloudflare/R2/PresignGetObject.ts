@@ -71,7 +71,7 @@ export interface PresignGetObjectRequest {
  *         return HttpServerResponse.redirect(url);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.R2.PresignGetObjectHttp)),
+ *   }).pipe(Effect.provide(Cloudflare.R2.PresignGetObjectToken)),
  * ) {}
  * ```
  *

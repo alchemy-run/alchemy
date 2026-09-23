@@ -56,7 +56,7 @@ export const presignWorker = (bucket: Effect.Effect<Bucket, never, any>) =>
       }),
     };
   }).pipe(
-    Effect.provide(Cloudflare.R2.PresignPutObjectHttp),
-    Effect.provide(Cloudflare.R2.PresignGetObjectHttp),
+    Effect.provide(Cloudflare.R2.PresignPutObjectToken),
+    Effect.provide(Cloudflare.R2.PresignGetObjectToken),
     Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   );

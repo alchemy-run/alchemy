@@ -16,8 +16,8 @@ import type { PresignError } from "./BucketTypes.ts";
 import { LOCAL_R2_S3_CREDENTIALS, LOCAL_R2_S3_PATH } from "./LocalS3.ts";
 
 /**
- * Shared scaffolding for the R2 presign bindings (`PresignGetObjectHttp`,
- * `PresignPutObjectHttp`).
+ * Shared scaffolding for the R2 presign bindings (`PresignGetObjectToken`,
+ * `PresignPutObjectToken`).
  *
  * Presigning is a pure SigV4 computation against R2's S3-compatible API, so
  * the Worker only needs S3 credentials and an endpoint, resolved per mode:

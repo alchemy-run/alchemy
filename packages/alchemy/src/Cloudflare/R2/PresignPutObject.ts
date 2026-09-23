@@ -81,7 +81,7 @@ export interface PresignPutObjectRequest {
  *         return yield* HttpServerResponse.json({ url });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.R2.PresignPutObjectHttp)),
+ *   }).pipe(Effect.provide(Cloudflare.R2.PresignPutObjectToken)),
  * ) {}
  * ```
  *

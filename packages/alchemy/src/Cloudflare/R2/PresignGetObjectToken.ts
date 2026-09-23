@@ -4,21 +4,24 @@ import {
   PresignGetObject,
   type PresignGetObjectRequest,
 } from "./PresignGetObject.ts";
-import { makePresignBinding, presignR2Url } from "./PresignHttp.ts";
+import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
 
 /**
- * Implementation of {@link PresignGetObject} over R2's S3-compatible API.
+ * Implementation of {@link PresignGetObject} that signs URLs with S3
+ * credentials derived from an API token. Signing is local SigV4 — no request
+ * is made to R2.
  *
  * Deployed, it mints a scoped account API token with
- * `Workers R2 Storage Read` and signs URLs for
- * `{accountId}.r2.cloudflarestorage.com`. Under `alchemy dev`, a
- * locally-emulated bucket is signed for the Worker's local S3 endpoint.
+ * `Workers R2 Storage Read` (access key id = token id, secret = SHA-256 of
+ * the token value) and signs URLs for `{accountId}.r2.cloudflarestorage.com`.
+ * Under `alchemy dev`, a locally-emulated bucket is signed with fixed local
+ * credentials for the Worker's local S3 endpoint, and no token is created.
  *
  * @layer
  * @provides Cloudflare.R2.PresignGetObject
  * @product R2
  */
-export const PresignGetObjectHttp = Layer.effect(
+export const PresignGetObjectToken = Layer.effect(
   PresignGetObject,
   Effect.suspend(() =>
     makePresignBinding<PresignGetObjectRequest>({
