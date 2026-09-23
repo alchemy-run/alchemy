@@ -1,0 +1,7 @@
+extends: existence
+message: "'X, not Y' framing. Keep it only when the reader needs the distinction."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#no-contrast-framing
+level: suggestion
+ignorecase: true
+tokens:
+  - '\w+, not \w+'

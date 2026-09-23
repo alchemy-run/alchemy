@@ -1,0 +1,9 @@
+extends: existence
+message: "Contrast framing. State what the thing is or does."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#no-contrast-framing
+level: warning
+ignorecase: true
+tokens:
+  - "it['’]?s not [^.]+?, it['’]?s"
+  - "isn['’]?t about"
+  - 'no \w+, no \w+, just'

@@ -1,0 +1,8 @@
+extends: existence
+message: "Present Bun and Node.js as equal options."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#bun-and-node-are-equal
+level: error
+ignorecase: true
+tokens:
+  - 'Bun \(recommended\)'
+  - 'recommend Bun'
