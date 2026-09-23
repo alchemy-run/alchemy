@@ -1,18 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vite from "vite";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import cloudflareVitePlugin from "../plugin.ts";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
-
-const cleanups: Array<() => Promise<void>> = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-  vi.unstubAllEnvs();
-});
 
 test.each([
   ["selective Worker routes", ["/api/*"]],
@@ -25,13 +16,16 @@ test.each([
 ] as const)(
   "starts the module runner with SPA fallback and %s",
   async (_, runWorkerFirst) => {
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
     // These tests use only the local runtime; no Cloudflare API calls are needed.
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "local-test-unused");
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "00000000000000000000000000000000");
     const tmpRoot = path.resolve(import.meta.dirname, "../.cache/test-roots");
     await fs.mkdir(tmpRoot, { recursive: true });
     const root = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-"));
-    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
     const entry = path.join(root, "worker.js");
     await fs.writeFile(
       path.join(root, "index.html"),
@@ -72,7 +66,7 @@ test.each([
         }),
       ],
     });
-    cleanups.push(() => server.close());
+    onTestFinished(() => server.close());
     await server.listen();
     const url = server.resolvedUrls!.local[0];
     const page = await fetch(new URL("/dashboard", url), {
