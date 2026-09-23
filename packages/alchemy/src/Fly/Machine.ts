@@ -38,11 +38,13 @@ import {
 } from "./Metadata.ts";
 import {
   deleteReplicaSet,
+  listAppAddresses,
   listReplicaSets,
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
   sameServices,
+  serviceUrl,
   toFlyService,
   volumeIdsOf,
   type Replica,
@@ -378,8 +380,12 @@ export type Machine = Resource<
     /** Observed guest size. */
     guest: MachineGuest | undefined;
     /**
-     * Public `https://{appName}.fly.dev` URL when this Machine publishes
-     * a proxy service. `undefined` when no services are configured.
+     * URL of the published proxy service. `https://{appName}.fly.dev`, or
+     * `http://{appName}.flycast` when every address on the App is Flycast
+     * (`private_v6`) and a port serves plain HTTP. `undefined` when nothing
+     * is published, or on a Flycast-only App without a plain-HTTP port.
+     * Re-derived from the App's addresses on every deploy, so adding or
+     * removing an {@link IpAssignment} shows up on the following deploy.
      */
     url: string | undefined;
     /** Number of Machines in the replica set. */
@@ -1214,6 +1220,13 @@ export const MachineProvider = () =>
           deleteFirst: nameChanged === false && appChanged === false,
         };
       }
+      // Addresses are separate resources; re-derive the URL when they change.
+      const url = serviceUrl(
+        output.appName,
+        news.services?.map(toFlyService),
+        yield* listAppAddresses(output.appName),
+      );
+      if (url !== output.url) return { action: "update" as const };
       return output.rolloutPending ? { action: "update" as const } : undefined;
     }),
 

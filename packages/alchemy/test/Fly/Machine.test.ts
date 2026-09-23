@@ -10,6 +10,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
 import type { MachineContainer } from "@/Fly/Machine";
+import { fetchFrom, httpService, nginx } from "./fixtures/flycast.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -853,4 +854,84 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider(
+  "url follows the App's addresses between Flycast and fly.dev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (options: { web: boolean; publicIp: boolean }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("FlycastUrlSite");
+            yield* Fly.IpAssignment("Flycast", { app, type: "private_v6" });
+            if (options.publicIp)
+              yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
+            const client = yield* Fly.App("FlycastUrlClient");
+            const caller = yield* Fly.Machine("Caller", {
+              app: client,
+              ...nginx,
+            });
+            if (!options.web) return { app, caller };
+            const web = yield* Fly.Machine("Web", {
+              app,
+              ...nginx,
+              services: [httpService],
+            });
+            const forced = yield* Fly.Machine("Forced", {
+              app,
+              ...nginx,
+              services: [
+                {
+                  ...httpService,
+                  ports: [
+                    { port: 80, handlers: ["http"], forceHttps: true },
+                    { port: 443, handlers: ["tls", "http"] },
+                  ],
+                },
+              ],
+            });
+            return { app, caller, web, forced };
+          }),
+        );
+
+      // The Flycast address exists before the Machines deploy.
+      yield* deploy({ web: false, publicIp: false });
+      const flycast = yield* deploy({ web: true, publicIp: false });
+      const appName = flycast.app.appName;
+      expect(flycast.web?.url).toEqual(`http://${appName}.flycast`);
+      expect(flycast.forced?.url).toBeUndefined();
+      expect(yield* fetchFrom(flycast.caller, flycast.web!.url!)).toContain(
+        "Welcome to nginx",
+      );
+      const target = {
+        app_name: appName,
+        machine_id: flycast.web!.machineId,
+      };
+      const before = yield* machines.getMachine(target);
+
+      // Addresses deploy alongside the Machines, so the next deploy picks them up.
+      yield* deploy({ web: true, publicIp: true });
+      const public_ = yield* deploy({ web: true, publicIp: true });
+      expect(public_.web?.url).toEqual(`https://${appName}.fly.dev`);
+      expect(public_.forced?.url).toEqual(`https://${appName}.fly.dev`);
+      expect((yield* machines.getMachine(target)).instance_id).toEqual(
+        before.instance_id,
+      );
+
+      yield* deploy({ web: true, publicIp: false });
+      const back = yield* deploy({ web: true, publicIp: false });
+      expect(back.web?.url).toEqual(`http://${appName}.flycast`);
+      expect(back.forced?.url).toBeUndefined();
+      expect((yield* machines.getMachine(target)).instance_id).toEqual(
+        before.instance_id,
+      );
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(appName, flycast.web!.machineId)).toEqual(
+        "gone",
+      );
+    }).pipe(logLevel),
+  { timeout: 300_000 },
 );

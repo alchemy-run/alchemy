@@ -4,6 +4,7 @@ import type {
   FlyMachineService,
   FlyMachineServiceCheck,
   FlyStopConfig,
+  IPAssignment as FlyIPAssignment,
   ImageRef as FlyImageRef,
   Machine as FlyMachine,
   Volume as FlyVolume,
@@ -320,6 +321,45 @@ export const hasPublishedService = (
       (port) => port.port !== undefined || port.start_port !== undefined,
     ),
   );
+
+/** Fly omits `type` on IP assignments; only Flycast (`private_v6`) addresses carry a `network`. */
+const isFlycastAddress = (ip: FlyIPAssignment) =>
+  ip.network !== undefined && ip.network !== null;
+
+export const listAppAddresses = (appName: string) =>
+  machines.listAppIPAssignments({ app_name: appName }).pipe(
+    Effect.map((res) => res.ips ?? []),
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.succeed([] as FlyIPAssignment[]),
+    ),
+  );
+
+/**
+ * URL of the App's published services. `https://{app}.fly.dev` unless every
+ * address on the App is Flycast; then the first plain-HTTP port on
+ * `http://{app}.flycast`, or `undefined` when no port serves plain HTTP
+ * (Fly issues no certificate for `.flycast`).
+ */
+export const serviceUrl = (
+  appName: string,
+  services: FlyMachineService[] | undefined,
+  addresses: readonly FlyIPAssignment[] = [],
+): string | undefined => {
+  if (!hasPublishedService(services)) return undefined;
+  if (addresses.length === 0 || !addresses.every(isFlycastAddress))
+    return `https://${appName}.fly.dev`;
+  const port = (services ?? [])
+    .flatMap((service) => service.ports ?? [])
+    .find(
+      (entry) =>
+        entry.port !== undefined &&
+        (entry.handlers ?? []).includes("http") &&
+        !(entry.handlers ?? []).includes("tls") &&
+        entry.force_https !== true,
+    )?.port;
+  if (port === undefined) return undefined;
+  return `http://${appName}.flycast${port === 80 ? "" : `:${port}`}`;
+};
 
 export const waitStarted = (appName: string, machineId: string) =>
   machines
@@ -1006,6 +1046,7 @@ export const toReplicaSet = (
   appName: string,
   baseName: string,
   services?: FlyMachineService[],
+  addresses?: readonly FlyIPAssignment[],
 ): ReplicaSet => {
   const primary = replicas[0];
   return {
@@ -1020,9 +1061,7 @@ export const toReplicaSet = (
     privateIp: primary?.privateIp,
     imageRef: primary?.imageRef,
     guest: primary?.guest,
-    url: hasPublishedService(services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
+    url: serviceUrl(appName, services, addresses),
     count: replicas.length,
     mounts: primary?.mounts ?? [],
     replicas,
@@ -1081,8 +1120,11 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
   const groups = yield* Effect.forEach(
     apps,
     (app) =>
-      listMachinesByApp(app.appName).pipe(
-        Effect.map((machines) => {
+      Effect.all([
+        listMachinesByApp(app.appName),
+        listAppAddresses(app.appName),
+      ]).pipe(
+        Effect.map(([machines, addresses]) => {
           const owned = machines.filter((machine) =>
             isOwnedType(machine, type),
           );
@@ -1114,6 +1156,7 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
               app.appName,
               replicas[0]?.name ?? "",
               sorted[0]?.config?.services,
+              addresses,
             );
           });
         }),
@@ -1483,6 +1526,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     input.appName,
     input.baseName,
     fresh[0]?.config?.services,
+    yield* listAppAddresses(input.appName),
   );
 });
 
@@ -1639,6 +1683,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       }
     }
     const replicas = listed.map((machine) => toReplica(machine, volumesById));
+    const addresses = yield* listAppAddresses(input.appName);
     return {
       ...toReplicaSet(
         replicas,
@@ -1648,6 +1693,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
           replicas[0]?.name ??
           "",
         listed[0]?.config?.services,
+        addresses,
       ),
       rolloutPending,
     };

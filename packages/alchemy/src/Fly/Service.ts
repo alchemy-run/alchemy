@@ -55,11 +55,13 @@ import { attachPostgresSecrets } from "./Postgres.ts";
 import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,
+  listAppAddresses,
   listReplicaSets,
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
   sameServices,
+  serviceUrl,
   toFlyService,
   volumeIdsOf,
   type Replica,
@@ -208,8 +210,12 @@ export type Service = Resource<
     /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
     state: string;
     /**
-     * Public `https://{appName}.fly.dev` URL when a proxy service is
-     * configured.
+     * URL of the published proxy service. `https://{appName}.fly.dev`, or
+     * `http://{appName}.flycast` when every address on the App is Flycast
+     * (`private_v6`) and a port serves plain HTTP. `undefined` when nothing
+     * is published, or on a Flycast-only App without a plain-HTTP port.
+     * Re-derived from the App's addresses on every deploy, so adding or
+     * removing an {@link IpAssignment} shows up on the following deploy.
      */
     url: string | undefined;
     /** Parsed image reference from Fly. */
@@ -351,7 +357,9 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * `url` is `undefined` when you pass `services: []` (nothing is
- * published).
+ * published). On an App whose only address is a Flycast `private_v6`
+ * {@link IpAssignment}, `url` is `http://{appName}.flycast`; see the
+ * [networking guide](/fly/networking).
  *
  * :::note[One fly.dev hostname per App]
  * Every published Service on the App shares `{appName}.fly.dev`. Put
@@ -1135,6 +1143,20 @@ export const ServiceProvider = () =>
             if (hash !== output.code.hash) {
               return { action: "update" as const };
             }
+          }
+          // Addresses are separate resources; re-derive the URL when they change.
+          const routing = news as Partial<
+            Pick<ServiceProps, "services" | "port">
+          >;
+          const published = { services: routing.services, port: routing.port };
+          if (isResolved<Pick<ServiceProps, "services" | "port">>(published)) {
+            const url = serviceUrl(
+              output.appName,
+              published.services?.map(toFlyService) ??
+                defaultHttpServices(published.port ?? DEFAULT_PORT),
+              yield* listAppAddresses(output.appName),
+            );
+            if (url !== output.url) return { action: "update" as const };
           }
           return output.rolloutPending
             ? { action: "update" as const }

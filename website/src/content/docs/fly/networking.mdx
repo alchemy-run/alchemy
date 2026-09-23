@@ -110,7 +110,10 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 Call it from another App in the same organization at
-`http://{appName}.flycast`. Prefer this over `{appName}.internal`:
+`http://{appName}.flycast`, which is also what the Service's `url`
+reports once the Flycast address exists. Allocating the address in an
+earlier deploy, or redeploying after adding it, updates `url`. Prefer
+this over `{appName}.internal`:
 `.internal` resolves straight to Machines and bypasses the proxy, so
 it ignores service checks, `autostart`, and the traffic switch of a
 [blue/green deployment](/fly/compute/deployments).

@@ -30,6 +30,7 @@ import {
   hasPublishedService,
   listMachinesByApp,
   leaseSnapshot,
+  listAppAddresses,
   ownedReplicas,
   ReplicaNotCreated,
   replicaIndexOf,
@@ -436,6 +437,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
       input.appName,
       input.baseName,
       config.services,
+      yield* listAppAddresses(input.appName),
     );
   }
   const candidates: Machine[] = [];
@@ -844,5 +846,6 @@ export const reconcileBlueGreen = Effect.fn(function* (
     input.appName,
     input.baseName,
     config.services,
+    yield* listAppAddresses(input.appName),
   );
 });

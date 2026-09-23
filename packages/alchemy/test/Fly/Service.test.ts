@@ -12,6 +12,11 @@ import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import FlycastApi, {
+  FLYCAST_BODY,
+  FlycastSite,
+} from "./fixtures/flycast-api.ts";
+import { fetchFrom, nginx } from "./fixtures/flycast.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -302,4 +307,42 @@ test.provider(
     ],
     timeout: 180_000,
   },
+);
+
+test.provider(
+  "a Flycast-only App gives the Service a Flycast url",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (withApi: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* FlycastSite;
+            yield* Fly.IpAssignment("FlycastIp", {
+              app: site,
+              type: "private_v6",
+            });
+            const client = yield* Fly.App("FlycastServiceClient");
+            const caller = yield* Fly.Machine("Caller", {
+              app: client,
+              ...nginx,
+            });
+            const api = withApi ? yield* FlycastApi : undefined;
+            return { caller, api };
+          }),
+        );
+
+      // The Flycast address exists before the Service deploys.
+      yield* deploy(false);
+      const deployed = yield* deploy(true);
+      const api = deployed.api!;
+      expect(api.url).toEqual(`http://${api.appName}.flycast`);
+      expect(
+        yield* fetchFrom(deployed.caller, api.url!, FLYCAST_BODY),
+      ).toContain(FLYCAST_BODY);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(api.appName, api.machineId)).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 300_000 },
 );
