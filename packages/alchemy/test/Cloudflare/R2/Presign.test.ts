@@ -83,7 +83,9 @@ test.provider(
             ),
             env: {
               BUCKET: bucket,
-              BUCKET_S3: Cloudflare.R2.S3Credentials(bucket),
+              BUCKET_S3: Cloudflare.R2.S3Credentials(bucket, {
+                access: "read-write",
+              }),
             },
           });
           return { bucket, worker };

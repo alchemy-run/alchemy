@@ -100,3 +100,5 @@ export const _s3Bucket: R2Bucket = s3Env.BUCKET;
 export const _s3Declared = Cloudflare.R2.S3Credentials(s3Bucket, {
   access: "write",
 });
+// @ts-expect-error `access` is required.
+export const _s3NoAccess = Cloudflare.R2.S3Credentials(s3Bucket);

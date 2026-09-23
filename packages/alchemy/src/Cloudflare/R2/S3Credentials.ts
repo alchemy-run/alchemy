@@ -20,9 +20,8 @@ export interface S3CredentialsOptions {
    * Object operations the credentials may perform. Deployed, this selects
    * the permission groups of the scoped API token they are derived from
    * (`Workers R2 Storage Read` and/or `Workers R2 Storage Write`).
-   * @default "read-write"
    */
-  access?: S3CredentialsAccess;
+  access: S3CredentialsAccess;
 }
 
 /**
@@ -83,7 +82,9 @@ export interface S3Credentials extends Effect.Effect<
  * ### Effect-native Workers
  * **Example:** Read the credentials at runtime
  * ```typescript
- * const credentials = yield* Cloudflare.R2.S3Credentials(Uploads);
+ * const credentials = yield* Cloudflare.R2.S3Credentials(Uploads, {
+ *   access: "read-write",
+ * });
  * // inside a handler:
  * const { endpoint, bucketName, accessKeyId, secretAccessKey } =
  *   yield* credentials;
@@ -129,9 +130,9 @@ export interface S3Credentials extends Effect.Effect<
  */
 export const S3Credentials = (
   bucket: BucketInput,
-  options: S3CredentialsOptions = {},
+  options: S3CredentialsOptions,
 ): S3Credentials => {
-  const access = options.access ?? "read-write";
+  const { access } = options;
   return Object.assign(
     Effect.gen(function* () {
       const host = yield* CoreBinding.Host;

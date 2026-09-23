@@ -149,15 +149,15 @@ export default {
 secret. Under `alchemy dev`, no token is created and it points at the
 local endpoint with local credentials.
 
-`access` sets the token's permissions:
+`access` is required and sets the token's permissions:
 
 ```typescript
 Cloudflare.R2.S3Credentials(Uploads, { access: "read" }); // downloads only
 Cloudflare.R2.S3Credentials(Uploads, { access: "write" }); // uploads only
-Cloudflare.R2.S3Credentials(Uploads); // "read-write", the default
+Cloudflare.R2.S3Credentials(Uploads, { access: "read-write" }); // both
 ```
 
-In an Effect-native Worker, `yield* Cloudflare.R2.S3Credentials(Uploads)`
+In an Effect-native Worker, `yield* Cloudflare.R2.S3Credentials(Uploads, { access })`
 gives you the same values for your own S3 client.
 
 ## Browser uploads to a deployed bucket

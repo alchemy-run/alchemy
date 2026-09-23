@@ -98,7 +98,9 @@ test.provider(
             ),
             env: {
               BUCKET: Bucket,
-              BUCKET_S3: Cloudflare.R2.S3Credentials(Bucket),
+              BUCKET_S3: Cloudflare.R2.S3Credentials(Bucket, {
+                access: "read-write",
+              }),
             },
           });
           const bucket = yield* Bucket;

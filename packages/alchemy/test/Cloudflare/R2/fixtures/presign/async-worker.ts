@@ -4,7 +4,7 @@ import { AwsClient } from "aws4fetch";
 
 interface Env {
   BUCKET: R2Bucket;
-  /** `Cloudflare.R2.S3Credentials(bucket)` — a JSON string. */
+  /** `Cloudflare.R2.S3Credentials(bucket, { access: "read-write" })` — a JSON string. */
   BUCKET_S3: string;
 }
 
