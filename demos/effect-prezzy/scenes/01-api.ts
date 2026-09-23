@@ -55,18 +55,29 @@ export default defineScene({
     await s.editor.patch(
       "src/ShortyApi.ts",
       "Declare an endpoint to create a link",
-      edit.append(`\n${api(7, 12)}  ) {}\n`),
-      "An HttpApi group: each endpoint declares its method, path, payload, success and error schemas.",
+      edit.append(`\n${api(7, 10)}`),
+      "Each endpoint is a value: its method, path, and the schemas for its payload, success and errors.",
     );
     await s.editor.patch(
       "src/ShortyApi.ts",
-      "Add list and get, with a typed 404",
-      edit.replace("  ) {}\n", api(13, 21)),
+      "Declare an endpoint to list links",
+      edit.append(`\n${api(12, 14)}`),
+    );
+    await s.editor.patch(
+      "src/ShortyApi.ts",
+      "Declare get, with a typed 404",
+      edit.append(`\n${api(16, 20)}`),
+      "get declares LinkNotFound as its error, so a missing link is a typed 404 on the wire and the same tagged error on the client.",
+    );
+    await s.editor.patch(
+      "src/ShortyApi.ts",
+      "Group the endpoints",
+      edit.append(`\n${api(22, 25)}`),
     );
     await s.editor.patch(
       "src/ShortyApi.ts",
       "One API value for the server, client and tests",
-      edit.append(`\n${api(23, 24)}`),
+      edit.append(`\n${api(27, 28)}`),
       "ShortyApi is a plain value. The Worker implements it, the dashboard derives a client from it, and the tests will use that same client.",
     );
 
