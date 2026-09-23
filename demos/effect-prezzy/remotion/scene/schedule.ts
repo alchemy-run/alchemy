@@ -1,6 +1,6 @@
 import type { AppId, Beat, SceneCapture } from "../../shared/types.ts";
-import { highlight, type Colors } from "./highlight.ts";
-import { planTyping, type TypingPlan } from "./typing.ts";
+import { highlight } from "./highlight.ts";
+import { patchView, staticView, type PatchView } from "./patch.ts";
 
 /** Frame budget for each kind of beat, at `fps`. */
 export const TIMING = {
@@ -10,11 +10,8 @@ export const TIMING = {
   /** Frames the picked window takes to come forward after the switcher closes. */
   raise: 3,
   openTab: 14,
-  editLeadIn: 10,
-  editHold: 14,
-  typing: { cps: 34, selectFrames: 10, gapFrames: 8 },
-  /** Longest a single edit may take to type; longer inserts type faster. */
-  maxTypingSeconds: 7,
+  /** A patch: scroll to it and show removed lines in red, swap in the new lines, then hold in green. */
+  patch: { show: 12, change: 14, hold: 16 },
   /** Base time on the architecture window, plus time per new node or edge. */
   diagram: 90,
   diagramPerAdded: 10,
@@ -36,16 +33,23 @@ export interface Segment {
   previous: AppId;
   /** Frames at the start spent switching windows (0 when already focused). */
   switchFrames: number;
-  /** editor.edit: the typing plan and token colours of both versions. */
-  typing?: { plan: TypingPlan; before: Colors; after: Colors };
-  /** editor.open: token colours of the opened file. */
-  colors?: Colors;
+  /** editor.patch / editor.edit / editor.open: the file as diff rows. */
+  view?: PatchView;
+}
+
+/** One press of → in the presenter: frames `[from, to)` of the scene. */
+export interface Step {
+  title: string;
+  notes: string;
+  from: number;
+  to: number;
 }
 
 export interface SceneSchedule {
   segments: Segment[];
-  /** Colours of the tabs open when the scene starts. */
-  initialColors: Record<string, Colors>;
+  steps: Step[];
+  /** The tabs open when the scene starts, as static views. */
+  initialViews: Record<string, PatchView>;
   durationInFrames: number;
 }
 
@@ -55,8 +59,11 @@ const appOf = (beat: Beat, current: AppId): AppId => {
       return beat.app;
     case "editor.open":
     case "editor.edit":
+    case "editor.patch":
     case "editor.delete":
       return "editor";
+    case "step":
+      return current;
     case "diagram":
       return "diagram";
     case "browser.update":
@@ -77,7 +84,7 @@ export const schedule = async (
   const segments: Segment[] = [];
   let frame = 0;
   // The scene opens on the first beat's window, without a switch.
-  const firstBeat = capture.beats.find((b) => b.kind !== "pause");
+  const firstBeat = capture.beats.find((b) => b.kind !== "pause" && b.kind !== "step");
   let app: AppId = firstBeat ? appOf(firstBeat, "editor") : "editor";
   for (const beat of capture.beats) {
     const next = appOf(beat, app);
@@ -93,12 +100,13 @@ export const schedule = async (
     let work = 0;
     switch (beat.kind) {
       case "focus":
+      case "step":
         break;
       case "pause":
         work = Math.round(beat.seconds * fps);
         break;
       case "editor.open":
-        segment.colors = await highlight(beat.file, beat.content);
+        segment.view = staticView(beat.content, await highlight(beat.file, beat.content));
         work = TIMING.openTab;
         break;
       case "editor.delete":
@@ -113,18 +121,16 @@ export const schedule = async (
       case "browser.update":
         work = TIMING.browserUpdate;
         break;
-      case "editor.edit": {
-        const inserted = Math.max(0, beat.after.length - beat.before.length);
-        const cps = Math.max(TIMING.typing.cps, inserted / TIMING.maxTypingSeconds);
-        const plan = planTyping(beat.before, beat.after, { fps, ...TIMING.typing, cps });
-        segment.typing = {
-          plan,
-          before: await highlight(beat.file, beat.before),
-          after: await highlight(beat.file, beat.after),
-        };
-        work = TIMING.editLeadIn + plan.frames + TIMING.editHold;
+      case "editor.patch":
+      case "editor.edit":
+        segment.view = patchView(
+          beat.before,
+          beat.after,
+          await highlight(beat.file, beat.before),
+          await highlight(beat.file, beat.after),
+        );
+        work = TIMING.patch.show + TIMING.patch.change + TIMING.patch.hold;
         break;
-      }
       case "terminal":
         work = Math.max(1, Math.round((beat.end - beat.start) * fps));
         break;
@@ -137,11 +143,27 @@ export const schedule = async (
     frame += segment.duration;
     app = next;
   }
-  const initialColors: Record<string, Colors> = {};
+  const initialViews: Record<string, PatchView> = {};
   for (const tab of capture.start.tabs) {
-    initialColors[tab.file] = await highlight(tab.file, tab.content);
+    initialViews[tab.file] = staticView(tab.content, await highlight(tab.file, tab.content));
   }
-  return { segments, initialColors, durationInFrames: Math.max(1, frame) };
+  const durationInFrames = Math.max(1, frame);
+
+  // Steps: a new one at every step beat; empty ones (e.g. a step right before a patch's own) are dropped.
+  const marks: { title: string; notes: string; from: number }[] = [
+    { title: capture.title, notes: capture.notes, from: 0 },
+  ];
+  for (const segment of segments) {
+    if (segment.beat.kind !== "step") continue;
+    const mark = { title: segment.beat.title, notes: segment.beat.notes, from: segment.from };
+    if (marks.at(-1)!.from === mark.from) marks[marks.length - 1] = mark;
+    else marks.push(mark);
+  }
+  const steps: Step[] = marks.map((mark, i) => ({
+    ...mark,
+    to: marks[i + 1]?.from ?? durationInFrames,
+  })).filter((step) => step.to > step.from);
+  return { segments, steps, initialViews, durationInFrames };
 };
 
 /** The segment playing at `frame` (the last one once the scene has ended). */

@@ -54,10 +54,15 @@ const tmuxConf = path.join(root, "capture", "tmux.conf");
 const zdot = path.join(root, "work", ".zdot");
 const SOCKET = "shorty-demo";
 const SESSION = "shorty";
-const PANES: Record<Pane, string> = { dev: `${SESSION}:0.0`, shell: `${SESSION}:0.1` };
+/** Terminal tabs are tmux windows: 0 for deploys and tests, 1 for `alchemy dev`. */
+const PANES: Record<Pane, string> = { shell: `${SESSION}:0`, dev: `${SESSION}:1` };
+/** The tab on screen; persists across scenes like the real terminal would. */
+let currentTab: Pane = "shell";
 
 /** Beat markers written into the tcut recording around terminal beats. */
 const BEAT = "prezzy-beat:";
+/** Markers recording which terminal tab is on screen. */
+const TAB = "prezzy-tab:";
 
 /** Never copied into the project or shown in the explorer. */
 const IGNORED = new Set(["node_modules", ".alchemy", "dist", ".DS_Store", "tsconfig.tsbuildinfo"]);
@@ -118,7 +123,9 @@ const startTmux = async (cols: number, rows: number) => {
   const shell = `ZDOTDIR=${zdot} zsh -i`;
   await sh(["tmux", "-f", tmuxConf, "-L", SOCKET, "new-session", "-d", "-s", SESSION,
     "-x", String(cols), "-y", String(rows), "-c", dir, shell]);
-  await tmux("split-window", "-v", "-l", "55%", "-t", `${SESSION}:0`, "-c", dir, shell);
+  await tmux("new-window", "-d", "-t", PANES.dev, "-c", dir, shell);
+  await tmux("select-window", "-t", PANES.shell);
+  currentTab = "shell";
   await Bun.sleep(800);
 };
 
@@ -177,7 +184,7 @@ const capturePage = async (url: string, waitFor?: RegExp) => {
 };
 
 /** Window contents carried from scene to scene. */
-let desk: Desk = { files: [], tabs: [], active: undefined };
+let desk: Desk = { files: [], tabs: [], active: undefined, terminalTabs: ["shell"] };
 const state: Record<string, string> = {};
 
 const captureScene = async (id: string, scene: SceneDefinition) => {
@@ -193,7 +200,17 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
   let browser = desk.browser;
   let diagram = desk.diagram;
   let terminalBeats = 0;
+  const openedTabs = new Set<Pane>(desk.terminalTabs ?? ["shell"]);
   let shots = 0;
+
+  /** Edited text not yet on disk: intermediate edits never reach `alchemy dev`. */
+  const pending = new Map<string, string>();
+  const current = async (file: string) =>
+    pending.get(file) ?? (await readText(path.join(dir, file)));
+  const flush = async () => {
+    for (const [file, content] of pending) await writeProjectFile(file, content);
+    pending.clear();
+  };
 
   const openTab = (file: string, content: string) => {
     tabs.set(file, content);
@@ -236,10 +253,21 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         await t.enter();
         await t.sleep("1500ms");
       });
+      await t.marker(`${TAB}${currentTab}`);
+
+      /** Click over to a terminal tab (a tmux window) and note it for the tab strip. */
+      const showTab = async (pane: Pane) => {
+        if (pane === currentTab) return;
+        await tmux("select-window", "-t", PANES[pane]);
+        currentTab = pane;
+        openedTabs.add(pane);
+        await t.marker(`${TAB}${pane}`);
+        await t.sleep("700ms");
+      };
 
       const term: Term = {
         async type(pane, command) {
-          await tmux("select-pane", "-t", PANES[pane]);
+          await showTab(pane);
           await t.sleep("300ms");
           await t.type(command);
           await t.sleep("250ms");
@@ -267,7 +295,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
           await t.sleep("1200ms");
           return paneText("shell");
         },
-        waitDev: (opts) => waitDev(opts?.timeout),
+        async waitDev(opts) {
+          // Watch alchemy dev pick up the change on its own tab.
+          await showTab("dev");
+          await waitDev(opts?.timeout);
+        },
         waitFor: (pane, pattern, opts) => waitFor(pane, pattern, opts?.timeout),
         text: paneText,
         sleep: (ms) => t.sleep(`${ms}ms`),
@@ -276,6 +308,17 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       const context: SceneContext = {
         dir,
         state,
+        async chapterLines(file) {
+          if (!(await exists(path.join(chapter, file)))) throw new Error(`${scene.chapter} has no ${file}`);
+          const lines = (await readText(path.join(chapter, file))).split("\n");
+          return (from, to = from) => {
+            if (from < 1 || to > lines.length || to < from) throw new Error(`${file} has no lines ${from}–${to}`);
+            return `${lines.slice(from - 1, to).join("\n")}\n`;
+          };
+        },
+        step(title, notes) {
+          beats.push({ kind: "step", title, notes: notes ?? "" });
+        },
         async sync(opts) {
           const keep = new Set(opts?.except ?? []);
           const want = await listFiles(chapter);
@@ -291,20 +334,26 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         },
         editor: {
           async open(file) {
-            const content = await readText(path.join(dir, file));
+            const content = await current(file);
             openTab(file, content);
             beats.push({ kind: "editor.open", file, content });
           },
-          async show(file) {
-            const before = await readText(path.join(dir, file));
-            const after = await readText(path.join(chapter, file));
-            if (!(await exists(path.join(chapter, file)))) throw new Error(`${scene.chapter} has no ${file}`);
-            if (before === after) throw new Error(`${file} is unchanged in ${scene.chapter}`);
-            await writeProjectFile(file, after);
+          async patch(file, title, edit, notes) {
+            const before = await current(file);
+            const after = edit(before);
+            if (after === before) throw new Error(`patch "${title}" changed nothing in ${file}`);
+            pending.set(file, after);
             openTab(file, after);
-            beats.push({ kind: "editor.edit", file, before, after });
+            beats.push({ kind: "step", title, notes: notes ?? "" });
+            beats.push({ kind: "editor.patch", file, title, before, after });
+          },
+          async show(file, title) {
+            if (!(await exists(path.join(chapter, file)))) throw new Error(`${scene.chapter} has no ${file}`);
+            const after = await readText(path.join(chapter, file));
+            await context.editor.patch(file, title ?? file, () => after);
           },
           async remove(file) {
+            pending.delete(file);
             await rm(path.join(dir, file), { force: true });
             tabs.delete(file);
             if (active === file) active = [...tabs.keys()].pop();
@@ -312,6 +361,7 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
           },
         },
         async terminal(fn) {
+          await flush();
           const index = terminalBeats++;
           beats.push({ kind: "terminal", start: 0, end: 0 });
           await t.marker(`${BEAT}start:${index}`);
@@ -322,6 +372,7 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
           }
         },
         async diagram(opts) {
+          await flush();
           const stateDir = path.join(dir, ".alchemy", "state", "Shorty");
           const deadline = Date.now() + 120_000;
           let graph: Graph;
@@ -374,6 +425,20 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       };
 
       await scene.run(context);
+      await flush();
+
+      // The edits on screen must add up to the real, tested chapter.
+      const want = await listFiles(chapter);
+      const have = await listFiles(dir);
+      const problems: string[] = [];
+      for (const file of new Set([...want, ...have])) {
+        if (!want.includes(file)) problems.push(`extra file ${file}`);
+        else if (!have.includes(file)) problems.push(`missing file ${file}`);
+        else if ((await readText(path.join(dir, file))) !== (await readText(path.join(chapter, file)))) {
+          problems.push(`${file} differs from chapters/${scene.chapter}/${file}`);
+        }
+      }
+      if (problems.length > 0) throw new Error(`${id} did not end at its chapter:\n  ${problems.join("\n  ")}`);
 
       await t.hide(async () => {
         await tmux("detach-client", "-s", SESSION);
@@ -400,6 +465,7 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       active,
       browser,
       diagram,
+      terminalTabs: [...openedTabs],
     },
     terminal: undefined,
     beats,
@@ -410,8 +476,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       maxPause: video.config.maxPause,
     });
     const at = new Map<string, number>();
+    const tabTimeline: { at: number; tab: Pane }[] = [];
     for (const e of timeline.events) {
-      if (e.type === "m" && e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
+      if (e.type !== "m") continue;
+      if (e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
+      if (e.data.startsWith(TAB)) tabTimeline.push({ at: e.vt, tab: e.data.slice(TAB.length) as Pane });
     }
     let index = 0;
     for (const beat of beats) {
@@ -422,7 +491,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
     }
     console.log(`● ${id}: rendering the terminal`);
     const result = await video.render(recording);
-    capture.terminal = { clip: `${id}/terminal.mp4`, duration: result.durationSeconds };
+    capture.terminal = {
+      clip: `${id}/terminal.mp4`,
+      duration: result.durationSeconds,
+      tabs: tabTimeline,
+    };
   }
 
   desk = capture.end;
@@ -462,9 +535,24 @@ if (!args.only) {
   // Resume from the desk the previous scene left behind.
   const index = scenes.findIndex((item) => item.id === args.only);
   const previous = scenes[index - 1];
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
   if (previous) {
     const prev = JSON.parse(await readText(path.join(captureRoot, previous.id, "scene.json"))) as SceneCapture;
     desk = prev.end;
+    const prevScene = (await import(path.join(root, "scenes", `${previous.id}.ts`))).default as SceneDefinition;
+    await cp(path.join(chaptersDir, prevScene.chapter), dir, {
+      recursive: true,
+      filter: (src) => !IGNORED.has(path.basename(src)),
+    });
+    // Later chapters expect `alchemy dev` already running in its tab.
+    await startTmux(150, 40);
+    if (desk.terminalTabs?.includes("dev")) {
+      await tmux("send-keys", "-t", PANES.dev, "alchemy dev", "Enter");
+      await waitDev(300_000);
+      await tmux("send-keys", "-t", PANES.dev, "C-l");
+    }
+    currentTab = "shell";
   }
 }
 
@@ -474,6 +562,5 @@ try {
     await captureScene(item.id, scene);
   }
 } finally {
-  if (!args.only) await teardown();
-  else await tmux("detach-client", "-s", SESSION);
+  await teardown();
 }

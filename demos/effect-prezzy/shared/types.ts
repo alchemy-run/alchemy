@@ -24,6 +24,9 @@ export const BROWSER_VIEWPORT = {
   height: WINDOW.height - BROWSER_CHROME,
 } as const;
 
+/** Terminal tabs: `dev` runs `alchemy dev`, `shell` runs deploys, tests and curls. */
+export type TerminalTab = "dev" | "shell";
+
 export type AppId = "editor" | "terminal" | "diagram" | "browser";
 
 /** The architecture, derived from Alchemy's state files. */
@@ -61,7 +64,11 @@ export type Beat =
   | { kind: "focus"; app: AppId }
   /** Open (or switch to) a file tab. */
   | { kind: "editor.open"; file: string; content: string }
-  /** Type the change from `before` to `after` into an open file (opened first if needed). */
+  /** Starts a new presenter step: everything until the next `step` plays on one press of →. */
+  | { kind: "step"; title: string; notes: string }
+  /** Apply one edit to a file, shown as a green/red diff (opens the file first if needed). */
+  | { kind: "editor.patch"; file: string; title: string; before: string; after: string }
+  /** Older captures: a whole-file change, shown like a patch. */
   | { kind: "editor.edit"; file: string; before: string; after: string }
   /** Delete a file: its tab closes and it leaves the explorer. */
   | { kind: "editor.delete"; file: string }
@@ -89,6 +96,8 @@ export interface Desk {
   active?: string;
   browser?: BrowserPage;
   diagram?: Graph;
+  /** Terminal tabs opened so far, in the order they were opened. */
+  terminalTabs?: TerminalTab[];
 }
 
 export interface SceneCapture {
@@ -102,7 +111,14 @@ export interface SceneCapture {
   /** Windows when the scene ends; the next scene starts from here. */
   end: Desk;
   /** Terminal-only render of the scene's shell session. */
-  terminal: { clip: string; duration: number } | undefined;
+  terminal:
+    | {
+        clip: string;
+        duration: number;
+        /** Which tab is on screen from each clip time on. */
+        tabs: { at: number; tab: TerminalTab }[];
+      }
+    | undefined;
   beats: Beat[];
 }
 

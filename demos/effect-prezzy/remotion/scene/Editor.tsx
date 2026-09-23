@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
+import { interpolate } from "remotion";
 import { TITLE_BAR, WINDOW, type SceneCapture } from "../../shared/types.ts";
 import { mono, sans } from "../fonts.ts";
 import { vscode } from "../theme.ts";
 import { Window } from "./Desktop.tsx";
 import { languageLabel } from "./highlight.ts";
 import { TIMING, type SceneSchedule } from "./schedule.ts";
-import { staticDocument, typedAt, type Glyph, type TypedDocument } from "./typing.ts";
+import type { PatchView, Row } from "./patch.ts";
 
 const CODE = { fontSize: 21, lineHeight: 32, charWidth: 21 * 0.6 } as const;
 const UI = 15;
@@ -20,10 +21,28 @@ interface EditorState {
   files: string[];
   tabs: string[];
   active: string | undefined;
-  document: TypedDocument | undefined;
-  /** True while characters are landing, so the cursor stays solid. */
-  typing: boolean;
+  view: PatchView | undefined;
+  /** Frames into the current patch (Infinity: settled). */
+  local: number;
+  /** Scroll position (in rows) to animate from, and to. */
+  scrollFrom: number;
+  scrollTo: number;
 }
+
+const VISIBLE_ROWS = Math.floor(
+  (WINDOW.height - TITLE_BAR - TABS - BREADCRUMBS - STATUS) / CODE.lineHeight,
+) - 1;
+
+/** Keep the change in view: its top a few rows down, its end on screen when it fits. */
+const scrollFor = (view: PatchView, kind: "patch" | "open") => {
+  if (kind === "open") return 0;
+  const max = Math.max(0, view.rows.length - VISIBLE_ROWS);
+  // The whole edit if it fits; otherwise its biggest hunk (e.g. the new code, not the imports).
+  const [first, last] = view.last - view.first <= VISIBLE_ROWS - 6 ? [view.first, view.last] : view.main;
+  let top = first - 4;
+  if (last - top > VISIBLE_ROWS - 3) top = Math.min(first - 2, last - VISIBLE_ROWS + 3);
+  return Math.max(0, Math.min(top, max));
+};
 
 const editorState = (
   capture: SceneCapture,
@@ -34,10 +53,11 @@ const editorState = (
   // Start each scene with the few most recent tabs, like closing old ones between chapters.
   const tabs = capture.start.tabs.map((t) => t.file).slice(-4);
   let active = capture.start.active;
-  const initial = capture.start.tabs.find((t) => t.file === active);
-  let document =
-    initial && active ? staticDocument(initial.content, plan.initialColors[active] ?? []) : undefined;
-  let typing = false;
+  let view = active ? plan.initialViews[active] : undefined;
+  let local = Infinity;
+  const scrolls = new Map<string, number>();
+  let scrollFrom = 0;
+  let scrollTo = 0;
   for (const segment of plan.segments) {
     if (segment.from > frame) break;
     const { beat } = segment;
@@ -47,26 +67,22 @@ const editorState = (
       if (at >= 0) tabs.splice(at, 1);
       if (active === beat.file) {
         active = tabs.at(-1);
-        document = undefined;
+        view = undefined;
       }
-      typing = false;
+      local = Infinity;
       continue;
     }
-    if (beat.kind !== "editor.open" && beat.kind !== "editor.edit") continue;
+    if (beat.kind !== "editor.open" && beat.kind !== "editor.edit" && beat.kind !== "editor.patch") continue;
     if (!tabs.includes(beat.file)) tabs.push(beat.file);
     active = beat.file;
     files.add(beat.file);
-    if (beat.kind === "editor.open") {
-      document = staticDocument(beat.content, segment.colors ?? []);
-      typing = false;
-    } else if (segment.typing) {
-      const local = frame - segment.from - segment.switchFrames - TIMING.editLeadIn;
-      const { plan: typingPlan, before, after } = segment.typing;
-      document = typedAt(typingPlan, local, before, after);
-      typing = local >= 0 && local <= typingPlan.frames;
-    }
+    view = segment.view;
+    local = beat.kind === "editor.open" ? Infinity : frame - segment.from - segment.switchFrames;
+    scrollFrom = scrolls.get(beat.file) ?? 0;
+    scrollTo = view ? scrollFor(view, beat.kind === "editor.open" ? "open" : "patch") : 0;
+    scrolls.set(beat.file, scrollTo);
   }
-  return { files: [...files].sort(), tabs, active, document, typing };
+  return { files: [...files].sort(), tabs, active, view, local, scrollFrom, scrollTo };
 };
 
 interface TreeNode {
@@ -215,73 +231,54 @@ const ActivityBar = () => (
   </div>
 );
 
-const lines = (glyphs: Glyph[]): Glyph[][] => {
-  const out: Glyph[][] = [[]];
-  for (const glyph of glyphs) {
-    if (glyph.char === "\n") out.push([]);
-    else out[out.length - 1]!.push(glyph);
-  }
-  return out;
-};
-
-/** Merge neighbouring glyphs that share colour and selection into spans. */
-const Line = ({ glyphs }: { glyphs: Glyph[] }) => {
-  const spans: Glyph[] = [];
-  for (const glyph of glyphs) {
-    const last = spans[spans.length - 1];
-    if (last && last.color === glyph.color && last.selected === glyph.selected) {
-      last.char += glyph.char;
-    } else {
-      spans.push({ ...glyph });
-    }
+/** Merge neighbouring characters that share a colour into spans. */
+const Line = ({ row }: { row: Row }) => {
+  const spans: { text: string; color: string }[] = [];
+  for (let i = 0; i < row.text.length; i++) {
+    const color = row.colors[i] || vscode.fg;
+    const last = spans.at(-1);
+    if (last && last.color === color) last.text += row.text[i];
+    else spans.push({ text: row.text[i]!, color });
   }
   return (
     <>
       {spans.map((span, i) => (
-        <span
-          key={i}
-          style={{
-            color: span.color || vscode.fg,
-            background: span.selected ? vscode.selection : undefined,
-          }}
-        >
-          {span.char}
+        <span key={i} style={{ color: span.color }}>
+          {span.text}
         </span>
       ))}
     </>
   );
 };
 
-const Code = ({
-  document,
-  height,
-  cursorVisible,
-}: {
-  document: TypedDocument;
-  height: number;
-  cursorVisible: boolean;
-}) => {
-  const all = lines(document.glyphs);
-  // Cursor line/column from the glyph index.
-  let cursorLine = -1;
-  let cursorColumn = 0;
-  if (document.cursor >= 0) {
-    cursorLine = 0;
-    for (let i = 0; i < document.cursor && i < document.glyphs.length; i++) {
-      if (document.glyphs[i]!.char === "\n") {
-        cursorLine++;
-        cursorColumn = 0;
-      } else {
-        cursorColumn++;
-      }
-    }
-  }
-  const visible = Math.floor(height / CODE.lineHeight) - 1;
+const ADD_BG = "rgba(46, 160, 67, 0.22)";
+const ADD_BAR = "#2ea043";
+const DEL_BG = "rgba(248, 81, 73, 0.2)";
+const DEL_BAR = "#f85149";
+
+const Code = ({ state }: { state: EditorState }) => {
+  const view = state.view!;
+  const { show, change } = TIMING.patch;
+  const t = state.local;
+  // Removed lines collapse and added lines open up during the change phase.
+  const progress =
+    t === Infinity ? 1 : interpolate(t, [show, show + change], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const ease = (x: number) => 1 - (1 - x) ** 3;
+  const p = ease(progress);
   const scroll =
-    cursorLine < 0
-      ? 0
-      : Math.max(0, Math.min(cursorLine - (visible - 6), all.length - visible));
-  const shown = all.slice(scroll, scroll + visible + 1);
+    t === Infinity
+      ? state.scrollTo
+      : interpolate(t, [0, show], [state.scrollFrom, state.scrollTo], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+          easing: ease,
+        });
+  const heightOf = (row: Row) => (row.kind === "del" ? 1 - p : row.kind === "add" ? p : 1);
+  // Pixel offset of the fractional scroll row, using the rows' current heights.
+  let offset = 0;
+  for (let i = 0; i < Math.floor(scroll) && i < view.rows.length; i++) offset += heightOf(view.rows[i]!);
+  offset += (scroll % 1) * heightOf(view.rows[Math.floor(scroll)] ?? view.rows[0]!);
+  const settled = t === Infinity;
   return (
     <div
       style={{
@@ -292,51 +289,47 @@ const Code = ({
         lineHeight: `${CODE.lineHeight}px`,
         whiteSpace: "pre",
         paddingTop: 6,
+        overflow: "hidden",
       }}
     >
-      {shown.map((glyphs, i) => {
-        const number = scroll + i;
-        const current = number === cursorLine;
-        return (
-          <div
-            key={number}
-            style={{
-              height: CODE.lineHeight,
-              display: "flex",
-              position: "relative",
-              background: current ? vscode.activeLine : undefined,
-              outline: current ? `1px solid ${vscode.border}` : undefined,
-            }}
-          >
-            <span
+      <div style={{ transform: `translateY(${-offset * CODE.lineHeight}px)` }}>
+        {view.rows.map((row, i) => {
+          const h = heightOf(row);
+          if (h <= 0.001) return null;
+          const added = row.kind === "add" && !settled;
+          const removed = row.kind === "del";
+          return (
+            <div
+              key={i}
               style={{
-                width: GUTTER,
-                paddingRight: 24,
-                textAlign: "right",
-                color: current ? vscode.lineNumberActive : vscode.lineNumber,
-                flex: "none",
+                height: CODE.lineHeight * h,
+                overflow: "hidden",
+                display: "flex",
+                position: "relative",
+                background: added ? ADD_BG : removed ? DEL_BG : undefined,
+                boxShadow: added ? `inset 3px 0 ${ADD_BAR}` : removed ? `inset 3px 0 ${DEL_BAR}` : undefined,
+                // Text fades with the row's height so squeezed lines don't smear.
+                opacity: row.kind === "add" ? p ** 2 : row.kind === "del" ? (1 - p) ** 2 : 1,
               }}
             >
-              {number + 1}
-            </span>
-            <span>
-              <Line glyphs={glyphs} />
-            </span>
-            {current && cursorVisible ? (
               <span
                 style={{
-                  position: "absolute",
-                  left: GUTTER + cursorColumn * CODE.charWidth,
-                  top: 3,
-                  width: 2,
-                  height: CODE.lineHeight - 6,
-                  background: vscode.cursor,
+                  width: GUTTER,
+                  paddingRight: 24,
+                  textAlign: "right",
+                  color: added ? "#7ee787" : removed ? "#ffa198" : vscode.lineNumber,
+                  flex: "none",
                 }}
-              />
-            ) : null}
-          </div>
-        );
-      })}
+              >
+                {row.kind === "del" ? "−" : row.number}
+              </span>
+              <span style={{ textDecoration: removed && p > 0 ? "line-through" : undefined, textDecorationColor: DEL_BAR }}>
+                <Line row={row} />
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -351,9 +344,7 @@ export const Editor = ({
   frame: number;
 }) => {
   const state = editorState(capture, plan, frame);
-  const cursorVisible = state.typing || frame % 32 < 18;
   const title = state.active ? `${state.active.split("/").pop()} — ${capture.project}` : capture.project;
-  const codeHeight = WINDOW.height - TITLE_BAR - TABS - BREADCRUMBS - STATUS;
   return (
     <Window title={title} background={vscode.editorBg}>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", fontFamily: sans, fontSize: UI }}>
@@ -404,8 +395,8 @@ export const Editor = ({
               ))}
             </div>
             <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              {state.document ? (
-                <Code document={state.document} height={codeHeight} cursorVisible={cursorVisible} />
+              {state.view ? (
+                <Code state={state} />
               ) : null}
             </div>
           </div>
