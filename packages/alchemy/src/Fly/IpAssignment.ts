@@ -393,34 +393,37 @@ export const hasPublicAddress = (appName: string) =>
 
 /**
  * Converge the addresses of an App a {@link Service} owns. Every owned App
- * gets a Flycast address on the organization's default network. A public
- * App also gets a shared IPv4 and an IPv6; a private one has every public
- * address released. All three types are free.
+ * gets a Flycast address on its private network (the organization's
+ * default network when `network` is omitted). A public App also gets a
+ * shared IPv4 and an IPv6; a private one has every public address
+ * released. All three types are free.
  */
 export const syncOwnedAppAddresses = Effect.fn(function* (
   appName: string,
   isPublic: boolean,
+  network?: string,
 ) {
   const observed = yield* listAssignments(appName);
-  const has = (type: IpAssignmentType) =>
-    observed.some(
-      (item) =>
-        inferType(item) === type &&
-        (type !== "private_v6" || networkOf(item) === undefined),
-    );
-  const desired: IpAssignmentType[] = isPublic
-    ? ["private_v6", "shared_v4", "v6"]
-    : ["private_v6"];
-  for (const type of desired) {
-    if (has(type)) continue;
+  const isDesiredFlycast = (item: FlyIPAssignment) =>
+    inferType(item) === "private_v6" && networkOf(item) === network;
+  if (!observed.some(isDesiredFlycast)) {
     yield* machines
-      .createAppIPAssignment({ app_name: appName, type })
+      .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
       .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
   }
-  if (isPublic) return;
+  if (isPublic) {
+    for (const type of ["shared_v4", "v6"] as const) {
+      if (observed.some((item) => inferType(item) === type)) continue;
+      yield* machines
+        .createAppIPAssignment({ app_name: appName, type })
+        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    }
+  }
+  // Release public addresses of a private Service and Flycast addresses
+  // on any other network.
   for (const item of observed) {
-    const type = inferType(item);
-    if (type === "private_v6" || item.ip === undefined) continue;
+    if (item.ip === undefined || isDesiredFlycast(item)) continue;
+    if (isPublic && inferType(item) !== "private_v6") continue;
     yield* machines
       .deleteAppIPAssignment({ app_name: appName, ip: item.ip })
       .pipe(Effect.catchTag("NotFound", () => Effect.void));

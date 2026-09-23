@@ -140,9 +140,35 @@ export default class Users extends Fly.Service<Users>()(
 ) {}
 ```
 
-Fly's private network spans the organization, so any App in the org
-reaches `Users` at `privateUrl`. Turning `public` on or off updates
-the Service in place; its App and hostname stay the same.
+Fly's default private network spans the organization, so any App in
+the org reaches `Users` at `privateUrl`. Turning `public` on or off
+updates the Service in place; its App and hostname stay the same.
+
+## Restrict a Service to the stack's network
+
+`network` puts the Service's App on its own private network. Only
+Apps on the same network can resolve its `privateUrl`.
+`Fly.stackNetwork` yields a network name unique to the stack and
+stage; yield it inside Effect-valued props:
+
+```typescript
+export default class Users extends Fly.Service<Users>()(
+  "Users",
+  Effect.gen(function* () {
+    return {
+      main: import.meta.url,
+      public: false,
+      network: yield* Fly.stackNetwork,
+    };
+  }),
+  /* ... */
+) {}
+```
+
+Give every Service in the stack the same `network`. Changing it
+replaces the Service, and it cannot be combined with `app`.
+[Connect Services](/fly/compute/connecting-services) walks through a
+private backend behind a public gateway.
 
 ## Call one Service from another
 
@@ -187,7 +213,10 @@ back.
 
 Requests to `privateUrl` go through Fly's proxy, so service checks,
 `autostart`, and [blue/green](/fly/compute/deployments) cutover still
-apply.
+apply. A caller on a [stack network](#restrict-a-service-to-the-stacks-network)
+must join the same network. See
+[Connect Services](/fly/compute/connecting-services) for a full
+example.
 
 ## Fly's proxy is the load balancer
 
@@ -391,6 +420,8 @@ Machine logs live in the Fly dashboard and `fly logs -a {appName}`.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-1) builds a Service step by step.
+[Connect Services](/fly/compute/connecting-services) connects several
+Services on a private network.
 [Networking](/fly/networking) covers public and private Services.
 [Sprites](/fly/compute/sprites) are org-scoped sandboxes that
 hibernate — no App, no Docker image.

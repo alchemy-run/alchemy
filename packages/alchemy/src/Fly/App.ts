@@ -188,7 +188,13 @@ export const App = Resource<App>("Fly.App");
 
 export class AppNotCreated extends Data.TaggedError("Fly.AppNotCreated")<{
   name: string;
-}> {}
+  /** Fly's rejection of the create request, when there was one. */
+  reason?: string;
+}> {
+  get message() {
+    return `Fly App ${this.name} was not created${this.reason ? `: ${this.reason}` : ""}`;
+  }
+}
 
 const toAttrs = (app: FlyApp, fallbackName?: string): App["Attributes"] => {
   const appName = app.name ?? fallbackName ?? "";
@@ -317,7 +323,9 @@ export const ensureApp = Effect.fn(function* (input: {
   }
   if (current === undefined) {
     const orgSlug = input.orgSlug ?? (yield* resolveOrgSlug());
-    yield* machines
+    // A name race surfaces as Conflict or UnprocessableEntity; the lookup
+    // below decides whether the App now exists.
+    const created = yield* machines
       .createApp({
         name: input.name,
         org_slug: orgSlug,
@@ -325,9 +333,25 @@ export const ensureApp = Effect.fn(function* (input: {
         enable_subdomains: input.enableSubdomains,
       })
       .pipe(
-        Effect.catchTag(["Conflict", "UnprocessableEntity"], () => Effect.void),
+        Effect.as(undefined),
+        Effect.catchTag(["Conflict", "UnprocessableEntity"], (error) =>
+          Effect.succeed(error),
+        ),
       );
-    current = yield* getByName(input.name);
+    // A new App can take a moment to become readable.
+    current = yield* getByName(input.name).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (app) => app !== undefined,
+        times: 10,
+      }),
+    );
+    if (current === undefined) {
+      return yield* new AppNotCreated({
+        name: input.name,
+        reason: created?.message,
+      });
+    }
   }
   if (current === undefined) {
     return yield* new AppNotCreated({ name: input.name });

@@ -13,9 +13,11 @@ import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
-import { fetchFrom, nginx } from "./fixtures/flycast.ts";
+import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
 import GatewayApi from "./fixtures/gateway-api.ts";
 import UsersApi, { USERS_BODY } from "./fixtures/users-api.ts";
+import SecureGateway from "./fixtures/secure-gateway.ts";
+import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -447,20 +449,22 @@ test.provider(
 );
 
 test.provider(
-  "public on a Service in a shared App is rejected before anything is created",
+  "public or network on a Service in a shared App is rejected before anything is created",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const app = yield* stack.deploy(Fly.App("EchoInvalidSite"));
-      const failed = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            const site = yield* Fly.App("EchoInvalidSite");
-            return yield* Echo({ app: site, public: false });
-          }),
-        )
-        .pipe(Effect.flip);
-      expect(failed).toMatchObject({ _tag: "Fly.InvalidServiceProps" });
+      for (const invalid of [{ public: false }, { network: "any-network" }]) {
+        const failed = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const site = yield* Fly.App("EchoInvalidSite");
+              return yield* Echo({ app: site, ...invalid });
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(failed).toMatchObject({ _tag: "Fly.InvalidServiceProps" });
+      }
       expect(yield* machines.listMachines({ app_name: app.appName })).toEqual(
         [],
       );
@@ -492,6 +496,62 @@ test.provider(
       yield* stack.destroy();
       expect(yield* appGone(deployed.users.appName)).toBe(true);
       expect(yield* appGone(deployed.gateway.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
+);
+
+test.provider(
+  "Services on the stack network reach each other and nothing else reaches them",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const users = yield* SecureUsers;
+          const gateway = yield* SecureGateway;
+          const outside = yield* Fly.App("OutsideSite");
+          const outsider = yield* Fly.Machine("Outsider", {
+            app: outside,
+            ...nginx,
+          });
+          return {
+            users,
+            gateway,
+            outsider,
+            network: yield* Fly.stackNetwork,
+          };
+        }),
+      );
+      const { users, gateway, outsider, network } = deployed;
+      expect(users.network).toEqual(network);
+      expect(gateway.network).toEqual(network);
+      expect(users.url).toBeUndefined();
+      expect(users.privateUrl).toEqual(`http://${users.appName}.flycast`);
+      for (const appName of [users.appName, gateway.appName]) {
+        const app = yield* machines.getApp({ app_name: appName });
+        expect(app.network).toEqual(network);
+      }
+      const flycast = (yield* machines.listAppIPAssignments({
+        app_name: users.appName,
+      })).ips;
+      expect(flycast?.map((ip) => ip.network?.name)).toEqual([network]);
+
+      // The public gateway reaches the private Service over the stack network.
+      expect(yield* getText(gateway.url!)).toEqual(SECURE_USERS_BODY);
+
+      // An App on the default network cannot resolve either private name.
+      for (const url of [
+        users.privateUrl!,
+        `http://${users.appName}.internal:3000`,
+      ]) {
+        const response = yield* fetchOnce(outsider, url);
+        expect(response).not.toContain(SECURE_USERS_BODY);
+        expect(response).toContain("bad address");
+      }
+
+      yield* stack.destroy();
+      for (const appName of [users.appName, gateway.appName, outsider.appName])
+        expect(yield* appGone(appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 400_000 },
 );

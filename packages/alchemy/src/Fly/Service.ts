@@ -109,6 +109,19 @@ export interface ServiceProps extends PlatformProps {
    */
   public?: boolean;
   /**
+   * Private network the Service's App joins. Only Apps on the same
+   * network can reach it, over `privateUrl` or `.internal`; every other
+   * App in the organization, including those on the default network,
+   * cannot resolve it. Services on one network reach each other freely.
+   * Use {@link stackNetwork} for a network unique to the stack and stage.
+   * Fly creates the network with the first App that names it. Changing
+   * it replaces the Service. Only applies when the Service owns its App
+   * (no `app`).
+   *
+   * @default the organization's default network, shared by every App
+   */
+  network?: string;
+  /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
    * A content-hash change updates the workload using the selected deployment strategy.
@@ -219,6 +232,8 @@ export type Service = Resource<
     appName: string;
     /** Whether the Service created and manages {@link appName}. */
     ownsApp?: boolean;
+    /** Private network the Service's App is on. `undefined` for the default. */
+    network?: string;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
@@ -431,6 +446,58 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * Turning `public` on or off updates the Service in place. Its App and
  * hostname stay the same.
+ *
+ * ### Isolate Services on a private network
+ * Fly's default private network spans the whole organization, so any
+ * App in it can call a private Service. Put a stack's Services on their
+ * own network with `network`. {@link stackNetwork} names one per stack
+ * and stage. Services on the network reach each other at `privateUrl`;
+ * Apps on other networks, including the default one, cannot resolve
+ * them. A public Service on the network still serves `url`, which makes
+ * it the stack's single entry point.
+ *
+ * **Example:** Private backend behind a public gateway
+ * ```typescript
+ * export class Users extends Fly.Service<Users>()(
+ *   "Users",
+ *   Effect.gen(function* () {
+ *     return {
+ *       main: import.meta.url,
+ *       public: false,
+ *       network: yield* Fly.stackNetwork,
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     return { fetch: Effect.succeed(HttpServerResponse.json([])) };
+ *   }),
+ * ) {}
+ *
+ * export class Gateway extends Fly.Service<Gateway>()(
+ *   "Gateway",
+ *   Effect.gen(function* () {
+ *     const users = yield* Users;
+ *     return {
+ *       main: import.meta.url,
+ *       network: yield* Fly.stackNetwork,
+ *       env: { USERS_URL: users.privateUrl },
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const usersUrl = yield* Config.String("USERS_URL");
+ *         const response = yield* HttpClient.get(usersUrl);
+ *         return HttpServerResponse.text(yield* response.text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * :::caution[Changing `network` replaces the Service]
+ * Fly cannot move an App between networks. Alchemy creates the Service
+ * on the new network, then deletes the old App.
+ * :::
  *
  * ### Fly's proxy is the load balancer
  * There is no LoadBalancer resource. Fly runs an Anycast proxy at
@@ -1103,18 +1170,39 @@ const privateUrlOf = (
     : withPort(`http://${appName}.flycast`, http.port, 80);
 };
 
-/** `public` manages the Service's own addresses; a shared App has none. */
+/** `public` and `network` configure the Service's own App. */
 const validateOwnership = (
-  props: Partial<Pick<ServiceProps, "app" | "public">>,
-) =>
-  props.app !== undefined && props.public !== undefined
-    ? Effect.fail(
+  props: Partial<Pick<ServiceProps, "app" | "public" | "network">>,
+) => {
+  if (props.app === undefined) return Effect.void;
+  const conflicting = (["public", "network"] as const).filter(
+    (key) => props[key] !== undefined,
+  );
+  return conflicting.length === 0
+    ? Effect.void
+    : Effect.fail(
         new InvalidServiceProps({
-          message:
-            "Fly.Service `public` only applies when the Service owns its App; remove `app` or `public`.",
+          message: `Fly.Service ${conflicting.map((key) => `\`${key}\``).join(" and ")} only apply when the Service owns its App; remove \`app\` or ${conflicting.map((key) => `\`${key}\``).join(" and ")}.`,
         }),
-      )
-    : Effect.void;
+      );
+};
+
+/**
+ * A private network name unique to the current stack and stage, for the
+ * Service `network` prop. Services in one stage reach each other; other
+ * stages and every other App in the organization cannot.
+ */
+export const stackNetwork = Effect.gen(function* () {
+  const stack = yield* Stack;
+  const name = `${stack.name}-${stack.stage}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 63)
+    .replace(/-$/, "");
+  return /^[a-z]/.test(name) ? name : `n-${name}`.slice(0, 63);
+});
 
 const endpointsOf = (
   set: ReplicaSet,
@@ -1133,10 +1221,11 @@ const endpointsOf = (
 const toAttrs = (
   set: ReplicaSet,
   codeHash: string,
-  access: { ownsApp: boolean; isPublic: boolean },
+  access: { ownsApp: boolean; isPublic: boolean; network?: string },
 ): Service["Attributes"] => ({
   appName: set.appName,
   ownsApp: access.ownsApp,
+  network: access.network,
   ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
   machineId: set.machineId,
@@ -1180,7 +1269,9 @@ export const ServiceProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, output }) {
           if (news === undefined) return;
-          const shape = news as Partial<Pick<ServiceProps, "app" | "public">>;
+          const shape = news as Partial<
+            Pick<ServiceProps, "app" | "public" | "network">
+          >;
           const ownsApp = shape.app === undefined;
           yield* validateOwnership(shape);
           if ("main" in news) {
@@ -1251,7 +1342,9 @@ export const ServiceProvider = () =>
             const nameChanged = desiredAppName !== output.appName;
             const regionChanged =
               (news.region ?? DEFAULT_REGION) !== output.region;
-            if (nameChanged || regionChanged) {
+            // Fly cannot move an App to another network.
+            const networkChanged = news.network !== output.network;
+            if (nameChanged || regionChanged || networkChanged) {
               return {
                 action: "replace" as const,
                 // A pinned App name cannot exist twice.
@@ -1339,6 +1432,7 @@ export const ServiceProvider = () =>
           return toAttrs(found, output?.code.hash ?? "", {
             ownsApp,
             isPublic: ownsApp && (yield* hasPublicAddress(found.appName)),
+            network: ownsApp ? (output?.network ?? olds?.network) : undefined,
           });
         }),
 
@@ -1378,11 +1472,12 @@ export const ServiceProvider = () =>
                   : yield* createFlyAppName(id);
             const app = yield* ensureApp({
               name: desired,
+              network: props.network,
               previousName:
                 output?.ownsApp === true ? output.appName : undefined,
             });
             appName = app.name ?? desired;
-            yield* syncOwnedAppAddresses(appName, isPublic);
+            yield* syncOwnedAppAddresses(appName, isPublic, props.network);
           } else {
             appName = appNameOf(props.app) ?? output?.appName;
           }
@@ -1490,7 +1585,11 @@ export const ServiceProvider = () =>
               ),
             ),
           );
-          return toAttrs(set, codeHash, { ownsApp, isPublic });
+          return toAttrs(set, codeHash, {
+            ownsApp,
+            isPublic,
+            network: ownsApp ? props.network : undefined,
+          });
         }),
 
         delete: Effect.fn(function* ({

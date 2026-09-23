@@ -76,6 +76,17 @@ Machines and bypasses the proxy, so it ignores service checks,
 Turning `public` on or off updates the Service in place. Its App and
 hostname stay the same.
 
+## Restrict private Services to the stack
+
+Fly's default private network spans the organization, so every App in
+the org can call a private Service. Set `network: yield* Fly.stackNetwork`
+on each Service to put them on a network unique to the stack and
+stage. Services on it reach each other at `privateUrl`; Apps on any
+other network, including the default one, get `bad address` for the
+`.flycast` and `.internal` names. A public Service on the network
+still serves `url`, so it becomes the stack's single entry point.
+[Connect Services](/fly/compute/connecting-services) walks through it.
+
 ## Addresses for a shared App
 
 A [Machine](/fly/compute/machines), or a Service that joins a
@@ -256,6 +267,8 @@ binding methods.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-1) deploys a public Service.
+[Connect Services](/fly/compute/connecting-services) connects private
+Services on a stack network.
 [Services](/fly/compute/services) covers private Services and grouping
 Services in one [App](/fly/compute/apps). See the
 [`IpAssignment`](/providers/fly/ipassignment) and

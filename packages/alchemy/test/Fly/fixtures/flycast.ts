@@ -38,3 +38,17 @@ export const fetchFrom = (
       }),
       Effect.map((result) => result.stdout ?? ""),
     );
+
+/** Fetch `url` once from inside a Machine; returns the body or wget's error. */
+export const fetchOnce = (
+  caller: { appName: string; machineId: string },
+  url: string,
+) =>
+  machines
+    .execMachine({
+      app_name: caller.appName,
+      machine_id: caller.machineId,
+      command: ["sh", "-c", `wget -qO- -T 5 ${url} 2>&1 || true`],
+      timeout: 15,
+    })
+    .pipe(Effect.map((result) => result.stdout ?? ""));

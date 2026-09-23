@@ -972,6 +972,10 @@ export default defineConfig({
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
                 {
+                  label: "Connect Services",
+                  link: "/fly/compute/connecting-services",
+                },
+                {
                   label: "Blue/green deployments",
                   link: "/fly/compute/deployments",
                 },
