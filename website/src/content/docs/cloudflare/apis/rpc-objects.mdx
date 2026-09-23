@@ -192,7 +192,76 @@ const child = yield* counter.child();
 const greeting = yield* child.echo("hello");
 ```
 
-Return child objects directly. RPC objects contain only methods, not `{ child: { echo: ... } }` data records.
+A child object returned from a method gets its own lifetime and can be released before its parent.
+
+### Mix data and methods
+
+```typescript
+openSession: Effect.fn(function* (id: string) {
+  const count = yield* Ref.make(0);
+  return {
+    id,
+    meta: { owner: "alchemy", tags: ["a", "b"] },
+    increment: () => Ref.updateAndGet(count, (n) => n + 1),
+    stats: {
+      label: "visits",
+      current: () => Ref.get(count),
+    },
+    items: [
+      { name: "small", bump: () => Ref.updateAndGet(count, (n) => n + 1) },
+      { name: "large", bump: () => Ref.updateAndGet(count, (n) => n + 100) },
+    ],
+  } satisfies RpcObject;
+}),
+```
+
+```typescript
+const session = yield* service.openSession("s1");
+session.meta.owner;              // "alchemy"
+yield* session.items[1].bump();  // 100
+yield* session.stats.current();  // 100
+```
+
+Any function in a returned plain object or array becomes a remote method, at any depth. Data fields are copied when the object is returned and do not update afterwards; expose changing values as methods.
+
+## Pipeline calls
+
+```typescript
+import * as Rpc from "alchemy/Rpc";
+
+const current = yield* service.openSession("s1").pipe(
+  Rpc.pipeline((session) => session.stats.current()),
+);
+```
+
+`Rpc.pipeline` sends `openSession` and `stats.current()` together, so the chain costs one round trip instead of two. Inside the callback the result has not arrived yet, so data fields are Effects:
+
+```typescript
+const summary = yield* service.openSession("s1").pipe(
+  Rpc.pipeline((session) =>
+    Effect.all({
+      owner: session.meta.owner,     // Effect<string>
+      meta: session.meta,            // Effect<{ owner; tags }>
+      bumped: session.items[1].bump(),
+      current: session.stats.current(),
+    }),
+  ),
+);
+```
+
+Methods keep their exact types, including generics and overloads. Chain another step by nesting `Rpc.pipeline`:
+
+```typescript
+service.openCounter().pipe(
+  Rpc.pipeline((counter) =>
+    counter.child().pipe(Rpc.pipeline((child) => child.echo("hello"))),
+  ),
+);
+```
+
+The pipelined object is released when the callback's Effect finishes, so consume streams inside the callback. Running the pipeline again runs the whole chain again; to keep using one object, get it with `yield*` first. A failure of the first call fails the pipeline with that call's error.
+
+Pipelining uses native Worker and Durable Object bindings. With other transports, and with Effects that are not RPC calls, `Rpc.pipeline` waits for the first result and then runs the callback.
 
 ## Lifetime
 

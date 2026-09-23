@@ -418,3 +418,97 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
     );
   });
 });
+
+describe(
+  "Rpc.pipeline without a pipelining transport",
+  { tags: ["unit", "local"] },
+  () => {
+    class OpenFailed extends Data.TaggedError("OpenFailed")<{}> {}
+
+    const openCounter = (runs: { count: number }) =>
+      Effect.sync(() => {
+        runs.count++;
+        let value = 0;
+        return {
+          id: `c${runs.count}`,
+          meta: { owner: "sam", tags: ["a", "b"] },
+          increment: () => Effect.sync(() => ++value),
+          stats: { current: () => Effect.sync(() => value) },
+          items: [
+            { name: "first", bump: () => Effect.sync(() => (value += 10)) },
+          ],
+        };
+      });
+
+    it.effect("reads data fields and calls nested methods on the result", () =>
+      Effect.gen(function* () {
+        const runs = { count: 0 };
+        const result = yield* openCounter(runs).pipe(
+          Rpc.pipeline((counter) =>
+            Effect.gen(function* () {
+              yield* counter.increment();
+              yield* counter.items[0].bump();
+              return {
+                id: yield* counter.id,
+                owner: yield* counter.meta.owner,
+                meta: yield* counter.meta,
+                tag: yield* counter.meta.tags[1],
+                length: yield* counter.meta.tags.length,
+                current: yield* counter.stats.current(),
+              };
+            }),
+          ),
+        );
+        expect(result).toEqual({
+          id: "c1",
+          owner: "sam",
+          meta: { owner: "sam", tags: ["a", "b"] },
+          tag: "b",
+          length: 2,
+          current: 11,
+        });
+      }),
+    );
+
+    it.effect("works with Effect.all over pending fields", () =>
+      Effect.gen(function* () {
+        const result = yield* Rpc.pipeline(
+          openCounter({ count: 0 }),
+          (counter) =>
+            Effect.all({ id: counter.id, current: counter.stats.current() }),
+        );
+        expect(result).toEqual({ id: "c1", current: 0 });
+      }),
+    );
+
+    it.effect("re-runs the whole chain every time it runs", () =>
+      Effect.gen(function* () {
+        const runs = { count: 0 };
+        const chain = openCounter(runs).pipe(
+          Rpc.pipeline((counter) => counter.increment()),
+        );
+        expect(yield* chain).toBe(1);
+        expect(yield* chain).toBe(1);
+        expect(runs.count).toBe(2);
+      }),
+    );
+
+    it.effect(
+      "fails with the first call's error without running the callback",
+      () =>
+        Effect.gen(function* () {
+          let called = false;
+          const error = yield* Effect.fail(new OpenFailed()).pipe(
+            Rpc.pipeline(() =>
+              Effect.sync(() => {
+                called = true;
+              }),
+            ),
+            Effect.flip,
+          );
+          expect(error._tag).toBe("OpenFailed");
+          expect(called).toBe(false);
+        }),
+    );
+  },
+);

@@ -4,6 +4,7 @@ import { makeRpcStub } from "@/Cloudflare/Workers/Rpc.ts";
 import { Service } from "@/Docker/Service.ts";
 import type { Rpc, RpcObject, ValidateRpcObject } from "@/Rpc.ts";
 import type { ValidateRpcShape } from "@/RpcObject.ts";
+import * as RpcPipeline from "@/RpcPipeline.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -467,3 +468,155 @@ const opaque = <T>(value: T): Effect.Effect<T> => Effect.succeed(value);
 export type _OpaqueGenericRemainsGeneric = Assert<
   Equal<Rpc.Shape<typeof FunctionalWorker>["echo"], typeof opaque>
 >;
+
+// Returned objects may mix data with methods and nest methods at any depth.
+const session = {
+  id: "s1",
+  createdAt: new Date(0),
+  tags: ["a", "b"],
+  increment: () => Effect.succeed(1),
+  stats: {
+    label: "visits",
+    current: () => Effect.succeed(1),
+    runtime: (): Effect.Effect<string, never, RuntimeContext> =>
+      Effect.succeed("runtime"),
+  },
+  items: [
+    { name: "a", bump: () => Effect.succeed("a" as const) },
+    { name: "b", bump: () => Effect.succeed("b" as const) },
+  ],
+  echo: <T>(value: T): Effect.Effect<T> => Effect.succeed(value),
+  overloaded,
+  values: () => Stream.make(1, 2),
+} satisfies RpcObject;
+
+export type _MixedAccepted = Assert<
+  Equal<ValidateRpcObject<typeof session>, unknown>
+>;
+
+type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | Json[]
+  | { readonly [key: string]: Json };
+export type _RecursiveJsonAccepted = Assert<
+  Equal<ValidateRpcObject<{ doc: Json; list: Json[] }>, unknown>
+>;
+
+const nestedMissing = { data: 1, stats: { read: () => MissingService } };
+const arrayMissing = { items: [{ read: () => MissingService }] };
+const nestedSync = { data: 1, stats: { read: () => "not an Effect" } };
+export type _NestedMissingInDataRejected = Assert<
+  Equal<ValidateRpcObject<typeof nestedMissing>, never>
+>;
+export type _ArrayMissingRejected = Assert<
+  Equal<ValidateRpcObject<typeof arrayMissing>, never>
+>;
+export type _NestedMethodObjectSyncRejected = Assert<
+  Equal<ValidateRpcObject<typeof nestedSync>, never>
+>;
+// @ts-expect-error Nested Effect methods still cannot require unresolved services.
+nestedMissing satisfies RpcObject;
+// @ts-expect-error Methods inside arrays are checked too.
+arrayMissing satisfies RpcObject;
+// @ts-expect-error Nested method objects keep the strict Effect-or-Stream rule.
+nestedSync satisfies RpcObject;
+
+export const MixedWorker = Cloudflare.Worker(
+  "RpcObjectMixedWorker",
+  props,
+  Effect.succeed({ open: () => Effect.succeed(session) }),
+);
+// @ts-expect-error Validation follows data fields to nested methods.
+Cloudflare.Worker(
+  "RpcObjectNestedMissing",
+  props,
+  Effect.succeed({ open: () => Effect.succeed(nestedMissing) }),
+);
+
+// Rpc.pipeline: data fields become Effects; methods keep their exact types.
+declare const openSession: Effect.Effect<typeof session, Rejected>;
+
+const piped = openSession.pipe(
+  RpcPipeline.pipeline((s) =>
+    Effect.all({
+      id: s.id,
+      when: s.createdAt,
+      tag: s.tags[0],
+      label: s.stats.label,
+      current: s.stats.current(),
+      runtime: s.stats.runtime(),
+      bumped: s.items[1].bump(),
+      echoed: s.echo("generic" as const),
+      overloadedText: s.overloaded("text"),
+    }),
+  ),
+);
+export type _PipelineTypes = Assert<
+  Equal<
+    typeof piped,
+    Effect.Effect<
+      {
+        id: string;
+        when: Date;
+        tag: string;
+        label: string;
+        current: number;
+        runtime: string;
+        bumped: "a" | "b";
+        echoed: "generic";
+        overloadedText: string;
+      },
+      Rejected,
+      RuntimeContext
+    >
+  >
+>;
+export type _PipelineKeepsGenerics = Assert<
+  Equal<RpcPipeline.Pending<typeof session>["echo"], typeof session.echo>
+>;
+export type _PipelineKeepsOverloads = Assert<
+  Equal<RpcPipeline.Pending<typeof session>["overloaded"], typeof overloaded>
+>;
+
+const dataFirst = RpcPipeline.pipeline(openSession, (s) => s.items[0].bump());
+export type _PipelineDataFirst = Assert<
+  Equal<typeof dataFirst, Effect.Effect<"a" | "b", Rejected>>
+>;
+
+const wholeNested = openSession.pipe(RpcPipeline.pipeline((s) => s.stats));
+export type _PipelineWholeNestedObject = Assert<
+  Equal<Effect.Success<typeof wholeNested>, typeof session.stats>
+>;
+
+class ChildFailed extends Data.TaggedError("ChildFailed")<{}> {}
+declare const openParent: Effect.Effect<
+  {
+    child: () => Effect.Effect<
+      { echo: <T>(v: T) => Effect.Effect<T> },
+      ChildFailed,
+      Scope
+    >;
+  },
+  Rejected
+>;
+const nestedPipeline = openParent.pipe(
+  RpcPipeline.pipeline((parent) =>
+    parent
+      .child()
+      .pipe(RpcPipeline.pipeline((child) => child.echo(1 as const))),
+  ),
+);
+export type _NestedPipeline = Assert<
+  Equal<typeof nestedPipeline, Effect.Effect<1, Rejected | ChildFailed>>
+>;
+
+export const _PendingDataIsNotPlain = (
+  pending: RpcPipeline.Pending<typeof session>,
+) => {
+  // @ts-expect-error A pending data field is an Effect, not the value.
+  const id: string = pending.id;
+  return id;
+};

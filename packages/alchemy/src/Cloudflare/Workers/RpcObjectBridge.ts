@@ -21,6 +21,7 @@ import {
   StreamTag,
   type RpcStreamEnvelope,
 } from "../../Rpc.ts";
+import { RpcPipelineStart, type RpcPendingCall } from "../../RpcPipeline.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import { WorkerExecutionContext } from "./WorkerRuntime.ts";
@@ -34,15 +35,20 @@ type Operation = (args: unknown[]) => Effect.Effect<any, any, any>;
 
 interface NativeTarget {
   result(args: unknown[]): Promise<unknown>;
-  dispatch(method: string): Promise<unknown>;
+  dispatch(path: string | MethodPath): Promise<unknown>;
   release(): Promise<void>;
   status(): Promise<unknown>;
   [Symbol.dispose](): void;
 }
 
+/** Where a method sits inside a returned value, e.g. `["stats", "current"]`. */
+type MethodPath = ReadonlyArray<string | number>;
+
 interface ObjectEnvelope {
   readonly _tag: typeof ObjectTag;
-  readonly methods: string[];
+  /** The returned value with its methods removed. */
+  readonly data: object;
+  readonly methods: MethodPath[];
   readonly target: NativeTarget;
 }
 
@@ -66,46 +72,161 @@ export const isRpcMethodName = (name: PropertyKey): name is string =>
   name !== "__proto__" &&
   !Object.hasOwn(Object.prototype, name);
 
-const objectMethods = (value: unknown): string[] | undefined => {
-  if (typeof value !== "object" || value === null) return;
+const maxValueDepth = 256;
+
+const isPlainObject = (value: object) => {
   const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const then = descriptors.then;
-  if (
-    then &&
-    (!Object.hasOwn(then, "value") || typeof then.value === "function")
-  ) {
-    throw new Error(
-      "RPC values cannot expose a callable or accessor then property",
-    );
-  }
-  const names = Reflect.ownKeys(descriptors).filter(
-    (name) => name !== Symbol.dispose,
-  );
-  if (
-    !names.some(
-      (name) =>
-        typeof Object.getOwnPropertyDescriptor(value, name)?.value ===
-        "function",
-    )
-  ) {
-    return;
-  }
-  if (
-    names.some(
-      (name) =>
-        !isRpcMethodName(name) ||
-        !Object.hasOwn(descriptors[name], "value") ||
-        typeof descriptors[name].value !== "function",
-    )
-  ) {
-    throw new Error(
-      "RPC method objects must contain only own, non-reserved method properties",
-    );
-  }
-  return names as string[];
+  return prototype === Object.prototype || prototype === null;
 };
+
+const isPlainArray = (value: object): value is unknown[] =>
+  Array.isArray(value) && Object.getPrototypeOf(value) === Array.prototype;
+
+const tooDeep = () =>
+  new Error(`RPC values cannot be nested deeper than ${maxValueDepth} levels`);
+
+/**
+ * Find every method in a returned value by walking its plain objects and
+ * arrays. Returns undefined for plain data, which is sent unchanged.
+ * Property getters are never invoked.
+ */
+const findMethods = (root: unknown): MethodPath[] | undefined => {
+  if (typeof root !== "object" || root === null) return;
+  const methods: MethodPath[] = [];
+  const seen = new WeakSet<object>();
+  const pending: Array<{ value: object; path: MethodPath }> = [
+    { value: root, path: [] },
+  ];
+  while (pending.length > 0) {
+    const { value, path } = pending.pop()!;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (path.length > maxValueDepth) throw tooDeep();
+    const visit = (key: string | number, member: unknown) => {
+      if (typeof member === "function") methods.push([...path, key]);
+      else if (typeof member === "object" && member !== null)
+        pending.push({ value: member, path: [...path, key] });
+    };
+    if (isPlainArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        const field = Object.getOwnPropertyDescriptor(value, index);
+        if (field && "value" in field) visit(index, field.value);
+      }
+    } else if (isPlainObject(value)) {
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      const then = descriptors.then;
+      if (then && (!("value" in then) || typeof then.value === "function")) {
+        throw new Error(
+          "RPC values cannot expose a callable or accessor then property",
+        );
+      }
+      for (const key of Reflect.ownKeys(descriptors)) {
+        if (key === Symbol.dispose) continue;
+        const field = descriptors[key as keyof typeof descriptors];
+        if (!("value" in field)) continue;
+        if (typeof field.value === "function" && !isRpcMethodName(key)) {
+          throw new Error(
+            `RPC methods must have a non-reserved string name; found ${String(key)}`,
+          );
+        }
+        if (typeof key === "string") visit(key, field.value);
+      }
+    }
+  }
+  return methods.length > 0 ? methods : undefined;
+};
+
+/**
+ * Copy a returned value without its methods, preserving shared references
+ * and cycles. Only called for values that contain methods.
+ */
+const stripMethods = (root: object): object => {
+  const copies = new Map<object, object>();
+  const copy = (value: unknown, depth: number): unknown => {
+    if (typeof value !== "object" || value === null) return value;
+    const existing = copies.get(value);
+    if (existing !== undefined) return existing;
+    if (depth > maxValueDepth) throw tooDeep();
+    if (isPlainArray(value)) {
+      const out: unknown[] = new Array(value.length);
+      copies.set(value, out);
+      for (let index = 0; index < value.length; index++) {
+        const field = Object.getOwnPropertyDescriptor(value, index);
+        if (!field) continue;
+        if (!("value" in field)) throw accessorError();
+        out[index] =
+          typeof field.value === "function"
+            ? undefined
+            : copy(field.value, depth + 1);
+      }
+      return out;
+    }
+    if (isPlainObject(value)) {
+      const out: Record<string, unknown> = Object.create(
+        Object.getPrototypeOf(value),
+      );
+      copies.set(value, out);
+      for (const [key, field] of Object.entries(
+        Object.getOwnPropertyDescriptors(value),
+      )) {
+        if (!field.enumerable) continue;
+        if (!("value" in field)) throw accessorError();
+        if (typeof field.value === "function") continue;
+        out[key] = copy(field.value, depth + 1);
+      }
+      return out;
+    }
+    return value;
+  };
+  return copy(root, 0) as object;
+};
+
+const accessorError = () =>
+  new Error("RPC values with methods cannot contain property getters");
+
+const isMethodPath = (path: unknown): path is MethodPath =>
+  Array.isArray(path) &&
+  path.length > 0 &&
+  path.every((segment) =>
+    typeof segment === "number"
+      ? Number.isInteger(segment) && segment >= 0
+      : isRpcMethodName(segment),
+  );
+
+const ownField = (container: unknown, segment: string | number) => {
+  if (typeof container !== "object" || container === null) return undefined;
+  if (!isPlainArray(container) && !isPlainObject(container)) return undefined;
+  const field = Object.getOwnPropertyDescriptor(container, segment);
+  return field && "value" in field ? field : undefined;
+};
+
+/** Call the method at `path` inside a returned value. */
+const invokeRpcPath = (
+  root: object,
+  path: MethodPath,
+  args: unknown[],
+): Effect.Effect<any, any, any> =>
+  Effect.suspend(() => {
+    const label = path.join(".");
+    if (!isMethodPath(path))
+      return Effect.die(new Error(`Invalid RPC method path "${label}"`));
+    let parent: unknown = root;
+    for (const segment of path.slice(0, -1)) {
+      parent = ownField(parent, segment)?.value;
+    }
+    const method = ownField(parent, path.at(-1)!)?.value;
+    if (typeof method !== "function") {
+      return Effect.die(new Error(`RPC method "${label}" not found`));
+    }
+    const result = Reflect.apply(method, parent, args);
+    return Effect.isEffect(result)
+      ? result
+      : Stream.isStream(result)
+        ? Effect.succeed(result)
+        : Effect.die(
+            new Error(`RPC method "${label}" must return an Effect or Stream`),
+          );
+  });
 
 export const invokeRpcMethod = (
   shape: object,
@@ -233,14 +354,14 @@ class ServerLifetime {
 let TargetClass:
   | (new (
       lifetime: ServerLifetime,
-      shape: Record<string, unknown>,
+      shape: object,
       operation?: Operation,
     ) => NativeTarget)
   | undefined;
 
 const makeTarget = (
   lifetime: ServerLifetime,
-  shape: Record<string, unknown>,
+  shape: object,
   operation?: Operation,
 ) =>
   Effect.gen(function* () {
@@ -253,13 +374,13 @@ const makeTarget = (
       }
       TargetClass ??= class extends RpcTarget implements NativeTarget {
         readonly #lifetime: ServerLifetime;
-        readonly #shape: Record<string, unknown>;
+        readonly #shape: object;
         readonly #operation: Operation | undefined;
         #result: Promise<unknown> | undefined;
 
         constructor(
           lifetime: ServerLifetime,
-          shape: Record<string, unknown>,
+          shape: object,
           operation?: Operation,
         ) {
           super();
@@ -303,7 +424,7 @@ const makeTarget = (
           return this.#result;
         }
 
-        async dispatch(method: string) {
+        async dispatch(path: string | MethodPath) {
           if (this.#lifetime.released)
             throw new Error("RPC object has been released");
           const call = new ServerLifetime(
@@ -311,10 +432,11 @@ const makeTarget = (
             this.#lifetime.context,
             this.#lifetime,
           );
+          const methodPath = typeof path === "string" ? [path] : path;
           try {
             return await Effect.runPromise(
               makeInvocation(
-                (args) => invokeRpcMethod(this.#shape, method, args),
+                (args) => invokeRpcPath(this.#shape, methodPath, args),
                 call,
               ),
             );
@@ -567,12 +689,18 @@ const encodeExit = (
     }
     if (Stream.isStream(exit.value))
       return yield* encodeStream(exit.value, lifetime);
-    const methods = yield* Effect.sync(() => objectMethods(exit.value));
+    const methods = yield* Effect.sync(() => findMethods(exit.value));
     if (methods === undefined) return exit.value;
+    const data = yield* Effect.sync(() => stripMethods(exit.value));
     const target = yield* makeTarget(lifetime, exit.value);
     lifetime.transferred = true;
     EffectHttp.scopeDisableClose(lifetime.scope);
-    return { _tag: ObjectTag, methods, target } satisfies ObjectEnvelope;
+    return {
+      _tag: ObjectTag,
+      data,
+      methods,
+      target,
+    } satisfies ObjectEnvelope;
   });
 
 export const handleNativeRpcExit = async (
@@ -582,7 +710,7 @@ export const handleNativeRpcExit = async (
 ): Promise<any> => {
   if (exit._tag === "Success") {
     if (isInvocationEnvelope(exit.value)) return exit.value;
-    if (!Stream.isStream(exit.value) && objectMethods(exit.value) === undefined)
+    if (!Stream.isStream(exit.value) && findMethods(exit.value) === undefined)
       return exit.value;
   } else {
     if (Cause.hasDies(exit.cause) || Cause.hasInterrupts(exit.cause))
@@ -685,6 +813,33 @@ const releaseUnclaimed = async (value: unknown) => {
   else if (isRpcStreamEnvelope(value)) await value.body.cancel();
 };
 
+const invalidEnvelope = () =>
+  new RpcDecodeError({ cause: new Error("Invalid RPC object envelope") });
+
+/** Put a remote method at each of the envelope's method paths. */
+const rebuildObject = (
+  envelope: ObjectEnvelope,
+  makeMethod: (path: MethodPath) => (...args: unknown[]) => unknown,
+): object | undefined => {
+  const { data, methods } = envelope;
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !Array.isArray(methods) ||
+    !methods.every(isMethodPath)
+  )
+    return;
+  for (const path of methods) {
+    let parent: any = data;
+    for (const segment of path.slice(0, -1)) {
+      parent = parent[segment];
+      if (typeof parent !== "object" || parent === null) return;
+    }
+    parent[path.at(-1)!] = makeMethod(path);
+  }
+  return data;
+};
+
 const decodeNativeResult = (
   value: unknown,
   revive: (error: unknown) => unknown,
@@ -716,38 +871,29 @@ const decodeNativeResult = (
       Effect.promise(() => lifetime.close()),
     );
     if (isObjectEnvelope(value)) {
-      if (
-        !Array.isArray(value.methods) ||
-        value.methods.some((method) => !isRpcMethodName(method))
-      ) {
-        yield* Effect.promise(() => lifetime.close());
-        return yield* Effect.fail(
-          new RpcDecodeError({
-            cause: new Error("Invalid RPC object envelope"),
-          }),
-        );
-      }
-      const proxy: Record<string, unknown> = Object.create(null);
-      for (const method of value.methods) {
-        proxy[method] = (...args: unknown[]) =>
-          asEffectOrStream(
-            callNativeRpc(
-              method,
-              () => target.dispatch(method),
+      const object = rebuildObject(
+        value,
+        (path) =>
+          (...args: unknown[]) =>
+            nativeCall(
+              path.join("."),
+              dispatchStart(target, path, args),
               revive,
               lifetime,
-              args,
             ),
-          );
+      );
+      if (object === undefined) {
+        yield* Effect.promise(() => lifetime.close());
+        return yield* Effect.fail(invalidEnvelope());
       }
-      return proxy;
+      return object;
     }
     const source = isNativeStreamEnvelope(value)
       ? Stream.fromPull(
           Effect.succeed(
-            callNativeRpc(
+            nativeCall(
               "pull",
-              () => target.dispatch("pull"),
+              dispatchStart(target, ["pull"], []),
               revive,
               lifetime,
             ).pipe(
@@ -812,75 +958,174 @@ const decodeNativeResult = (
     );
   });
 
-export const callNativeRpc = (
+/** A native call that has been sent but not awaited. */
+export interface NativeStart {
+  /** The pending result; calls on it are pipelined. */
+  readonly pending: any;
+  /** Settles with the final wire value. */
+  readonly settled: PromiseLike<unknown>;
+  /** The pending invocation, released if the caller abandons the call. */
+  readonly control?: any;
+}
+
+/** Adapt a pending invocation so a ClientLifetime can release or drop it. */
+const pendingControl = (invocation: any): NativeTarget =>
+  ({
+    release: () =>
+      Promise.resolve(invocation.target.release()).then(
+        () => undefined,
+        () => undefined,
+      ),
+    [Symbol.dispose]: () => invocation[Symbol.dispose]?.(),
+  }) as unknown as NativeTarget;
+
+const releasedError = (method: string) =>
+  new RpcCallError({
+    method,
+    cause: new Error("RPC object has been released"),
+  });
+
+/** Call the method at `path` on a (possibly still pending) remote target. */
+const dispatchStart = (
+  target: any,
+  path: MethodPath,
+  args: unknown[],
+): Effect.Effect<NativeStart, RpcCallError> =>
+  Effect.try({
+    try: () => {
+      const invocation = target.dispatch(path);
+      const pending = invocation.target.result(args);
+      return { pending, settled: pending, control: invocation };
+    },
+    catch: (cause) => new RpcCallError({ method: path.join("."), cause }),
+  });
+
+const settleNative = (
   method: string,
-  invoke: () => Promise<unknown>,
+  started: NativeStart,
   revive: (error: unknown) => unknown,
-  parent?: ClientLifetime,
-  args: unknown[] = [],
-): Effect.Effect<unknown, unknown> =>
-  Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function* () {
-      if (parent?.released) {
-        return yield* Effect.fail(
-          new RpcCallError({
-            method,
-            cause: new Error("RPC object has been released"),
-          }),
-        );
-      }
-      const context = (yield* Effect.context<never>()) as Context.Context<any>;
-      const request = (invoke: () => Promise<unknown>) =>
-        Effect.gen(function* () {
-          let received: unknown;
-          let settled = false;
-          let claimed = false;
-          let cleaned = false;
-          const cleanup = () => {
-            if (settled && !claimed && !cleaned) {
-              cleaned = true;
-              pinCleanup(context, releaseUnclaimed(received));
-            }
-          };
-          const value = yield* restore(
-            Effect.tryPromise({
-              try: (signal) => {
-                signal.addEventListener("abort", cleanup, { once: true });
-                return Promise.resolve(invoke()).then((value) => {
-                  received = value;
-                  settled = true;
-                  if (signal.aborted) cleanup();
-                  return value;
-                });
-              },
-              catch: (cause) => new RpcCallError({ method, cause }),
-            }),
-          );
-          claimed = true;
+  parent: ClientLifetime | undefined,
+  context: Context.Context<any>,
+  restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+): Effect.Effect<unknown, unknown> => {
+  const control =
+    started.control === undefined
+      ? undefined
+      : new ClientLifetime(pendingControl(started.control), parent);
+  let completed = false;
+  let received: unknown;
+  let settled = false;
+  let claimed = false;
+  let cleaned = false;
+  const cleanup = () => {
+    if (settled && !claimed && !cleaned) {
+      cleaned = true;
+      pinCleanup(context, releaseUnclaimed(received));
+    }
+  };
+  return restore(
+    Effect.tryPromise({
+      try: (signal) => {
+        signal.addEventListener("abort", cleanup, { once: true });
+        return Promise.resolve(started.settled).then((value) => {
+          received = value;
+          settled = true;
+          if (signal.aborted) cleanup();
           return value;
         });
-      const value = yield* request(invoke);
-      if (!isInvocationEnvelope(value))
-        return yield* decodeNativeResult(value, revive, parent);
-      const control = new ClientLifetime(value.target, parent);
-      let completed = false;
-      return yield* Effect.gen(function* () {
-        if (parent?.released)
-          return yield* Effect.fail(
-            new RpcCallError({
-              method,
-              cause: new Error("RPC object has been released"),
-            }),
-          );
-        const result = yield* request(() => value.target.result(args));
-        completed = true;
-        return yield* decodeNativeResult(result, revive, parent);
-      }).pipe(
-        Effect.onExit((exit) =>
-          completed || Exit.isSuccess(exit)
-            ? Effect.sync(() => control.disown())
-            : Effect.promise(() => control.close()),
-        ),
-      );
+      },
+      catch: (cause) => new RpcCallError({ method, cause }),
     }),
+  ).pipe(
+    Effect.flatMap((value) => {
+      claimed = true;
+      completed = true;
+      return decodeNativeResult(value, revive, parent);
+    }),
+    Effect.onExit((exit) =>
+      control === undefined
+        ? Effect.void
+        : completed || Exit.isSuccess(exit)
+          ? Effect.sync(() => control.disown())
+          : Effect.promise(() => control.close()),
+    ),
   );
+};
+
+/**
+ * An RPC call as an Effect (or Stream). Running it sends the call and waits
+ * for the result. `Rpc.pipeline` can instead start it and send further calls
+ * on its result before it arrives.
+ */
+export const nativeCall = (
+  method: string,
+  start: Effect.Effect<NativeStart, unknown>,
+  revive: (error: unknown) => unknown,
+  parent?: ClientLifetime,
+): Effect.Effect<unknown, unknown> => {
+  const begin = Effect.gen(function* () {
+    if (parent?.released) return yield* Effect.fail(releasedError(method));
+    const started = yield* start;
+    const context = (yield* Effect.context<never>()) as Context.Context<any>;
+    return { started, context };
+  });
+  const call = Effect.uninterruptibleMask((restore) =>
+    begin.pipe(
+      Effect.flatMap(({ started, context }) =>
+        settleNative(method, started, revive, parent, context, restore),
+      ),
+    ),
+  );
+  return Object.assign(asEffectOrStream(call), {
+    [RpcPipelineStart]: begin.pipe(
+      Effect.map(({ started, context }): RpcPendingCall => ({
+        result: Effect.uninterruptibleMask((restore) =>
+          settleNative(method, started, revive, parent, context, restore),
+        ),
+        call: (path, args) =>
+          nativeCall(
+            `${method}.${path.join(".")}`,
+            Effect.suspend(() =>
+              dispatchStart(started.pending.target, path, [...args]),
+            ),
+            revive,
+          ),
+      })),
+    ),
+  });
+};
+
+const isMissingInvocation = (error: unknown) =>
+  error instanceof Error &&
+  (error.message ===
+    `The RPC receiver does not implement the method "${NativeInvocation}".` ||
+    error.message ===
+      `Method "${NativeInvocation}" not found on worker. Make sure it's returned from the worker's default export.`);
+
+/**
+ * Start a call on a Worker or Durable Object stub. Alchemy hosts get the
+ * cancellable invocation entrypoint, with the result call pipelined onto it;
+ * receivers predating that entrypoint fall back to a direct call.
+ */
+export const startRootCall = (
+  stub: any,
+  method: string,
+  args: unknown[],
+  invocations: boolean | undefined,
+): NativeStart => {
+  if (!invocations) {
+    const pending = stub[method](...args);
+    return { pending, settled: pending };
+  }
+  const invocation = stub[NativeInvocation](method);
+  const pending = invocation.target.result(args);
+  const settled = Promise.resolve(pending).catch(async (error) => {
+    const outcome = await Promise.resolve(invocation).then(
+      (value: unknown) => ({ legacy: value === undefined }),
+      (reason: unknown) => ({ legacy: isMissingInvocation(reason) }),
+    );
+    if (outcome.legacy) return stub[method](...args);
+    throw error;
+  });
+  return { pending, settled, control: invocation };
+};

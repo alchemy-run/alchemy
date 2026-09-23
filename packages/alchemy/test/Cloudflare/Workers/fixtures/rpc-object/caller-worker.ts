@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Rpc from "@/Rpc";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -152,6 +153,134 @@ export default class RpcObjectCaller extends Cloudflare.Worker<RpcObjectCaller>(
             ),
           );
         }).pipe(Effect.scoped);
+      }
+
+      if (scenario === "mixed") {
+        return yield* Effect.gen(function* () {
+          const session = yield* target.session(id);
+          yield* session.increment();
+          yield* session.items[1].bump();
+          const child = yield* session.child();
+          return {
+            id: session.id,
+            createdAt: session.createdAt.toISOString(),
+            isDate: session.createdAt instanceof Date,
+            meta: session.meta,
+            label: session.stats.label,
+            names: session.items.map((item) => item.name),
+            current: yield* session.stats.current(),
+            echoed: yield* child.echo({ nested: true }),
+            values: yield* session.values().pipe(Stream.runCollect),
+            rejected: yield* session
+              .reject()
+              .pipe(
+                Effect.catchTag("ObjectRejected", (error) =>
+                  Effect.succeed({ tag: error._tag, code: error.code }),
+                ),
+              ),
+            beforeClose: yield* events(id),
+          };
+        }).pipe(Effect.scoped);
+      }
+
+      if (scenario === "pipeline") {
+        const result = yield* target.session(id).pipe(
+          Rpc.pipeline((session) =>
+            Effect.all({
+              id: session.id,
+              createdAt: session.createdAt.pipe(
+                Effect.map((date) => date.toISOString()),
+              ),
+              owner: session.meta.owner,
+              tag: session.meta.tags[1],
+              label: session.stats.label,
+              incremented: session.increment(),
+              bumped: session.items[0].bump(),
+              current: session.stats.current(),
+              values: session.values().pipe(Stream.runCollect),
+            }),
+          ),
+        );
+        yield* observed(id, "session:close");
+        return { result, events: yield* events(id) };
+      }
+
+      if (scenario === "pipeline-nested") {
+        const echoed = yield* target
+          .session(id)
+          .pipe(
+            Rpc.pipeline((session) =>
+              session
+                .child()
+                .pipe(Rpc.pipeline((child) => child.echo("nested" as const))),
+            ),
+          );
+        yield* observed(id, "session:close");
+        return { echoed };
+      }
+
+      if (scenario === "pipeline-failures") {
+        const firstFailed = yield* target.rejectOpen().pipe(
+          Rpc.pipeline((session) => session.increment()),
+          Effect.flip,
+        );
+        const methodFailed = yield* target.session(id).pipe(
+          Rpc.pipeline((session) => session.reject()),
+          Effect.flip,
+        );
+        yield* observed(id, "session:close");
+        return {
+          first: { tag: firstFailed._tag, code: firstFailed.code },
+          method: { tag: methodFailed._tag, code: methodFailed.code },
+        };
+      }
+
+      if (scenario === "pipeline-reruns") {
+        const chain = target
+          .session(id)
+          .pipe(Rpc.pipeline((session) => session.increment()));
+        const values = [yield* chain, yield* chain];
+        const rows = yield* events(id).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            times: 8,
+            until: (rows) =>
+              rows.filter((row) => row === "session:close").length === 2,
+          }),
+        );
+        return { values, events: rows };
+      }
+
+      if (scenario === "pipeline-performance") {
+        const iterations = 20;
+        const timed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          Effect.gen(function* () {
+            const start = yield* Effect.sync(() => performance.now());
+            const value = yield* effect;
+            const ms = (yield* Effect.sync(() => performance.now())) - start;
+            return { value, ms };
+          });
+        const sequential = yield* timed(
+          Effect.forEach(Array.from({ length: iterations }), () =>
+            Effect.gen(function* () {
+              const session = yield* target.session(id);
+              return yield* session.stats.current();
+            }).pipe(Effect.scoped),
+          ),
+        );
+        const pipelined = yield* timed(
+          Effect.forEach(Array.from({ length: iterations }), () =>
+            target
+              .session(id)
+              .pipe(Rpc.pipeline((session) => session.stats.current())),
+          ),
+        );
+        return {
+          iterations,
+          sequentialMs: sequential.ms,
+          pipelinedMs: pipelined.ms,
+          values: [...sequential.value, ...pipelined.value],
+        };
       }
 
       if (scenario === "runtime-context") {
