@@ -892,13 +892,13 @@ export const steps: StepSpec[] = [
       "And then for versioning, and then for every other setting, and every change after that. Every script ends up re-discovering the current state of the world, one if statement at a time.",
   }),
   iac({
-    title: "Infrastructure as code describes what it should be instead",
+    title: "Infrastructure as code declares what should be, not what is",
     lang: "yaml",
     file: "template.yaml",
     code: CFN_1,
     diagram: { nodes: [], edges: [] },
     notes:
-      "Infrastructure as code flips that around. Instead of the steps, you write down what the cloud should look like: the desired state. This is CloudFormation, AWS's version. One bucket.",
+      "Infrastructure as code inverts this. You stop tracking what is, and declare what the cloud should be: the desired state. This is CloudFormation, AWS's version. One bucket.",
   }),
   iac({
     title: "An engine compares it to the cloud, and creates what's missing",
