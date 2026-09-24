@@ -251,14 +251,14 @@ const program = (): StepSpec[] => [
       "So far every resource was declared at the top. What if the function itself declares one? The function runs on every request, maybe thousands of times a second. Does each request get a new bucket? Who deletes them? Who gave the function permission to create them?",
   }),
   lang({
-    title: "It can't: a request can't create infrastructure",
+    title: "Uh-oh, we can't do that: resources need to be known ahead of time",
     src: { code: SCRATCH },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
       nodes: [...GRAPH(["versioning: on"], ENV), SCRATCH_NODE],
       edges: BINDINGS,
       labels: [{ text: "one per request?", x: 590, y: 622, tone: "bad" }],
-      cards: [{ text: "✗ a request can't create a bucket", tone: "bad" }],
+      cards: [{ text: "✗ not known until a request arrives", tone: "bad" }],
     },
     notes:
       "It doesn't make sense. Infrastructure is created once, ahead of time, by the deploy. The function only uses it. So there are really two different kinds of code in this program.",
