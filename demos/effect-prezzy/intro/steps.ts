@@ -750,10 +750,10 @@ export const steps: StepSpec[] = [
       "Hang on. Reaching into fetch to find out what it uses… that's Functionless all over again. Peeking inside, just with types instead of the compiler. Let's keep going anyway and see where it breaks.",
   }),
   api({
-    title: "And just like before, it breaks on a bucket only dev has",
+    title: "…which becomes really clear when you customize behavior",
     code: INFERRED_DEV_1,
     req: [BUCKET, GET_OBJECT_HOISTED],
-    notes: "And just like peeking inside, it breaks down. Here's how: in dev only, we also want a Logs bucket. Construction is ordinary code, so that's just a conditional.",
+    notes: "And that becomes really clear the moment you customize behavior. Say that in dev only, we also want a Logs bucket. Construction is ordinary code, so that's just a conditional.",
   }),
   api({
     title: "…and fetch writes to it when it's there",
