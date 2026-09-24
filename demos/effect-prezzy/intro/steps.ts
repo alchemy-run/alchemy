@@ -1466,11 +1466,11 @@ export const steps: StepSpec[] = [
     notes: "Next, the providers: the code that actually creates, updates and deletes resources. Cloudflare.providers() is every Cloudflare provider there is.",
   }),
   stack({
-    title: "All of them, because this code only runs locally",
+    title: "All of them, because this code isn't bundled or used at runtime",
     code: STACK_2,
     marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" }],
     notes:
-      "Unlike the bindings, we don't have to be precise here. The Stack only runs on your machine, or in CI, during deploy. None of it ships, so none of it needs to be tree-shaken.",
+      "Unlike the bindings, we don't have to be precise here. This code is never bundled into the Worker and never runs at runtime. It only runs on your machine, or in CI, during deploy, so none of it needs to be tree-shaken.",
   }),
   stack({
     title: "…and a place to remember what it deployed",
