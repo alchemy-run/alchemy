@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { MachineServiceCheck } from "./Machine.ts";
+import { pinsFromConfig } from "./DeploymentImages.ts";
 
 /** Replacement/readiness policy shared by Machines, Services, and websites; not an App-wide deployment lock. */
 export interface MachineDeploy {
@@ -124,9 +125,12 @@ export const validateDeployment = (
   if (mounted)
     message =
       "Blue/green deployments cannot attach volumes, including MountVolume bindings.";
-  else if (config.containers !== undefined)
+  else if (
+    config.containers !== undefined &&
+    pinsFromConfig(config) === undefined
+  )
     message =
-      "Blue/green deployments of multi-container Machines are not supported yet.";
+      "Blue/green multi-container Machines require unique names and immutable repository@sha256 image references for every container.";
   else if (skipLaunch || config.auto_destroy || config.restart?.policy === "no")
     message = "Blue/green deployments require a persistent, launched Machine.";
   else if (

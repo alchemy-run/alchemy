@@ -833,7 +833,12 @@ test.provider(
               app,
               region: "iad",
               guest: { cpus: 1, memoryMb: 256 },
-              containers: workload("one", false),
+              containers: [
+                {
+                  name: "web",
+                  image: "docker-hub-mirror.fly.io/library/nginx:alpine",
+                },
+              ],
               checks: { ready: { type: "tcp", port: 80 } },
               deploy: { strategy: "bluegreen" },
             });

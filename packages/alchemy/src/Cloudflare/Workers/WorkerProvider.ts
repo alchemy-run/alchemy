@@ -888,8 +888,7 @@ const putWorkerScript = (params: {
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
-          metadata:
-            params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
+          metadata: params.metadata,
           files: params.files,
         })
         .pipe(

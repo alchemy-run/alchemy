@@ -441,7 +441,9 @@ export type Machine = Resource<
  * Each replica contains the entire group. Container checks and dependencies
  * control Pilot startup; configure Machine or service checks for deployment
  * readiness. Rolling updates can restart the entire group when one image
- * changes. Blue/green for named containers is not supported yet.
+ * changes. Blue/green requires every named image to use an immutable
+ * `repository@sha256:` digest and cannot attach volumes. Alchemy replaces
+ * the entire group and applies readiness policy before retiring predecessors.
  *
  * **Example:** API and worker
  * ```typescript
