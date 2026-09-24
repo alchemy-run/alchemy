@@ -719,6 +719,21 @@ const STACK_4 = `export default Alchemy.Stack(
     const api = yield* Api;
   }),
 );`;
+/** The same Stack deployed to two stages: the same resources, twice, isolated by name. */
+const stageColumn = (stage: string, x: number) => [
+  at({ id: `api-${stage}`, title: "Api", color: "#f38020" }, x, 90, [`${stage}-api`]),
+  at({ id: `uploads-${stage}`, title: "Uploads", color: "#8b7cf6" }, x, 250, [`${stage}-uploads`]),
+  at({ id: `jobs-${stage}`, title: "Jobs", color: "#e0a86b" }, x, 410, [`${stage}-jobs`]),
+];
+const STAGES: MiniGraph = {
+  nodes: [...stageColumn("dev", 140), ...stageColumn("prod", 530)],
+  edges: [],
+  labels: [
+    { text: "--stage dev", x: 140, y: 10, tone: "runtime" },
+    { text: "--stage prod", x: 530, y: 10, tone: "good" },
+  ],
+};
+
 /** One step of building the Stack in alchemy.run.ts. */
 const stack = (s: {
   title: string;
@@ -726,6 +741,7 @@ const stack = (s: {
   notes: string;
   marks?: CodeSpec["marks"];
   panel?: CodeSpec["panel"];
+  diagram?: MiniGraph;
   req?: ReqItem[];
 }): CodeSpec => ({
   kind: "code",
@@ -735,6 +751,7 @@ const stack = (s: {
   src: { code: s.code },
   marks: s.marks,
   panel: s.panel,
+  diagram: s.diagram,
   req: s.req ? { label: REQ_LABEL, items: s.req } : undefined,
   notes: s.notes,
 });
@@ -1794,16 +1811,9 @@ export const steps: StepSpec[] = [
     title: "…and each stage is its own isolated copy of it",
     code: STACK_1,
     marks: [{ kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" }],
-    panel: {
-      title: "One Stack, many stages",
-      items: [
-        { title: "alchemy deploy --stage dev-sam", body: "your own copy, while you work", tone: "runtime" },
-        { title: "alchemy deploy --stage pr-42", body: "a preview for every pull request", tone: "construct" },
-        { title: "alchemy deploy --stage prod", body: "production", tone: "good" },
-      ],
-    },
+    diagram: STAGES,
     notes:
-      "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own resources and its own state. Your dev copy, a preview per pull request, and production never share a resource.",
+      "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own resources and its own state. Your dev copy and production never share a resource.",
   }),
   stack({
     title: "We give it the providers that create the resources",
