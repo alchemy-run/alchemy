@@ -182,18 +182,21 @@ export const CodeSlide = ({
           style={{
             position: "absolute",
             left: AREA.x,
-            top: 34,
+            top: 40,
             display: "flex",
             alignItems: "center",
             gap: 12,
-            fontFamily: step.pseudo ? hand : mono,
-            fontSize: step.pseudo ? 30 : 20,
-            color: step.pseudo ? TONE.runtime : brand.fgMuted,
+            // A plain heading: the imaginary language, or the file being shown.
+            fontFamily: sans,
+            fontSize: 40,
+            fontWeight: 600,
+            letterSpacing: -0.3,
+            color: brand.fg,
             // Continuing the same code: the label is already there.
             opacity: morph ? 1 : t,
           }}
         >
-          {step.pseudo ? "an imaginary cloud language" : step.file}
+          {step.pseudo ? "An imaginary cloud language" : step.file}
         </div>
       ) : null}
       {/* lines new or changed since the previous step in this sequence, in diff green */}
