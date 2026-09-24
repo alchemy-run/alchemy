@@ -606,6 +606,53 @@ const DEPLOY_APPLIED = [
   `${T.ok}Stack deployed (3/3)${T.reset} ${T.dim}{ url: "https://api.workers.dev" }${T.reset}`,
 ].join("\n");
 
+// The Stack, built up one piece at a time; the last version is snippets/stack.ts.
+const STACK_1 = `export default Alchemy.Stack(
+  "App",
+);`;
+const STACK_2 = `export default Alchemy.Stack(
+  "App",
+  {
+    providers: Cloudflare.providers(),
+  },
+);`;
+const STACK_3 = `export default Alchemy.Stack(
+  "App",
+  {
+    providers: Cloudflare.providers(),
+    state: Alchemy.localState(),
+  },
+);`;
+const STACK_4 = `export default Alchemy.Stack(
+  "App",
+  {
+    providers: Cloudflare.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+  }),
+);`;
+/** One step of building the Stack in alchemy.run.ts. */
+const stack = (s: {
+  title: string;
+  code: string;
+  notes: string;
+  marks?: CodeSpec["marks"];
+  panel?: CodeSpec["panel"];
+  req?: ReqItem[];
+}): CodeSpec => ({
+  kind: "code",
+  group: "stack",
+  file: "alchemy.run.ts",
+  title: s.title,
+  src: { code: s.code },
+  marks: s.marks,
+  panel: s.panel,
+  req: s.req ? { label: REQ_LABEL, items: s.req } : undefined,
+  notes: s.notes,
+});
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -1385,35 +1432,22 @@ export const steps: StepSpec[] = [
     notes:
       "Compare that with where I started. A CDK construct carries all of its provisioning code with it. Here the resource is a description plus a requirement, and the code that actually provisions it lives somewhere else.",
   }),
-  {
-    kind: "code",
-    group: "stack",
-    file: "alchemy.run.ts",
+  stack({
     title: "Now that we have a Worker, we need a Stack to deploy it",
-    src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "underline", find: "yield* Api", label: "our Worker", side: "right", tone: "construct" }],
+    code: STACK_1,
     notes:
-      "OK, so now that we actually have a Worker, how do we deploy it? We need an entry point for alchemy deploy: a Stack, in alchemy.run.ts. And all it does is yield our Worker.",
-  },
-  {
-    kind: "code",
-    group: "stack",
-    file: "alchemy.run.ts",
+      "OK, so now that we actually have a Worker, how do we deploy it? We need an entry point for alchemy deploy: a Stack, in alchemy.run.ts. It starts with a name.",
+  }),
+  stack({
     title: "A Stack is a set of resources you deploy as one unit",
-    src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [
-      { kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" },
-      { kind: "underline", find: "yield* Api", label: "and everything it declares", side: "right", tone: "construct" },
-    ],
+    code: STACK_1,
+    marks: [{ kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" }],
     notes:
-      "So what is a Stack? It's the root of the program: a collection of resources that are deployed, updated and destroyed together, as one unit. Here that's the Api Worker and everything it declares.",
-  },
-  {
-    kind: "code",
-    group: "stack",
-    file: "alchemy.run.ts",
+      "So what is a Stack? It's the root of the program: a collection of resources that are deployed, updated and destroyed together, as one unit.",
+  }),
+  stack({
     title: "…and each stage is its own isolated copy of it",
-    src: { snippet: "stack.ts", regions: ["show"] },
+    code: STACK_1,
     marks: [{ kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" }],
     panel: {
       title: "One Stack, many stages",
@@ -1424,48 +1458,41 @@ export const steps: StepSpec[] = [
       ],
     },
     notes:
-      "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own bucket, its own queue, its own Worker and its own state. Your dev copy, a preview per pull request, and production never share a resource.",
-  },
-  {
-    kind: "code",
-    group: "stack",
-    file: "alchemy.run.ts",
-    title: "The requirement bubbles up to the Stack",
-    src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "underline", find: "yield* Api", label: "brings its providers along", side: "right", tone: "construct" }],
-    req: { label: REQ_LABEL, items: [BUCKET, QUEUE] },
-    notes:
-      "And because the Stack yields the Worker, the Worker's remaining requirements, the providers, bubble up to it.",
-  },
-  {
-    kind: "code",
-    group: "stack",
-    file: "alchemy.run.ts",
-    title: "…and the Stack provides every provider at once",
-    src: { snippet: "stack.ts", regions: ["show"] },
+      "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own resources and its own state. Your dev copy, a preview per pull request, and production never share a resource.",
+  }),
+  stack({
+    title: "We give it the providers that create the resources",
+    code: STACK_2,
+    notes: "Next, the providers: the code that actually creates, updates and deletes resources. Cloudflare.providers() is every Cloudflare provider there is.",
+  }),
+  stack({
+    title: "All of them, because this code only runs locally",
+    code: STACK_2,
     marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" }],
-    req: {
-      label: REQ_LABEL,
-      items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
-    },
-    notes: "And the Stack satisfies them. Cloudflare.providers() is every Cloudflare provider there is.",
-  },
+    notes:
+      "Unlike the bindings, we don't have to be precise here. The Stack only runs on your machine, or in CI, during deploy. None of it ships, so none of it needs to be tree-shaken.",
+  }),
+  stack({
+    title: "…and a place to remember what it deployed",
+    code: STACK_3,
+    notes:
+      "Then state: where Alchemy records what it deployed for each stage, so the next deploy knows what to create, update or delete. Here it's a local file; in CI you'd use a shared store.",
+  }),
+  stack({
+    title: "Then it yields the Worker, and its providers bubble up",
+    code: STACK_4,
+    req: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
+    notes:
+      "Finally, the program itself: it yields our Worker. The Worker's remaining requirements, R2.BucketProvider and Queues.QueueProvider, bubble up to the Stack, and the providers we gave it satisfy them.",
+  }),
   {
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "It doesn't need to be precise, because this only runs locally",
+    title: "…and returns what we want to know, like its URL",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [
-      { kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" },
-      { kind: "underline", find: "state: Alchemy.localState(),", label: "on your machine, during deploy", side: "right", tone: "good" },
-    ],
-    req: {
-      label: REQ_LABEL,
-      items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
-    },
-    notes:
-      "Unlike the bindings, we don't have to be careful here. The Stack only runs on your machine, or in CI, during deploy. Every provider, the state store, the SDKs: none of it has to be tree-shaken, because none of it ships.",
+    req: { label: REQ_LABEL, items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")] },
+    notes: "And it returns the outputs we care about, like the Worker's URL, printed after every deploy.",
   },
   {
     kind: "code",
