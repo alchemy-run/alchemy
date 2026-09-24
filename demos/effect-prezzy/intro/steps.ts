@@ -378,6 +378,30 @@ const PROVIDED: ReqItem[] = [
   met(WORKER, "it runs in a Worker"),
 ];
 
+/** The Worker with a hypothetical catch-all layer: not a real API. */
+const ALL_BINDINGS = `export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const bucket = yield* R2.Bucket("Uploads");
+    const uploads = yield* R2.ReadBucket(bucket);
+    const queue = yield* Queues.Queue("Jobs");
+    const jobs = yield* Queues.WriteQueue(queue);
+    return {
+      fetch: Effect.gen(function* () {
+        const file = yield* uploads.get("hello.txt");
+        yield* jobs.send({ size: file?.size });
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(
+    Effect.provide([
+      R2.AllBindings,
+      Queues.AllBindings,
+    ]),
+  ),
+);`;
+
 /** The first line of the compiler's message that starts with `prefix`. */
 const firstLine = (prefix: string) => (lines: string[]) => lines.filter((line) => line.startsWith(prefix)).slice(0, 1);
 
@@ -394,6 +418,7 @@ const api = (s: {
   tints?: CodeSpec["tints"];
   marks?: CodeSpec["marks"];
   error?: CodeSpec["error"];
+  quiet?: boolean;
 }): CodeSpec => ({
   kind: "code",
   group: "api",
@@ -403,6 +428,7 @@ const api = (s: {
   tints: s.tints,
   marks: s.marks,
   error: s.error,
+  quiet: s.quiet,
   req: {
     label: REQ_LABEL,
     items: s.req,
@@ -1131,6 +1157,61 @@ export const steps: StepSpec[] = [
     req: PROVIDED,
     notes:
       "So let's actually deploy it somewhere. Wrap it in a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
+  }),
+  api({
+    title: "export default and import.meta.url say what to bundle",
+    snippet: "api-07-worker.ts",
+    marks: [
+      { kind: "underline", find: "export default", label: "the Worker's entrypoint", side: "right", tone: "construct" },
+      { kind: "circle", find: "import.meta.url", label: "this file", side: "right", tone: "construct" },
+    ],
+    req: PROVIDED,
+    notes:
+      "Two conventions you'll see everywhere. The Worker is the file's default export, and main is import.meta.url: this very file. That tells Alchemy what to bundle and what the entrypoint is. There's no separate handler file to keep in sync.",
+  }),
+  api({
+    title: "Rolldown bundles it, and tree-shakes what you don't use",
+    snippet: "api-07-worker.ts",
+    marks: [
+      {
+        kind: "box",
+        find: "R2.ReadBucketBinding,",
+        to: "Queues.WriteQueueBinding,",
+        label: "only these clients are bundled",
+        side: "right",
+        tone: "construct",
+      },
+    ],
+    req: PROVIDED,
+    notes:
+      "At deploy time Alchemy runs the file through Rolldown and tree-shakes it hard. Anything the Worker doesn't reach is dropped. The binding layers you provide decide which runtime clients end up in the bundle.",
+  }),
+  api({
+    title: "A catch-all like R2.AllBindings would bundle every client",
+    code: ALL_BINDINGS,
+    quiet: true,
+    marks: [{ kind: "circle", find: "R2.AllBindings", label: "every R2 client, in every bundle", side: "right", tone: "bad" }],
+    req: PROVIDED,
+    notes:
+      "That's why there's no R2.AllBindings or Queues.AllBindings. A catch-all would be convenient, but it would pull every client for every operation into every bundle, whether you call it or not.",
+  }),
+  api({
+    title: "So you provide only the bindings you actually use",
+    snippet: "api-07-worker.ts",
+    quiet: true,
+    marks: [
+      {
+        kind: "box",
+        find: "R2.ReadBucketBinding,",
+        to: "Queues.WriteQueueBinding,",
+        label: "just what you use",
+        side: "right",
+        tone: "good",
+      },
+    ],
+    req: PROVIDED,
+    notes:
+      "So you provide the specific bindings, one per capability. It's a little more typing, and it keeps each bundle down to exactly the code it runs.",
   }),
   api({
     title: "But what if we read during construction?",
