@@ -6,7 +6,7 @@ excerpt: Moving CI to Blacksmith, fixing cache bugs, switching to pnpm, running 
 
 As of writing this, Alchemy is a monorepo of almost 100 packages (86 of them are [distilled](https://github.com/alchemy-run/distilled) SDKs), with a docs website with thousands of generated pages, regular CI checks, preview package publishing, tests for our local cloudflare runtime and a release pipeline that publishes to npm. Over past few weeks we made several CI improvements to make it so the contributors and their agents can iterate fast.
 
-## Swapping out GitHub runners
+## Swapping out GitHub runners and Tooling
 Our first immediate improvement came from moving our workflows to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) runners ([#1162](https://github.com/alchemy-run/alchemy/pull/1162)). Just by doing that we had very comparable numbers to look at: 
 
 | Workflow | Before | After | |
@@ -15,9 +15,11 @@ Our first immediate improvement came from moving our workflows to [Blacksmith](h
 | cloudflare-tools | 16.2 min | 5.3 min | −67% |
 | pr-package | 5.0 min | 3.2 min | −36% |
 
-We also changed out our package manager from bun to pnpm ([#1214](https://github.com/alchemy-run/alchemy/pull/1214)) which behaves better in general and doesn't have weird issues.
+We also switched our package manager from `bun` to `pnpm` ([#1214](https://github.com/alchemy-run/alchemy/pull/1214)). Bun kept us giving trouble: it behaves weirdly around updating lock files when manually add/removing deps from `package.json`, fails randomly during install failures in CI, broke our publishing of packages when using `workspace:` and `catalog:` in dependencies, doesn't respect `publishConfig` overrides, didn't have deduping until `1.4`, doesn't work with out `pkg.alchemy.run` preview URLs since it doesn't dedupe tarball url deps, and the list goes on.
 
-All of our CI jobs runs on Blacksmith, expect for npm releases. Npm [trusted publishing](https://docs.npmjs.com/trusted-publishers/) only allows trusted publishing from GitHub-hosted runners, GitLab.com, and CircleCI cloud. So we had to split releases in two job: build on Blacksmith, publish on GitHub.
+We are still supporting and using bun as our runtime, but our repo is stuck on bun `1.3.13` since later versions introduced a [bug in `AsyncLocalStorage`](https://github.com/oven-sh/bun/issues/32693) which breaks our test runner. This is yet to be fixed and our blocker for upgrading `bun`.
+
+All of our CI now runs on Blacksmith, expect for **npm releases**. Npm [trusted publishing](https://docs.npmjs.com/trusted-publishers/) only allows publishing from GitHub-hosted runners, GitLab.com, and CircleCI cloud. So we had to split releases in two job: build on Blacksmith, publish on GitHub. We don't want this extra complexity, but npm has yet to [allow trusted publishing from any other CI provider](https://x.com/samgoodwin89/status/2085278917825552412).
 
 ```yaml  
 name: Release
@@ -33,13 +35,12 @@ jobs:
     # Publish tarballs using pnpm publish which handles everything
 ```
 
-We don't want this extra complexity, but npm has yet to allow trusted publishing from any other CI provider.
+## Making our website deploy faster
 
-## Fixing our website deploys 
+Our docs site is a content heavy site. It used to have over 4k+ pages (and paired OG image for each page), most of them being generated specs from our jsdoc. It would take up to 25 min building and deploying all those pages and assets.
+[Astro 7.2](https://astro.build/blog/astro-720/) shipped [experimental incremental builds](https://docs.astro.build/en/reference/experimental-flags/incremental-build/), which skip building pages that haven't changed. We enabled it, patched Starlight to support it, and persisted the cache across CI runs ([#1128](https://github.com/alchemy-run/alchemy/pull/1128), [#1136](https://github.com/alchemy-run/alchemy/pull/1136)). Now a warm build restores most of the pages and almost all OG images.
 
-Our docs site is a content heavy site, it used to have over 4k+ pages (and paired OG image for each page), most of them are just generated specs from our inline jsdocs, It would take upto 25 min building and deploying all those pages and assets. [Astro 7.2](https://astro.build/blog/astro-720/) shipped [experimental incremental builds](https://docs.astro.build/en/reference/experimental-flags/incremental-build/), which skip bulding pages that haven't changed. We enabled it, patched Starlight to support it, and persisted the cache across CI runs ([#1128](https://github.com/alchemy-run/alchemy/pull/1128), [#1136](https://github.com/alchemy-run/alchemy/pull/1136)). A warm build restored most of the page and allmost all OG images.
-
-The API reference had one page per resource, 4,368 in total. We merged them into one page per service ([#1767](https://github.com/alchemy-run/alchemy/pull/1767), [#1774](https://github.com/alchemy-run/alchemy/pull/1774)), and it did the biggest improvement so far.
+But the biggest improvement came from changing how the API references are generated. We had one page per resource totaling to 4,368 pages. We merged them into one page per service ([#1767](https://github.com/alchemy-run/alchemy/pull/1767), [#1774](https://github.com/alchemy-run/alchemy/pull/1774)).
 
 | | Before | After |
 |---|---:|---:|
@@ -48,20 +49,19 @@ The API reference had one page per resource, 4,368 in total. We merged them into
 | Output size | 3.64GB | 438MB |
 | Website CI run (median) | 8.0 min | 4.1 min |
 
-PR previews used to deploy a new Worker each time. Now they're versions of a single preview Worker, so assets already uploaded from `main` are reused ([#1267](https://github.com/alchemy-run/alchemy/pull/1267)). Website deploys on PRs are only trigged when `deploy-website` tag is used, and doesn't work on fork PRs yet.
+Along with that, Website previews in PRs used to deploy a new Worker each time. Now they're versions of a single stable preview Worker, so assets already uploaded from `main` are reused ([#1267](https://github.com/alchemy-run/alchemy/pull/1267)). Deploys on PRs are still only triggered when `deploy-website` tag is used, and doesn't work on fork PRs yet.
 
-## Conditional Test runs, worflow concurrency and cancelation
+## Conditional Test runs, workflow concurrency and cancellation
 
-We went through our runs to find where we were burning minutes ([#1362](https://github.com/alchemy-run/alchemy/pull/1362)):
+We went through our runs to find where we were burning minutes ([#1362](https://github.com/alchemy-run/alchemy/pull/1362)).
 
-- New pushes cancel older runs on the same PR.
-- Workflows skip changes that don't affect them. Cloudflare tooling only runs when its packages change.
-- Website Workers keep stable names, so wiping our test account doesn't force a full asset upload.
+- New pushes in the PR didn't cancel the already ongoing runs, so every commit was still running the full CI even though our agents had already pushed more commits to the branch, now we cancel the old runs in the same group.
+- Cloudflare tooling tests always ran, regardless of if anything related to it happened in the PR, now we have scoped it to only run when its packages change.
+- We were accidentally deleting our stable preview workers, which is now fixed, so wiping our test account doesn't force a full asset upload.
 
-## Using `pkg.alchemy.run`
+## Rewriting `pkg.alchemy.run`
 
-[`@alchemy.run/pkg`](https://github.com/alchemy-run/alchemy/pull/1516) publishes every PR's packages to an installable URL, like [pkg.pr.new](https://github.com/stackblitz-labs/pkg.pr.new). We built our own as soon as we hit pkg.pr.new's limits, and we host it on Cloudflare with Alchemy.
-We first optimized it as a some time after, packages are stored by content hash, so unchanged ones are never uploaded again ([#1145](https://github.com/alchemy-run/alchemy/pull/1145)). Then we rewrote it recently:
+[`@alchemy.run/pkg`](https://github.com/alchemy-run/alchemy/pull/1516) publishes every PR's packages to an installable URL, like [pkg.pr.new](https://github.com/stackblitz-labs/pkg.pr.new). We built our own version of this as soon as we hit pkg.pr.new's limits, and we host it on Cloudflare with Alchemy. We recently rewrote it so now it supports everything:
 
 - Fork PRs can publish without secrets, because each publish is verified against the GitHub Actions run that built it ([#1681](https://github.com/alchemy-run/alchemy/pull/1681)).
 - Previews can publish only the packages a change affects ([#1727](https://github.com/alchemy-run/alchemy/pull/1727)).
@@ -69,4 +69,4 @@ We first optimized it as a some time after, packages are stored by content hash,
 
 ## Thanks to Blacksmith
 
-Thanks to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. Their fast Linux, macOS, and Windows runners help us test our packages across platforms and deploy our content-heavy website and more without having to wait forever.
+Huge shutout to our friends at [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. We are utilizing their fast Linux, macOS, and Windows runners. We found Github runners very slow that we were splitting our workloads, but with blacksmith's fast runners we just throw our tests across platforms and deploy our content-heavy website, run checks without having to even think about it.
