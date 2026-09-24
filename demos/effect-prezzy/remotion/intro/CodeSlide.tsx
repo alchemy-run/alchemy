@@ -153,11 +153,11 @@ export const CodeSlide = ({
   // Lines new or changed since the previous step stay bright; the rest dims.
   // Each line moves from how bright it was at the end of the previous step.
   const changed = (i: number) => !!morph && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
-  const anyChanged = step.lines.some((_, i) => changed(i));
+  const anyChanged = step.tints.length === 0 && step.lines.some((_, i) => changed(i));
   const morph2 = !!prev && !!prev2 && prev.group === step.group && prev2.group === prev.group;
   const prevMatched = morph2 ? matchLines(prev2, prev!) : new Map<number, number>();
   const prevChanged = (j: number) => morph2 && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
-  const prevAny = morph2 && prev!.lines.some((_, j) => prevChanged(j));
+  const prevAny = morph2 && prev!.tints.length === 0 && prev!.lines.some((_, j) => prevChanged(j));
   const dimT = interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const lineLevel = (i: number) => {
     const target = anyChanged ? (changed(i) ? 1 : 0.4) : 1;
@@ -200,10 +200,10 @@ export const CodeSlide = ({
         </div>
       ) : null}
       {/* lines new or changed since the previous step in this sequence, in diff green */}
-      {morph
+      {/* Steps that tint phases are about the phases, not the edit: no change highlight. */}
+      {morph && step.tints.length === 0
         ? step.lines.map((tokens, i) => {
-            // One highlight per line: a phase tint takes precedence over "changed".
-            if (matched.has(i) || !lineText(tokens).trim() || tintOf(i)) return null;
+            if (matched.has(i) || !lineText(tokens).trim()) return null;
             return (
               <div
                 key={`added-${i}`}
