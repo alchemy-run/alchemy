@@ -200,6 +200,12 @@ export const schedule = async (
     const stop =
       beat.kind === "step" ||
       beat.kind === "editor.patch" ||
+      beat.kind === "editor.edit" ||
+      beat.kind === "editor.delete" ||
+      beat.kind === "terminal" ||
+      beat.kind === "browser" ||
+      beat.kind === "browser.update" ||
+      beat.kind === "browser.action" ||
       (segment.app !== segment.previous && segment.duration > 0);
     if (stop) {
       const mark = { title, notes, from: segment.from };
