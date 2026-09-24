@@ -1355,12 +1355,12 @@ export const steps: StepSpec[] = [
       "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
   }),
   api({
-    title: "First, it's in the wrong spot",
+    title: "But it's in the wrong spot",
     code: INFERRED_ON_FETCH,
     req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
-      "First, it's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
+      "But it's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
     title: "Moving the bucket out puts the layer on construction",
