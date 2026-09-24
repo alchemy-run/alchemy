@@ -1491,7 +1491,7 @@ export const steps: StepSpec[] = [
       "It's called an effectful constructor, and it's just like a class constructor: take your dependencies once, up front, and the methods use them. The difference is the constructor is an Effect, so its dependencies are tracked in the type.",
   },
   api({
-    title: "And a cloud program is an effectful constructor too",
+    title: "A cloud program is an effectful constructor too",
     snippet: "api-02-bucket.ts",
     marks: [
       { kind: "underline", find: 'const bucket = yield* R2.Bucket("Uploads");', label: "yields its resources", side: "right", tone: "construct" },
