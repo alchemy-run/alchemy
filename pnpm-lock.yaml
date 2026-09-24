@@ -309,6 +309,9 @@ catalogs:
     esbuild:
       specifier: ^0.28.1
       version: 0.28.2
+    fast-xml-parser:
+      specifier: ^5.10.1
+      version: 5.10.1
     fflate:
       specifier: ^0.8.3
       version: 0.8.3
@@ -6418,9 +6421,6 @@ importers:
       '@effect/sql-sqlite-do':
         specifier: 'catalog:'
         version: 4.0.0-rc.117(effect@4.0.0-rc.117)
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(vitest@4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
@@ -6503,6 +6503,9 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(vitest@4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.22.0(effect@4.0.0-rc.117)(foldkit@0.160.0(@effect/platform-browser@4.0.0-rc.117(effect@4.0.0-rc.117))(effect@4.0.0-rc.117))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -6829,9 +6832,15 @@ importers:
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
+      aws4fetch:
+        specifier: 'catalog:'
+        version: 1.0.20
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
+      fast-xml-parser:
+        specifier: 'catalog:'
+        version: 5.10.1
       heap-js:
         specifier: 'catalog:'
         version: 2.7.1

@@ -1,4 +1,3 @@
-import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -14,6 +13,7 @@ import {
   type FrameworkSiteProps,
   type Website,
 } from "./FrameworkSite.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** A command-built website with the same build vocabulary as Fly and Railway. */
 export interface StaticSiteProps
@@ -116,6 +116,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       errorPage: props.errorPage,
     };
     if (local) {
+      const { makeNodeServeEntrySource } = yield* loadFrontendCore;
       const path = yield* Path.Path;
       const runtime = yield* Effect.sync(() => process.execPath);
       const command = Output.map(build.outdir, (outdir) => {
