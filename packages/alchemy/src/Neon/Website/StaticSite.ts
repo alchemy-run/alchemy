@@ -1,4 +1,3 @@
-import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -15,6 +14,7 @@ import {
   type Website,
   type WebsiteScope,
 } from "./FrameworkSite.ts";
+import { importFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Configuration for a command-built Neon website. */
 export type StaticSiteProps = Omit<Command.BuildProps, "env"> &
@@ -122,6 +122,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       errorPage: props.errorPage,
     };
     if (local) {
+      const { makeNodeServeEntrySource } = yield* importFrontendCore;
       const path = yield* Path.Path;
       const runtime = yield* Effect.sync(() => process.execPath);
       const command = Output.map(build.outdir, (outdir) => {
