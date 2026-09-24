@@ -411,6 +411,7 @@ const deleter = (type: string) => `function deleter(remove: (id: string) => ${ty
 const REQ_LABEL = "Req · what it needs";
 const BUCKET: ReqItem = { name: "R2.BucketProvider", note: "to create the bucket" };
 const READ: ReqItem = { name: "R2.ReadBucket", note: "to read it at runtime" };
+const WORKER_PROVIDER: ReqItem = { name: "Cloudflare.WorkerProvider", note: "to deploy the Worker" };
 const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
 const WRITE_LOGS: ReqItem = { name: "R2.WriteBucket", note: "only in dev" };
 const WRITE: ReqItem = { name: "Queues.WriteQueue", note: "to send at runtime" };
@@ -1836,9 +1837,7 @@ export const steps: StepSpec[] = [
   stack({
     title: "Then you give it an Effect that yields the resources you want",
     code: STACK_4,
-    req: [met(BUCKET, "the Stack"), met(QUEUE, "the Stack")],
-    notes:
-      "Finally, the program itself: an Effect that yields the resources you want, here our Worker. The Worker's remaining requirements, R2.BucketProvider and Queues.QueueProvider, bubble up to the Stack, and the providers we gave it satisfy them.",
+    notes: "Finally, the program itself: an Effect that yields the resources you want. Here, that's our Worker.",
   }),
   {
     kind: "code",
@@ -1846,26 +1845,29 @@ export const steps: StepSpec[] = [
     file: "alchemy.run.ts",
     title: "…and returns what we want to know, like its URL",
     src: { snippet: "stack.ts", regions: ["show"] },
-    req: { label: REQ_LABEL, items: [met(BUCKET, "the Stack"), met(QUEUE, "the Stack")] },
     notes: "And it returns the outputs we care about, like the Worker's URL, printed after every deploy.",
   },
   {
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "The Worker is bundled on its own, with only its runtime code",
+    title: "Yielding Api brings its provider requirements with it",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "underline", find: "yield* Api", label: "bundled from its own import.meta.url", side: "right", tone: "runtime" }],
-    panel: {
-      title: "What the Worker bundle contains",
-      items: [
-        { title: "src/Api.ts", body: "from its import.meta.url", tone: "runtime" },
-        { title: "ReadBucketBinding, WriteQueueBinding", body: "just their runtime clients", tone: "construct" },
-        { title: "Providers, state, the Stack", body: "not included: they only run in alchemy deploy", tone: "good" },
-      ],
-    },
+    marks: [{ kind: "underline", find: "yield* Api", label: "needs these", side: "right", tone: "construct" }],
+    req: { label: REQ_LABEL, items: [BUCKET, WORKER_PROVIDER, QUEUE] },
     notes:
-      "The Worker is bundled separately, starting from its own import.meta.url. So it never pulls in the Stack, the providers, or the state store. Only the runtime code it needs. Remember Punchcard shipping the whole CDK? This is the fix.",
+      "Yielding Api brings its requirements along: a provider for every kind of resource it declared. R2.BucketProvider for the bucket, Queues.QueueProvider for the queue, and Cloudflare.WorkerProvider for the Worker itself. They bubble up to the Stack.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "…and Cloudflare.providers() satisfies all of them",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all three", side: "right", tone: "good" }],
+    req: { label: REQ_LABEL, items: [met(BUCKET, ""), met(WORKER_PROVIDER, ""), met(QUEUE, "")] },
+    notes:
+      "And the providers we gave the Stack satisfy them. That's why it can be every Cloudflare provider: this code runs during deploy, and none of it ships in the Worker.",
   },
 
   // Act 6: the compiler
