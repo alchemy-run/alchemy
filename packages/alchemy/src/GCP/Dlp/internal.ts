@@ -1,6 +1,8 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import type * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
@@ -21,6 +23,86 @@ export const LIST_LOCATIONS = ["us-central1", "global", "us"] as const;
 export class DlpNotResolved extends Data.TaggedError("GCP.Dlp.NotResolved")<{
   name: string;
 }> {}
+
+export class StoredInfoTypeNotReady extends Data.TaggedError(
+  "GCP.Dlp.StoredInfoTypeNotReady",
+)<{
+  name: string;
+  state: string | undefined;
+}> {}
+
+export class StoredInfoTypeFailed extends Data.TaggedError(
+  "GCP.Dlp.StoredInfoTypeFailed",
+)<{
+  name: string;
+  state: string;
+  message: string;
+}> {}
+
+const storedInfoTypeFailure = (
+  name: string,
+  version: dlp.GooglePrivacyDlpV2StoredInfoTypeVersion | undefined,
+) =>
+  version?.state === "FAILED" || version?.state === "INVALID"
+    ? new StoredInfoTypeFailed({
+        name,
+        state: version.state,
+        message:
+          (version.errors ?? [])
+            .map((error) => error.details?.message ?? "")
+            .filter((message) => message.length > 0)
+            .join("; ") || `stored info type version is ${version.state}`,
+      })
+    : undefined;
+
+/**
+ * Poll a stored info type until its current version is `READY` and no
+ * pending versions remain (create and update both build a new version
+ * asynchronously). Fails on a `FAILED`/`INVALID` version.
+ */
+export const waitForStoredInfoTypeReady = <
+  E extends { readonly _tag: string },
+  R,
+>(
+  name: string,
+  get: Effect.Effect<dlp.GooglePrivacyDlpV2StoredInfoType | undefined, E, R>,
+) =>
+  get.pipe(
+    Effect.flatMap(
+      (
+        stored,
+      ): Effect.Effect<
+        dlp.GooglePrivacyDlpV2StoredInfoType,
+        StoredInfoTypeNotReady | StoredInfoTypeFailed
+      > => {
+        if (stored === undefined) {
+          return Effect.fail(
+            new StoredInfoTypeNotReady({ name, state: undefined }),
+          );
+        }
+        const pending = stored.pendingVersions ?? [];
+        const failed = storedInfoTypeFailure(
+          name,
+          pending[pending.length - 1] ?? stored.currentVersion,
+        );
+        if (failed !== undefined) return Effect.fail(failed);
+        if (stored.currentVersion?.state !== "READY" || pending.length > 0) {
+          return Effect.fail(
+            new StoredInfoTypeNotReady({
+              name,
+              state: pending[0]?.state ?? stored.currentVersion?.state,
+            }),
+          );
+        }
+        return Effect.succeed(stored);
+      },
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Dlp.StoredInfoTypeNotReady",
+      times: 120,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+  );
 
 export class OrganizationNotResolved extends Data.TaggedError(
   "GCP.Dlp.OrganizationNotResolved",

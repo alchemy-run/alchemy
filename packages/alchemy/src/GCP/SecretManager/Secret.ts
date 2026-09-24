@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   createInternalLabels,
@@ -377,8 +378,13 @@ const waitUntilMissing = (name: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (secret): boolean => secret === undefined,
-      times: 8,
+      times: 30,
     }),
+    Effect.flatMap((secret): Effect.Effect<void, DeleteNotConfirmed> =>
+      secret === undefined
+        ? Effect.void
+        : Effect.fail(new DeleteNotConfirmed({ resource: name })),
+    ),
   );
 
 const toCreateBody = (
@@ -483,14 +489,8 @@ export const SecretProvider = () =>
         yield* secretmanager
           .deleteProjectsSecrets({ name: current.name ?? name })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        current = yield* waitUntilMissing(name);
-        if (
-          current !== undefined &&
-          replicationFingerprint(toReplication(current.replication)) !==
-            desiredReplicationFp
-        ) {
-          current = undefined;
-        }
+        yield* waitUntilMissing(name);
+        current = undefined;
       }
 
       if (current === undefined) {

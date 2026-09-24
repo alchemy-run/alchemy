@@ -327,6 +327,10 @@ export type Trigger = Resource<
  */
 export const Trigger = Resource<Trigger>("GCP.Eventarc.Trigger");
 
+export class TriggerNotHealthy extends Data.TaggedError(
+  "GCP.Eventarc.TriggerNotHealthy",
+)<{ name: string; conditions: string }> {}
+
 export class TriggerNotResolved extends Data.TaggedError(
   "GCP.Eventarc.TriggerNotResolved",
 )<{
@@ -709,6 +713,39 @@ const waitForOperation = (
     );
   });
 
+/**
+ * Block until Eventarc reports every trigger condition healthy (`OK`), so
+ * nothing downstream assumes a trigger that is still provisioning its
+ * transport. A trigger whose conditions settle on an error fails.
+ */
+const waitUntilHealthy = (name: string) =>
+  waitUntilExists(name).pipe(
+    Effect.flatMap((trigger) => {
+      const failing = Object.entries(trigger.conditions ?? {}).filter(
+        ([, condition]) =>
+          condition?.code !== undefined && condition.code !== "OK",
+      );
+      return failing.length === 0
+        ? Effect.succeed(trigger)
+        : Effect.fail(
+            new TriggerNotHealthy({
+              name,
+              conditions: failing
+                .map(
+                  ([key, condition]) =>
+                    `${key}: ${condition?.code} ${condition?.message ?? ""}`,
+                )
+                .join("; "),
+            }),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Eventarc.TriggerNotHealthy",
+      times: 30,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+  );
+
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
@@ -970,6 +1007,7 @@ export const TriggerProvider = () =>
         current = yield* waitUntilExists(name);
       }
 
+      current = yield* waitUntilHealthy(name);
       return toAttrs(current, env.project);
     }),
 

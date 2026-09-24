@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import {
   listAlchemyBuckets,
@@ -124,8 +125,17 @@ const waitUntilGone = (bucketName: string, folderName: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
-      times: 10,
+      times: 30,
     }),
+    Effect.flatMap((status): Effect.Effect<void, DeleteNotConfirmed> =>
+      status === "gone"
+        ? Effect.void
+        : Effect.fail(
+            new DeleteNotConfirmed({
+              resource: `${bucketName}/folders/${folderName}`,
+            }),
+          ),
+    ),
   );
 
 export const FolderProvider = () =>

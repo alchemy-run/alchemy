@@ -342,6 +342,21 @@ export class JobNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
+export class SchedulerJobNotReady extends Data.TaggedError(
+  "GCP.CloudScheduler.JobNotReady",
+)<{
+  name: string;
+  state: string | undefined;
+}> {}
+
+export class JobStateFailed extends Data.TaggedError(
+  "GCP.CloudScheduler.JobStateFailed",
+)<{
+  name: string;
+  state: string;
+  message: string;
+}> {}
+
 export class JobTargetMissing extends Data.TaggedError(
   "GCP.CloudScheduler.JobTargetMissing",
 )<{
@@ -479,6 +494,39 @@ const getByName = (name: string) =>
   scheduler
     .getProjectsLocationsJobs({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+
+/** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
+const waitForJobState = (name: string, paused: boolean) =>
+  getByName(name).pipe(
+    Effect.flatMap(
+      (
+        job,
+      ): Effect.Effect<
+        scheduler.Job,
+        JobStateFailed | SchedulerJobNotReady
+      > => {
+        const desired = paused ? "PAUSED" : "ENABLED";
+        if (job?.state === desired) return Effect.succeed(job);
+        if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
+          return Effect.fail(
+            new JobStateFailed({
+              name,
+              state: job.state,
+              message: job.status?.message ?? `job is ${job.state}`,
+            }),
+          );
+        }
+        return Effect.fail(
+          new SchedulerJobNotReady({ name, state: job?.state }),
+        );
+      },
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.CloudScheduler.JobNotReady",
+      times: 30,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 
 const headersMatch = (
   observed: scheduler.StringMap | undefined,
@@ -884,6 +932,7 @@ export const JobProvider = () =>
       }
 
       current = yield* syncPaused(name, current, desiredPaused);
+      current = yield* waitForJobState(name, desiredPaused);
       return toAttrs(current, env.project);
     }),
 

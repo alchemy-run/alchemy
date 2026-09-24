@@ -21,6 +21,7 @@ import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -372,7 +373,7 @@ export const updateIamMembership = (options: {
   const member = principal(options.member);
   const add = new Set(options.add ?? []);
   const remove = new Set(options.remove ?? []);
-  return Effect.gen(function* () {
+  const write = Effect.gen(function* () {
     const policy = yield* target.get;
     const next = rewrite(policy, member, add, remove);
     if (next === undefined) return;
@@ -388,7 +389,31 @@ export const updateIamMembership = (options: {
       schedule: Schedule.exponential("1 second"),
     }),
   );
+  // Don't report success until GCP reads the change back: callers (and
+  // the resources that depend on them) must never race a write that has
+  // not landed. A lost write (read-after-write lag, a concurrent writer
+  // without etag) is re-applied.
+  const confirmed = target.get.pipe(
+    Effect.flatMap((policy) =>
+      rewrite(policy, member, add, remove) === undefined
+        ? Effect.void
+        : Effect.fail(new IamPolicyNotConverged({ name: options.name })),
+    ),
+  );
+  return write.pipe(
+    Effect.andThen(confirmed),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.IamPolicyNotConverged",
+      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 };
+
+/** A written IAM policy did not read back with the change applied. */
+export class IamPolicyNotConverged extends Data.TaggedError(
+  "GCP.IamPolicyNotConverged",
+)<{ name: string }> {}
 
 /**
  * Remove `member` from every unconditional binding of `roles` on the

@@ -326,16 +326,23 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
+export class DeleteNotConfirmed extends Data.TaggedError(
+  "GCP.Ces.DeleteNotConfirmed",
+)<{}> {}
+
+/** Poll until the resource is gone; fails if it is still readable after ~60s. */
 export const waitUntilGone = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
 ) =>
   get.pipe(
     Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced("2 seconds"),
       until: (value) => value === undefined,
-      times: 10,
+      times: 30,
     }),
-    Effect.asVoid,
+    Effect.flatMap((value): Effect.Effect<void, DeleteNotConfirmed> =>
+      value === undefined ? Effect.void : Effect.fail(new DeleteNotConfirmed()),
+    ),
   );
 
 export const waitForVisible = <A, E, R>(

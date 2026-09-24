@@ -7,7 +7,7 @@ import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { isGcpListenHost, type GcpHostRuntimeContext } from "./HostContext.ts";
 import { Member } from "./IAM/Member.ts";
-import { verifyGoogleIdToken } from "./Oidc.ts";
+import { unverifiedAudience, verifyGoogleIdToken } from "./Oidc.ts";
 
 /**
  * Shared scaffolding for event sources that deliver over HTTPS to a GCP
@@ -153,8 +153,8 @@ export const listenForDeliveries = (
         email,
       });
       if (!valid) {
-        yield* Effect.logDebug(
-          `Rejected delivery to ${path}: invalid OIDC token`,
+        yield* Effect.logWarning(
+          `Rejected delivery to ${path}: invalid OIDC token (aud=${unverifiedAudience(request.headers["authorization"]) ?? "none"})`,
         );
         return unauthorized;
       }

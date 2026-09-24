@@ -203,6 +203,14 @@ export class InstanceStillExists extends Data.TaggedError(
   status: string;
 }> {}
 
+export class InstanceNotSettled extends Data.TaggedError(
+  "GCP.Compute.InstanceNotSettled",
+)<{
+  instanceName: string;
+  zone: string;
+  status: string;
+}> {}
+
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-micro";
 const DEFAULT_SOURCE_IMAGE =
@@ -322,6 +330,52 @@ const waitUntilGone = (project: string, zone: string, instanceName: string) =>
       while: (error) => error._tag === "GCP.Compute.InstanceStillExists",
       times: 18,
       schedule: Schedule.spaced("3 seconds"),
+    }),
+  );
+
+/** Transitional statuses Compute passes through before an instance settles. */
+const TRANSITIONAL_STATUSES = new Set([
+  "PENDING",
+  "PROVISIONING",
+  "STAGING",
+  "REPAIRING",
+  "STOPPING",
+  "PENDING_STOP",
+  "SUSPENDING",
+]);
+
+/** Poll until the instance reports a settled status (e.g. `RUNNING`). */
+const waitUntilSettled = (
+  project: string,
+  zone: string,
+  instanceName: string,
+) =>
+  getByName(project, zone, instanceName).pipe(
+    Effect.flatMap(
+      (
+        instance,
+      ): Effect.Effect<
+        compute.Instance,
+        InstanceNotResolved | InstanceNotSettled
+      > =>
+        instance === undefined
+          ? Effect.fail(new InstanceNotResolved({ instanceName, zone }))
+          : TRANSITIONAL_STATUSES.has(instance.status ?? "")
+            ? Effect.fail(
+                new InstanceNotSettled({
+                  instanceName,
+                  zone,
+                  status: instance.status ?? "UNKNOWN",
+                }),
+              )
+            : Effect.succeed(instance),
+    ),
+    Effect.retry({
+      while: (error) =>
+        error._tag === "GCP.Compute.InstanceNotSettled" ||
+        error._tag === "GCP.Compute.InstanceNotResolved",
+      times: 60,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
@@ -687,6 +741,7 @@ export const InstanceProvider = () =>
           (yield* getByName(env.project, zone, instanceName)) ?? current;
       }
 
+      current = yield* waitUntilSettled(env.project, zone, instanceName);
       return toAttrs(current, env.project);
     }),
 

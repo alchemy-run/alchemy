@@ -10,3 +10,4 @@ export * from "./WorkerPool.ts";
 export { TopicEventSource } from "./TopicEventSource.ts";
 export * from "./TopicPullEventSource.ts";
 export { ScheduleEventSource } from "./ScheduleEventSource.ts";
+export { EventarcEventSource } from "./EventarcEventSource.ts";

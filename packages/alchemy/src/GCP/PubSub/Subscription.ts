@@ -328,7 +328,7 @@ const waitUntilPresent = (name: string) =>
     Effect.retry({
       while: (error) => error._tag === "GCP.PubSub.SubscriptionNotResolved",
       schedule: Schedule.spaced("1 second"),
-      times: 8,
+      times: 60,
     }),
   );
 
@@ -522,14 +522,10 @@ export const SubscriptionProvider = () =>
             body: toCreateBody(topicName, news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => waitUntilPresent(name)));
+        // Block until Pub/Sub serves the subscription: the create response
+        // alone does not mean a GET (or a publish routed to it) sees it yet.
         current =
-          created === undefined
-            ? undefined
-            : yield* waitUntilPresent(name).pipe(
-                Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () =>
-                  Effect.succeed(created),
-                ),
-              );
+          created === undefined ? undefined : yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {

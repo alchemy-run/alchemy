@@ -33,6 +33,7 @@ import {
   toPhysicalId,
   updateMaskOf,
   userLabels,
+  waitForOperation,
   waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
@@ -434,12 +435,13 @@ export const RepositoryProvider = () =>
       const observedFolder = current.containingFolder ?? "";
       const desiredFolder = containingFolder ?? "";
       if (desiredFolder !== observedFolder) {
-        yield* retryTransient(
+        const moved = yield* retryTransient(
           dataform.moveProjectsLocationsRepositories({
             name: currentName,
             body: { destinationContainingFolder: desiredFolder },
           }),
         );
+        yield* waitForOperation(moved);
         current = (yield* getByName(currentName)) ?? current;
       }
 

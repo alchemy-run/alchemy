@@ -155,6 +155,7 @@ uses for `SQS.consumeQueueMessages` with Lambda or a server host:
 | `GCP.PubSub.consumeTopicMessages` | `PubSub.TopicEventSource` | `GCP.Run.TopicEventSource` | `GCP.Run.TopicPullEventSource` |
 | `GCP.Storage.consumeBucketEvents` | `Storage.BucketEventSource` | `Storage.BucketEventSourceLive` + a topic layer | same |
 | `GCP.CloudScheduler.consumeSchedule` | `CloudScheduler.ScheduleEventSource` | `GCP.Run.ScheduleEventSource` | — |
+| `GCP.Eventarc.consumeEvents` | `Eventarc.EventSource` | `GCP.Run.EventarcEventSource` | — |
 
 ```typescript
 yield* GCP.PubSub.consumeTopicMessages(orders, (messages) =>
@@ -163,14 +164,21 @@ yield* GCP.PubSub.consumeTopicMessages(orders, (messages) =>
 // …provided with Effect.provide(GCP.Run.TopicEventSource)
 ```
 
+`GCP.Eventarc.consumeEvents` covers everything else Google emits as a
+CloudEvent: Cloud Storage and Firestore changes, Audit Log entries for
+any Google API call, and partner channels. You pass Eventarc's
+attribute filters and get each decoded CloudEvent.
+
 A push source provisions the delivery (a push subscription, a Storage
-notification, a scheduler job) at the host's URL on a path under
+notification, a scheduler job, an Eventarc trigger) at the host's URL on a path under
 `/__alchemy/`, signed with an OIDC token for the host's runtime service
 account, and grants that account `roles/run.invoker` on the host. At
 runtime the host claims those paths before your `fetch` and verifies
 every token's signature, audience, and email, so the service can stay
 private. A 2xx acks; a failed handler answers 500 and Pub/Sub
-redelivers. A pull source creates a subscription the host owns and runs
+redelivers. Every deploy blocks until GCP reports the delivery in place:
+IAM grants are read back, the subscription and scheduler job exist and
+are enabled, and an Eventarc trigger reports healthy. A pull source creates a subscription the host owns and runs
 a pull loop that acks each batch after the handler succeeds.
 
 ## Next

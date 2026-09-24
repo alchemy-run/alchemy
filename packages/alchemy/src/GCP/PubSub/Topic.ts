@@ -1,6 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -157,6 +158,19 @@ const getByName = (name: string) =>
     .getProjectsTopics({ topic: name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+const waitUntilPresent = (name: string) =>
+  getByName(name).pipe(
+    Effect.filterOrFail(
+      (existing): existing is pubsub.Topic => existing !== undefined,
+      () => new TopicNotResolved({ name }),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.PubSub.TopicNotResolved",
+      schedule: Schedule.spaced("1 second"),
+      times: 60,
+    }),
+  );
+
 export const TopicProvider = () =>
   Provider.succeed(Topic, {
     stables: ["name", "topicId", "project"],
@@ -201,7 +215,7 @@ export const TopicProvider = () =>
       let current = yield* getByName(name);
 
       if (current === undefined) {
-        const created = yield* pubsub
+        yield* pubsub
           .createProjectsTopics({
             name,
             body: {
@@ -210,8 +224,9 @@ export const TopicProvider = () =>
               messageRetentionDuration: news.messageRetentionDuration,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
-        current = created ?? undefined;
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        // Block until Pub/Sub serves the topic, not just the create response.
+        current = yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {

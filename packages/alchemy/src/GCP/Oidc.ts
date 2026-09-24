@@ -123,3 +123,14 @@ export const verifyGoogleIdToken = (options: {
       (claims.iat ?? Number.POSITIVE_INFINITY) - CLOCK_SKEW_SECONDS <= now
     );
   }).pipe(Effect.catchCause(() => Effect.succeed(false)));
+
+/** The `aud` claim of a bearer token, unverified — for diagnostics only. */
+export const unverifiedAudience = (authorization: string | undefined) => {
+  try {
+    const token = /^Bearer\s+(.+)$/i.exec(authorization ?? "")?.[1];
+    const payload = token?.split(".")[1];
+    return payload ? (decodeSegment(payload) as Claims).aud : undefined;
+  } catch {
+    return undefined;
+  }
+};

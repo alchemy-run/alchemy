@@ -19,6 +19,7 @@ import {
   replaceOnIdentity,
   toResourceId,
   updateMaskOf,
+  waitForStoredInfoTypeReady,
 } from "./internal.ts";
 
 type StoredInfoTypeRegex = dlp.GooglePrivacyDlpV2Regex;
@@ -296,6 +297,11 @@ export const StoredInfoTypeProvider = () =>
         });
       }
 
+      const readyName = current.name ?? name;
+      current = yield* waitForStoredInfoTypeReady(
+        readyName,
+        getByName(readyName),
+      );
       return toAttrs(current, env.project);
     }),
 

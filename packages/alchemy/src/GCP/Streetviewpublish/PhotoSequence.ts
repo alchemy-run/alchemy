@@ -1,6 +1,7 @@
 import * as streetviewpublish from "@distilled.cloud/gcp/streetviewpublish_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -151,6 +152,67 @@ export class PhotoSequenceNotResolved extends Data.TaggedError(
   sequenceId: string;
 }> {}
 
+export class PhotoSequenceProcessingFailed extends Data.TaggedError(
+  "GCP.Streetviewpublish.PhotoSequenceProcessingFailed",
+)<{
+  sequenceId: string;
+  failureReason: string | undefined;
+}> {}
+
+export class PhotoSequenceStillExists extends Data.TaggedError(
+  "GCP.Streetviewpublish.PhotoSequenceStillExists",
+)<{
+  sequenceId: string;
+}> {}
+
+/**
+ * Poll until Street View returns the sequence. Processing (`PENDING` →
+ * `PROCESSED`) is the service ingesting the upload and can take hours, so
+ * only a `FAILED` processing state is treated as a deployment failure.
+ */
+const waitUntilVisible = (sequenceId: string) =>
+  getPhotoSequence(sequenceId).pipe(
+    Effect.flatMap(
+      (
+        sequence,
+      ): Effect.Effect<
+        streetviewpublish.PhotoSequence,
+        PhotoSequenceNotResolved | PhotoSequenceProcessingFailed
+      > =>
+        sequence === undefined
+          ? Effect.fail(new PhotoSequenceNotResolved({ sequenceId }))
+          : sequence.processingState === "FAILED"
+            ? Effect.fail(
+                new PhotoSequenceProcessingFailed({
+                  sequenceId,
+                  failureReason: sequence.failureReason,
+                }),
+              )
+            : Effect.succeed(sequence),
+    ),
+    Effect.retry({
+      while: (error) =>
+        error._tag === "GCP.Streetviewpublish.PhotoSequenceNotResolved",
+      times: 20,
+      schedule: Schedule.spaced("3 seconds"),
+    }),
+  );
+
+const waitUntilGone = (sequenceId: string) =>
+  getPhotoSequence(sequenceId).pipe(
+    Effect.flatMap((sequence): Effect.Effect<void, PhotoSequenceStillExists> =>
+      sequence === undefined
+        ? Effect.void
+        : Effect.fail(new PhotoSequenceStillExists({ sequenceId })),
+    ),
+    Effect.retry({
+      while: (error) =>
+        error._tag === "GCP.Streetviewpublish.PhotoSequenceStillExists",
+      times: 20,
+      schedule: Schedule.spaced("3 seconds"),
+    }),
+  );
+
 const toAttrs = (
   sequence: streetviewpublish.PhotoSequence,
   project: string,
@@ -300,11 +362,10 @@ export const PhotoSequenceProvider = () =>
           news.sequenceId ||
           output?.sequenceId ||
           "";
-        current =
-          (yield* getPhotoSequence(sequenceId)) ??
-          (sequenceId.length > 0
-            ? { id: sequenceId, processingState: "PENDING" }
-            : undefined);
+        if (sequenceId.length === 0) {
+          return yield* new PhotoSequenceNotResolved({ sequenceId });
+        }
+        current = yield* waitUntilVisible(sequenceId);
       }
 
       if (current === undefined) {
@@ -313,13 +374,14 @@ export const PhotoSequenceProvider = () =>
         });
       }
 
-      const fresh =
-        (yield* getPhotoSequence(current.id ?? output?.sequenceId ?? "")) ??
-        current;
+      const fresh = yield* waitUntilVisible(
+        current.id ?? output?.sequenceId ?? "",
+      );
       return toAttrs(fresh, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       yield* deletePhotoSequence(output.sequenceId);
+      yield* waitUntilGone(output.sequenceId);
     }),
   });

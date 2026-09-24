@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import { ALCHEMY_LABEL_PREFIX, stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_LOCATION = "global";
@@ -220,8 +221,13 @@ export const waitUntilParameterGone = (name: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (parameter): boolean => parameter === undefined,
-      times: 8,
+      times: 30,
     }),
+    Effect.flatMap((parameter): Effect.Effect<void, DeleteNotConfirmed> =>
+      parameter === undefined
+        ? Effect.void
+        : Effect.fail(new DeleteNotConfirmed({ resource: name })),
+    ),
   );
 
 export const waitUntilVersionGone = (name: string) =>
@@ -229,8 +235,13 @@ export const waitUntilVersionGone = (name: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (version): boolean => version === undefined,
-      times: 8,
+      times: 30,
     }),
+    Effect.flatMap((version): Effect.Effect<void, DeleteNotConfirmed> =>
+      version === undefined
+        ? Effect.void
+        : Effect.fail(new DeleteNotConfirmed({ resource: name })),
+    ),
   );
 
 const emptyParameters = () =>

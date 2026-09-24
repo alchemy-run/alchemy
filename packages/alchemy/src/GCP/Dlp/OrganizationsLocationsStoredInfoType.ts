@@ -28,6 +28,7 @@ import {
   toPhysicalId,
   tryResolveOrganization,
   updateMaskOf,
+  waitForStoredInfoTypeReady,
 } from "./internal.ts";
 
 export type StoredInfoTypeConfig = dlp.GooglePrivacyDlpV2StoredInfoTypeConfig;
@@ -340,6 +341,11 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
         });
       }
 
+      const readyName = current.name ?? name;
+      current = yield* waitForStoredInfoTypeReady(
+        readyName,
+        getByName(readyName),
+      );
       return toAttrs(current, organization, env.project);
     }),
 

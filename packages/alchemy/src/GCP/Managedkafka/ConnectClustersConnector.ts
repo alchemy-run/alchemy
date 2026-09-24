@@ -22,6 +22,8 @@ import {
   rfc1035,
   stringMapOf,
   toPhysicalId,
+  waitUntilGone,
+  waitUntilReady,
 } from "./internal.ts";
 
 export type TaskRetryPolicy = {
@@ -298,6 +300,11 @@ export const ConnectClustersConnectorProvider = () =>
         });
       }
 
+      current = yield* waitUntilReady(
+        getConnector(current.name ?? name),
+        current.name ?? name,
+        (connector) => connector.state,
+      );
       return toAttrs(current, env.project);
     }),
 
@@ -307,5 +314,6 @@ export const ConnectClustersConnectorProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* waitUntilGone(getConnector(output.name), output.name);
     }),
   });

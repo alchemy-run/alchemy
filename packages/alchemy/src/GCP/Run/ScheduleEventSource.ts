@@ -74,7 +74,11 @@ export const ScheduleEventSource = Layer.effect(
               location: props.location,
               schedule: props.schedule,
               timeZone: props.timeZone,
-              retryConfig: props.retryConfig,
+              retryConfig: props.retryConfig ?? {
+                retryCount: 5,
+                minBackoffDuration: "10s",
+                maxBackoffDuration: "120s",
+              },
               httpTarget: {
                 uri: Output.interpolate`${endpoint.url}${path}`,
                 httpMethod: "POST",

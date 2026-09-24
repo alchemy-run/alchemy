@@ -286,16 +286,23 @@ export const ignoreGone = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) => effect.pipe(Effect.catchIf(isGone, () => Effect.void));
 
+export class DeleteNotConfirmed extends Data.TaggedError(
+  "GCP.Datalabeling.DeleteNotConfirmed",
+)<{}> {}
+
+/** Poll until the resource is gone; fails if it is still readable after ~60s. */
 export const waitUntilGone = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
 ) =>
   get.pipe(
     Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced("2 seconds"),
       until: (value) => value === undefined,
-      times: 10,
+      times: 30,
     }),
-    Effect.asVoid,
+    Effect.flatMap((value): Effect.Effect<void, DeleteNotConfirmed> =>
+      value === undefined ? Effect.void : Effect.fail(new DeleteNotConfirmed()),
+    ),
   );
 
 export const waitForVisible = <A, E, R>(

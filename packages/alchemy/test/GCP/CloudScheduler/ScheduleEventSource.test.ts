@@ -72,30 +72,18 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
         `${out.uri}/__alchemy/scheduler/heartbeat`,
       );
 
-      // Force runs instead of waiting for the (yearly) cron. The job has no
-      // retries, and a run can be refused while the fresh run.invoker grant
-      // propagates, so re-run until one lands.
+      // Force one run instead of waiting for the (yearly) cron. The job's
+      // default retry policy redelivers until the host accepts it.
       const jobName = job!.name!.split("/").pop()!;
       const media = yield* makeObjectMedia;
-      const readMarker = media.download({
-        bucket: out.bucket,
-        object: markerFor(jobName),
-      });
-      const marker = yield* scheduler
-        .runProjectsLocationsJobs({ name: job!.name!, body: {} })
+      yield* scheduler.runProjectsLocationsJobs({ name: job!.name!, body: {} });
+      const marker = yield* media
+        .download({ bucket: out.bucket, object: markerFor(jobName) })
         .pipe(
-          Effect.andThen(
-            readMarker.pipe(
-              Effect.retry({
-                while: (error) => error._tag === "GCP.Storage.ObjectNotFound",
-                schedule: Schedule.spaced("5 seconds"),
-                times: 6,
-              }),
-            ),
-          ),
           Effect.retry({
             while: (error) => error._tag === "GCP.Storage.ObjectNotFound",
-            times: 5,
+            schedule: Schedule.spaced("5 seconds"),
+            times: 48,
           }),
         );
       const event = JSON.parse(new TextDecoder().decode(marker.body));

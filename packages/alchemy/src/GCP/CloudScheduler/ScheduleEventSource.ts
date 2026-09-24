@@ -29,7 +29,12 @@ export interface ScheduleEventSourceProps {
    * @default "us-central1"
    */
   location?: string;
-  /** Retry policy for failed invocations. */
+  /**
+   * Retry policy for failed invocations. The default retries a refused or
+   * failed delivery (e.g. while a new invoker grant propagates) instead
+   * of dropping that run.
+   * @default { retryCount: 5, minBackoffDuration: "10s", maxBackoffDuration: "120s" }
+   */
   retryConfig?: RetryConfig;
   /**
    * Delivery path on the host. Defaults to a deterministic per-schedule
