@@ -793,14 +793,26 @@ export const steps: StepSpec[] = [
     notes:
       "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. That's a least-privilege violation, baked in by the type system.",
   }),
+  api({
+    title: "What we learned is that we've broken encapsulation",
+    code: INFERRED_DEV,
+    marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "its type now says R2, and which buckets", side: "right", tone: "bad" }],
+    req: [
+      BUCKET,
+      GET_OBJECT_HOISTED,
+      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+    ],
+    notes:
+      "Step back and look at what happened. The infrastructure a function uses has become part of its type. fetch's type now says R2, and exactly which buckets. That's broken encapsulation, and it's the problem that finally killed this design.",
+  }),
   {
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "The last problem shows up when you put it behind a service",
+    title: "Take a Storage service that hides where files live",
     src: { code: SERVICE },
     notes:
-      "The last problem is the one that killed this design. Effect's answer to encapsulation is a service: an interface, with implementations provided as Layers. Here's Storage: get a file by key. It says nothing about where files live.",
+      "To see it clearly, take Effect's tool for encapsulation: a service. An interface, with implementations provided as Layers. Storage gets a file by key, and says nothing about where files live. That's the whole point.",
   },
   {
     kind: "code",
