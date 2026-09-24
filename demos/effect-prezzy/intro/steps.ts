@@ -90,9 +90,9 @@ const C = {
 };
 const FN = `
 
-async function api(req) {
-  const file = await bucket.get(req.key)
-  await queue.send(file)
+function api(req) {
+  const file = bucket.get(req.key)
+  queue.send(file)
 }`;
 const VERSIONED = `const bucket = Bucket({ versioning: true })
 const queue = Queue()${FN}`;
@@ -100,14 +100,14 @@ const COLORED_APP = `construct app() {
   const bucket = Bucket({ versioning: true })
   const queue = Queue()
 
-  runtime async function api(req) {
-    const file = await bucket.get(req.key)
-    await queue.send(file)
+  runtime function api(req) {
+    const file = bucket.get(req.key)
+    queue.send(file)
   }
 }`;
 const COLORED_BAD = COLORED_APP.replace(
-  "    const file = await bucket.get(req.key)",
-  "    const other = Bucket()\n    const file = await bucket.get(req.key)",
+  "    const file = bucket.get(req.key)",
+  "    const other = Bucket()\n    const file = bucket.get(req.key)",
 );
 
 const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]) => ({
@@ -142,12 +142,12 @@ const BQ = `${B2}
 const queue = Queue()`;
 const EMPTY_FN = `${BQ}
 
-async function api(req) {
+function api(req) {
 }`;
 const GET_FN = `${BQ}
 
-async function api(req) {
-  const file = await bucket.get(req.key)
+function api(req) {
+  const file = bucket.get(req.key)
 }`;
 
 const program = (): StepSpec[] => [
@@ -222,7 +222,7 @@ const program = (): StepSpec[] => [
     src: { code: VERSIONED },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
-      { from: "const file", to: "await queue.send", tone: "runtime" },
+      { from: "const file", to: "queue.send(file)", tone: "runtime" },
     ],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
