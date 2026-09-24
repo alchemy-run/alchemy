@@ -1119,11 +1119,18 @@ export const steps: StepSpec[] = [
       "So the WriteBucketBinding code is still in the production bundle, but it never grants anything there. Providing a layer isn't granting a permission; running the code is. That's the difference from my first attempt, where the type demanded the permission in every stage.",
   }),
   api({
-    title: "Finally, we wrap it in a Worker to run it in the cloud",
+    title: "So far, though, it's just a program that nothing runs",
+    snippet: "api-06-provide.ts",
+    req: [met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding"), WORKER],
+    notes:
+      "Let's drop the Logs bucket again to keep the code small. And notice what we have: api is just a value. An Effect describing a program. Nothing has deployed it, and nothing runs it yet.",
+  }),
+  api({
+    title: "Now let's actually deploy it, starting with a Worker",
     snippet: "api-07-worker.ts",
     req: PROVIDED,
     notes:
-      "To run the program in the cloud, wrap it in a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
+      "So let's actually deploy it somewhere. Wrap it in a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
   }),
   api({
     title: "But what if we read during construction?",
