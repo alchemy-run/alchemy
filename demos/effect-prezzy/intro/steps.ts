@@ -1499,16 +1499,10 @@ export const steps: StepSpec[] = [
     ],
     req: [],
     notes:
-      "And look at our cloud program. It's the same shape: yield resources in the body, return a fetch handler that closes over them. A cloud program is an effectful constructor, and it fits Effect's Layers perfectly.",
+      "And that's what I finally realized. Look at our cloud program: it's the same shape. Yield resources in the body, return a fetch handler that closes over them. A cloud program is an effectful constructor, and it fits Effect's Layers perfectly. I'd been fighting the model instead of using it.",
   }),
   api({
-    title: "So what I actually ended up realizing…",
-    snippet: "api-02-bucket.ts",
-    req: [],
-    notes: "So what I actually ended up realizing is that I'd been fighting the model instead of using it.",
-  }),
-  api({
-    title: "…is that a binding is just another dependency to yield",
+    title: "So a binding is just another dependency to yield",
     snippet: "api-04-get.ts",
     req: [{ ...READ, note: "declared in construction" }],
     notes:
