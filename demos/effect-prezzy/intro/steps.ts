@@ -1834,11 +1834,11 @@ export const steps: StepSpec[] = [
       "Then state: where Alchemy records what it deployed for each stage, so the next deploy knows what to create, update or delete. Here it's stored in your Cloudflare account, so your laptop and CI share it.",
   }),
   stack({
-    title: "Then it yields the Worker, and its providers bubble up",
+    title: "Then you give it an Effect that yields the resources you want",
     code: STACK_4,
-    req: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
+    req: [met(BUCKET, "the Stack"), met(QUEUE, "the Stack")],
     notes:
-      "Finally, the program itself: it yields our Worker. The Worker's remaining requirements, R2.BucketProvider and Queues.QueueProvider, bubble up to the Stack, and the providers we gave it satisfy them.",
+      "Finally, the program itself: an Effect that yields the resources you want, here our Worker. The Worker's remaining requirements, R2.BucketProvider and Queues.QueueProvider, bubble up to the Stack, and the providers we gave it satisfy them.",
   }),
   {
     kind: "code",
@@ -1846,7 +1846,7 @@ export const steps: StepSpec[] = [
     file: "alchemy.run.ts",
     title: "…and returns what we want to know, like its URL",
     src: { snippet: "stack.ts", regions: ["show"] },
-    req: { label: REQ_LABEL, items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")] },
+    req: { label: REQ_LABEL, items: [met(BUCKET, "the Stack"), met(QUEUE, "the Stack")] },
     notes: "And it returns the outputs we care about, like the Worker's URL, printed after every deploy.",
   },
   {
