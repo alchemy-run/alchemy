@@ -166,10 +166,33 @@ const program = (): StepSpec[] => [
       "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
   }),
   lang({
-    title: "Using a resource connects them into a graph",
+    title: "A function is a resource too",
+    src: {
+      code: `${TWO}
+
+async function api(req) {
+}`,
+    },
+    diagram: { nodes: GRAPH(), edges: [] },
+    notes: "Declaring a function deploys it: another node in the world.",
+  }),
+  lang({
+    title: "Reading the bucket connects the function to it",
+    src: {
+      code: `${TWO}
+
+async function api(req) {
+  const file = await bucket.get(req.key)
+}`,
+    },
+    diagram: { nodes: GRAPH(), edges: [USES[0]!] },
+    notes: "Call bucket.get inside the function, and the function now depends on the bucket.",
+  }),
+  lang({
+    title: "Sending to the queue connects it to the queue",
     src: { code: APP },
     diagram: { nodes: GRAPH(), edges: USES },
-    notes: "A function that reads the bucket and writes to the queue: the program describes a graph of interconnected resources.",
+    notes: "Send to the queue as well: the program describes a graph of interconnected resources.",
   }),
   lang({
     title: "Change the code, and the cloud is reconciled to match",
