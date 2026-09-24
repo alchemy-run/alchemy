@@ -1778,10 +1778,10 @@ export const steps: StepSpec[] = [
       "Compare that with where I started. A CDK construct carries all of its provisioning code with it. Here the resource is a description plus a requirement, and the code that actually provisions it lives somewhere else.",
   }),
   stack({
-    title: "Now that we have a Worker, we need a Stack to deploy it",
+    title: "This is where Stacks come in",
     code: STACK_1,
     notes:
-      "OK, so now that we actually have a Worker, how do we deploy it? We need an entry point for alchemy deploy: a Stack, in alchemy.run.ts. It starts with a name.",
+      "So who provides the providers, and how do we actually deploy this Worker? This is where Stacks come in: the entry point for alchemy deploy, in alchemy.run.ts. It starts with a name.",
   }),
   stack({
     title: "A Stack is a set of resources you deploy as one unit",
