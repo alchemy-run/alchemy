@@ -217,6 +217,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
     error,
     panel: spec.panel,
     diagram: spec.diagram,
+    quiet: spec.quiet,
     frames: spec.frames ?? 30,
   };
 };

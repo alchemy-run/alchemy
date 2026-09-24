@@ -40,6 +40,8 @@ export interface CodeSpec {
   panel?: { title: string; items: PanelItem[] };
   /** A drawing beside the code that evolves with it. */
   diagram?: MiniGraph;
+  /** Don't highlight or spotlight the lines that changed since the previous step. */
+  quiet?: boolean;
   frames?: number;
 }
 
@@ -133,10 +135,6 @@ const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): C
   fontSize: 32,
   ...spec,
 });
-const phaseTints = [
-  { from: "const bucket", to: "const queue", tone: "construct" as const },
-  { from: "const file", to: "await queue.send", tone: "runtime" as const },
-];
 
 const B1 = "const bucket = Bucket()";
 const B2 = "const bucket = Bucket({ versioning: true })";
@@ -238,7 +236,8 @@ const program = (): StepSpec[] => [
   lang({
     title: "Imagine the phases as colored functions",
     src: { code: COLORED_APP },
-    tints: phaseTints,
+    // The construct/runtime keywords carry the colors; nothing else to highlight.
+    quiet: true,
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
       "In a real language we could make that explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
@@ -246,10 +245,6 @@ const program = (): StepSpec[] => [
   lang({
     title: "The colors are boundaries the compiler enforces",
     src: { code: COLORED_BAD },
-    tints: [
-      { from: "const bucket", to: "const queue", tone: "construct" },
-      { from: "const other", to: "await queue.send", tone: "runtime" },
-    ],
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
@@ -261,7 +256,7 @@ const program = (): StepSpec[] => [
   lang({
     title: "Inferring bindings is a kind of type checking",
     src: { code: COLORED_APP },
-    tints: phaseTints,
+    quiet: true,
     marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "runtime" }],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
@@ -653,7 +648,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     title: "Today a DSL in TypeScript. Tomorrow, a syntax",
     src: { code: COLORED_APP },
     fontSize: 40,
-    tints: phaseTints,
+    quiet: true,
     notes:
       "This all serves the original goal: a cloud programming language without new syntax. The TypeScript and Effect DSL is the foundation that a real syntax, with first-class colored functions, can sit on later. Now let's build something.",
   },

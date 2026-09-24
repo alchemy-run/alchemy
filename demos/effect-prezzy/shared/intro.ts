@@ -86,6 +86,8 @@ export interface CodeStep {
   error?: CodeError;
   panel?: { title: string; items: PanelItem[] };
   diagram?: MiniGraph;
+  /** No change highlight or spotlight on this step. */
+  quiet?: boolean;
   frames: number;
 }
 
