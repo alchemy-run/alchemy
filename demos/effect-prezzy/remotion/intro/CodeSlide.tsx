@@ -242,7 +242,6 @@ export const CodeSlide = ({
   const morph = prev && prev.group === step.group;
   const matched = matchLines(morph ? prev : undefined, step);
   const pg = prev ? layout(prev, area) : g;
-  const stampIn = step.stamp && prev?.stamp !== step.stamp ? spring({ frame: local - 4, fps, config: { damping: 12, stiffness: 180 } }) : 1;
   const asideIn = prev?.aside?.text === step.aside?.text ? 1 : interpolate(local, [4, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   // The photo lands after the text, with a little overshoot.
   const photoIn =
@@ -513,29 +512,23 @@ export const CodeSlide = ({
           })}
         </svg>
       ) : null}
-      {step.stamp ? (
-        <div
-          style={{
-            position: "absolute",
-            left: g.left + g.blockW / 2,
-            top: g.top + g.blockH / 2,
-            transform: `translate(-50%, -50%) rotate(-7deg) scale(${1.6 - stampIn * 0.6})`,
-            opacity: Math.min(1, stampIn * 1.5),
-            padding: "10px 34px 16px",
-            border: `5px solid ${TONE.bad}`,
-            borderRadius: 14,
-            background: "rgba(20, 17, 13, 0.82)",
-            boxShadow: "0 18px 50px rgba(0, 0, 0, 0.55)",
-            fontFamily: hand,
-            fontWeight: 700,
-            fontSize: 92,
-            lineHeight: 1.1,
-            whiteSpace: "nowrap",
-            color: TONE.bad,
-          }}
-        >
-          {step.stamp}
-        </div>
+      {step.cross ? (
+        <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+          {(() => {
+            // Two quick hand-drawn strokes over the code block, already drawn if the previous step had them.
+            const x0 = g.left - 20;
+            const y0 = g.top - 16;
+            const x1 = g.left + g.blockW + 20;
+            const y1 = g.top + g.blockH + 16;
+            const at = prev?.cross ? -100 : 4;
+            return (
+              <>
+                {stroke(`M ${x0} ${y0} Q ${(x0 + x1) / 2 + 18} ${(y0 + y1) / 2 - 14}, ${x1} ${y1}`, TONE.bad, drawProgress(local, at, 7), 12)}
+                {stroke(`M ${x1 + 6} ${y0 + 8} Q ${(x0 + x1) / 2 - 12} ${(y0 + y1) / 2 - 10}, ${x0 - 4} ${y1 - 6}`, TONE.bad, drawProgress(local, at + 6, 7), 12)}
+              </>
+            );
+          })()}
+        </svg>
       ) : null}
       {step.aside?.image ? (
         <div

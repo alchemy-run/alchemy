@@ -164,8 +164,8 @@ export interface CodeStep {
   links?: CodeLink[];
   /** Arcs from text in the code to what it becomes in `diagram`: a node, or an edge's label. */
   diagramLinks?: { from: Span; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
-  /** A big hand-written verdict stamped across the code. */
-  stamp?: string;
+  /** A big hand-drawn red X across the code: this approach is wrong. */
+  cross?: boolean;
   /** A hand-written aside in the bottom-right corner. */
   aside?: {
     text: string;

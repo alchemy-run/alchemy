@@ -61,8 +61,8 @@ export interface CodeSpec {
   diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
   aside?: { text: string; tone?: Tone; image?: string };
-  /** A big hand-written verdict stamped across the code. */
-  stamp?: string;
+  /** A big hand-drawn red X across the code: this approach is wrong. */
+  cross?: boolean;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -502,7 +502,7 @@ const api = (s: {
   bundle?: BundlePanel;
   frames?: number;
   aside?: CodeSpec["aside"];
-  stamp?: string;
+  cross?: boolean;
 }): CodeSpec => ({
   kind: "code",
   group: "api",
@@ -514,7 +514,7 @@ const api = (s: {
   error: s.error,
   quiet: s.quiet,
   aside: s.aside,
-  stamp: s.stamp,
+  cross: s.cross,
   bundle: s.bundle,
   frames: s.frames,
   req: s.bundle
@@ -1298,7 +1298,7 @@ export const steps: StepSpec[] = [
     title: "It looked just like the imaginary language…",
     code: INFERRED,
     quiet: true,
-    stamp: "but it had problems",
+    cross: true,
     req: [],
     fetchReq: [GET_OBJECT],
     notes:

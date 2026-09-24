@@ -244,7 +244,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     beside,
     links: links.length ? links : undefined,
     aside: spec.aside,
-    stamp: spec.stamp,
+    cross: spec.cross,
     diagramLinks: spec.diagramLinks?.map((link) => ({ ...link, from: locate(code, link.from, spec.title) })),
     quiet: spec.quiet,
     frames: spec.frames ?? 30,
