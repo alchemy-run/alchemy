@@ -41,7 +41,9 @@ without the port and Service.
 ## Run an Effect program
 
 Declare the Job in its own module with `main: import.meta.url` and an
-implementation that returns `{ run }`:
+implementation that returns `{ run }`. This example assumes
+`src/infra.ts` exports the cluster and an `Api` Deployment, as
+described in [Why the props are an Effect](#why-the-props-are-an-effect):
 
 ```typescript
 // src/Seed.ts
