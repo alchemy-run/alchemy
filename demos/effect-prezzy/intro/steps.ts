@@ -105,9 +105,9 @@ export const steps: StepSpec[] = [
     kind: "board",
     board: "world",
     stage: 0,
-    title: "A cloud program describes a world that outlives it",
+    title: "Cloud code describes a world that outlives the program",
     notes:
-      "A normal program runs from entry point to exit and its state is gone. Cloud code represents a persistent world that lives beyond a single run of the program. Every deploy starts from the world the last one left behind.",
+      "A normal program runs from start to finish and its state is gone. Cloud code is different: it describes Functions, Databases, Queues and Buckets that keep existing after the program that created them has finished. Every deploy starts from the world the last one left behind.",
   },
   {
     kind: "board",

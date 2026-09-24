@@ -78,7 +78,7 @@ const Svg = ({ children }: { children: ReactNode }) => (
   </svg>
 );
 
-const CodeCard = ({ x, y, w, text, color, opacity }: { x: number; y: number; w: number; text: string; color: string; opacity: number }) => (
+const CodeCard = ({ x, y, w, text, color, opacity, size = 24 }: { x: number; y: number; w: number; text: string; color: string; opacity: number; size?: number }) => (
   <pre
     style={{
       position: "absolute",
@@ -91,7 +91,7 @@ const CodeCard = ({ x, y, w, text, color, opacity }: { x: number; y: number; w: 
       border: `2px solid ${color}`,
       borderRadius: 12,
       fontFamily: mono,
-      fontSize: 24,
+      fontSize: size,
       lineHeight: 1.45,
       color: "#d4d4d4",
       opacity,
@@ -103,108 +103,145 @@ const CodeCard = ({ x, y, w, text, color, opacity }: { x: number; y: number; w: 
 );
 
 // ── Act 1: a cloud program's world ───────────────────────────────────────
+// One idea per stage: 0 the resources, 1 the graph, 2 one resource changing,
+// 3 one connection and what it needs.
+const BIG = { w: 300, h: 110 };
 const WORLD = {
-  fn: { x: 1150, y: 360, title: "Function", color: "#f38020" },
-  db: { x: 1560, y: 290, title: "Database", color: "#00e599" },
-  bucket: { x: 1560, y: 560, title: "Bucket", color: "#8b7cf6" },
-  queue: { x: 1150, y: 650, title: "Queue", color: "#e0a86b" },
+  fn: { x: 700, y: 330, title: "Function", color: "#f38020" },
+  db: { x: 1220, y: 330, title: "Database", color: "#00e599" },
+  queue: { x: 700, y: 640, title: "Queue", color: "#e0a86b" },
+  bucket: { x: 1220, y: 640, title: "Bucket", color: "#8b7cf6" },
 };
 
+const BigNode = ({ n, opacity }: { n: { x: number; y: number; title: string; color: string }; opacity: number }) => (
+  <div
+    style={{
+      position: "absolute",
+      left: n.x - BIG.w / 2,
+      top: n.y - BIG.h / 2,
+      width: BIG.w,
+      height: BIG.h,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 14,
+      borderRadius: 20,
+      background: "#1c1a17",
+      border: `3px solid ${n.color}`,
+      boxShadow: "0 14px 40px rgba(0,0,0,0.45)",
+      opacity,
+      transform: `scale(${0.9 + 0.1 * opacity})`,
+      fontFamily: sans,
+      fontSize: 40,
+      fontWeight: 600,
+      color: brand.fg,
+    }}
+  >
+    <span style={{ width: 14, height: 14, borderRadius: 7, background: n.color }} />
+    {n.title}
+  </div>
+);
+
 const World = ({ stage, local }: BoardProps) => {
-  const graph = shown(stage, 1, local);
-  const edge = (i: number) => (stage > 1 ? 1 : stage === 1 ? drawProgress(local, 14 + i * 6) : 0);
-  // Stage 2 zooms into the bucket's config; stage 3 into the function → bucket edge.
-  const versions = ["versioning: off", "versioning: on", "versioning: on\ncors: [app.shorty.dev]"];
-  const v = stage === 2 ? Math.min(2, Math.floor(Math.max(0, local - 6) / 18)) : 2;
+  if (stage <= 1) {
+    const keys = Object.keys(WORLD) as (keyof typeof WORLD)[];
+    const edges: [number, number, number, number][] = [
+      [850, 330, 1070, 330],
+      [700, 385, 700, 585],
+      [830, 380, 1090, 590],
+      [1220, 585, 1220, 385],
+    ];
+    return (
+      <AbsoluteFill>
+        {stage === 1 ? (
+          <Svg>
+            {edges.map(([x1, y1, x2, y2], i) => (
+              <Arrow key={i} x1={x1} y1={y1} x2={x2} y2={y2} color={brand.fgMuted} progress={drawProgress(local, 4 + i * 8, 14)} bend={0} />
+            ))}
+          </Svg>
+        ) : null}
+        {keys.map((key, i) => (
+          <BigNode key={key} n={WORLD[key]} opacity={stage === 0 ? fadeIn(local, i * 6) : 1} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+  if (stage === 2) {
+    // One resource, its configuration changing over time.
+    const lines = ["versioning: on", "cors: [shorty.dev]", "lifecycle: expire 30d"];
+    return (
+      <AbsoluteFill>
+        <BigNode n={{ ...WORLD.bucket, x: 960, y: 300 }} opacity={1} />
+        <div
+          style={{
+            position: "absolute",
+            left: 960 - 340,
+            top: 420,
+            width: 680,
+            padding: "26px 34px",
+            borderRadius: 16,
+            background: vscode.editorBg,
+            border: "1px solid rgba(255,255,255,0.1)",
+            fontFamily: mono,
+            fontSize: 34,
+            lineHeight: 1.7,
+          }}
+        >
+          {lines.map((line, i) => {
+            const p = fadeIn(local, 6 + i * 16, 8);
+            return (
+              <div
+                key={line}
+                style={{
+                  opacity: p,
+                  color: "#7ee787",
+                  background: p > 0 ? "rgba(46,160,67,0.18)" : undefined,
+                  borderLeft: "4px solid #2ea043",
+                  paddingLeft: 16,
+                }}
+              >
+                + {line}
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  // stage 3: one connection, and what it needs.
   return (
     <AbsoluteFill>
-      {/* left: an ordinary program */}
-      <div style={{ position: "absolute", left: 120, top: 150, width: 640 }}>
-        <Label color={brand.fg} size={34}>
-          An ordinary program
-        </Label>
-        <Svg>
-          {stroke2(`M 150 330 L 710 330`, brand.fgMuted, drawProgress(local, 4, 20))}
-        </Svg>
-        <div style={{ position: "absolute", left: 30, top: 130, fontFamily: mono, fontSize: 26, color: brand.fgMuted }}>
-          main()
-        </div>
-        <div style={{ position: "absolute", left: 540, top: 130, fontFamily: mono, fontSize: 26, color: brand.fgMuted }}>
-          exit
-        </div>
-        <div style={{ position: "absolute", left: 30, top: 240, width: 600 }}>
-          <Label>Runs from entry point to exit. When it's done, its state is gone.</Label>
-        </div>
-      </div>
-      {/* right: a cloud program's world */}
-      <div style={{ position: "absolute", left: 960, top: 150 }}>
-        <Label color={brand.fg} size={34}>
-          A cloud program
-        </Label>
-      </div>
+      <BigNode n={{ ...WORLD.fn, x: 560, y: 300 }} opacity={1} />
+      <BigNode n={{ ...WORLD.bucket, x: 1360, y: 300 }} opacity={1} />
+      <Svg>
+        <Arrow x1={720} y1={300} x2={1200} y2={300} color={TONE.construct} progress={drawProgress(local, 2, 14)} bend={0} />
+      </Svg>
+      <CodeCard
+        x={530}
+        y={430}
+        w={860}
+        size={34}
+        text={`Allow s3:GetObject on uploads-7f3a`}
+        color={TONE.construct}
+        opacity={fadeIn(local, 18)}
+      />
+      <CodeCard x={530} y={560} w={860} size={34} text="BUCKET_NAME=uploads-7f3a" color={TONE.construct} opacity={fadeIn(local, 26)} />
       <div
         style={{
           position: "absolute",
-          left: 940,
-          top: 210,
-          width: 860,
-          height: 600,
-          borderRadius: 28,
-          border: `2px dashed ${brand.fgMuted}55`,
-          opacity: fadeIn(local, 6),
+          left: 0,
+          right: 0,
+          top: 710,
+          textAlign: "center",
+          fontFamily: hand,
+          fontSize: 60,
+          fontWeight: 700,
+          color: TONE.construct,
+          opacity: fadeIn(local, 36),
         }}
-      />
-      <div style={{ position: "absolute", left: 970, top: 770, opacity: fadeIn(local, 10) }}>
-        <Label>…leaves a world behind that the next run starts from.</Label>
+      >
+        a binding
       </div>
-      <Svg>
-        <g opacity={graph}>
-          <Arrow x1={1270} y1={360} x2={1440} y2={300} color={brand.fgMuted} progress={edge(0)} bend={0.1} />
-          <Arrow x1={1270} y1={390} x2={1440} y2={540} color={stage >= 3 ? TONE.construct : brand.fgMuted} progress={edge(1)} bend={-0.1} />
-          <Arrow x1={1150} y1={600} x2={1150} y2={420} color={brand.fgMuted} progress={edge(2)} bend={0.2} />
-        </g>
-      </Svg>
-      {(Object.keys(WORLD) as (keyof typeof WORLD)[]).map((key, i) => {
-        const n = WORLD[key];
-        const dim = stage === 2 && key !== "bucket" ? 0.35 : stage === 3 && key !== "fn" && key !== "bucket" ? 0.35 : 1;
-        return (
-          <Node
-            key={key}
-            x={n.x}
-            y={n.y}
-            title={n.title}
-            color={n.color}
-            opacity={(stage > 1 ? 1 : stage === 1 ? fadeIn(local, i * 5) : stage === 0 ? fadeIn(local, 16 + i * 4) * 0.9 : 0) * dim}
-          />
-        );
-      })}
-      {stage === 2 ? (
-        <div style={{ position: "absolute", left: 1450, top: 640, width: 360 }}>
-          <CodeCard x={0} y={0} w={330} text={versions[v]!} color={TONE.construct} opacity={fadeIn(local, 4)} />
-          <div style={{ position: "absolute", left: 0, top: 150, fontFamily: hand, fontSize: 34, color: TONE.construct, opacity: fadeIn(local, 30) }}>
-            desired ≠ actual → reconcile
-          </div>
-        </div>
-      ) : null}
-      {stage === 3 ? (
-        <>
-          <CodeCard
-            x={150}
-            y={470}
-            w={560}
-            text={`{ "Effect": "Allow",\n  "Action": "s3:GetObject",\n  "Resource": "arn:…:bucket/*" }`}
-            color={TONE.construct}
-            opacity={fadeIn(local, 8)}
-          />
-          <CodeCard x={150} y={650} w={560} text="BUCKET_NAME=uploads-7f3a" color={TONE.construct} opacity={fadeIn(local, 16)} />
-          <Svg>
-            <Arrow x1={720} y1={560} x2={1330} y2={470} color={TONE.construct} progress={drawProgress(local, 20, 16)} bend={-0.15} />
-          </Svg>
-          <div style={{ position: "absolute", left: 160, top: 740, fontFamily: hand, fontSize: 48, fontWeight: 700, color: TONE.construct, opacity: fadeIn(local, 26) }}>
-            = a binding
-          </div>
-        </>
-      ) : null}
     </AbsoluteFill>
   );
 };
