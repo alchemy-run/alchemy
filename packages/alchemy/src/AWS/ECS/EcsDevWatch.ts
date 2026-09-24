@@ -23,7 +23,7 @@ const familyOfArn = (arn: string | undefined) =>
  * - **standalone** tasks (launched via `RunTask`, `startedBy` ≠ the service
  *   scheduler) are stopped and re-run on the new revision in the same
  *   cluster/launch type;
- * - **service-managed** tasks (`startedBy: "ecs-svc"` in floci) are only
+ * - **service-managed** tasks (`startedBy: "ecs-svc/<deployment>"`) are only
  *   stopped — the service scheduler relaunches them on the service's
  *   current (freshly-updated) task definition.
  *
@@ -60,7 +60,11 @@ export const restartFamilyTasks = Effect.fn(function* (options: {
       if (task.lastStatus !== "RUNNING") continue;
       if (familyOfArn(task.taskDefinitionArn) !== options.family) continue;
       if (task.taskDefinitionArn === options.nextTaskDefinitionArn) continue;
-      const isServiceManaged = task.startedBy === "ecs-svc";
+      // ECS stamps service tasks with their deployment id (`ecs-svc/<id>`);
+      // older floci builds used the bare `ecs-svc`.
+      const isServiceManaged =
+        task.startedBy === "ecs-svc" ||
+        (task.startedBy?.startsWith("ecs-svc/") ?? false);
       if (isServiceManaged !== options.serviceManaged) continue;
       yield* ecs.stopTask({
         cluster,
