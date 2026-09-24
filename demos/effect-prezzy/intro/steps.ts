@@ -229,8 +229,8 @@ const program = (): StepSpec[] => [
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
-      labels: [{ text: "construction builds this", x: 350, y: 20, tone: "construct" }],
-      incoming: { to: "api", label: "runtime: every request", tone: "runtime" },
+      frame: { label: "construction", tone: "construct" },
+      incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
     },
     notes:
       "So the program doesn't run once from top to bottom. Construction is declarative: it builds the architecture, the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",

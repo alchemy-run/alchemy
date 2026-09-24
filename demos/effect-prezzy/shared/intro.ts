@@ -60,8 +60,10 @@ export interface MiniGraph {
   edges: { from: string; to: string; tone?: Tone; label?: string }[];
   /** Short facts shown under the drawing (permissions, env vars, errors). */
   cards?: { text: string; tone?: Tone }[];
-  /** An arrow coming into a node from outside, e.g. requests. */
+  /** Requests arriving at a node from outside, drawn as a looping stream. */
   incoming?: { to: string; label: string; tone?: Tone };
+  /** A dashed frame around the whole drawing, e.g. "everything construction builds". */
+  frame?: { label: string; tone?: Tone };
   /** Hand-written labels at a position in the drawing. */
   labels?: { text: string; x: number; y: number; tone?: Tone }[];
 }

@@ -45,8 +45,7 @@ const focusOf = (graph: MiniGraph | undefined, prev: MiniGraph | undefined) => {
     (graph.nodes.some((n) => node(n.id)) ||
       graph.edges.some(edge) ||
       (graph.cards ?? []).some((c) => card(c.text)) ||
-      (graph.labels ?? []).some((l) => !prev.labels?.some((p) => p.text === l.text)) ||
-      (!!graph.incoming && prev.incoming?.to !== graph.incoming.to));
+      (graph.labels ?? []).some((l) => !prev.labels?.some((p) => p.text === l.text)));
   const ownNode = (id: string) => {
     const n = graph?.nodes.find((x) => x.id === id);
     const was = before.get(id);
@@ -155,27 +154,49 @@ export const MiniGraphView = ({
             </g>
           );
         })}
+        {graph.frame
+          ? (() => {
+              // Everything drawn so far: the boxes and what's listed under them.
+              const xs = graph.nodes.flatMap((n) => [n.x - NODE.w / 2, n.x + NODE.w / 2]);
+              const ys = graph.nodes.flatMap((n) => [n.y - NODE.h / 2, n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38]);
+              const x = Math.min(...xs) - 26;
+              const y = Math.min(...ys) - 30;
+              const w = Math.max(...xs) + 26 - x;
+              const h = Math.max(...ys) + 26 - y;
+              const color = TONE[graph.frame.tone ?? "construct"];
+              const q = prev?.frame ? 1 : fade(local, delay, 14);
+              return (
+                <g opacity={q}>
+                  <rect x={x} y={y} width={w} height={h} rx={22} fill={`${color}0d`} stroke={color} strokeWidth={2.5} strokeDasharray="10 8" />
+                  {/* Top-right, clear of anything arriving from above. */}
+                  <rect x={x + w - 46 - graph.frame.label.length * 13.2} y={y - 16} width={graph.frame.label.length * 13.2 + 24} height={32} rx={8} fill="#14110d" />
+                  <text x={x + w - 34 - graph.frame.label.length * 13.2} y={y + 8} fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
+                    {graph.frame.label}
+                  </text>
+                </g>
+              );
+            })()
+          : null}
         {graph.incoming
           ? (() => {
+              // Requests stream into the node from above, from outside the architecture.
               const n = placed.get(graph.incoming.to)!;
-              // Come in from below whatever is listed under the node (e.g. its env vars).
-              const under = NODE.h / 2 + (graph.nodes.find((x) => x.id === n.id)?.notes?.length ?? 0) * 38;
               const color = TONE[graph.incoming.tone ?? "runtime"];
               const isNew = prev?.incoming?.to !== graph.incoming.to;
-              const p = isNew ? drawProgress(local, delay, 14) : 1;
+              const p = isNew ? drawProgress(local, delay + 10, 14) : 1;
+              const top = n.y - NODE.h / 2;
+              const y1 = top - 250;
+              const y2 = top - 12;
+              const dots = [0, 1, 2].map((k) => ((local + k * 16) % 48) / 48);
               return (
-                <g>
-                  <Arrow x1={n.x} y1={n.y + under + 150} x2={n.x} y2={n.y + under + 14} color={color} progress={p} bend={0} />
-                  <text
-                    x={n.x}
-                    y={n.y + under + 196}
-                    textAnchor="middle"
-                    fill={color}
-                    fontFamily={hand}
-                    fontWeight={700}
-                    fontSize={38}
-                    opacity={isNew ? fade(local, delay + 10) : 1}
-                  >
+                <g opacity={isNew ? fade(local, delay + 10, 10) : 1}>
+                  <Arrow x1={n.x} y1={y1} x2={n.x} y2={y2} color={color} progress={p} bend={0} />
+                  {p >= 1
+                    ? dots.map((d, k) => (
+                        <circle key={k} cx={n.x} cy={y1 + (y2 - y1 - 16) * d} r={7} fill={color} opacity={Math.sin(Math.PI * d)} />
+                      ))
+                    : null}
+                  <text x={n.x + 22} y={y1 + 8} fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
                     {graph.incoming.label}
                   </text>
                 </g>
