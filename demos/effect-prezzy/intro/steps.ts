@@ -742,6 +742,14 @@ export const steps: StepSpec[] = [
       "But the outer Effect doesn't need R2.GetObject. Only fetch does. The only way construction learns about it is type magic: dig into the return type of the Effect, find fetch, infer its requirements, and hoist them up. The requirement is discovered by analyzing the runtime function, not declared.",
   }),
   api({
+    title: "This is starting to feel like peeking inside again…",
+    code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
+    marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
+    req: [BUCKET, GET_OBJECT_HOISTED],
+    notes:
+      "Hang on. Reaching into fetch to find out what it uses… that's Functionless all over again. Peeking inside, just with types instead of the compiler. Let's keep going anyway and see where it breaks.",
+  }),
+  api({
     title: "Now say we only want a Logs bucket in dev",
     code: INFERRED_DEV_1,
     req: [BUCKET, GET_OBJECT_HOISTED],
