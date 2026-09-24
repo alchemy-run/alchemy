@@ -1456,11 +1456,11 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "In Effect, a Layer yields its dependencies in the body…",
+    title: "This is why a Layer yields its dependencies in the body…",
     src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
     marks: [{ kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" }],
     notes:
-      "Effect already has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
+      "This is why Effect has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
   },
   {
     kind: "code",
