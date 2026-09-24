@@ -234,6 +234,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     req: spec.req,
     beside,
     links: links.length ? links : undefined,
+    aside: spec.aside,
     quiet: spec.quiet,
     frames: spec.frames ?? 30,
   };

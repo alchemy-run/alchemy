@@ -241,6 +241,7 @@ export const CodeSlide = ({
   const morph = prev && prev.group === step.group;
   const matched = matchLines(morph ? prev : undefined, step);
   const pg = prev ? layout(prev, area) : g;
+  const asideIn = prev?.aside?.text === step.aside?.text ? 1 : interpolate(local, [4, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const t = morph
     ? interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: (x) => 1 - (1 - x) ** 3 })
     : interpolate(local, [0, 6], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -458,6 +459,24 @@ export const CodeSlide = ({
           local={local}
           delay={marksStart}
         />
+      ) : null}
+      {step.aside ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 1920 - (AREA.x + AREA.width),
+            bottom: 1080 - (AREA.y + AREA.height) + 10,
+            fontFamily: hand,
+            fontWeight: 700,
+            fontSize: 44,
+            color: TONE[step.aside.tone ?? "neutral"],
+            transform: `rotate(-3deg) translateY(${(1 - asideIn) * 8}px)`,
+            transformOrigin: "right bottom",
+            opacity: asideIn,
+          }}
+        >
+          {step.aside.text}
+        </div>
       ) : null}
       {step.drill ? (
         <DrillView

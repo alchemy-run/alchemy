@@ -147,6 +147,8 @@ export interface CodeStep {
   beside?: CodeStep;
   /** Lines from text in this pane to text in `beside`: how the two are coupled. */
   links?: CodeLink[];
+  /** A hand-written aside in the bottom-right corner. */
+  aside?: { text: string; tone?: Tone };
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;
   frames: number;

@@ -54,6 +54,8 @@ export interface CodeSpec {
   beside?: Pick<CodeSpec, "file" | "src" | "lang" | "tints" | "marks">;
   /** Lines from text in this file to text in `beside`. */
   links?: { from: Find; to: Find; tone?: Tone }[];
+  /** A hand-written aside in the bottom-right corner. */
+  aside?: { text: string; tone?: Tone };
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -425,6 +427,7 @@ const api = (s: {
   marks?: CodeSpec["marks"];
   error?: CodeSpec["error"];
   quiet?: boolean;
+  aside?: CodeSpec["aside"];
 }): CodeSpec => ({
   kind: "code",
   group: "api",
@@ -435,6 +438,7 @@ const api = (s: {
   marks: s.marks,
   error: s.error,
   quiet: s.quiet,
+  aside: s.aside,
   req: {
     label: REQ_LABEL,
     items: s.req,
@@ -1149,6 +1153,23 @@ export const steps: StepSpec[] = [
     ],
     notes:
       "So the WriteBucketBinding code is still in the production bundle, but it never grants anything there. Providing a layer isn't granting a permission; running the code is. That's the difference from my first attempt, where the type demanded the permission in every stage.",
+  }),
+  api({
+    title: "The layer ships in the bundle, but least privilege holds",
+    snippet: "api-06b-dev.ts",
+    marks: [
+      { kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" },
+      { kind: "box", find: "R2.WriteBucketBinding,", label: "in the bundle, never granted", side: "right", tone: "good" },
+    ],
+    req: [
+      met(READ, "ReadBucketBinding"),
+      met(WRITE, "WriteQueueBinding"),
+      met(WRITE_LOGS, "WriteBucketBinding\nno permission in prod"),
+      WORKER,
+    ],
+    aside: { text: "usually, pragmatism beats purity", tone: "neutral" },
+    notes:
+      "A small trade-off: a few bytes of unused client code in production, in exchange for a program that stays plain code. Usually, pragmatism beats purity.",
   }),
   api({
     title: "So far, though, it's just a program that nothing runs",
