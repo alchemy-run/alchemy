@@ -153,8 +153,9 @@ export const ReqView = ({
         }
         return (
           <div key={e.key}>
-            <div style={{ position: "absolute", left: x, top: y, opacity: 1 - p }}>{content(old)}</div>
-            <div style={{ position: "absolute", left: x, top: y, opacity: p }}>{content(e)}</div>
+            {/* Out, then in: overlapping text of different lengths is unreadable. */}
+            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, 1 - p * 2) }}>{content(old)}</div>
+            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, p * 2 - 1) }}>{content(e)}</div>
           </div>
         );
       })}

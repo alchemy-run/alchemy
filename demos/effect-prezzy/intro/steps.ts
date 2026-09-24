@@ -448,6 +448,26 @@ const ALL_BINDINGS = `export default Cloudflare.Worker(
   ),
 );`;
 
+/** The Lambda in AWS calling R2 and Queues in Cloudflare through a scoped token. */
+const CROSS_CLOUD = (connected: boolean): MiniGraph => ({
+  nodes: [
+    at({ id: "api", title: "Lambda", color: "#ff9900" }, 125, 270),
+    at({ id: "bucket", title: "R2 Bucket", color: "#f38020" }, 560, 100),
+    at({ id: "queue", title: "Queue", color: "#f38020" }, 560, 440),
+  ],
+  edges: connected
+    ? [
+        { from: "api", to: "bucket", tone: "construct", label: "R2: read" },
+        { from: "api", to: "queue", tone: "construct", label: "Queues: write" },
+      ]
+    : [],
+  labels: [
+    { text: "AWS", x: 125, y: 190, tone: "neutral" },
+    { text: "Cloudflare", x: 560, y: 25, tone: "neutral" },
+    { text: "🔒 scoped API token,\nbound as a secret", x: 110, y: 400, tone: "construct" },
+  ],
+});
+
 /** The first line of the compiler's message that starts with `prefix`. */
 const firstLine = (prefix: string) => (lines: string[]) => lines.filter((line) => line.startsWith(prefix)).slice(0, 1);
 
@@ -1623,12 +1643,55 @@ export const steps: StepSpec[] = [
     // which AWS.Lambda.Function doesn't provide yet.
     error: { hide: true },
     req: [
+      met(READ, "ReadBucketHttp\ncalls Cloudflare's API"),
+      met(WRITE, "WriteQueueHttp\ncalls Cloudflare's API"),
+    ],
+    notes:
+      "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. Same program, different runtime, different layer. That's the other reason there's no AllBindings: the right implementation depends on the environment you're running in, so you choose it.",
+  }),
+  api({
+    title: "Each HTTP layer mints a least-privilege Cloudflare API token",
+    snippet: "api-11-http.error.ts",
+    error: { hide: true },
+    marks: [
+      {
+        kind: "box",
+        find: "R2.ReadBucketHttp,",
+        to: "Queues.WriteQueueHttp,",
+        label: "one scoped token each",
+        side: "right",
+        tone: "construct",
+      },
+    ],
+    req: [
       met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
       met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
     ],
     notes:
-      "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. The permission changes with the layer too: each one mints an API token scoped to exactly what the code declared. Same program, different runtime, different layer. That's the other reason there's no AllBindings: the right implementation depends on the environment you're running in, so you choose it.",
+      "But how does a Lambda get into Cloudflare? At deploy time, each HTTP layer's construction face mints a Cloudflare account API token, scoped to exactly what the code declared: read this bucket, write to this queue, and nothing else.",
   }),
+  {
+    kind: "code",
+    group: "api",
+    file: "src/Api.ts",
+    title: "…and binds it securely into the Lambda",
+    src: { snippet: "api-11-http.error.ts", regions: ["show"] },
+    error: { hide: true },
+    diagram: CROSS_CLOUD(false),
+    notes:
+      "Then it binds the token into the Lambda as a secret, just like the bucket's name was bound in our imaginary language. The token never appears in your code or your repository.",
+  },
+  {
+    kind: "code",
+    group: "api",
+    file: "src/Api.ts",
+    title: "Now AWS can call Cloudflare, with only the access it needs",
+    src: { snippet: "api-11-http.error.ts", regions: ["show"] },
+    error: { hide: true },
+    diagram: CROSS_CLOUD(true),
+    notes:
+      "And now the Lambda, running in AWS, reads from R2 and writes to a Cloudflare Queue, with a token that can do exactly that. Cross-cloud, least privilege, and the same program as before.",
+  },
   lang({
     group: "phase-callback",
     title: "Remember the phase rule from our imaginary language?",
