@@ -6,10 +6,15 @@ import type {
   ReplacedResourceState,
   ResourceState,
 } from "../../State/ResourceState.ts";
-import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import * as EntryCodec from "./EntryCodec.ts";
+import {
+  EncryptionKeyChangedError,
+  keyFingerprint,
+  verifyKeyFingerprint,
+} from "./KeyFingerprint.ts";
 import { EncryptionKey } from "./Token.ts";
 
 export default class Store extends DurableObject<Store>()(
@@ -27,56 +32,52 @@ export default class Store extends DurableObject<Store>()(
         .get()
         .pipe(Effect.map(Redacted.value), Effect.orDie);
       const cryptoKey = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey(
-          "raw",
-          Buffer.from(keyHex, "hex"),
-          { name: "AES-CTR" },
-          false,
-          ["encrypt", "decrypt"],
-        ),
+        EntryCodec.importEntryKey(keyHex),
       ).pipe(Effect.orDie);
 
       const encryptValue = (value: unknown) =>
-        Effect.tryPromise(async () => {
-          const plaintext = new TextEncoder().encode(
-            JSON.stringify(encodeState(value)),
-          );
-          const counter = crypto.getRandomValues(allocBytes(NONCE_BYTES));
-          const ct = new Uint8Array(
-            await crypto.subtle.encrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              plaintext,
-            ),
-          );
-          // Frame as a single base64 string: nonce || ciphertext.
-          return Buffer.concat([counter, ct]).toString("base64");
-        }).pipe(Effect.orDie);
+        Effect.tryPromise(() => EntryCodec.encryptEntry(cryptoKey, value)).pipe(
+          Effect.orDie,
+        );
 
+      // Unreadable entries (wrong key, corrupt frame) resolve `undefined`
+      // inside the codec — the promise never rejects for bad data, so
+      // `orDie` here only covers genuine runtime faults. See
+      // `EntryCodec.decryptEntry` for why.
       const decryptEntry = (entry: string) =>
-        Effect.tryPromise(async () => {
-          const framed = Buffer.from(entry, "base64");
-          const counter = framed.subarray(0, NONCE_BYTES);
-          const ciphertext = framed.subarray(NONCE_BYTES);
-          let pt;
-          try {
-            pt = await crypto.subtle.decrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              ciphertext,
-            );
-          } catch (error) {
-            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
-            // So, we catch a decryption error here and return undefined instead.
-            // The engine should reconcile, hopefully, but users may lose some data
-            console.error(
-              "Error decrypting entry. Returning undefined instead.",
-              error,
-            );
-            return undefined;
-          }
-          return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
-        }).pipe(Effect.orDie);
+        Effect.tryPromise(() =>
+          EntryCodec.decryptEntry<ResourceState>(cryptoKey, entry),
+        ).pipe(Effect.orDie);
+
+      // Rotation guard (see KeyFingerprint.ts). Checked once per DO instance,
+      // lazily on the first data method so the check runs inside a request
+      // context; a mismatch dies loudly on every data method rather than
+      // letting unreadable entries degrade to "absent". Listing and deleting
+      // stay available so a deliberate wipe is still possible.
+      const fingerprint = yield* Effect.tryPromise(() =>
+        keyFingerprint(keyHex),
+      ).pipe(Effect.orDie);
+      const guard = yield* Effect.cached(
+        verifyKeyFingerprint(
+          {
+            get: (key) => storage.get<string>(key),
+            put: (key, value) => storage.put(key, value),
+          },
+          fingerprint,
+        ).pipe(
+          Effect.flatMap((check) =>
+            check === "mismatch"
+              ? Effect.logError(
+                  "Cloudflare State Store encryption key changed; refusing to serve state.",
+                ).pipe(
+                  Effect.andThen(Effect.die(new EncryptionKeyChangedError())),
+                )
+              : Effect.void,
+          ),
+        ),
+      );
+      const guarded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        guard.pipe(Effect.andThen(effect));
 
       return {
         // -- Root DO methods -----------------------------------------
@@ -149,13 +150,17 @@ export default class Store extends DurableObject<Store>()(
          * null if missing.
          */
         get: ({ stage, fqn }: { stage: string; fqn: string }) =>
-          storage
-            .get<string>(resourceKey(stage, fqn))
-            .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
+          guarded(
+            storage
+              .get<string>(resourceKey(stage, fqn))
+              .pipe(
+                Effect.flatMap((entry) =>
+                  entry == null
+                    ? Effect.succeed(undefined)
+                    : decryptEntry(entry),
+                ),
               ),
-            ),
+          ),
 
         /**
          * (Stack DO only) Persist a resource. Returns the stored
@@ -170,13 +175,15 @@ export default class Store extends DurableObject<Store>()(
           fqn: string;
           value: ResourceState;
         }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(resourceKey(stage, fqn), encrypted)
-                .pipe(Effect.asVoid),
+          guarded(
+            encryptValue(value).pipe(
+              Effect.flatMap((encrypted) =>
+                storage
+                  .put<string>(resourceKey(stage, fqn), encrypted)
+                  .pipe(Effect.asVoid),
+              ),
+              Effect.map(() => value),
             ),
-            Effect.map(() => value),
           ),
 
         /**
@@ -209,26 +216,32 @@ export default class Store extends DurableObject<Store>()(
          * Returns `undefined` when the stage has not been deployed.
          */
         getOutput: ({ stage }: { stage: string }) =>
-          storage
-            .get<string>(stackOutputKey(stage))
-            .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
+          guarded(
+            storage
+              .get<string>(stackOutputKey(stage))
+              .pipe(
+                Effect.flatMap((entry) =>
+                  entry == null
+                    ? Effect.succeed(undefined)
+                    : decryptEntry(entry),
+                ),
               ),
-            ),
+          ),
 
         /**
          * (Stack DO only) Persist the resolved stack output for
          * `stage`. Returns the stored value unchanged.
          */
         setOutput: ({ stage, value }: { stage: string; value: any }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(stackOutputKey(stage), encrypted)
-                .pipe(Effect.asVoid),
+          guarded(
+            encryptValue(value).pipe(
+              Effect.flatMap((encrypted) =>
+                storage
+                  .put<string>(stackOutputKey(stage), encrypted)
+                  .pipe(Effect.asVoid),
+              ),
+              Effect.map(() => value),
             ),
-            Effect.map(() => value),
           ),
 
         /**
@@ -237,8 +250,7 @@ export default class Store extends DurableObject<Store>()(
          * `status` field can be inspected.
          */
         getReplacedResources: ({ stage }: { stage: string }) =>
-          pipe(
-            storage.list<string>({ prefix: stagePrefix(stage) }),
+          guarded(storage.list<string>({ prefix: stagePrefix(stage) })).pipe(
             Effect.map((entries) =>
               [...entries.values()].filter((e): e is string => !!e),
             ),
@@ -275,9 +287,6 @@ const STACK_OUTPUT_PREFIX = `o${SEP}`;
 /** Key prefix for stack-index entries in the root DO. */
 const STACK_INDEX_PREFIX = "s:";
 
-/** AES-CTR counter block length. */
-const NONCE_BYTES = 16;
-
 /** Build the resource key inside a *stack DO*. */
 const resourceKey = (stage: string, fqn: string) =>
   `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
@@ -301,11 +310,3 @@ const parseResourceKey = (
   if (sep < 0) return undefined;
   return { stage: rest.slice(0, sep), fqn: rest.slice(sep + 1) };
 };
-
-/**
- * Allocate a `Uint8Array` over a fresh `ArrayBuffer` (not shared) so
- * the resulting buffer satisfies Web Crypto's `BufferSource` type
- * constraint under strict DOM typings.
- */
-const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(new ArrayBuffer(size));
