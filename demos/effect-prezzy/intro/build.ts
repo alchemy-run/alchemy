@@ -125,9 +125,9 @@ const cut = (text: string, keep?: string[]): Cut => {
 };
 
 // ── highlighting ─────────────────────────────────────────────────────────
-const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml"] });
+const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml", "shellscript"] });
 const PSEUDO_KEYWORDS: Record<string, string> = { construct: "#a3c473", runtime: "#e0a86b" };
-const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" | "ansi" = "typescript"): Token[][] =>
+const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" | "ansi" | "shellscript" = "typescript"): Token[][] =>
   highlighter.codeToTokens(code, { lang, theme: "dark-plus" }).tokens.map((line) =>
     line.flatMap((token) => {
       // Shiki's FontStyle.Bold is bit 2 (terminal output uses it).

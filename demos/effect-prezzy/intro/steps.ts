@@ -22,7 +22,7 @@ export interface CodeSpec {
   file?: string;
   pseudo?: boolean;
   src: Source;
-  lang?: "typescript" | "yaml" | "ansi";
+  lang?: "typescript" | "yaml" | "ansi" | "shellscript";
   fontSize?: number;
   /** Tint lines by phase: a snippet region, or the lines from one match to another. */
   tints?: (({ region: string } | { from: Find; to?: Find }) & { tone: Tone })[];
@@ -653,6 +653,41 @@ const stack = (s: {
   notes: s.notes,
 });
 
+// ── what infrastructure as code is ──────────────────────────────────────
+const SCRIPT = `aws s3api create-bucket --bucket uploads
+aws s3api put-bucket-versioning --bucket uploads \\
+  --versioning-configuration Status=Enabled`;
+const CFN_1 = `Resources:
+  Uploads:
+    Type: AWS::S3::Bucket`;
+const CFN_2 = `Resources:
+  Uploads:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled`;
+/** One step of the infrastructure-as-code primer: a file beside the cloud it describes. */
+const iac = (s: {
+  title: string;
+  lang: CodeSpec["lang"];
+  file: string;
+  code: string;
+  notes: string;
+  diagram: MiniGraph;
+  marks?: CodeSpec["marks"];
+}): CodeSpec => ({
+  kind: "code",
+  group: "iac",
+  file: s.file,
+  lang: s.lang,
+  title: s.title,
+  src: { code: s.code },
+  marks: s.marks,
+  diagram: s.diagram,
+  fontSize: 32,
+  notes: s.notes,
+});
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -666,16 +701,96 @@ export const steps: StepSpec[] = [
       "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language.",
   },
 
+  {
+    kind: "slide",
+    layout: "section",
+    title: "Hi, I'm Sam Goodwin",
+    eyebrow: "Hi, I'm",
+    heading: "Sam Goodwin",
+    subtitle: "I'm obsessed with programming languages and cloud infrastructure",
+    notes:
+      "Hi, I'm Sam Goodwin. I'm obsessed with two things: programming languages, and cloud infrastructure. This talk is about where they meet.",
+  },
+  {
+    kind: "slide",
+    layout: "section",
+    title: "First, what is infrastructure as code?",
+    eyebrow: "In case you're new to it",
+    heading: "What is infrastructure as code?",
+    notes: "For anyone who hasn't used it, a quick primer on infrastructure as code.",
+  },
+  iac({
+    title: "Without it, you change the cloud by running scripts",
+    lang: "shellscript",
+    file: "setup.sh",
+    code: SCRIPT,
+    diagram: { nodes: [], edges: [] },
+    notes:
+      "Without infrastructure as code, you change the cloud by running commands: create this bucket, then turn on versioning. A script of steps, run in order.",
+  }),
+  iac({
+    title: "…and each script has to know what already exists",
+    lang: "shellscript",
+    file: "setup.sh",
+    code: SCRIPT,
+    marks: [{ kind: "underline", find: "create-bucket", label: "fails the second time", side: "right", tone: "bad" }],
+    diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
+    notes:
+      "Run it again and create-bucket fails, because the bucket already exists. Every script has to know the current state of the world, and every change is another script.",
+  }),
+  iac({
+    title: "Infrastructure as code describes what it should be instead",
+    lang: "yaml",
+    file: "template.yaml",
+    code: CFN_1,
+    diagram: { nodes: [], edges: [] },
+    notes:
+      "Infrastructure as code flips that around. Instead of the steps, you write down what the cloud should look like: the desired state. This is CloudFormation, AWS's version. One bucket.",
+  }),
+  iac({
+    title: "An engine compares it to the cloud, and creates what's missing",
+    lang: "yaml",
+    file: "template.yaml",
+    code: CFN_1,
+    diagram: {
+      nodes: [at(C.bucket, 360, 150)],
+      edges: [],
+      labels: [{ text: "created", x: 470, y: 90, tone: "good" }],
+    },
+    notes: "An engine compares the desired state with what actually exists. The bucket doesn't exist yet, so the engine creates it.",
+  }),
+  iac({
+    title: "Change what it should be…",
+    lang: "yaml",
+    file: "template.yaml",
+    code: CFN_2,
+    diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
+    notes: "Now we want versioning. We don't write a script to turn it on. We just change the description.",
+  }),
+  iac({
+    title: "…and the engine updates only what changed",
+    lang: "yaml",
+    file: "template.yaml",
+    code: CFN_2,
+    diagram: {
+      nodes: [at(C.bucket, 360, 150, ["versioning: on"])],
+      edges: [],
+      labels: [{ text: "updated in place", x: 470, y: 90, tone: "good" }],
+    },
+    notes:
+      "Deploy again, and the engine works out the difference: the bucket exists, but versioning is off. It turns versioning on and leaves everything else alone. You say what, the engine works out how. That's infrastructure as code.",
+  }),
+
   // Act 0: why combine infrastructure and runtime code at all
   {
     kind: "code",
     group: "cfn",
     file: "template.yaml",
     lang: "yaml",
-    title: "I started out writing CloudFormation",
+    title: "That's how I started, writing templates like this",
     src: { code: CFN },
     notes:
-      "Some context first. I started out writing infrastructure as CloudFormation: a bucket, a role, a Lambda function, all in YAML.",
+      "That's how I started: writing CloudFormation templates for real apps, a bucket, a role, a Lambda function, all in YAML.",
   },
   {
     kind: "code",
