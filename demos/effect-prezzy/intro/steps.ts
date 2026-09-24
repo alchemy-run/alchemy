@@ -1389,6 +1389,16 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
+    title: "Now that we have a Worker, we need a Stack to deploy it",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [{ kind: "underline", find: "yield* Api", label: "our Worker", side: "right", tone: "construct" }],
+    notes:
+      "OK, so now that we actually have a Worker, how do we deploy it? We need an entry point for alchemy deploy: a Stack, in alchemy.run.ts. And all it does is yield our Worker.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
     title: "A Stack is a set of resources you deploy as one unit",
     src: { snippet: "stack.ts", regions: ["show"] },
     marks: [
@@ -1396,7 +1406,7 @@ export const steps: StepSpec[] = [
       { kind: "underline", find: "yield* Api", label: "and everything it declares", side: "right", tone: "construct" },
     ],
     notes:
-      "Which brings us to the Stack. A Stack is the root of the program: a collection of resources that are deployed, updated and destroyed together, as one unit. Here that's the Api Worker and everything it declares.",
+      "So what is a Stack? It's the root of the program: a collection of resources that are deployed, updated and destroyed together, as one unit. Here that's the Api Worker and everything it declares.",
   },
   {
     kind: "code",
