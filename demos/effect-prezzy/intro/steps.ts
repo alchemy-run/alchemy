@@ -1509,21 +1509,6 @@ export const steps: StepSpec[] = [
       "A binding is just another dependency of the constructor. Yield R2.ReadBucket(bucket) in the body, exactly like the Storage layer yields Database, and fetch closes over the client it got back. The requirement lands on the program, where a Layer can satisfy it, and fetch's type stays clean, so a service built on it can have any implementation. It's still infrastructure as code, and I should embrace that.",
   }),
   api({
-    title: "Conditional infrastructure becomes just an if statement",
-    snippet: "api-04b-dev.ts",
-    req: [{ ...READ, note: "declared in construction" }, WRITE_LOGS],
-    notes:
-      "And conditional infrastructure is just ordinary code. Only in dev do we create a Logs bucket and bind it for writing. No new syntax, no analysis: an if statement, or here a ternary.",
-  }),
-  api({
-    title: "And then \"peeking inside\" is solved by just running the code",
-    snippet: "api-04b-dev.ts",
-    marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
-    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
-    notes:
-      "And that solves peeking inside. Alchemy doesn't read your code to find the bindings. It just runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
-  }),
-  api({
     title: "A queue works the same way",
     snippet: "api-05-queue.ts",
     req: [READ, WRITE],
@@ -1580,7 +1565,7 @@ export const steps: StepSpec[] = [
       "The second face is what R2.ReadBucket(bucket) returns: code that runs at runtime and implements the interface. When fetch calls uploads.get, that's the layer's get, talking to the native R2 binding.",
   }),
   api({
-    title: "Let's bring back the dev-only Logs bucket and its layer",
+    title: "Conditional infrastructure is just an if statement",
     snippet: "api-06b-dev.ts",
     req: [
       met(READ, "ReadBucketBinding"),
@@ -1589,10 +1574,10 @@ export const steps: StepSpec[] = [
       WORKER,
     ],
     notes:
-      "Remember the Logs bucket that only exists in dev? The program uses R2.WriteBucket, so its layer has to be provided: R2.WriteBucketBinding goes in the array, in every stage.",
+      "Remember the Logs bucket that only exists in dev? Now it's ordinary code: create it and bind it for writing only when dev is true. No new syntax, no analysis. The program uses R2.WriteBucket, so its layer, R2.WriteBucketBinding, goes in the array like any other.",
   }),
   api({
-    title: "In prod that line never runs, so no policy is ever made",
+    title: "And \"peeking inside\" is solved by just running the code",
     snippet: "api-06b-dev.ts",
     marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
     req: [
@@ -1602,7 +1587,7 @@ export const steps: StepSpec[] = [
       WORKER,
     ],
     notes:
-      "But the layer's construction face only runs when that line runs. In production, logs is undefined, so R2.WriteBucket(logs) never runs: no binding is attached, no policy is created, no environment variable is set.",
+      "And that solves peeking inside. Alchemy doesn't read your code to find the bindings; it runs it. The layer's construction face only runs when that line runs. In dev it does, and the binding and its policy are attached. In production logs is undefined, so R2.WriteBucket(logs) never runs: no binding, no policy, no environment variable.",
   }),
   api({
     title: "The layer ships in the bundle, but least privilege holds",
