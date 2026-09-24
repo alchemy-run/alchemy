@@ -1078,6 +1078,47 @@ export const steps: StepSpec[] = [
       "The second face is what R2.ReadBucket(bucket) returns: code that runs at runtime and implements the interface. When fetch calls uploads.get, that's the layer's get, talking to the native R2 binding.",
   }),
   api({
+    title: "Bring back the dev-only Logs bucket, and provide its layer",
+    snippet: "api-06b-dev.ts",
+    req: [
+      met(READ, "ReadBucketBinding"),
+      met(WRITE, "WriteQueueBinding"),
+      met(WRITE_LOGS, "WriteBucketBinding"),
+      WORKER,
+    ],
+    notes:
+      "Remember the Logs bucket that only exists in dev? The program uses R2.WriteBucket, so its layer has to be provided: R2.WriteBucketBinding goes in the array, in every stage.",
+  }),
+  api({
+    title: "In prod that line never runs, so no policy is ever made",
+    snippet: "api-06b-dev.ts",
+    marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
+    req: [
+      met(READ, "ReadBucketBinding"),
+      met(WRITE, "WriteQueueBinding"),
+      met(WRITE_LOGS, "WriteBucketBinding\nnever runs in prod"),
+      WORKER,
+    ],
+    notes:
+      "But the layer's construction face only runs when that line runs. In production, logs is undefined, so R2.WriteBucket(logs) never runs: no binding is attached, no policy is created, no environment variable is set.",
+  }),
+  api({
+    title: "The layer ships in the bundle, but least privilege holds",
+    snippet: "api-06b-dev.ts",
+    marks: [
+      { kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" },
+      { kind: "box", find: "R2.WriteBucketBinding,", label: "in the bundle, never granted", side: "right", tone: "good" },
+    ],
+    req: [
+      met(READ, "ReadBucketBinding"),
+      met(WRITE, "WriteQueueBinding"),
+      met(WRITE_LOGS, "WriteBucketBinding\nno permission in prod"),
+      WORKER,
+    ],
+    notes:
+      "So the WriteBucketBinding code is still in the production bundle, but it never grants anything there. Providing a layer isn't granting a permission; running the code is. That's the difference from my first attempt, where the type demanded the permission in every stage.",
+  }),
+  api({
     title: "Finally, we wrap it in a Worker to run it in the cloud",
     snippet: "api-07-worker.ts",
     req: PROVIDED,
