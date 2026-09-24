@@ -355,6 +355,13 @@ new Function(stack, "Delete", async (id: string) => {
   await table.delete({ id });
 });`;
 
+/** A Function built around a callback it can't see inside, typed as `type`. */
+const deleter = (type: string) => `function deleter(remove: (id: string) => ${type}) {
+  return new Function(stack, "Delete", async (id: string) => {
+    await remove(id);
+  });
+}`;
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -484,25 +491,9 @@ export const steps: StepSpec[] = [
   },
   {
     kind: "code",
-    group: "hidden",
+    group: "class",
     file: "functionless · app.ts",
-    title: "But it can't see inside a function that's passed in",
-    src: {
-      code: `function deleter(remove: (id: string) => Promise<void>) {
-  return new Function(stack, "Delete", async (id: string) => {
-    await remove(id);
-  });
-}`,
-    },
-    marks: [{ kind: "circle", find: "remove(id)", label: "which function? could be anything", side: "right", tone: "bad" }],
-    notes:
-      "But peeking inside breaks down fast. Here the function calls remove, which was passed in. Which function is it? It depends on the caller, so reading this body tells you nothing.",
-  },
-  {
-    kind: "code",
-    group: "hidden",
-    file: "functionless · app.ts",
-    title: "Or a class that accepts any implementation of Store",
+    title: "But it can't see inside a class that takes any Store",
     src: {
       code: `class Todos {
   constructor(private store: Store) {}
@@ -516,24 +507,62 @@ export const steps: StepSpec[] = [
     },
     marks: [{ kind: "circle", find: "this.store.delete", label: "a table? a bucket? whichever was passed in", side: "right", tone: "bad" }],
     notes:
-      "Or a class member: this.store could be a DynamoDB table, a bucket, anything, depending on who constructed the class. The implementation isn't there to read.",
+      "But peeking inside breaks down fast. this.store could be a DynamoDB table, a bucket, anything, depending on who constructed the class. The implementation isn't there to read.",
   },
   {
-    kind: "slide",
-    layout: "section",
-    title: "Inferring permissions is really type checking",
-    eyebrow: "The realization",
-    heading: "Policy inference is type checking",
-    subtitle: "Read the signature, not the implementation.",
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "Or a function that's passed in",
+    src: { code: deleter("Promise<void>") },
+    marks: [{ kind: "circle", find: "remove(id)", label: "which function? could be anything", side: "right", tone: "bad" }],
     notes:
-      "That's when it clicked: inferring permissions is exactly like type checking. A type checker doesn't read the body of every function you call; it uses signatures. We need the dependencies in the signature.",
+      "Same with a function passed in. Which function is remove? It depends on the caller, so reading this body tells you nothing.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "Unless its type says what it needs",
+    src: { code: deleter("Promise<void, DeleteItem>") },
+    notes:
+      "But what if the type of remove told us? Imagine a type parameter that lists what the function needs from the outside world: here, permission to delete an item.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "Then inferring permissions is just type checking",
+    src: { code: deleter("Promise<void, DeleteItem>") },
+    marks: [
+      { kind: "circle", find: "DeleteItem", tone: "construct" },
+      { kind: "underline", find: "new Function", label: "so it needs DeleteItem too", side: "right", tone: "construct" },
+    ],
+    notes:
+      "Now nobody has to read the body. A type checker never looks inside the functions you call; it reads their signatures. The Function calls remove, so it needs DeleteItem too, and that's the policy. Higher-order functions and classes just work.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "It could say how it fails, too",
+    src: { code: deleter("Promise<void, NotFound, DeleteItem>") },
+    notes: "And while we're at it, the type could say how the function fails, too.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "Wait… this looks familiar",
+    src: { code: deleter("Effect<void, NotFound, DeleteItem>") },
+    notes: "Wait. A value, an error, and its requirements. We've seen this before.",
   },
 
   // Act 4: Effect is the missing piece
   {
     kind: "code",
     group: "effect",
-    title: "Effect already has that signature",
+    title: "That's exactly the type of an Effect",
     src: { code: "Effect<A, Err, Req>" },
     fontSize: 96,
     marks: [
@@ -541,7 +570,7 @@ export const steps: StepSpec[] = [
       { kind: "underline", find: "Err", label: "how it fails", side: "below", tone: "neutral" },
       { kind: "circle", find: "Req", label: "what it needs", side: "above", tone: "construct" },
     ],
-    notes: "And Effect already has it. Look at Effect's type: success, errors, and the requirements channel.",
+    notes: "That's Effect. Success, errors, and the requirements channel: the signature we were missing.",
   },
   {
     kind: "code",

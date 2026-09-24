@@ -71,6 +71,54 @@ const matchLines = (prev: CodeStep | undefined, step: CodeStep) => {
   return from;
 };
 
+/**
+ * Changed lines that are a small edit of a previous line: the columns that
+ * differ (in the new line), so only that span is highlighted and fades in.
+ */
+const modifiedLines = (prev: CodeStep, step: CodeStep, matched: Map<number, number>) => {
+  const out = new Map<number, { from: number; start: number; end: number }>();
+  const taken = new Set(matched.values());
+  const prevText = prev.lines.map(lineText);
+  step.lines.forEach((line, i) => {
+    const text = lineText(line);
+    if (matched.has(i) || !text.trim()) return;
+    let best: { from: number; start: number; end: number; score: number } | undefined;
+    prevText.forEach((old, j) => {
+      if (taken.has(j) || !old.trim()) return;
+      let pre = 0;
+      while (pre < old.length && pre < text.length && old[pre] === text[pre]) pre++;
+      let suf = 0;
+      while (suf < old.length - pre && suf < text.length - pre && old[old.length - 1 - suf] === text[text.length - 1 - suf]) suf++;
+      const score = pre + suf;
+      if (score < Math.max(old.length, text.length) * 0.5 || text.length - suf <= pre) return;
+      if (!best || score > best.score || (score === best.score && Math.abs(j - i) < Math.abs(best.from - i)))
+        best = { from: j, start: pre, end: text.length - suf, score };
+    });
+    if (best) {
+      taken.add(best.from);
+      out.set(i, { from: best.from, start: best.start, end: best.end });
+    }
+  });
+  return out;
+};
+
+/** Tokens split at a column range, so part of a line can be styled on its own. */
+const sliceTokens = (tokens: Token[], start: number, end: number) => {
+  const out: { token: Token; inside: boolean }[] = [];
+  let col = 0;
+  for (const token of tokens) {
+    const a = col;
+    const b = col + token.text.length;
+    const cuts = [a, Math.min(Math.max(start, a), b), Math.min(Math.max(end, a), b), b];
+    for (let k = 0; k < 3; k++) {
+      if (cuts[k + 1]! > cuts[k]!)
+        out.push({ token: { ...token, text: token.text.slice(cuts[k]! - a, cuts[k + 1]! - a) }, inside: k === 1 });
+    }
+    col = b;
+  }
+  return out;
+};
+
 const MarkView = ({ mark, g, step, progress, index }: { mark: Mark; g: ReturnType<typeof layout>; step: CodeStep; progress: number; index: number }) => {
   const r = rect(step, g, mark);
   const color = TONE[mark.tone ?? "construct"];
@@ -164,6 +212,7 @@ export const CodeSlide = ({
     m.size >= from.lines.filter((l) => lineText(l).trim()).length / 2 && to.lines.length > 0;
   const edit = !!morph && isEdit(prev!, step, matched);
   const changed = (i: number) => edit && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
+  const modified = edit ? modifiedLines(prev!, step, matched) : new Map<number, { from: number; start: number; end: number }>();
   const anyChanged = step.tints.length === 0 && !step.quiet && step.lines.some((_, i) => changed(i));
   const morph2 = !!prev && !!prev2 && prev.group === step.group && prev2.group === prev.group;
   const prevMatched = morph2 ? matchLines(prev2, prev!) : new Map<number, number>();
@@ -229,6 +278,37 @@ export const CodeSlide = ({
       {edit && step.tints.length === 0 && !step.quiet
         ? step.lines.map((tokens, i) => {
             if (matched.has(i) || !lineText(tokens).trim()) return null;
+            const span = modified.get(i);
+            if (span) {
+              // An edit within the line: mark the line, highlight just the new part.
+              return (
+                <div key={`added-${i}`}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: g.left - 26,
+                      top: g.top + i * g.lh,
+                      width: 4,
+                      height: g.lh,
+                      background: "#2ea043",
+                      opacity: newIn,
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: g.left + span.start * g.cw - 4,
+                      top: g.top + i * g.lh + 3,
+                      width: (span.end - span.start) * g.cw + 8,
+                      height: g.lh - 6,
+                      borderRadius: 5,
+                      background: "rgba(46, 160, 67, 0.3)",
+                      opacity: newIn,
+                    }}
+                  />
+                </div>
+              );
+            }
             return (
               <div
                 key={`added-${i}`}
@@ -267,13 +347,16 @@ export const CodeSlide = ({
         );
       })}
       {step.lines.map((tokens, i) => {
-        const from = matched.get(i);
+        const span = modified.get(i);
+        // An edited line glides from its old position; only the new part fades in.
+        const from = matched.get(i) ?? span?.from;
         const y0 = from !== undefined ? pg.top + from * pg.lh : g.top + i * g.lh;
         const x0 = from !== undefined ? pg.left : g.left;
         const y = y0 + (g.top + i * g.lh - y0) * t;
         const x = x0 + (g.left - x0) * t;
         const size = (from !== undefined ? pg.size : g.size) + (g.size - (from !== undefined ? pg.size : g.size)) * t;
         const opacity = (from !== undefined ? 1 : newIn) * (focused(i) ? 1 : 0.28) * lineLevel(i);
+        const parts = span ? sliceTokens(tokens, span.start, span.end) : tokens.map((token) => ({ token, inside: false }));
         return (
           <div
             key={`line-${i}`}
@@ -289,8 +372,8 @@ export const CodeSlide = ({
               opacity,
             }}
           >
-            {tokens.map((token, k) => (
-              <span key={k} style={{ color: token.color }}>
+            {parts.map(({ token, inside }, k) => (
+              <span key={k} style={{ color: token.color, opacity: inside ? newIn : 1 }}>
                 {token.text}
               </span>
             ))}
