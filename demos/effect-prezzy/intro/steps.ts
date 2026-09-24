@@ -290,7 +290,7 @@ const program = (): StepSpec[] => [
       "It wouldn't make sense. Infrastructure has to be created once, ahead of time, by the deploy. The function only uses it. So there would really be two different kinds of code in this program.",
   }),
   lang({
-    title: "So a cloud program would really be two phases",
+    title: "So a cloud program is actually a language with two phases",
     src: { code: VERSIONED },
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
@@ -299,7 +299,7 @@ const program = (): StepSpec[] => [
       incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
     },
     notes:
-      "Construction would be declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime would be imperative: the function body runs on every request, using what construction declared.",
+      "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
   }),
   lang({
     title: "One for construction, containing the resource declarations",
@@ -327,7 +327,7 @@ const program = (): StepSpec[] => [
       "Then runtime: a runtime function inside it runs on every request, using the resources construction declared. These are colored functions: construct and runtime are different colors, and the compiler knows which is which.",
   }),
   lang({
-    title: "Now creating a bucket at runtime would be a compile error",
+    title: "Now creating a bucket at runtime is a compile error",
     src: { code: COLORED_BAD },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -335,10 +335,10 @@ const program = (): StepSpec[] => [
       edges: BINDINGS,
       cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
     },
-    notes: "The colors would be boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, would now be a compile error instead of a question.",
+    notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
   }),
   lang({
-    title: "And inferring permissions would become a kind of type checking",
+    title: "And inferring permissions becomes a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
     diagram: {
@@ -347,7 +347,7 @@ const program = (): StepSpec[] => [
       labels: [{ text: "for every possible req…", x: 360, y: 530, tone: "runtime" }],
     },
     notes:
-      "Inferring the bindings would be like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
+      "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
   }),
 ];
 
