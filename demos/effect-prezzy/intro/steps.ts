@@ -466,7 +466,7 @@ export const steps: StepSpec[] = [
     title: "Then came Functionless, which used compiler tricks instead",
     src: { code: FUNCTIONLESS },
     notes:
-      "So the next attempt, Functionless, dropped the declarations. Just use the table inside the function, and let static analysis work out what it touches.",
+      "So in 2022 the next attempt, Functionless, dropped the declarations. Just use the table inside the function, and let static analysis work out what it touches.",
   },
   {
     kind: "code",

@@ -110,7 +110,7 @@ const stroke2 = (d: string, color: string, progress: number) => (
 const History = ({ local }: BoardProps) => {
   const items = [
     { year: "2018–19", name: "Punchcard", body: "Two phases on top of the AWS CDK", tone: "neutral" as const },
-    { year: "later", name: "Functionless", body: "TypeScript compiled by reading its AST", tone: "neutral" as const },
+    { year: "2022", name: "Functionless", body: "TypeScript compiled by reading its AST", tone: "neutral" as const },
     { year: "now", name: "Alchemy", body: "Infrastructure as Effects", tone: "construct" as const },
   ];
   return (

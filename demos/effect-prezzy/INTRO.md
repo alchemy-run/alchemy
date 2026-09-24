@@ -79,7 +79,7 @@ such on screen.
 ## Act 3: How we tried before
 
 12. **I've tried this before**
-    Timeline slide: Punchcard (2018/19, on the AWS CDK) → Functionless →
+    Timeline slide: Punchcard (2018/19, on the AWS CDK) → Functionless (2022) →
     Alchemy.
 
 13. **Punchcard: two phases on top of the AWS CDK**
