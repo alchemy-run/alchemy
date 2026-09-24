@@ -872,16 +872,6 @@ export const steps: StepSpec[] = [
   {
     kind: "slide",
     layout: "section",
-    title: "Hi, I'm Sam Goodwin",
-    eyebrow: "Hi, I'm",
-    heading: "Sam Goodwin",
-    subtitle: "I'm obsessed with programming languages and cloud infrastructure",
-    notes:
-      "Hi, I'm Sam Goodwin. I'm obsessed with two things: programming languages, and cloud infrastructure. This talk is about where they meet.",
-  },
-  {
-    kind: "slide",
-    layout: "section",
     title: "What is infrastructure as code?",
     eyebrow: "In case you're new to it",
     heading: "What is infrastructure as code?",
