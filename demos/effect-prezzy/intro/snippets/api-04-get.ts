@@ -12,7 +12,7 @@ const api = Effect.gen(function* () {
     fetch: Effect.gen(function* () {
       const file = yield* uploads.get("hello.txt");
       return HttpServerResponse.text("ok");
-    }).pipe(Effect.orDie),
+    })/*hide*/.pipe(Effect.orDie)/*end*/,
   };
 });
 // #endregion show

@@ -85,6 +85,8 @@ for (const file of snippetFiles) {
 
 // ── snippets: keep only the named regions ────────────────────────────────
 const REGION = /^\s*\/\/ #(end)?region\b/;
+/** Code that must be there to type-check but isn't worth showing: `/*hide*\/ … /*end*\/`. */
+const HIDDEN = /\/\*hide\*\/.*?\/\*end\*\//g;
 interface Cut {
   code: string;
   /** Snippet line (0-based) of each kept line. */
@@ -113,7 +115,7 @@ const cut = (text: string, keep?: string[]): Cut => {
     }
     if (REGION.test(line)) return;
     if (keep && !keep.some((name) => open.includes(name))) return;
-    kept.push(line);
+    kept.push(line.replace(HIDDEN, ""));
     origin.push(i);
   });
   // Drop the shared indentation and blank edges.

@@ -626,7 +626,7 @@ export const steps: StepSpec[] = [
     snippet: "api-04-get.ts",
     req: [BUCKET, READ],
     notes:
-      "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction. Reading can fail, so for now orDie turns a failure into a crash.",
+      "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction.",
   }),
   api({
     title: "Sending to a queue works the same way",
