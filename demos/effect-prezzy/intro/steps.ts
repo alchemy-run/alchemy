@@ -1325,6 +1325,7 @@ export const steps: StepSpec[] = [
   api({
     title: "…it's in the wrong spot",
     code: INFERRED_ON_FETCH,
+    marks: [{ kind: "circle", find: "Effect.provide(R2.ReadBucket(bucket))", label: "on fetch, at runtime", side: "right", tone: "bad" }],
     req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
