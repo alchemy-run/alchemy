@@ -1,10 +1,9 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Attestor } from "./Attestor.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 import {
   ValidateAttestation,
   type ValidateAttestationRequest,
@@ -26,9 +25,13 @@ export const ValidateAttestationHttp = Layer.effect(
         tag: "GCP.Binaryauthorization.ValidateAttestation",
         resource: attestor,
         iam: [
-          {
-            role: defaultRoleFor("GCP.Binaryauthorization.ValidateAttestation"),
-          },
+          grantFor(
+            {
+              role: "roles/binaryauthorization.attestorsVerifier",
+              on: "binaryauthorization.attestor",
+            },
+            attestor.name,
+          ),
         ],
       });
       const project = yield* attestor.project;

@@ -2,7 +2,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Job } from "./Job.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Scheduler job bindings.
@@ -14,7 +15,7 @@ import { bindGcpHost, defaultRoleFor } from "../Host.ts";
  */
 export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,
@@ -28,7 +29,7 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
       yield* bindGcpHost({
         tag: options.tag,
         resource: job,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, job.name)],
       });
       const name = yield* job.name;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (

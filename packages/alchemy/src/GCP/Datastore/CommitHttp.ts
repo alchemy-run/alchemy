@@ -13,6 +13,7 @@ export const CommitHttp = Layer.effect(
   Commit,
   makeIndexeHttpBinding({
     tag: "GCP.Datastore.Commit",
+    iam: { role: "roles/datastore.user" },
     operation: datastore.commitProjects,
   }),
 );

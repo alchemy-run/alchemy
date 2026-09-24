@@ -1,6 +1,7 @@
 import type { Output } from "../../Output.ts";
 import {
   makeNamedHttpBinding as makeGcpNamedHttpBinding,
+  type BindingIam,
   type GcpHttpOp,
 } from "../HttpBinding.ts";
 
@@ -16,11 +17,11 @@ export const makeNamedHttpBinding = <
 >(options: {
   tag: string;
   operation: GcpHttpOp<I, A, E>;
-  role?: string;
+  iam: BindingIam;
 }) =>
   makeGcpNamedHttpBinding<Resource, I, A, E>({
     tag: options.tag,
     operation: options.operation,
-    role: options.role ?? "roles/aiplatform.user",
+    iam: options.iam,
     resourceName: (resource) => resource.name,
   });

@@ -23,6 +23,8 @@ export const RunJobHttp: Layer.Layer<
     scheduler.RunProjectsLocationsJobsError
   >({
     tag: "GCP.CloudScheduler.RunJob",
+    // Cloud Scheduler has no resource-level IAM.
+    iam: { role: "roles/cloudscheduler.jobRunner" },
     operation: scheduler.runProjectsLocationsJobs,
   }),
 );

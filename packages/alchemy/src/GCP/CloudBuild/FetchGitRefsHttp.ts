@@ -13,6 +13,7 @@ export const FetchGitRefsHttp = Layer.effect(
   FetchGitRefs,
   makeRepositoryHttpBinding({
     tag: "GCP.CloudBuild.FetchGitRefs",
+    iam: { role: "roles/cloudbuild.connectionViewer" },
     operation: cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories,
   }),
 );

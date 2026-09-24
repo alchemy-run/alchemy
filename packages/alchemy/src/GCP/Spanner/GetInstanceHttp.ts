@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeSpannerInstanceHttpBinding({
     tag: "GCP.Spanner.GetInstance",
+    iam: { role: "roles/spanner.viewer", on: "spanner.instance" },
     operation: spanner.getProjectsInstances,
   }),
 );

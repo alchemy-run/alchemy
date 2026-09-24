@@ -17,6 +17,7 @@ export const AdaptiveMtTranslateHttp = Layer.effect(
   makeAdaptiveMtTranslateBinding({
     tag: "GCP.Translate.AdaptiveMtTranslate",
     operation: translate.adaptiveMtTranslateProjectsLocations,
+    iam: { role: "roles/cloudtranslate.user" },
     withBody: (name, request) => ({
       parent: locationParentOf(name),
       body: {

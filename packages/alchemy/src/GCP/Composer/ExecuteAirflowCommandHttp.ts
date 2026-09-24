@@ -13,6 +13,7 @@ export const ExecuteAirflowCommandHttp = Layer.effect(
   ExecuteAirflowCommand,
   makeEnvironmentHttpBinding({
     tag: "GCP.Composer.ExecuteAirflowCommand",
+    iam: { role: "roles/composer.editor" },
     nameKey: "environment",
     operation: composer.executeAirflowCommandProjectsLocationsEnvironments,
   }),

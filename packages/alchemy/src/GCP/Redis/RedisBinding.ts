@@ -5,7 +5,6 @@ import * as redis from "@distilled.cloud/gcp/redis_v1";
 import type { Url } from "../../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../../Redis/index.ts";
 import * as Output from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
 import type { Instance } from "./Instance.ts";
 
 export const REDIS_URL_ENV = "REDIS_URL";
@@ -13,10 +12,10 @@ export const REDIS_URL_ENV = "REDIS_URL";
 /**
  * Shared scaffolding for Memorystore Redis RESP bindings.
  *
- * Deploy-time packs `REDIS_URL` (host/port/AUTH) onto the Cloud Run /
- * Function host as an Output the engine resolves at reconcile, and
- * grants `roles/redis.editor`. Runtime commands use `alchemy/Redis`
- * over that URL.
+ * Deploy-time resolves the instance's URL (host/port/AUTH) as an Output
+ * and transports it to the runtime through the host's RuntimeContext;
+ * `REDIS_URL` in the environment is only a fallback. Runtime commands use
+ * `alchemy/Redis` over that URL.
  *
  * NOT exported from `index.ts`.
  */
@@ -96,26 +95,26 @@ const redisUrlFromInstance = (
 
 export const makeRedisBinding = <Client>(options: {
   makeClient: (url: Url) => Client;
-  role: string;
 }) =>
   Effect.gen(function* () {
     const getAuthString = yield* redis.getAuthStringProjectsLocationsInstances;
     return Effect.fn(function* (instance: Instance) {
-      const name = instance.LogicalId;
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* bindGcpHost({
-          tag: "GCP.Redis.RESP",
-          resource: instance,
-          iam: [{ role: options.role }],
-          env: {
-            [REDIS_URL_ENV]: redisUrlFromInstance(instance, getAuthString),
-          },
-        });
-      }
-
-      const url = redisUrlFromEnv.pipe(
-        Effect.mapError(() => new RedisUrlMissing({ name })),
-      );
+      // The URL (with the AUTH string) travels per instance through the
+      // host's RuntimeContext, so two Redis bindings on one host never
+      // collide on a shared env var. RESP authenticates with that AUTH
+      // string, so the runtime service account needs no IAM role.
+      // The auth-string lookup is a deploy-time Output; its requirements
+      // are satisfied by the engine, never at runtime.
+      const fromContext = yield* redisUrlFromInstance(
+        instance,
+        getAuthString,
+      ) as Output.Output<string, never>;
+      const missing = new RedisUrlMissing({ name: instance.LogicalId });
+      const url: Url = Effect.gen(function* () {
+        const value = yield* fromContext;
+        if (typeof value === "string" && value.length > 0) return value;
+        return yield* redisUrlFromEnv.pipe(Effect.mapError(() => missing));
+      });
       return options.makeClient(url);
     });
   });

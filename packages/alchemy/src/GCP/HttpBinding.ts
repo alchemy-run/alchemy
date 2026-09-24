@@ -1,7 +1,9 @@
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
+import type { Input } from "../Input.ts";
 import type { Output } from "../Output.ts";
-import { bindGcpHost, defaultRoleFor } from "./Host.ts";
+import { bindGcpHost, type GcpIamGrant } from "./Host.ts";
+import type { GcpIamResourceKind } from "./IamPolicy.ts";
 
 /**
  * Distilled ops are `OperationMethod`s: yield them once at Layer
@@ -17,10 +19,33 @@ export type GcpHttpOp<I, A, E> = Effect.Effect<
   ((input: I) => Effect.Effect<A, E, GcpOpContext>);
 
 /**
+ * IAM a binding grants the host's runtime service account on the bound
+ * resource: `role` is the narrowest predefined role covering the
+ * operation. With `on`, the role is granted on the bound resource's own
+ * IAM policy (resource-scoped, like an AWS statement's `Resource: [arn]`);
+ * without it — only for services that have no resource-level IAM — the
+ * role is granted on the project.
+ */
+export interface BindingIam {
+  role: string;
+  on?: Exclude<GcpIamResourceKind, "project">;
+}
+
+/** Build the grant for `iam` against a bound resource's full name. */
+export const grantFor = (
+  iam: BindingIam,
+  name: Input<string>,
+): Input<GcpIamGrant> =>
+  iam.on === undefined
+    ? { role: iam.role }
+    : // The engine resolves the name Output before the host reconciles.
+      { role: iam.role, resource: { kind: iam.on, name } };
+
+/**
  * Shared HTTP scaffolding for GCP named-resource bindings.
  *
  * Yields the distilled operation (no double-provide) and, at deploy
- * time, grants `role` on the ambient Cloud Run / Function host the way
+ * time, grants `iam` on the ambient Cloud Run / Function host the way
  * AWS bindings attach IAM policy statements.
  */
 export const makeNamedHttpBinding = <
@@ -31,26 +56,25 @@ export const makeNamedHttpBinding = <
 >(options: {
   tag: string;
   operation: GcpHttpOp<I, A, E>;
-  /** IAM role granted to the host runtime SA, e.g. `roles/redis.viewer`. */
-  role?: string;
+  iam: BindingIam;
   resourceName: (resource: Resource) => Output<string, never>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (resource: Resource) {
-      const name = yield* options.resourceName(resource);
+      const resourceName = options.resourceName(resource);
       yield* bindGcpHost({
         tag: options.tag,
         resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, resourceName)],
       });
+      const name = yield* resourceName;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        const resourceName = yield* name;
         return yield* run({
           ...(request ?? {}),
-          name: resourceName,
+          name: yield* name,
         } as I);
       });
     });

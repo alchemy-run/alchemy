@@ -23,6 +23,7 @@ export const ResumeCollectorHttp: Layer.Layer<
     rma.ResumeProjectsLocationsCollectorsError
   >({
     tag: "GCP.Rapidmigrationassessment.ResumeCollector",
+    iam: { role: "roles/rma.runner" },
     operation: rma.resumeProjectsLocationsCollectors,
   }),
 );

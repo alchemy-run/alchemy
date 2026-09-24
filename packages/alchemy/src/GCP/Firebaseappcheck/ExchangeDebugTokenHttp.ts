@@ -1,10 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AppsDebugToken } from "./AppsDebugToken.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 import {
   ExchangeDebugToken,
   type ExchangeDebugTokenRequest,
@@ -24,9 +22,9 @@ export const ExchangeDebugTokenHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Firebaseappcheck.ExchangeDebugToken",
         resource: debugToken,
-        iam: [
-          { role: defaultRoleFor("GCP.Firebaseappcheck.ExchangeDebugToken") },
-        ],
+        // exchangeDebugToken is not IAM-gated; the debug token secret is the
+        // credential.
+        iam: [],
       });
       const app = yield* debugToken.app;
       const secret = yield* debugToken.token;

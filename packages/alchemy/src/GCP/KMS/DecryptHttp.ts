@@ -13,6 +13,7 @@ export const DecryptHttp = Layer.effect(
   Decrypt,
   makeCryptoKeyHttpBinding({
     tag: "GCP.KMS.Decrypt",
+    iam: { role: "roles/cloudkms.cryptoKeyDecrypter", on: "kms.cryptoKey" },
     operation: kms.decryptProjectsLocationsKeyRingsCryptoKeys,
   }),
 );

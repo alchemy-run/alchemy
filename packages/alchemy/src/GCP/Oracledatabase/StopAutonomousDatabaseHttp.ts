@@ -14,5 +14,7 @@ export const StopAutonomousDatabaseHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.StopAutonomousDatabase",
     operation: oracle.stopProjectsLocationsAutonomousDatabases,
+    // Narrowest predefined role with this autonomousDatabases permission.
+    iam: { role: "roles/oracledatabase.autonomousDatabaseAdmin" },
   }),
 );

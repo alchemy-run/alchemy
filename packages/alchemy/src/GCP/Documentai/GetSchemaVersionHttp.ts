@@ -14,5 +14,6 @@ export const GetSchemaVersionHttp = Layer.effect(
   makeSchemaVersionHttpBinding({
     tag: "GCP.Documentai.GetSchemaVersion",
     operation: documentai.getProjectsLocationsSchemasSchemaVersions,
+    iam: { role: "roles/documentai.viewer" },
   }),
 );

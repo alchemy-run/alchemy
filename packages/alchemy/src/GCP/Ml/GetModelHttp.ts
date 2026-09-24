@@ -14,5 +14,6 @@ export const GetModelHttp = Layer.effect(
   makeModelHttpBinding({
     tag: "GCP.Ml.GetModel",
     operation: ml.getProjectsModels,
+    iam: { role: "roles/ml.modelUser", on: "ml.model" },
   }),
 );

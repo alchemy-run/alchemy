@@ -14,5 +14,6 @@ export const GetDocumentHttp = Layer.effect(
   makeDocumentHttpBinding({
     tag: "GCP.Contentwarehouse.GetDocument",
     operation: cw.getProjectsLocationsDocuments,
+    iam: { role: "roles/contentwarehouse.documentViewer" },
   }),
 );

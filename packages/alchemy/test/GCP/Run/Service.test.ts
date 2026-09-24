@@ -10,6 +10,10 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { spawnSync } from "node:child_process";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as storage from "@distilled.cloud/gcp/storage_v1";
+import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
+import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
 import BoundService from "./fixtures/service.ts";
 
@@ -139,74 +143,138 @@ class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
   status: number;
 }> {}
 
+const membersOf = (
+  policy: {
+    bindings?: ReadonlyArray<{
+      role?: string;
+      members?: ReadonlyArray<string>;
+    }>;
+  },
+  member: string,
+) =>
+  new Set(
+    (policy.bindings ?? [])
+      .filter((binding) => (binding.members ?? []).includes(member))
+      .map((binding) => binding.role),
+  );
+
+const fetchJson = <A>(url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.get(url).pipe(
+      Effect.flatMap((response) =>
+        response.status === 200
+          ? Effect.succeed(response)
+          : Effect.fail(new ServiceNotReady({ status: response.status })),
+      ),
+      Effect.retry({
+        while: (e): e is ServiceNotReady => e._tag === "ServiceNotReady",
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    return (yield* response.json) as A;
+  });
+
 test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
-  "effect-native Function with PubSub and Storage bindings",
+  "effect-native Function grants resource-scoped IAM and revokes it when a binding is removed",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const service = yield* BoundService;
-          return {
-            uri: service.uri,
-            name: service.name,
-            project: service.project,
-            serviceAccount: service.serviceAccount,
-            managedServiceAccount: service.managedServiceAccount,
-          };
-        }),
-      );
+      const deployed = (
+        program: typeof BoundService | typeof PublishOnlyService,
+      ) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const service = yield* program;
+            const topic = yield* Tweets;
+            const bucket = yield* DataBucket;
+            return {
+              uri: service.uri,
+              name: service.name,
+              project: service.project,
+              serviceAccount: service.serviceAccount,
+              managedServiceAccount: service.managedServiceAccount,
+              topic: topic.name,
+              bucket: bucket.bucketName,
+            };
+          }),
+        );
 
-      expect(out.uri).toEqual(expect.any(String));
+      const out = yield* deployed(BoundService);
       expect(out.managedServiceAccount).toEqual(true);
-      expect(out.serviceAccount ?? "").toContain("alch-");
+      expect(out.serviceAccount ?? "").toMatch(/^alch-/);
+      const member = `serviceAccount:${out.serviceAccount}`;
 
       const live = yield* cloudrun.getProjectsLocationsServices({
         name: out.name,
       });
       expect(live.template?.serviceAccount).toEqual(out.serviceAccount);
 
-      const policy = yield* resourcemanager.getIamPolicyProjects({
+      // Grants land on the bound resources, never on the project.
+      const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
         resource: `projects/${out.project}`,
       });
-      const member = `serviceAccount:${out.serviceAccount}`;
-      const roles = new Set(
-        (policy.bindings ?? [])
-          .filter((binding) => (binding.members ?? []).includes(member))
-          .map((binding) => binding.role),
-      );
-      expect(roles.has("roles/pubsub.publisher")).toEqual(true);
-      expect(roles.has("roles/storage.objectAdmin")).toEqual(true);
+      expect([...membersOf(projectPolicy, member)]).toEqual([]);
+      const topicPolicy = yield* pubsub.getIamPolicyProjectsTopics({
+        resource: out.topic,
+      });
+      expect([...membersOf(topicPolicy, member)]).toEqual([
+        "roles/pubsub.publisher",
+      ]);
+      const bucketPolicy = yield* storage.getIamPolicyBuckets({
+        bucket: out.bucket,
+      });
+      expect([...membersOf(bucketPolicy, member)].sort()).toEqual([
+        "roles/storage.objectUser",
+        "roles/storage.objectViewer",
+      ]);
 
-      const client = yield* HttpClient.HttpClient;
-      const res = yield* client.get(out.uri!).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new ServiceNotReady({ status: response.status })),
-        ),
-        Effect.retry({
-          while: (e): e is ServiceNotReady => e._tag === "ServiceNotReady",
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
+      // The runtime SA's own token publishes and round-trips object content.
+      const body = yield* fetchJson<{ published: boolean; read: string }>(
+        out.uri!,
+      );
+      expect(body).toEqual({ published: true, read: "stored" });
+
+      // Step 2: drop the Storage bindings. The code change redeploys and the
+      // bucket grants are revoked; the topic grant stays.
+      const next = yield* deployed(PublishOnlyService);
+      expect(next.serviceAccount).toEqual(out.serviceAccount);
+      const bucketAfter = yield* storage.getIamPolicyBuckets({
+        bucket: out.bucket,
+      });
+      expect([...membersOf(bucketAfter, member)]).toEqual([]);
+      const topicAfter = yield* pubsub.getIamPolicyProjectsTopics({
+        resource: out.topic,
+      });
+      expect([...membersOf(topicAfter, member)]).toEqual([
+        "roles/pubsub.publisher",
+      ]);
+      const step2 = yield* fetchJson<{ published: boolean; step?: number }>(
+        next.uri!,
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (response) => response.step === 2,
+          times: 15,
         }),
       );
-      const body = (yield* res.json) as { published: boolean };
-      expect(body.published).toEqual(true);
+      expect(step2).toEqual({ published: true, step: 2 });
 
       yield* stack.destroy();
 
-      const saName = `projects/${out.project}/serviceAccounts/${out.serviceAccount}`;
       const saGone = yield* iam
-        .getProjectsServiceAccounts({ name: saName })
+        .getProjectsServiceAccounts({
+          name: `projects/${out.project}/serviceAccounts/${out.serviceAccount}`,
+        })
         .pipe(
           Effect.as("found" as const),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 420_000 },
 );
 
 test.provider.skipIf(

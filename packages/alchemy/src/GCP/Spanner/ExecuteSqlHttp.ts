@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
 import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link ExecuteSql}.
@@ -31,7 +32,12 @@ export const ExecuteSqlHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Spanner.ExecuteSql",
         resource: database,
-        iam: [{ role: defaultRoleFor("GCP.Spanner.ExecuteSql") }],
+        iam: [
+          grantFor(
+            { role: "roles/spanner.databaseUser", on: "spanner.database" },
+            database.name,
+          ),
+        ],
       });
       const name = yield* database.name;
       return Effect.fn(`GCP.Spanner.ExecuteSql(${database.LogicalId})`)(

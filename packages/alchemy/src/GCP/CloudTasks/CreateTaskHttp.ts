@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { CreateTask, type CreateTaskRequest } from "./CreateTask.ts";
 import type { Queue } from "./Queue.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link CreateTask}.
@@ -19,7 +20,12 @@ export const CreateTaskHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.CloudTasks.CreateTask",
         resource: queue,
-        iam: [{ role: defaultRoleFor("GCP.CloudTasks.CreateTask") }],
+        iam: [
+          grantFor(
+            { role: "roles/cloudtasks.enqueuer", on: "cloudtasks.queue" },
+            queue.name,
+          ),
+        ],
       });
       const name = yield* queue.name;
       return Effect.fn(`GCP.CloudTasks.CreateTask(${queue.LogicalId})`)(

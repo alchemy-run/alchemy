@@ -13,6 +13,7 @@ export const GetConnectionInfoHttp = Layer.effect(
   GetConnectionInfo,
   makeAlloyDbConnectionInfoHttpBinding({
     tag: "GCP.AlloyDB.GetConnectionInfo",
+    iam: { role: "roles/alloydb.client" },
     operation: alloydb.getConnectionInfoProjectsLocationsClustersInstances,
   }),
 );

@@ -2,7 +2,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Pipeline } from "./Pipeline.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Data Pipelines bindings.
@@ -18,7 +19,7 @@ export const makePipelineHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,
@@ -32,7 +33,7 @@ export const makePipelineHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: pipeline,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, pipeline.name)],
       });
       const name = yield* pipeline.name;
       return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (

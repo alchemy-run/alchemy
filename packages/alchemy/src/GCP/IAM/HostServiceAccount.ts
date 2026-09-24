@@ -8,7 +8,6 @@ import {
   ALCHEMY_HOST_SA_DISPLAY_NAME,
   deleteHostServiceAccount,
   hostServiceAccountEmail,
-  hostServiceAccountId,
 } from "../Host.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -41,7 +40,7 @@ const toAttrs = (
   project: string,
 ): HostServiceAccount["Attributes"] => {
   const email = account.email ?? "";
-  const accountId = email.split("@")[0] ?? hostServiceAccountId("account");
+  const accountId = email.split("@")[0] ?? "";
   return {
     name: account.name ?? "",
     email,
@@ -63,9 +62,10 @@ export const HostServiceAccountProvider = () =>
   Provider.succeed(HostServiceAccount, {
     stables: ["name", "email", "project", "accountId"],
 
-    read: Effect.fn(function* ({ id, output }) {
+    read: Effect.fn(function* ({ output }) {
+      if (output === undefined) return undefined;
       const env = yield* GcpEnvironment.current;
-      const accountId = output?.accountId ?? hostServiceAccountId(id);
+      const accountId = output.accountId;
       const email = hostServiceAccountEmail(env.project, accountId);
       const name = `projects/${env.project}/serviceAccounts/${email}`;
       const existing = yield* iam
@@ -77,9 +77,12 @@ export const HostServiceAccountProvider = () =>
       return toAttrs(existing, env.project);
     }),
 
+    // Host accounts are minted by their host (`GCP.Run.Service`, …); this
+    // resource only exists so `nuke` can list and delete leaked ones.
     reconcile: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
-      const accountId = output?.accountId ?? hostServiceAccountId(id);
+      const accountId =
+        output?.accountId ?? `alch-${id.toLowerCase()}`.slice(0, 30);
       const email = hostServiceAccountEmail(env.project, accountId);
       const name = `projects/${env.project}/serviceAccounts/${email}`;
       const existing = yield* iam
@@ -117,6 +120,9 @@ export const HostServiceAccountProvider = () =>
       }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* deleteHostServiceAccount(output.project, output.accountId);
+      yield* deleteHostServiceAccount({
+        project: output.project,
+        email: hostServiceAccountEmail(output.project, output.accountId),
+      });
     }),
   });

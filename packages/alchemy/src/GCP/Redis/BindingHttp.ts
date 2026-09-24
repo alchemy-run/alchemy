@@ -1,4 +1,8 @@
-import { makeNamedHttpBinding, type GcpHttpOp } from "../HttpBinding.ts";
+import {
+  makeNamedHttpBinding,
+  type BindingIam,
+  type GcpHttpOp,
+} from "../HttpBinding.ts";
 import type { AclPolicy } from "./AclPolicy.ts";
 import type { Instance } from "./Instance.ts";
 
@@ -12,13 +16,13 @@ export const makeRedisHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
+  // Memorystore has no resource-level IAM; viewer covers reads.
   makeNamedHttpBinding<AclPolicy, I, A, E>({
     tag: options.tag,
     operation: options.operation,
-    role: "roles/redis.viewer",
+    iam: { role: "roles/redis.viewer" },
     resourceName: (policy) => policy.name,
   });
 
@@ -32,12 +36,12 @@ export const makeRedisInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<Instance, I, A, E>({
     tag: options.tag,
     operation: options.operation,
-    role: "roles/redis.viewer",
+    iam: options.iam,
     resourceName: (instance) => instance.name,
   });

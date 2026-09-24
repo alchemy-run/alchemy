@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -23,8 +24,8 @@ export interface MintedToken {
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
-const signJwt = (sa: ServiceAccountKey): string => {
-  const now = Math.floor(Date.now() / 1000);
+const signJwt = (sa: ServiceAccountKey, nowMs: number): string => {
+  const now = Math.floor(nowMs / 1000);
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
   const signingInput = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
@@ -48,8 +49,9 @@ export const mintAccessToken = (
   sa: ServiceAccountKey,
 ): Effect.Effect<MintedToken, AuthError> =>
   Effect.gen(function* () {
+    const issuedAt = yield* Clock.currentTimeMillis;
     const jwt = yield* Effect.try({
-      try: () => signJwt(sa),
+      try: () => signJwt(sa, issuedAt),
       catch: (cause) =>
         new AuthError({
           message: "Failed to sign Google service-account JWT",
@@ -97,12 +99,11 @@ export const mintAccessToken = (
       typeof (body as { expires_in?: unknown }).expires_in === "number"
         ? (body as { expires_in: number }).expires_in
         : 3600;
-    const now = yield* Effect.sync(() => Date.now());
     return {
       accessToken: Redacted.make(
         (body as { access_token: string }).access_token,
       ),
-      expirationMs: now + expiresIn * 1000,
+      expirationMs: issuedAt + expiresIn * 1000,
       project: sa.project_id,
     };
   }).pipe(Effect.provide(FetchHttpClient.layer));

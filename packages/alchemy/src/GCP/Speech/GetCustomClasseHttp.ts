@@ -22,6 +22,7 @@ export const GetCustomClasseHttp = Layer.effect(
   >({
     tag: "GCP.Speech.GetCustomClasse",
     operation: speech.getProjectsLocationsCustomClasses,
+    iam: { role: "roles/speech.client" },
     toInput: (name) => ({ name }),
   }),
 );

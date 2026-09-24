@@ -1,8 +1,6 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Oracle Database@Google Cloud bindings.
@@ -15,7 +13,8 @@ export const makeOracleNameHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  /** Oracle Database@Google Cloud has no resource-level IAM: project grant. */
+  iam: Pick<BindingIam, "role">;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -24,7 +23,7 @@ export const makeOracleNameHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [{ role: options.iam.role }],
       });
       const name = yield* resource.name as Effect.Effect<string>;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (

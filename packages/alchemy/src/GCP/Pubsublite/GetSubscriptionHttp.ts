@@ -13,6 +13,7 @@ export const GetSubscriptionHttp = Layer.effect(
   GetSubscription,
   makeSubscriptionHttpBinding({
     tag: "GCP.Pubsublite.GetSubscription",
+    iam: { role: "roles/pubsublite.viewer" },
     field: "name",
     operation: pubsublite.getAdminProjectsLocationsSubscriptions,
   }),

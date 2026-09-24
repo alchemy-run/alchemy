@@ -14,5 +14,7 @@ export const GenerateWalletHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GenerateWallet",
     operation: oracle.generateWalletProjectsLocationsAutonomousDatabases,
+    // Narrowest predefined role with this autonomousDatabases permission.
+    iam: { role: "roles/oracledatabase.autonomousDatabaseAdmin" },
   }),
 );

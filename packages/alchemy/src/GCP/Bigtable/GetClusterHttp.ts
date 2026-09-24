@@ -13,6 +13,7 @@ export const GetClusterHttp = Layer.effect(
   GetCluster,
   makeBigtableClusterHttpBinding({
     tag: "GCP.Bigtable.GetCluster",
+    iam: { role: "roles/bigtable.viewer", on: "bigtable.instance" },
     operation: bigtable.getProjectsInstancesClusters,
   }),
 );

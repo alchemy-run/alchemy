@@ -14,5 +14,6 @@ export const ProcessHttp = Layer.effect(
   makeProcessorHttpBinding({
     tag: "GCP.Documentai.Process",
     operation: documentai.processProjectsLocationsProcessors,
+    iam: { role: "roles/documentai.apiUser" },
   }),
 );

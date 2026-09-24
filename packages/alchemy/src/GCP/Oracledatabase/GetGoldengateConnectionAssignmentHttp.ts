@@ -14,5 +14,6 @@ export const GetGoldengateConnectionAssignmentHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetGoldengateConnectionAssignment",
     operation: oracle.getProjectsLocationsGoldengateConnectionAssignments,
+    iam: { role: "roles/oracledatabase.goldenGateConnectionAssignmentViewer" },
   }),
 );

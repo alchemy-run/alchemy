@@ -13,6 +13,7 @@ export const GetClusterHttp = Layer.effect(
   GetCluster,
   makeAlloyDbClusterHttpBinding({
     tag: "GCP.AlloyDB.GetCluster",
+    iam: { role: "roles/alloydb.viewer" },
     operation: alloydb.getProjectsLocationsClusters,
   }),
 );

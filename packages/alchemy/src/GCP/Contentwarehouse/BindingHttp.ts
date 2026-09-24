@@ -1,13 +1,12 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type { GcpOpContext } from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Output } from "../../Output.ts";
 import type { Document } from "./Document.ts";
 import type { DocumentSchema } from "./DocumentSchema.ts";
 import type { RuleSet } from "./RuleSet.ts";
 import type { SynonymSet } from "./SynonymSet.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam } from "../HttpBinding.ts";
 
 /**
  * Distilled ops are OperationMethods: yield them once at Layer construction
@@ -28,7 +27,7 @@ const makeNamedHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -37,7 +36,7 @@ const makeNamedHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, resource.name)],
       });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
@@ -62,7 +61,7 @@ export const makeDocumentSchemaHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<DocumentSchema, I, A, E>(options);
 
@@ -72,7 +71,7 @@ export const makeDocumentHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<Document, I, A, E>(options);
 
@@ -82,7 +81,7 @@ export const makeRuleSetHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<RuleSet, I, A, E>(options);
 
@@ -92,6 +91,6 @@ export const makeSynonymSetHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<SynonymSet, I, A, E>(options);

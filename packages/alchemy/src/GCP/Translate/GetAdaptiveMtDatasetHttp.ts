@@ -14,5 +14,6 @@ export const GetAdaptiveMtDatasetHttp = Layer.effect(
   makeAdaptiveMtDatasetHttpBinding({
     tag: "GCP.Translate.GetAdaptiveMtDataset",
     operation: translate.getProjectsLocationsAdaptiveMtDatasets,
+    iam: { role: "roles/cloudtranslate.viewer" },
   }),
 );

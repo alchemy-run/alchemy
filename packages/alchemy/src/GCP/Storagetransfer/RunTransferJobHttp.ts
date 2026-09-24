@@ -23,6 +23,7 @@ export const RunTransferJobHttp: Layer.Layer<
     storagetransfer.RunTransferJobsError
   >({
     tag: "GCP.Storagetransfer.RunTransferJob",
+    iam: { role: "roles/storagetransfer.user" },
     operation: storagetransfer.runTransferJobs,
     projectInBody: true,
   }),

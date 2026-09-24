@@ -1,11 +1,9 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as firebaserules from "@distilled.cloud/gcp/firebaserules_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Ruleset } from "./Ruleset.ts";
 import { TestRuleset, type TestRulesetRequest } from "./TestRuleset.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link TestRuleset}.
@@ -21,7 +19,9 @@ export const TestRulesetHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Firebaserules.TestRuleset",
         resource: ruleset,
-        iam: [{ role: defaultRoleFor("GCP.Firebaserules.TestRuleset") }],
+        // firebaserules.rulesets.test is only in firebaserules.admin; no
+        // narrower predefined role exists. No resource-level IAM.
+        iam: [{ role: "roles/firebaserules.admin" }],
       });
       const name = yield* ruleset.name;
       return Effect.fn(`GCP.Firebaserules.TestRuleset(${ruleset.LogicalId})`)(

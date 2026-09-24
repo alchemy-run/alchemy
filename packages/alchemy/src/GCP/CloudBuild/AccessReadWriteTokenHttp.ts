@@ -21,6 +21,7 @@ export const AccessReadWriteTokenHttp = Layer.effect(
       cloudbuild.AccessReadWriteTokenProjectsLocationsConnectionsRepositoriesError
     >({
       tag: "GCP.CloudBuild.AccessReadWriteToken",
+      iam: { role: "roles/cloudbuild.tokenAccessor" },
       operation: (input) =>
         access({
           ...input,

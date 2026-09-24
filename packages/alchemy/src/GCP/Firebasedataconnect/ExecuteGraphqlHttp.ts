@@ -13,6 +13,7 @@ export const ExecuteGraphqlHttp = Layer.effect(
   ExecuteGraphql,
   makeServiceHttpBinding({
     tag: "GCP.Firebasedataconnect.ExecuteGraphql",
+    iam: { role: "roles/firebasedataconnect.dataAdmin" },
     operation: firebasedataconnect.executeGraphqlProjectsLocationsServices,
   }),
 );

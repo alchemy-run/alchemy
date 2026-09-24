@@ -13,6 +13,7 @@ export const GetUserHttp = Layer.effect(
   GetUser,
   makeSqlUserHttpBinding({
     tag: "GCP.SQL.GetUser",
+    iam: { role: "roles/cloudsql.viewer" },
     operation: sqladmin.getUsers,
   }),
 );

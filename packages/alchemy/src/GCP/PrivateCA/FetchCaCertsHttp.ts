@@ -1,11 +1,10 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CaPool } from "./CaPool.ts";
 import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link FetchCaCerts}.
@@ -22,7 +21,12 @@ export const FetchCaCertsHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.PrivateCA.FetchCaCerts",
         resource: pool,
-        iam: [{ role: defaultRoleFor("GCP.PrivateCA.FetchCaCerts") }],
+        iam: [
+          grantFor(
+            { role: "roles/privateca.poolReader", on: "privateca.caPool" },
+            pool.name,
+          ),
+        ],
       });
       const name = yield* pool.name;
       return Effect.fn(`GCP.PrivateCA.FetchCaCerts(${pool.LogicalId})`)(

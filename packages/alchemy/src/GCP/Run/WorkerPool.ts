@@ -17,7 +17,6 @@ import {
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { packEnvValue } from "../../RuntimeContext.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -28,16 +27,18 @@ import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
-  applyHostBindings,
-  collectHostBindings,
-  defaultComputeServiceAccount,
-  deleteHostServiceAccount,
-  ensureHostServiceAccount,
-  hostServiceAccountEmail,
-  hostServiceAccountId,
   retryActAs,
+  type AppliedIamGrant,
   type GcpHostBinding,
 } from "../Host.ts";
+import {
+  alchemyRuntimeEnv,
+  isManagedServiceAccount,
+  makeGcpBootstrap,
+  mergeContainerEnv,
+  releaseHostIdentity,
+  resolveHostIdentity,
+} from "../HostRuntime.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -265,8 +266,14 @@ export type WorkerPool = Resource<
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
+    /** Runtime service account email. */
+    serviceAccount: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
+    /** IAM roles bindings granted to the runtime service account. */
+    iamGrants: AppliedIamGrant[];
+    /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
+    codeHash: string | undefined;
   },
   GcpHostBinding,
   Providers
@@ -685,10 +692,18 @@ const templateNeedsSync = (
   return false;
 };
 
+const HOST_TYPE = "GCP.Run.WorkerPool";
+
+// Worker pools have no ingress, so they run the one-shot/loop bootstrap
+// (no HTTP server); a long-running `run` keeps the instance alive.
+const bootstrapFor = (news: WorkerPoolProps) =>
+  makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
+
 const toAttrs = (
   pool: cloudrun.GoogleCloudRunV2WorkerPool,
   project: string,
-) => {
+  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";
   const parsed = parseName(name);
   return {
@@ -710,12 +725,15 @@ const toAttrs = (
     image: pool.template?.containers?.[0]?.image,
     createTime: pool.createTime,
     updateTime: pool.updateTime,
-    managedServiceAccount:
-      (pool.template?.serviceAccount ?? "") ===
-      hostServiceAccountEmail(
-        parsed.project || project,
-        hostServiceAccountId(parsed.workerPoolId),
-      ),
+    serviceAccount: pool.template?.serviceAccount,
+    managedServiceAccount: isManagedServiceAccount({
+      project: parsed.project || project,
+      hostType: HOST_TYPE,
+      resourceName: name,
+      serviceAccount: pool.template?.serviceAccount,
+    }),
+    iamGrants: extras.iamGrants ?? [],
+    codeHash: extras.codeHash,
   };
 };
 
@@ -917,8 +935,23 @@ export const WorkerPoolProvider = () =>
         nextId !== undefined &&
         nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
-      if (!idChanged && !locationChanged) return undefined;
-      return { action: "replace" as const, deleteFirst: false };
+      if (idChanged || locationChanged) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      // A code-only change leaves the props untouched; hash the bundled
+      // program (and bootstrap) so it still surfaces as an update.
+      if (output !== undefined && news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const hash = yield* images.hash({
+          source: { main: news.main, handler: news.handler, build: news.build },
+          isExternal: news.isExternal,
+          bootstrap: bootstrapFor(news),
+        });
+        if (hash !== undefined && hash !== output.codeHash) {
+          return { action: "update" as const };
+        }
+      }
+      return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -935,7 +968,10 @@ export const WorkerPoolProvider = () =>
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, {
+        iamGrants: output?.iamGrants,
+        codeHash: output?.codeHash,
+      });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -972,84 +1008,59 @@ export const WorkerPoolProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
-      const preview = collectHostBindings(
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
-      const userSa =
-        template.serviceAccount && template.serviceAccount.length > 0
-          ? template.serviceAccount
-          : undefined;
-      const managed =
-        userSa === undefined &&
-        (news.main !== undefined || preview.iam.length > 0);
-      const serviceAccount =
-        userSa ??
-        (managed
-          ? yield* ensureHostServiceAccount(env.project, workerPoolId)
-          : yield* defaultComputeServiceAccount(env.project));
-      template.serviceAccount = serviceAccount;
-      const collected = yield* applyHostBindings({
+      const identity = yield* resolveHostIdentity({
         project: env.project,
-        serviceAccount,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: template.serviceAccount,
+        effectNative: news.main !== undefined,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        revoke: managed,
+        output,
       });
-      const runtimeEnv = { ...collected.env, ...news.env };
+      template.serviceAccount = identity.serviceAccount;
+      let codeHash: string | undefined;
       if (news.main !== undefined) {
         const images = yield* makeImageSource;
-        const handler = news.handler ?? "default";
         const image = yield* images
           .resolve({
             id,
             source: {
               main: news.main,
-              handler,
+              handler: news.handler ?? "default",
               build: news.build,
             },
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,
             isExternal: news.isExternal,
-            bootstrap: (importPath: string) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRunJob";
-
-globalThis.__ALCHEMY_RUNTIME__ = true;
-const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
-
-await bootstrap(entrypoint);
-`,
+            bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(
-            Effect.tapError(() =>
-              managed && output === undefined
-                ? deleteHostServiceAccount(env.project, workerPoolId)
-                : Effect.void,
-            ),
-          );
-        const existing = template.containers?.[0] ?? {};
+          .pipe(Effect.tapError(() => identity.cleanup));
+        codeHash = image.codeHash;
+        const container = template.containers?.[0] ?? {};
         template.containers = [
           {
-            ...existing,
+            ...container,
             image: image.imageUri,
-            env: [
-              ...(existing.env ?? []),
-              ...Object.entries(runtimeEnv).map(([envName, value]) => ({
-                name: envName,
-                value: packEnvValue(value),
-              })),
-            ],
+            env: mergeContainerEnv(
+              container.env,
+              identity.env,
+              yield* alchemyRuntimeEnv,
+              news.env,
+            ),
           },
         ];
-      } else if (Object.keys(runtimeEnv).length > 0) {
-        const existing = template.containers?.[0];
-        if (existing !== undefined) {
-          existing.env = [
-            ...(existing.env ?? []),
-            ...Object.entries(runtimeEnv).map(([envName, value]) => ({
-              name: envName,
-              value: packEnvValue(value),
-            })),
-          ];
+      } else {
+        const runtimeEnv = { ...identity.env, ...news.env };
+        if (Object.keys(runtimeEnv).length > 0 && template.containers) {
+          template.containers = template.containers.map((container, index) =>
+            index === 0
+              ? {
+                  ...container,
+                  env: mergeContainerEnv(container.env, runtimeEnv),
+                }
+              : container,
+          );
         }
       }
 
@@ -1069,11 +1080,7 @@ await bootstrap(entrypoint);
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() =>
-              managed
-                ? deleteHostServiceAccount(env.project, workerPoolId)
-                : Effect.void,
-            ),
+            Effect.tapError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1159,7 +1166,10 @@ await bootstrap(entrypoint);
         return yield* new WorkerPoolNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, {
+        iamGrants: identity.grants,
+        codeHash,
+      });
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1177,8 +1187,6 @@ await bootstrap(entrypoint);
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
-      if (output.managedServiceAccount) {
-        yield* deleteHostServiceAccount(output.project, output.workerPoolId);
-      }
+      yield* releaseHostIdentity(output);
     }),
   });

@@ -14,5 +14,6 @@ export const PredictHttp = Layer.effect(
   makeModelHttpBinding({
     tag: "GCP.Ml.Predict",
     operation: ml.predictProjects,
+    iam: { role: "roles/ml.modelUser", on: "ml.model" },
   }),
 );

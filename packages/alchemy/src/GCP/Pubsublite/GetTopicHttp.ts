@@ -13,6 +13,7 @@ export const GetTopicHttp = Layer.effect(
   GetTopic,
   makeTopicNameHttpBinding({
     tag: "GCP.Pubsublite.GetTopic",
+    iam: { role: "roles/pubsublite.viewer" },
     operation: pubsublite.getAdminProjectsLocationsTopics,
   }),
 );

@@ -17,7 +17,6 @@ import {
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { packEnvValue } from "../../RuntimeContext.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -28,16 +27,18 @@ import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
-  applyHostBindings,
-  collectHostBindings,
-  defaultComputeServiceAccount,
-  deleteHostServiceAccount,
-  ensureHostServiceAccount,
-  hostServiceAccountEmail,
-  hostServiceAccountId,
   retryActAs,
+  type AppliedIamGrant,
   type GcpHostBinding,
 } from "../Host.ts";
+import {
+  alchemyRuntimeEnv,
+  isManagedServiceAccount,
+  makeGcpBootstrap,
+  mergeContainerEnv,
+  releaseHostIdentity,
+  resolveHostIdentity,
+} from "../HostRuntime.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -270,6 +271,10 @@ export type Job = Resource<
     serviceAccount: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
+    /** IAM roles bindings granted to the runtime service account. */
+    iamGrants: AppliedIamGrant[];
+    /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
+    codeHash: string | undefined;
   },
   GcpHostBinding,
   Providers
@@ -449,7 +454,16 @@ const toId = (id: string, jobId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (job: cloudrun.GoogleCloudRunV2Job, project: string) => {
+const HOST_TYPE = "GCP.Run.Job";
+
+const bootstrapFor = (news: JobProps) =>
+  makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
+
+const toAttrs = (
+  job: cloudrun.GoogleCloudRunV2Job,
+  project: string,
+  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+): Job["Attributes"] => {
   const name = job.name ?? "";
   const parsed = parseName(name);
   const task = job.template?.template;
@@ -475,12 +489,14 @@ const toAttrs = (job: cloudrun.GoogleCloudRunV2Job, project: string) => {
     taskCount: job.template?.taskCount,
     parallelism: job.template?.parallelism,
     serviceAccount: task?.serviceAccount,
-    managedServiceAccount:
-      (task?.serviceAccount ?? "") ===
-      hostServiceAccountEmail(
-        parsed.project || project,
-        hostServiceAccountId(parsed.jobId),
-      ),
+    managedServiceAccount: isManagedServiceAccount({
+      project: parsed.project || project,
+      hostType: HOST_TYPE,
+      resourceName: name,
+      serviceAccount: task?.serviceAccount,
+    }),
+    iamGrants: extras.iamGrants ?? [],
+    codeHash: extras.codeHash,
   };
 };
 
@@ -765,8 +781,23 @@ export const JobProvider = () =>
         nextId !== undefined &&
         nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
-      if (!idChanged && !locationChanged) return undefined;
-      return { action: "replace" as const, deleteFirst: false };
+      if (idChanged || locationChanged) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      // A code-only change leaves the props untouched; hash the bundled
+      // program (and bootstrap) so it still surfaces as an update.
+      if (output !== undefined && news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const hash = yield* images.hash({
+          source: { main: news.main, handler: news.handler, build: news.build },
+          isExternal: news.isExternal,
+          bootstrap: bootstrapFor(news),
+        });
+        if (hash !== undefined && hash !== output.codeHash) {
+          return { action: "update" as const };
+        }
+      }
+      return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -778,7 +809,10 @@ export const JobProvider = () =>
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, {
+        iamGrants: output?.iamGrants,
+        codeHash: output?.codeHash,
+      });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -817,69 +851,61 @@ export const JobProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
       const desiredAnnotations = userAnnotations(news.annotations);
-      const preview = collectHostBindings(
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
-      const userSa =
-        news.serviceAccount && news.serviceAccount.length > 0
-          ? news.serviceAccount
-          : undefined;
-      const managed =
-        userSa === undefined &&
-        (news.main !== undefined || preview.iam.length > 0);
-      const serviceAccount =
-        userSa ??
-        (managed
-          ? yield* ensureHostServiceAccount(env.project, jobId)
-          : yield* defaultComputeServiceAccount(env.project));
-      const collected = yield* applyHostBindings({
+      const identity = yield* resolveHostIdentity({
         project: env.project,
-        serviceAccount,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: news.serviceAccount,
+        effectNative: news.main !== undefined,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        revoke: managed,
+        output,
       });
-      const runtimeEnv = { ...collected.env, ...news.env };
+      const serviceAccount = identity.serviceAccount;
       let containers = news.containers;
+      let codeHash: string | undefined;
       if (news.main !== undefined) {
         const images = yield* makeImageSource;
-        const handler = news.handler ?? "default";
         const image = yield* images
           .resolve({
             id,
             source: {
               main: news.main,
-              handler,
+              handler: news.handler ?? "default",
               build: news.build,
             },
             repositoryName: rfc1035(`${jobId}-src`),
             location,
             isExternal: news.isExternal,
-            bootstrap: (importPath: string) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRunJob";
-
-globalThis.__ALCHEMY_RUNTIME__ = true;
-const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
-
-await bootstrap(entrypoint);
-`,
+            bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(
-            Effect.tapError(() =>
-              managed && output === undefined
-                ? deleteHostServiceAccount(env.project, jobId)
-                : Effect.void,
-            ),
-          );
+          .pipe(Effect.tapError(() => identity.cleanup));
+        codeHash = image.codeHash;
+        const container = news.containers?.[0];
         containers = [
           {
+            ...container,
             image: image.imageUri,
-            env: Object.entries(runtimeEnv).map(([envName, value]) => ({
-              name: envName,
-              value: packEnvValue(value),
-            })),
+            env: mergeContainerEnv(
+              container?.env,
+              identity.env,
+              yield* alchemyRuntimeEnv,
+              news.env,
+            ),
           },
         ];
+      } else {
+        const runtimeEnv = { ...identity.env, ...news.env };
+        if (Object.keys(runtimeEnv).length > 0 && containers) {
+          containers = containers.map((container, index) =>
+            index === 0
+              ? {
+                  ...container,
+                  env: mergeContainerEnv(container.env, runtimeEnv),
+                }
+              : container,
+          );
+        }
       }
       const effectiveNews: JobProps = { ...news, containers, serviceAccount };
 
@@ -908,11 +934,7 @@ await bootstrap(entrypoint);
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() =>
-              managed
-                ? deleteHostServiceAccount(env.project, jobId)
-                : Effect.void,
-            ),
+            Effect.tapError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -953,9 +975,7 @@ await bootstrap(entrypoint);
         news.parallelism !== undefined &&
         (current.template?.parallelism ?? 0) !== news.parallelism;
       const serviceAccountChanged =
-        news.serviceAccount !== undefined &&
-        (current.template?.template?.serviceAccount ?? "") !==
-          news.serviceAccount;
+        (current.template?.template?.serviceAccount ?? "") !== serviceAccount;
       const executionEnvironmentChanged =
         news.executionEnvironment !== undefined &&
         (current.template?.template?.executionEnvironment ?? "") !==
@@ -1024,7 +1044,10 @@ await bootstrap(entrypoint);
         return yield* new JobNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, {
+        iamGrants: identity.grants,
+        codeHash,
+      });
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1035,8 +1058,6 @@ await bootstrap(entrypoint);
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
-      if (output.managedServiceAccount) {
-        yield* deleteHostServiceAccount(output.project, output.jobId);
-      }
+      yield* releaseHostIdentity(output);
     }),
   });

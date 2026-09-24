@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Table } from "./Table.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for BigQuery table bindings.
@@ -15,7 +13,7 @@ export const makeTableHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -24,7 +22,7 @@ export const makeTableHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: table,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, table.name)],
       });
       const project = yield* table.project;
       const datasetId = yield* table.datasetId;

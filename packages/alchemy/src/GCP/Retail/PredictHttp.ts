@@ -14,5 +14,6 @@ export const PredictHttp = Layer.effect(
   makeServingConfigHttpBinding({
     tag: "GCP.Retail.Predict",
     operation: retail.predictProjectsLocationsCatalogsServingConfigs,
+    iam: { role: "roles/retail.viewer" },
   }),
 );

@@ -1,14 +1,12 @@
 import * as bqdt from "@distilled.cloud/gcp/bigquerydatatransfer_v1";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   StartManualRuns,
   type StartManualRunsRequest,
 } from "./StartManualRuns.ts";
 import type { TransferConfig } from "./TransferConfig.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link StartManualRuns}.
@@ -25,9 +23,9 @@ export const StartManualRunsHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.BigQueryDataTransfer.StartManualRuns",
         resource: config,
-        iam: [
-          { role: defaultRoleFor("GCP.BigQueryDataTransfer.StartManualRuns") },
-        ],
+        // bigquery.transfers.update is only in roles/bigquery.admin; transfer
+        // configs have no resource-level IAM.
+        iam: [{ role: "roles/bigquery.admin" }],
       });
       const name = yield* config.name;
       return Effect.fn(

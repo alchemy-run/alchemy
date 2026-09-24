@@ -14,5 +14,6 @@ export const GetExascaleDbStorageVaultHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetExascaleDbStorageVault",
     operation: oracle.getProjectsLocationsExascaleDbStorageVaults,
+    iam: { role: "roles/oracledatabase.exascaleDbStorageVaultViewer" },
   }),
 );

@@ -14,5 +14,6 @@ export const GetDbSystemHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetDbSystem",
     operation: oracle.getProjectsLocationsDbSystems,
+    iam: { role: "roles/oracledatabase.dbSystemViewer" },
   }),
 );

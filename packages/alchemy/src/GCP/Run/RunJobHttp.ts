@@ -2,6 +2,7 @@ import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 import { RunJob, type RunJobRequest } from "./RunJob.ts";
 import type { Job } from "./Job.ts";
 
@@ -20,7 +21,13 @@ export const RunJobHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Run.RunJob",
         resource: job,
-        iam: [{ role: "roles/run.developer" }],
+        iam: [
+          // runWithOverrides: RunJobRequest accepts `body.overrides`.
+          grantFor(
+            { role: "roles/run.jobsExecutorWithOverrides", on: "run.job" },
+            job.name,
+          ),
+        ],
       });
       return Effect.fn(`GCP.Run.RunJob(${job.LogicalId})`)(function* (
         request?: RunJobRequest,

@@ -13,6 +13,9 @@ export const GetUsersSshPublicKeyHttp = Layer.effect(
   GetUsersSshPublicKey,
   makeUsersSshPublicKeyHttpBinding({
     tag: "GCP.Oslogin.GetUsersSshPublicKey",
+    // No IAM permission governs users.sshPublicKeys.get; it only reads the
+    // caller's own account.
+    iam: [],
     operation: oslogin.getUsersSshPublicKeys,
   }),
 );

@@ -13,6 +13,7 @@ export const GetQueuedResourceHttp = Layer.effect(
   GetQueuedResource,
   makeTpuQueuedResourceHttpBinding({
     tag: "GCP.Tpu.GetQueuedResource",
+    iam: { role: "roles/tpu.viewer" },
     operation: tpu.getProjectsLocationsQueuedResources,
   }),
 );

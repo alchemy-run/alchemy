@@ -13,6 +13,7 @@ export const GetUserHttp = Layer.effect(
   GetUser,
   makeAlloyDbUserHttpBinding({
     tag: "GCP.AlloyDB.GetUser",
+    iam: { role: "roles/alloydb.viewer" },
     operation: alloydb.getProjectsLocationsClustersUsers,
   }),
 );

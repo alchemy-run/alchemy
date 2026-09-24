@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeInstanceHttpBinding({
     tag: "GCP.Compute.GetInstance",
+    iam: { role: "roles/compute.viewer", on: "compute.instance" },
     operation: compute.getInstances,
   }),
 );

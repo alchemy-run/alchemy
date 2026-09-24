@@ -161,8 +161,10 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
           Effect.retry({
             while: (error): error is JobRunNotReady =>
               error._tag === "JobRunNotReady" && error.reason === "pending",
-            schedule: Schedule.spaced("3 seconds"),
-            times: 20,
+            // Cloud Run schedules a fresh execution slowly: even Google's
+            // sample job takes ~2 minutes to start in the test project.
+            schedule: Schedule.spaced("10 seconds"),
+            times: 36,
           }),
         );
       expect((execution.succeededCount ?? 0) >= 1).toEqual(true);
@@ -185,5 +187,5 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
       const gone = yield* waitUntilGone(out.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 540_000 },
 );

@@ -13,6 +13,7 @@ export const GetTableHttp = Layer.effect(
   GetTable,
   makeBigtableTableHttpBinding({
     tag: "GCP.Bigtable.GetTable",
+    iam: { role: "roles/bigtable.viewer", on: "bigtable.table" },
     operation: bigtable.getProjectsInstancesTables,
   }),
 );

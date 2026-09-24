@@ -1,10 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Node } from "./Node.ts";
 import type { QueuedResource } from "./QueuedResource.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud TPU node bindings.
@@ -16,7 +14,7 @@ export const makeTpuNodeHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -25,7 +23,7 @@ export const makeTpuNodeHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: node,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, node.name)],
       });
       const name = yield* node.name;
       return Effect.fn(`${options.tag}(${node.LogicalId})`)(function* (
@@ -49,7 +47,7 @@ export const makeTpuQueuedResourceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -58,7 +56,7 @@ export const makeTpuQueuedResourceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, resource.name)],
       });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (

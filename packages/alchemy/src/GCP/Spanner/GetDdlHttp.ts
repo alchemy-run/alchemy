@@ -1,11 +1,10 @@
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Database } from "./Database.ts";
 import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link GetDdl}.
@@ -22,7 +21,12 @@ export const GetDdlHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Spanner.GetDdl",
         resource: database,
-        iam: [{ role: defaultRoleFor("GCP.Spanner.GetDdl") }],
+        iam: [
+          grantFor(
+            { role: "roles/spanner.databaseReader", on: "spanner.database" },
+            database.name,
+          ),
+        ],
       });
       const name = yield* database.name;
       return Effect.fn(`GCP.Spanner.GetDdl(${database.LogicalId})`)(function* (

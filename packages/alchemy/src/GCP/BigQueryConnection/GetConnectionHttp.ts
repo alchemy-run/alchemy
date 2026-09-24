@@ -13,6 +13,10 @@ export const GetConnectionHttp = Layer.effect(
   GetConnection,
   makeConnectionHttpBinding({
     tag: "GCP.BigQueryConnection.GetConnection",
+    iam: {
+      role: "roles/bigquery.connectionUser",
+      on: "bigqueryconnection.connection",
+    },
     operation: bigqueryconnection.getProjectsLocationsConnections,
   }),
 );

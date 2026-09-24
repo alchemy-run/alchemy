@@ -18,6 +18,7 @@ export const FetchGitRefsHttp = Layer.effect(
     developerconnect.FetchGitRefsProjectsLocationsConnectionsGitRepositoryLinksError
   >({
     tag: "GCP.Developerconnect.FetchGitRefs",
+    iam: { role: "roles/developerconnect.user" },
     operation: Effect.gen(function* () {
       const call =
         yield* developerconnect.fetchGitRefsProjectsLocationsConnectionsGitRepositoryLinks;

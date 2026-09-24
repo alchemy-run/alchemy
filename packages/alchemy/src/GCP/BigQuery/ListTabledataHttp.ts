@@ -13,6 +13,8 @@ export const ListTabledataHttp = Layer.effect(
   ListTabledata,
   makeTableHttpBinding({
     tag: "GCP.BigQuery.ListTabledata",
+    // bigquery.tables.getData
+    iam: { role: "roles/bigquery.dataViewer", on: "bigquery.table" },
     operation: bigquery.listTabledata,
   }),
 );

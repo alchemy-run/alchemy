@@ -20,5 +20,6 @@ export const GetReasoningEngineHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.GetReasoningEngine",
     operation: aiplatform.getReasoningEngines,
+    iam: { role: "roles/aiplatform.viewer" },
   }),
 );

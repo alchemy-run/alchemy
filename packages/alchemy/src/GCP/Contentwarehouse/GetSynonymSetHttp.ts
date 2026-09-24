@@ -14,5 +14,7 @@ export const GetSynonymSetHttp = Layer.effect(
   makeSynonymSetHttpBinding({
     tag: "GCP.Contentwarehouse.GetSynonymSet",
     operation: cw.getProjectsLocationsSynonymSets,
+    // contentwarehouse.synonymSets.get is only in contentwarehouse.admin.
+    iam: { role: "roles/contentwarehouse.admin" },
   }),
 );

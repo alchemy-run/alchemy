@@ -20,5 +20,6 @@ export const ResumeSandboxEnvironmentHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.ResumeSandboxEnvironment",
     operation: aiplatform.resumeReasoningEnginesSandboxEnvironments,
+    iam: { role: "roles/aiplatform.user" },
   }),
 );

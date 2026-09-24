@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Certificate Authority Service bindings.
@@ -15,16 +13,17 @@ export const makeCertificateAuthorityHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (ca: CertificateAuthority) {
+      // CAs have no IAM policy of their own; access is granted on the parent pool.
       yield* bindGcpHost({
         tag: options.tag,
         resource: ca,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, ca.caPool)],
       });
       const name = yield* ca.name;
       return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (

@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeAlloyDbInstanceHttpBinding({
     tag: "GCP.AlloyDB.GetInstance",
+    iam: { role: "roles/alloydb.viewer" },
     operation: alloydb.getProjectsLocationsClustersInstances,
   }),
 );

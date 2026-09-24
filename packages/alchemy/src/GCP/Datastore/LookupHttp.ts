@@ -13,6 +13,7 @@ export const LookupHttp = Layer.effect(
   Lookup,
   makeIndexeHttpBinding({
     tag: "GCP.Datastore.Lookup",
+    iam: { role: "roles/datastore.viewer" },
     operation: datastore.lookupProjects,
   }),
 );

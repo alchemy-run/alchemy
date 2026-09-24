@@ -15,7 +15,7 @@ const publish = yield* GCP.PubSub.Publish(topic);
 That expression:
 
 1. Creates (or adopts) a runtime service account for this host.
-2. Adds `roles/pubsub.editor` to it on the project.
+2. Adds `roles/pubsub.publisher` to it on that one topic's IAM policy.
 3. Injects whatever the call needs into the revision.
 4. Returns a typed function you call from a request handler.
 
@@ -26,11 +26,13 @@ the scoped `AccountApiToken` a Cloudflare binding mints.
 
 Every effectful GCP host — `GCP.Run.Service` (and its alias
 `GCP.Function`), `GCP.Run.Job`, `GCP.Run.WorkerPool`, and
-`GCP.CloudFunctions.Function` — gets its own account, named from the
-host's logical id:
+`GCP.CloudFunctions.Function` — gets its own account. The id is the
+host's name plus a hash of its type and full resource name, so no two
+hosts share an account — not across stages, and not the old and new
+generation of a replacement:
 
 ```
-alch-api@my-project.iam.gserviceaccount.com
+alch-api-3f9c0a1b2d@my-project.iam.gserviceaccount.com
 ```
 
 Accounts Alchemy mints carry the display name `alchemy-host`, which is
@@ -44,45 +46,47 @@ The difference is what happens on removal, below.
 
 ## Which role a binding grants
 
-Each binding has a default role chosen from the Google service it
-belongs to:
+Each binding grants the narrowest predefined role that covers its
+operation, on the resource it is bound to wherever the service has
+resource-level IAM — the GCP counterpart of an AWS statement's
+`Resource: [arn]`:
 
-| Binding prefix | Default role |
-| --- | --- |
-| `GCP.Firestore.*` | `roles/datastore.user` |
-| `GCP.SecretManager.*` | `roles/secretmanager.secretAccessor` |
-| `GCP.PubSub.*` | `roles/pubsub.editor` |
-| `GCP.BigQuery.*` | `roles/bigquery.user` |
-| `GCP.Storage.*` | `roles/storage.objectAdmin` |
-| `GCP.Redis.*` | `roles/redis.editor` |
-| `GCP.Run.*` | `roles/run.developer` |
-| `GCP.KMS.*` | `roles/cloudkms.cryptoOperator` |
-| `GCP.Spanner.*` | `roles/spanner.databaseUser` |
-| `GCP.SQL.*` | `roles/cloudsql.client` |
+| Binding | Role | Granted on |
+| --- | --- | --- |
+| `GCP.PubSub.Publish` | `roles/pubsub.publisher` | the topic |
+| `GCP.PubSub.Pull`, `Acknowledge` | `roles/pubsub.subscriber` | the subscription |
+| `GCP.Storage.GetObject` | `roles/storage.objectViewer` | the bucket |
+| `GCP.Storage.PutObject`, `DeleteObject` | `roles/storage.objectUser` | the bucket |
+| `GCP.SecretManager.AccessSecretVersion` | `roles/secretmanager.secretAccessor` | the secret |
+| `GCP.KMS.Encrypt` / `Decrypt` | `roles/cloudkms.cryptoKeyEncrypter` / `Decrypter` | the key |
+| `GCP.CloudTasks.CreateTask` | `roles/cloudtasks.enqueuer` | the queue |
+| `GCP.Run.RunJob` | `roles/run.jobsExecutorWithOverrides` | the job |
+| `GCP.BigQuery.InsertAll` | `roles/bigquery.dataEditor` | the table |
+| `GCP.Firestore.*` | `roles/datastore.user` / `datastore.viewer` | the project |
 
-Anything without an entry falls back to `roles/viewer`. Individual
-bindings may override the default with a more specific role.
+Services with no resource-level IAM (Firestore, Memorystore, Cloud SQL,
+Vertex AI, …) fall back to the narrowest role on the project. The
+Memorystore RESP bindings (`ReadRedis`, `WriteRedis`, `ReadWriteRedis`)
+grant nothing at all: RESP authenticates with the instance's AUTH
+string, which travels to the runtime with the connection URL.
 
 ## Adding and removing
 
-The set of bindings you yield *is* the desired IAM state. For an
-Alchemy-minted account, roles outside that set are revoked on the next
-deploy — delete a `yield*` and the permission goes away. Accounts you
-supply yourself are additive only: Alchemy grants what the bindings
-need and never removes a role it did not add, because it cannot tell
-which of the account's other roles matter.
+The set of bindings you yield *is* the desired IAM state. The host
+records every grant it made; on the next deploy, a grant no binding
+asks for any more is revoked from that resource — delete a `yield*` and
+the permission goes away. For an Alchemy-minted account, the project
+policy is also synced against what GCP reports, so project roles added
+out of band are removed too. Accounts you supply yourself only ever
+lose grants Alchemy recorded, because Alchemy cannot tell which of the
+account's other roles matter.
+
+Policies are updated read-modify-write under their etag, so parallel
+hosts deploying against one project or topic converge instead of
+overwriting each other. Conditional role bindings are never touched.
 
 Destroying the host revokes every role Alchemy granted and deletes the
 minted account.
-
-:::note[Grants are project-scoped]
-Alchemy grants roles through `projects.setIamPolicy`, not through the
-per-resource IAM APIs (`topics.setIamPolicy`, `buckets.setIamPolicy`,
-and friends), which differ service by service. A host bound to one
-topic can therefore reach other topics in the same project. When you
-need a resource-scoped grant, set it on the resource yourself and give
-the host a narrower custom role.
-:::
 
 ## Provide the implementation
 
@@ -133,7 +137,8 @@ you `Effect.orDie` it.
   for pulling from a queue continuously.
 - **`GCP.CloudFunctions.Function`** — the zip-source gen2 API. It does
   not take `main`; use it when you have an archive rather than a
-  bundle.
+  bundle. Bindings yielded in its Effect still grant IAM and inject env
+  for the archive's code, but the Effect itself does not run there.
 
 The first three build a container image locally, which means Docker
 has to be running to deploy them.

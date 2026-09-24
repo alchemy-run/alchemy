@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 import {
   GetCatalogItem,
   type GetCatalogItemRequest,
@@ -29,9 +29,7 @@ export const GetCatalogItemHttp: Layer.Layer<
       yield* bindGcpHost({
         tag: "GCP.Recommendationengine.GetCatalogItem",
         resource: item,
-        iam: [
-          { role: defaultRoleFor("GCP.Recommendationengine.GetCatalogItem") },
-        ],
+        iam: [{ role: "roles/automlrecommendations.viewer" }],
       });
       const name = yield* item.name;
       return Effect.fn(

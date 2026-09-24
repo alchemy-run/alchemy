@@ -1,22 +1,23 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import type { GcpOpContext } from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Bucket } from "./Bucket.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  GcpOpContext
-> &
-  ((input: I) => Effect.Effect<A, E, GcpOpContext>);
 
 /**
- * Shared HTTP scaffolding for Cloud Storage object bindings.
- * Distilled ops are OperationMethods: yield them once at Layer
- * construction (after providing Credentials + HttpClient) so the inner
- * runtime Effect is `Effect<A, E>` and does not leak `GcpOpContext`.
+ * Grant `role` on the bound bucket's own IAM policy (not the project), the
+ * way AWS S3 bindings scope statements to the bucket ARN.
+ */
+export const grantOnBucket = (tag: string, bucket: Bucket, role: string) =>
+  bindGcpHost({
+    tag,
+    resource: bucket,
+    iam: [grantFor({ role, on: "storage.bucket" }, bucket.bucketName)],
+  });
+
+/**
+ * Shared HTTP scaffolding for Cloud Storage object metadata bindings
+ * (`DeleteObject`): yields the distilled operation once at Layer
+ * construction and injects the bound bucket's name.
  * NOT exported from index.ts.
  */
 export const makeObjectHttpBinding = <
@@ -25,17 +26,13 @@ export const makeObjectHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  role: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (bucket: Bucket) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: bucket,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
-      });
+      yield* grantOnBucket(options.tag, bucket, options.role);
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request: Omit<I, "bucket">,

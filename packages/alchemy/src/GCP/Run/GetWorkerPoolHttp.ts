@@ -1,11 +1,10 @@
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetWorkerPool, type GetWorkerPoolRequest } from "./GetWorkerPool.ts";
 import type { WorkerPool } from "./WorkerPool.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link GetWorkerPool}.
@@ -22,7 +21,12 @@ export const GetWorkerPoolHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Run.GetWorkerPool",
         resource: pool,
-        iam: [{ role: defaultRoleFor("GCP.Run.GetWorkerPool") }],
+        iam: [
+          grantFor(
+            { role: "roles/run.viewer", on: "run.workerPool" },
+            pool.name,
+          ),
+        ],
       });
       const name = yield* pool.name;
       return Effect.fn(`GCP.Run.GetWorkerPool(${pool.LogicalId})`)(function* (

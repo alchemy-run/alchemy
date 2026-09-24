@@ -13,6 +13,7 @@ export const GetClusterHttp = Layer.effect(
   GetCluster,
   makeDataprocClusterHttpBinding({
     tag: "GCP.Dataproc.GetCluster",
+    iam: { role: "roles/dataproc.viewer", on: "dataproc.cluster" },
     operation: dataproc.getProjectsRegionsClusters,
   }),
 );

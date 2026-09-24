@@ -13,6 +13,10 @@ export const GetNoteHttp = Layer.effect(
   GetNote,
   makeNoteHttpBinding({
     tag: "GCP.Containeranalysis.GetNote",
+    iam: {
+      role: "roles/containeranalysis.notes.viewer",
+      on: "containeranalysis.note",
+    },
     operation: containeranalysis.getProjectsNotes,
   }),
 );

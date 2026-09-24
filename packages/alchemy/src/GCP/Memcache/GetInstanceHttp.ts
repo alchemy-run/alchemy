@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeMemcacheInstanceHttpBinding({
     tag: "GCP.Memcache.GetInstance",
+    iam: { role: "roles/memcache.viewer" },
     operation: memcache.getProjectsLocationsInstances,
   }),
 );

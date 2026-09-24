@@ -14,5 +14,7 @@ export const GetAuthStringHttp = Layer.effect(
   makeRedisInstanceHttpBinding({
     tag: "GCP.Redis.GetAuthString",
     operation: redis.getAuthStringProjectsLocationsInstances,
+    // `redis.instances.getAuthString` is only in the admin role.
+    iam: { role: "roles/redis.admin" },
   }),
 );

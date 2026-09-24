@@ -1,16 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Service } from "./Service.ts";
 import type { ServicesConnector } from "./ServicesConnector.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Firebase Data Connect bindings.
@@ -22,7 +14,7 @@ export const makeServiceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -31,7 +23,7 @@ export const makeServiceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: service,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, service.name)],
       });
       const name = yield* service.name;
       return Effect.fn(`${options.tag}(${service.LogicalId})`)(function* (
@@ -51,7 +43,7 @@ export const makeConnectorHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -60,7 +52,7 @@ export const makeConnectorHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: connector,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, connector.name)],
       });
       const name = yield* connector.name;
       return Effect.fn(`${options.tag}(${connector.LogicalId})`)(function* (

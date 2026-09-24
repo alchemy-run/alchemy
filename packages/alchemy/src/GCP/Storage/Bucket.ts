@@ -149,10 +149,9 @@ export type Bucket = Resource<
  *     const putObject = yield* GCP.Storage.PutObject(bucket);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         yield* putObject({
- *           name: "hello.txt",
- *           body: { name: "hello.txt", contentType: "text/plain" },
- *         }).pipe(Effect.orDie);
+ *         yield* putObject({ name: "hello.txt", body: "Hello!" }).pipe(
+ *           Effect.orDie,
+ *         );
  *         return HttpServerResponse.text("ok");
  *       }),
  *     };

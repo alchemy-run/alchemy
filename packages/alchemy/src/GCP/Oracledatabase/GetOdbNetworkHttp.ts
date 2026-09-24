@@ -14,5 +14,6 @@ export const GetOdbNetworkHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetOdbNetwork",
     operation: oracle.getProjectsLocationsOdbNetworks,
+    iam: { role: "roles/oracledatabase.odbNetworkViewer" },
   }),
 );

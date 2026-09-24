@@ -13,6 +13,7 @@ export const StartWorkstationHttp = Layer.effect(
   StartWorkstation,
   makeWorkstationHttpBinding({
     tag: "GCP.Workstations.StartWorkstation",
+    iam: { role: "roles/workstations.user", on: "workstations.workstation" },
     operation:
       workstations.startProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
   }),

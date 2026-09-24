@@ -14,5 +14,6 @@ export const GetCloudExadataInfrastructureHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetCloudExadataInfrastructure",
     operation: oracle.getProjectsLocationsCloudExadataInfrastructures,
+    iam: { role: "roles/oracledatabase.cloudExadataInfrastructureViewer" },
   }),
 );

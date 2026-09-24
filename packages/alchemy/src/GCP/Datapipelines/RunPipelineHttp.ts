@@ -23,6 +23,7 @@ export const RunPipelineHttp: Layer.Layer<
     datapipelines.RunProjectsLocationsPipelinesError
   >({
     tag: "GCP.Datapipelines.RunPipeline",
+    iam: { role: "roles/datapipelines.invoker" },
     operation: datapipelines.runProjectsLocationsPipelines,
   }),
 );

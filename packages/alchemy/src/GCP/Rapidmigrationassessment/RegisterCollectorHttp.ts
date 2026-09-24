@@ -23,6 +23,7 @@ export const RegisterCollectorHttp: Layer.Layer<
     rma.RegisterProjectsLocationsCollectorsError
   >({
     tag: "GCP.Rapidmigrationassessment.RegisterCollector",
+    iam: { role: "roles/rma.runner" },
     operation: rma.registerProjectsLocationsCollectors,
   }),
 );

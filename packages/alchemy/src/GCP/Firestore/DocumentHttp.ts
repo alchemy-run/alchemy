@@ -1,21 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import type { GcpOpContext } from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Database } from "./Database.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-/**
- * Distilled ops are OperationMethods: yield them once at Layer construction
- * (after providing Credentials + HttpClient) so the inner runtime Effect is
- * `Effect<A, E>` and does not leak `GcpOpContext`.
- */
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  GcpOpContext
-> &
-  ((input: I) => Effect.Effect<A, E, GcpOpContext>);
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Firestore document bindings.
@@ -27,7 +13,7 @@ export const makeDocumentHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -36,7 +22,7 @@ export const makeDocumentHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: database,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, database.name)],
       });
       const name = yield* database.name;
       return Effect.fn(`${options.tag}(${database.LogicalId})`)(function* (

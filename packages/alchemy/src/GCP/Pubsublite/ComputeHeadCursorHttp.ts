@@ -13,6 +13,7 @@ export const ComputeHeadCursorHttp = Layer.effect(
   ComputeHeadCursor,
   makeTopicStatsHttpBinding({
     tag: "GCP.Pubsublite.ComputeHeadCursor",
+    iam: { role: "roles/pubsublite.subscriber" },
     operation: pubsublite.computeHeadCursorTopicStatsProjectsLocationsTopics,
   }),
 );

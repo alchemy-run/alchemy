@@ -19,6 +19,7 @@ export const GetPhraseSetHttp = Layer.effect(
   >({
     tag: "GCP.Speech.GetPhraseSet",
     operation: speech.getProjectsLocationsPhraseSets,
+    iam: { role: "roles/speech.client" },
     toInput: (name) => ({ name }),
   }),
 );

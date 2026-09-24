@@ -14,5 +14,6 @@ export const GetCloudVmClusterHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetCloudVmCluster",
     operation: oracle.getProjectsLocationsCloudVmClusters,
+    iam: { role: "roles/oracledatabase.cloudVmClusterViewer" },
   }),
 );

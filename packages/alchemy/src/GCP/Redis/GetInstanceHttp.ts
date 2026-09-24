@@ -14,5 +14,6 @@ export const GetInstanceHttp = Layer.effect(
   makeRedisInstanceHttpBinding({
     tag: "GCP.Redis.GetInstance",
     operation: redis.getProjectsLocationsInstances,
+    iam: { role: "roles/redis.viewer" },
   }),
 );

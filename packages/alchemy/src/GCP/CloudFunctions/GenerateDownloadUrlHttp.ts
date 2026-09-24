@@ -13,6 +13,11 @@ export const GenerateDownloadUrlHttp = Layer.effect(
   GenerateDownloadUrl,
   makeFunctionHttpBinding({
     tag: "GCP.CloudFunctions.GenerateDownloadUrl",
+    // Narrowest predefined role with cloudfunctions.functions.sourceCodeGet.
+    iam: {
+      role: "roles/cloudfunctions.developer",
+      on: "cloudfunctions.function",
+    },
     operation: cloudfunctions.generateDownloadUrlProjectsLocationsFunctions,
   }),
 );

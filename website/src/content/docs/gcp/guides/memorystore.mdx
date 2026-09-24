@@ -58,10 +58,12 @@ bindings exist when you want least privilege at the call site:
 - `GCP.Redis.WriteRedis` / `WriteRedisHttp` — write commands only.
 - `GCP.Redis.ReadWriteRedis` / `ReadWriteRedisHttp` — both.
 
-The binding grants `roles/redis.editor` on the host's runtime service
-account and packs the connection URL into the revision as an Output —
-it is resolved when the instance reconciles, not when you write the
-binding, so the private IP is never something you paste in.
+The binding needs no IAM role: RESP authenticates with the instance's
+AUTH string. Alchemy resolves the connection URL (private IP, port,
+AUTH string) when the instance reconciles and carries it to the runtime
+through the host's runtime context, keyed per instance — so the private
+IP is never something you paste in, and two instances bound to one host
+never collide.
 
 ## Expect minutes, not seconds
 

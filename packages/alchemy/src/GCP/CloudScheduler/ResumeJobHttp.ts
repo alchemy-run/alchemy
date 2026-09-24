@@ -23,6 +23,8 @@ export const ResumeJobHttp: Layer.Layer<
     scheduler.ResumeProjectsLocationsJobsError
   >({
     tag: "GCP.CloudScheduler.ResumeJob",
+    // Only cloudscheduler.admin has jobs.enable; no resource-level IAM.
+    iam: { role: "roles/cloudscheduler.admin" },
     operation: scheduler.resumeProjectsLocationsJobs,
   }),
 );

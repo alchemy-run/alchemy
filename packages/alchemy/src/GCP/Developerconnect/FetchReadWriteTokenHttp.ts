@@ -18,6 +18,7 @@ export const FetchReadWriteTokenHttp = Layer.effect(
     developerconnect.FetchReadWriteTokenProjectsLocationsConnectionsGitRepositoryLinksError
   >({
     tag: "GCP.Developerconnect.FetchReadWriteToken",
+    iam: { role: "roles/developerconnect.tokenAccessor" },
     operation: Effect.gen(function* () {
       const call =
         yield* developerconnect.fetchReadWriteTokenProjectsLocationsConnectionsGitRepositoryLinks;

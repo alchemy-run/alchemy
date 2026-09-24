@@ -23,6 +23,8 @@ export const StopPipelineHttp: Layer.Layer<
     datapipelines.StopProjectsLocationsPipelinesError
   >({
     tag: "GCP.Datapipelines.StopPipeline",
+    // No narrower predefined role contains datapipelines.pipelines.stop.
+    iam: { role: "roles/datapipelines.admin" },
     operation: datapipelines.stopProjectsLocationsPipelines,
   }),
 );

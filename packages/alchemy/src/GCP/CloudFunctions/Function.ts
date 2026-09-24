@@ -19,16 +19,15 @@ import { tagRecord } from "../../Tags.ts";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { GcpEnvironment } from "../Environment.ts";
 import {
-  applyHostBindings,
-  collectHostBindings,
-  defaultComputeServiceAccount,
-  deleteHostServiceAccount,
-  ensureHostServiceAccount,
-  hostServiceAccountEmail,
-  hostServiceAccountId,
   retryActAs,
+  type AppliedIamGrant,
   type GcpHostBinding,
 } from "../Host.ts";
+import {
+  isManagedServiceAccount,
+  releaseHostIdentity,
+  resolveHostIdentity,
+} from "../HostRuntime.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -332,6 +331,8 @@ export type Function = Resource<
     updateTime: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
+    /** IAM roles bindings granted to the runtime service account. */
+    iamGrants: AppliedIamGrant[];
   },
   GcpHostBinding,
   Providers
@@ -575,10 +576,13 @@ const sameSource = (desired?: Source, observed?: Source) => {
   );
 };
 
+const HOST_TYPE = "GCP.CloudFunctions.Function";
+
 const toAttrs = (
   fn: cloudfunctions.Cloudfunctions_Function,
   project: string,
-) => {
+  extras: { iamGrants?: AppliedIamGrant[] } = {},
+): Function["Attributes"] => {
   const name = fn.name ?? "";
   const parsed = parseName(name);
   return {
@@ -604,12 +608,13 @@ const toAttrs = (
     trigger: fn.eventTrigger?.trigger,
     createTime: fn.createTime,
     updateTime: fn.updateTime,
-    managedServiceAccount:
-      (fn.serviceConfig?.serviceAccountEmail ?? "") ===
-      hostServiceAccountEmail(
-        parsed.project || project,
-        hostServiceAccountId(parsed.functionId),
-      ),
+    managedServiceAccount: isManagedServiceAccount({
+      project: parsed.project || project,
+      hostType: HOST_TYPE,
+      resourceName: name,
+      serviceAccount: fn.serviceConfig?.serviceAccountEmail,
+    }),
+    iamGrants: extras.iamGrants ?? [],
   };
 };
 
@@ -871,7 +876,9 @@ export const FunctionProvider = () =>
         output?.name ?? resourceName(env.project, location, functionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, {
+        iamGrants: output?.iamGrants,
+      });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -910,26 +917,20 @@ export const FunctionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const preview = collectHostBindings(
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
-      const userSa =
-        news.serviceConfig?.serviceAccountEmail &&
-        news.serviceConfig.serviceAccountEmail.length > 0
-          ? news.serviceConfig.serviceAccountEmail
-          : undefined;
-      const managed = userSa === undefined && preview.iam.length > 0;
-      const serviceAccount =
-        userSa ??
-        (managed
-          ? yield* ensureHostServiceAccount(env.project, functionId)
-          : yield* defaultComputeServiceAccount(env.project));
-      const collected = yield* applyHostBindings({
+      const identity = yield* resolveHostIdentity({
         project: env.project,
-        serviceAccount,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: news.serviceConfig?.serviceAccountEmail,
+        effectNative: false,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        revoke: managed,
+        output: output && {
+          ...output,
+          serviceAccount: output.serviceAccountEmail,
+        },
       });
+      const serviceAccount = identity.serviceAccount;
+      const collected = identity;
       const serviceConfig = {
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
@@ -969,9 +970,7 @@ export const FunctionProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() =>
-              deleteHostServiceAccount(env.project, functionId),
-            ),
+            Effect.tapError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -1104,7 +1103,7 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, { iamGrants: identity.grants });
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1115,8 +1114,9 @@ export const FunctionProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
-      if (output.managedServiceAccount) {
-        yield* deleteHostServiceAccount(output.project, output.functionId);
-      }
+      yield* releaseHostIdentity({
+        ...output,
+        serviceAccount: output.serviceAccountEmail,
+      });
     }),
   });

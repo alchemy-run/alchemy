@@ -1,18 +1,10 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 export type SecretBindingTarget = Secret | LocationsSecret;
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 
 /**
  * Shared HTTP scaffolding for Secret Manager bindings.
@@ -20,17 +12,19 @@ type GcpHttpOp<I, A, E> = Effect.Effect<
  */
 export const makeSecretHttpBinding = <I, A, E, Req = void>(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
   toInput: (secretName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (secret: SecretBindingTarget) {
+      // `name` is `projects/p/secrets/s` or, for regional secrets,
+      // `projects/p/locations/l/secrets/s`; both are secret IAM targets.
       yield* bindGcpHost({
         tag: options.tag,
         resource: secret,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, secret.name)],
       });
       const name = yield* secret.name;
       return Effect.fn(`${options.tag}(${secret.LogicalId})`)(function* (

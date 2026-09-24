@@ -13,6 +13,7 @@ export const PublishHttp = Layer.effect(
   Publish,
   makeTopicHttpBinding({
     tag: "GCP.PubSub.Publish",
+    iam: { role: "roles/pubsub.publisher", on: "pubsub.topic" },
     operation: pubsub.publishProjectsTopics,
   }),
 );

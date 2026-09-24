@@ -13,6 +13,8 @@ export const InsertAllHttp = Layer.effect(
   InsertAll,
   makeTableHttpBinding({
     tag: "GCP.BigQuery.InsertAll",
+    // bigquery.tables.updateData
+    iam: { role: "roles/bigquery.dataEditor", on: "bigquery.table" },
     operation: bigquery.insertAllTabledata,
   }),
 );

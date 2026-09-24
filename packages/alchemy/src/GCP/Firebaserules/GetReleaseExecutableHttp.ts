@@ -1,14 +1,12 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as firebaserules from "@distilled.cloud/gcp/firebaserules_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   GetReleaseExecutable,
   type GetReleaseExecutableRequest,
 } from "./GetReleaseExecutable.ts";
 import type { Release } from "./Release.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetReleaseExecutable}.
@@ -25,9 +23,9 @@ export const GetReleaseExecutableHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Firebaserules.GetReleaseExecutable",
         resource: release,
-        iam: [
-          { role: defaultRoleFor("GCP.Firebaserules.GetReleaseExecutable") },
-        ],
+        // firebaserules.releases.getExecutable is only in firebaserules.admin;
+        // no narrower predefined role exists. No resource-level IAM.
+        iam: [{ role: "roles/firebaserules.admin" }],
       });
       const name = yield* release.name;
       return Effect.fn(

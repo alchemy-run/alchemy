@@ -13,6 +13,7 @@ export const GetUserWorkloadsSecretHttp = Layer.effect(
   GetUserWorkloadsSecret,
   makeUserWorkloadsSecretHttpBinding({
     tag: "GCP.Composer.GetUserWorkloadsSecret",
+    iam: { role: "roles/composer.viewer" },
     operation: composer.getProjectsLocationsEnvironmentsUserWorkloadsSecrets,
   }),
 );

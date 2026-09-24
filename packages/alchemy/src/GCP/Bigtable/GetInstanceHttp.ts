@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeBigtableInstanceHttpBinding({
     tag: "GCP.Bigtable.GetInstance",
+    iam: { role: "roles/bigtable.viewer", on: "bigtable.instance" },
     operation: bigtable.getProjectsInstances,
   }),
 );

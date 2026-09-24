@@ -14,5 +14,7 @@ export const GetRuleSetHttp = Layer.effect(
   makeRuleSetHttpBinding({
     tag: "GCP.Contentwarehouse.GetRuleSet",
     operation: cw.getProjectsLocationsRuleSets,
+    // contentwarehouse.ruleSets.get is only in contentwarehouse.admin.
+    iam: { role: "roles/contentwarehouse.admin" },
   }),
 );

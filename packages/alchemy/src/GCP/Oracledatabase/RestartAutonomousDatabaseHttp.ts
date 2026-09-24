@@ -14,5 +14,7 @@ export const RestartAutonomousDatabaseHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.RestartAutonomousDatabase",
     operation: oracle.restartProjectsLocationsAutonomousDatabases,
+    // Narrowest predefined role with this autonomousDatabases permission.
+    iam: { role: "roles/oracledatabase.autonomousDatabaseAdmin" },
   }),
 );

@@ -13,6 +13,7 @@ export const GenerateAccessTokenHttp = Layer.effect(
   GenerateAccessToken,
   makeGenerateAccessTokenHttpBinding({
     tag: "GCP.Workstations.GenerateAccessToken",
+    iam: { role: "roles/workstations.user", on: "workstations.workstation" },
     operation:
       workstations.generateAccessTokenProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
   }),

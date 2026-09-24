@@ -5,7 +5,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AdminReservation } from "./AdminReservation.ts";
 import type { AdminSubscription } from "./AdminSubscription.ts";
 import type { AdminTopic } from "./AdminTopic.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam } from "../HttpBinding.ts";
 
 type Op<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -27,7 +28,7 @@ export const makeReservationHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -40,7 +41,7 @@ export const makeReservationHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: reservation,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, reservation.name)],
       });
       const name = yield* reservation.name;
       return Effect.fn(`${options.tag}(${reservation.LogicalId})`)(function* (
@@ -60,7 +61,7 @@ export const makeTopicNameHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -73,7 +74,7 @@ export const makeTopicNameHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: topic,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, topic.name)],
       });
       const name = yield* topic.name;
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
@@ -93,7 +94,7 @@ export const makeTopicStatsHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -106,7 +107,7 @@ export const makeTopicStatsHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: topic,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, topic.name)],
       });
       const name = yield* topic.name;
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
@@ -126,7 +127,7 @@ export const makeSubscriptionHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   field: "name" | "subscription";
   operation: Op<I, A, E>;
 }) =>
@@ -140,7 +141,7 @@ export const makeSubscriptionHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: subscription,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, subscription.name)],
       });
       const name = yield* subscription.name;
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (

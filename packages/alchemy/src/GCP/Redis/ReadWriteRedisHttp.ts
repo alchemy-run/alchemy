@@ -13,6 +13,5 @@ export const ReadWriteRedisHttp = Layer.effect(
   ReadWriteRedis,
   makeRedisBinding({
     makeClient: makeReadWrite,
-    role: "roles/redis.editor",
   }),
 );

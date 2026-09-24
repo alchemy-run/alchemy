@@ -14,5 +14,6 @@ export const GetModelHttp = Layer.effect(
   makeModelHttpBinding({
     tag: "GCP.Translate.GetModel",
     operation: translate.getProjectsLocationsModels,
+    iam: { role: "roles/cloudtranslate.viewer" },
   }),
 );

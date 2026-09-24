@@ -14,5 +14,6 @@ export const GetSchemaHttp = Layer.effect(
   makeSchemaHttpBinding({
     tag: "GCP.Documentai.GetSchema",
     operation: documentai.getProjectsLocationsSchemas,
+    iam: { role: "roles/documentai.viewer" },
   }),
 );

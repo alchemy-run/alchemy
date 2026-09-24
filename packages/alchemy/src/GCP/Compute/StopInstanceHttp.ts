@@ -13,6 +13,8 @@ export const StopInstanceHttp = Layer.effect(
   StopInstance,
   makeInstanceHttpBinding({
     tag: "GCP.Compute.StopInstance",
+    // No narrower predefined role contains compute.instances.stop.
+    iam: { role: "roles/compute.instanceAdmin.v1", on: "compute.instance" },
     operation: compute.stopInstances,
   }),
 );

@@ -13,6 +13,7 @@ export const GetEntityHttp = Layer.effect(
   GetEntity,
   makeEntityHttpBinding({
     tag: "GCP.Connectors.GetEntity",
+    iam: { role: "roles/connectors.invoker" },
     operation: connectors.getProjectsLocationsConnectionsEntityTypesEntities,
   }),
 );

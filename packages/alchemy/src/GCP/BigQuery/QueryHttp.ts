@@ -1,11 +1,9 @@
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Dataset } from "./Dataset.ts";
 import { Query, type QueryRequest } from "./Query.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link Query}.
@@ -21,7 +19,13 @@ export const QueryHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.BigQuery.Query",
         resource: dataset,
-        iam: [{ role: defaultRoleFor("GCP.BigQuery.Query") }],
+        iam: [
+          // bigquery.jobs.create is only grantable on the project.
+          { role: "roles/bigquery.jobUser" },
+          // Datasets have no resource kind in the IAM registry, so read
+          // access is granted project-wide.
+          { role: "roles/bigquery.dataViewer" },
+        ],
       });
       const project = yield* dataset.project;
       const datasetId = yield* dataset.datasetId;

@@ -13,6 +13,7 @@ export const GetReservationHttp = Layer.effect(
   GetReservation,
   makeReservationHttpBinding({
     tag: "GCP.Pubsublite.GetReservation",
+    iam: { role: "roles/pubsublite.viewer" },
     operation: pubsublite.getAdminProjectsLocationsReservations,
   }),
 );

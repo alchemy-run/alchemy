@@ -2,6 +2,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ConnectionsGitRepositoryLink } from "./ConnectionsGitRepositoryLink.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Developer Connect git repository link
@@ -17,7 +19,7 @@ export const makeGitRepositoryLinkHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,
@@ -29,6 +31,11 @@ export const makeGitRepositoryLinkHttpBinding = <
     return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(
       link: T,
     ) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: link,
+        iam: [grantFor(options.iam, link.name)],
+      });
       const name = yield* link.name;
       return Effect.fn(`${options.tag}(${link.LogicalId})`)(function* (
         request?: Omit<I, "gitRepositoryLink">,

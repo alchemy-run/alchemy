@@ -19,10 +19,10 @@ export default class MarkerJob extends GCP.Run.Job<MarkerJob>()(
     });
     const putObject = yield* GCP.Storage.PutObject(bucket);
     return {
-      run: putObject({
-        name: MARKER_OBJECT,
-        body: { name: MARKER_OBJECT, contentType: "text/plain" },
-      }).pipe(Effect.asVoid, Effect.orDie),
+      run: putObject({ name: MARKER_OBJECT, body: "ran" }).pipe(
+        Effect.asVoid,
+        Effect.orDie,
+      ),
     };
   }).pipe(Effect.provide(GCP.Storage.PutObjectHttp)),
 ) {}

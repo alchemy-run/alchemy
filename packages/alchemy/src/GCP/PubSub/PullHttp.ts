@@ -13,6 +13,7 @@ export const PullHttp = Layer.effect(
   Pull,
   makeSubscriptionHttpBinding({
     tag: "GCP.PubSub.Pull",
+    iam: { role: "roles/pubsub.subscriber", on: "pubsub.subscription" },
     operation: pubsub.pullProjectsSubscriptions,
   }),
 );

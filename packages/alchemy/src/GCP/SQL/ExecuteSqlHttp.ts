@@ -1,11 +1,9 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
 import type { Instance } from "./Instance.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link ExecuteSql}.
@@ -21,7 +19,8 @@ export const ExecuteSqlHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.SQL.ExecuteSql",
         resource: instance,
-        iam: [{ role: defaultRoleFor("GCP.SQL.ExecuteSql") }],
+        // Cloud SQL has no instance-level IAM.
+        iam: [{ role: "roles/cloudsql.instanceUser" }],
       });
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;

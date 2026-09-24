@@ -1,4 +1,8 @@
-import { makeNamedHttpBinding, type GcpHttpOp } from "../HttpBinding.ts";
+import {
+  makeNamedHttpBinding,
+  type BindingIam,
+  type GcpHttpOp,
+} from "../HttpBinding.ts";
 import type { Function as CloudFunction } from "./Function.ts";
 
 /**
@@ -11,12 +15,12 @@ export const makeFunctionHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<CloudFunction, I, A, E>({
     tag: options.tag,
     operation: options.operation,
-    role: "roles/cloudfunctions.viewer",
+    iam: options.iam,
     resourceName: (fn) => fn.name,
   });

@@ -21,6 +21,8 @@ export const GetParameterVersionHttp = Layer.effect(
     GetParameterVersionRequest
   >({
     tag: "GCP.Parametermanager.GetParameterVersion",
+    // Parameter Manager has no resource-level IAM.
+    iam: { role: "roles/parametermanager.parameterViewer" },
     operation: parametermanager.getProjectsLocationsParametersVersions,
     toInput: (name, request) => ({
       name,

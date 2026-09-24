@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeSqlInstanceHttpBinding({
     tag: "GCP.SQL.GetInstance",
+    iam: { role: "roles/cloudsql.viewer" },
     operation: sqladmin.getInstances,
   }),
 );

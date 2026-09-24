@@ -13,6 +13,7 @@ export const PatchDocumentHttp = Layer.effect(
   PatchDocument,
   makeDocumentHttpBinding({
     tag: "GCP.Firestore.PatchDocument",
+    iam: { role: "roles/datastore.user" },
     operation: firestore.patchProjectsDatabasesDocuments,
   }),
 );

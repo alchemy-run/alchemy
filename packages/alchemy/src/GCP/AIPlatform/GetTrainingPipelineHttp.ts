@@ -20,5 +20,6 @@ export const GetTrainingPipelineHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.GetTrainingPipeline",
     operation: aiplatform.getProjectsLocationsTrainingPipelines,
+    iam: { role: "roles/aiplatform.viewer" },
   }),
 );

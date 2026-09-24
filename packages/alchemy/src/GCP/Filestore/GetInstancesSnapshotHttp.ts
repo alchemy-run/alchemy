@@ -13,6 +13,7 @@ export const GetInstancesSnapshotHttp = Layer.effect(
   GetInstancesSnapshot,
   makeFilestoreSnapshotHttpBinding({
     tag: "GCP.Filestore.GetInstancesSnapshot",
+    iam: { role: "roles/file.viewer" },
     operation: file.getProjectsLocationsInstancesSnapshots,
   }),
 );

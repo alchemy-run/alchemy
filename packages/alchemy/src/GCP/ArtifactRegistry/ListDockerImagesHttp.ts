@@ -6,7 +6,8 @@ import {
   type ListDockerImagesRequest,
 } from "./ListDockerImages.ts";
 import type { Repository } from "./Repository.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link ListDockerImages}.
@@ -24,7 +25,13 @@ export const ListDockerImagesHttp = Layer.effect(
         tag: "GCP.ArtifactRegistry.ListDockerImages",
         resource: repository,
         iam: [
-          { role: defaultRoleFor("GCP.ArtifactRegistry.ListDockerImages") },
+          grantFor(
+            {
+              role: "roles/artifactregistry.reader",
+              on: "artifactregistry.repository",
+            },
+            repository.name,
+          ),
         ],
       });
       const name = yield* repository.name;

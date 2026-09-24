@@ -14,5 +14,6 @@ export const GetGlossariesGlossaryEntryHttp = Layer.effect(
   makeGlossaryEntryHttpBinding({
     tag: "GCP.Translate.GetGlossariesGlossaryEntry",
     operation: translate.getProjectsLocationsGlossariesGlossaryEntries,
+    iam: { role: "roles/cloudtranslate.viewer" },
   }),
 );

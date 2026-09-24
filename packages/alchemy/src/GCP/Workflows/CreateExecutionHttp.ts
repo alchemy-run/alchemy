@@ -1,14 +1,12 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   CreateExecution,
   type CreateExecutionRequest,
 } from "./CreateExecution.ts";
 import type { Workflow } from "./Workflow.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateExecution}.
@@ -25,7 +23,8 @@ export const CreateExecutionHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Workflows.CreateExecution",
         resource: workflow,
-        iam: [{ role: defaultRoleFor("GCP.Workflows.CreateExecution") }],
+        // Workflows has no resource-level IAM; invoker is granted on the project.
+        iam: [{ role: "roles/workflows.invoker" }],
       });
       const name = yield* workflow.name;
       return Effect.fn(`GCP.Workflows.CreateExecution(${workflow.LogicalId})`)(

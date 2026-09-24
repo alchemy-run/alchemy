@@ -13,6 +13,7 @@ export const DeleteDocumentHttp = Layer.effect(
   DeleteDocument,
   makeDocumentHttpBinding({
     tag: "GCP.Firestore.DeleteDocument",
+    iam: { role: "roles/datastore.user" },
     operation: firestore.deleteProjectsDatabasesDocuments,
   }),
 );

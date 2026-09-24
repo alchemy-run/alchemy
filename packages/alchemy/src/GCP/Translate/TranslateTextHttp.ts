@@ -14,6 +14,7 @@ export const TranslateTextHttp = Layer.effect(
   makeTranslateTextBinding({
     tag: "GCP.Translate.TranslateText",
     operation: translate.translateTextProjectsLocations,
+    iam: { role: "roles/cloudtranslate.user" },
     withBody: (name, request) => ({
       parent: locationParentOf(name),
       body: {

@@ -20,5 +20,6 @@ export const QueryReasoningEngineHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.QueryReasoningEngine",
     operation: aiplatform.queryReasoningEngines,
+    iam: { role: "roles/aiplatform.viewer" },
   }),
 );

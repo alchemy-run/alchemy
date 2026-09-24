@@ -19,6 +19,7 @@ export const RecognizeHttp = Layer.effect(
   >({
     tag: "GCP.Speech.Recognize",
     operation: speech.recognizeSpeech,
+    iam: { role: "roles/speech.client" },
     toInput: (name, request) => {
       const body = request?.body ?? {};
       const config = body.config ?? {};

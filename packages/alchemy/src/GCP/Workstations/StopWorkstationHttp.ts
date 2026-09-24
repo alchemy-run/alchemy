@@ -13,6 +13,7 @@ export const StopWorkstationHttp = Layer.effect(
   StopWorkstation,
   makeWorkstationHttpBinding({
     tag: "GCP.Workstations.StopWorkstation",
+    iam: { role: "roles/workstations.user", on: "workstations.workstation" },
     operation:
       workstations.stopProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
   }),

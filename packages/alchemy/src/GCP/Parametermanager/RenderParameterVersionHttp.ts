@@ -1,11 +1,9 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ParametersVersion } from "./ParametersVersion.ts";
 import { RenderParameterVersion } from "./RenderParameterVersion.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link RenderParameterVersion}.
@@ -22,11 +20,8 @@ export const RenderParameterVersionHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Parametermanager.RenderParameterVersion",
         resource: version,
-        iam: [
-          {
-            role: defaultRoleFor("GCP.Parametermanager.RenderParameterVersion"),
-          },
-        ],
+        // Parameter Manager has no resource-level IAM.
+        iam: [{ role: "roles/parametermanager.parameterAccessor" }],
       });
       const name = yield* version.name;
       return Effect.fn(

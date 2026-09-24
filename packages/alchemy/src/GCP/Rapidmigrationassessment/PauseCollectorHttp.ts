@@ -23,6 +23,7 @@ export const PauseCollectorHttp: Layer.Layer<
     rma.PauseProjectsLocationsCollectorsError
   >({
     tag: "GCP.Rapidmigrationassessment.PauseCollector",
+    iam: { role: "roles/rma.runner" },
     operation: rma.pauseProjectsLocationsCollectors,
   }),
 );

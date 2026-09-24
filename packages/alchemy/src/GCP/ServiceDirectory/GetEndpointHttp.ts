@@ -13,6 +13,10 @@ export const GetEndpointHttp = Layer.effect(
   GetEndpoint,
   makeEndpointHttpBinding({
     tag: "GCP.ServiceDirectory.GetEndpoint",
+    iam: {
+      role: "roles/servicedirectory.viewer",
+      on: "servicedirectory.service",
+    },
     operation: servicedirectory.getProjectsLocationsNamespacesServicesEndpoints,
   }),
 );

@@ -1,12 +1,11 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type { GcpOpContext } from "@distilled.cloud/gcp/documentai_v1";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Output } from "../../Output.ts";
 import type { Processor } from "./Processor.ts";
 import type { Schema } from "./Schema.ts";
 import type { SchemasSchemaVersion } from "./SchemasSchemaVersion.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam } from "../HttpBinding.ts";
 
 /**
  * Distilled ops are OperationMethods: yield them once at Layer construction
@@ -27,7 +26,7 @@ const makeNamedHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -36,7 +35,7 @@ const makeNamedHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, resource.name)],
       });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
@@ -61,7 +60,7 @@ export const makeProcessorHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<Processor, I, A, E>(options);
 
@@ -71,7 +70,7 @@ export const makeSchemaHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<Schema, I, A, E>(options);
 
@@ -81,6 +80,6 @@ export const makeSchemaVersionHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<SchemasSchemaVersion, I, A, E>(options);

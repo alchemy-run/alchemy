@@ -21,6 +21,10 @@ export const AccessSecretVersionHttp = Layer.effect(
     AccessSecretVersionRequest
   >({
     tag: "GCP.SecretManager.AccessSecretVersion",
+    iam: {
+      role: "roles/secretmanager.secretAccessor",
+      on: "secretmanager.secret",
+    },
     operation: secretmanager.accessProjectsSecretsVersions,
     toInput: (secretName, request) => ({
       name: `${secretName}/versions/${request?.version ?? "latest"}`,

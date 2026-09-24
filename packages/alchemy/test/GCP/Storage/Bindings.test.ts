@@ -41,6 +41,22 @@ test.provider.skipIf(!hasGcpCreds)(
                 const missingGet = yield* getObject({
                   object: "missing.txt",
                 }).pipe(Effect.flip);
+                const put = yield* putObject({
+                  name: "hello.txt",
+                  body: "Hello, GCS!",
+                });
+                const got = yield* getObject({ object: "hello.txt" });
+                const overwritten = yield* putObject({
+                  name: "hello.txt",
+                  body: new TextEncoder().encode("v2"),
+                  contentType: "application/octet-stream",
+                  metadata: { source: "test" },
+                });
+                const again = yield* getObject({ object: "hello.txt" });
+                yield* deleteObject({ object: "hello.txt" });
+                const afterDelete = yield* getObject({
+                  object: "hello.txt",
+                }).pipe(Effect.flip);
                 const missingDelete = yield* deleteObject({
                   object: "missing.txt",
                 }).pipe(
@@ -49,11 +65,16 @@ test.provider.skipIf(!hasGcpCreds)(
                     Effect.succeed("gone" as const),
                   ),
                 );
-                const put = yield* putObject({
-                  name: "hello.txt",
-                  body: { name: "hello.txt", contentType: "text/plain" },
-                }).pipe(Effect.flip);
-                return { missingGet, missingDelete, put };
+                return {
+                  missingGet: missingGet._tag,
+                  putName: put.name,
+                  text: new TextDecoder().decode(got.body),
+                  contentType: got.contentType,
+                  overwrittenMetadata: overwritten.metadata,
+                  againText: new TextDecoder().decode(again.body),
+                  afterDelete: afterDelete._tag,
+                  missingDelete,
+                };
               });
             }),
           );
@@ -61,12 +82,14 @@ test.provider.skipIf(!hasGcpCreds)(
         }),
       );
 
-      expect(out.probe.missingGet._tag).toEqual("NotFound");
+      expect(out.probe.missingGet).toEqual("GCP.Storage.ObjectNotFound");
+      expect(out.probe.putName).toEqual("hello.txt");
+      expect(out.probe.text).toEqual("Hello, GCS!");
+      expect(out.probe.contentType).toContain("text/plain");
+      expect(out.probe.overwrittenMetadata).toEqual({ source: "test" });
+      expect(out.probe.againText).toEqual("v2");
+      expect(out.probe.afterDelete).toEqual("GCP.Storage.ObjectNotFound");
       expect(out.probe.missingDelete).toEqual("gone");
-      // JSON insertObjects is rejected; object bytes must go to the
-      // /upload endpoint. The binding is still exercised.
-      expect(out.probe.put._tag).toEqual("BadRequest");
-      expect(String(out.probe.put)).toContain("upload URL");
 
       yield* stack.destroy();
     }).pipe(logLevel),

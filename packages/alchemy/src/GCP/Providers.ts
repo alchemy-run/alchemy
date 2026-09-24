@@ -781,7 +781,6 @@ import {
 } from "./Storage/ObjectAccessControl.ts";
 import { DeleteObjectHttp } from "./Storage/DeleteObjectHttp.ts";
 import { GetObjectHttp } from "./Storage/GetObjectHttp.ts";
-import { GetFileHttp } from "./Drive/GetFileHttp.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
 import { AgentPool, AgentPoolProvider } from "./Storagetransfer/AgentPool.ts";
 import { GetGoogleServiceAccountHttp } from "./Storagetransfer/GetGoogleServiceAccountHttp.ts";
@@ -1738,9 +1737,6 @@ import {
   DomainsUser,
   DomainsUserProvider,
 } from "./Gmailpostmastertools/DomainsUser.ts";
-import { GetDomainHttp as GetGmailpostmastertoolsDomainHttp } from "./Gmailpostmastertools/GetDomainHttp.ts";
-import { GetDomainsUserHttp } from "./Gmailpostmastertools/GetDomainsUserHttp.ts";
-import { QueryDomainStatsHttp } from "./Gmailpostmastertools/QueryDomainStatsHttp.ts";
 import {
   SettingsDatasource,
   SettingsDatasourceProvider,
@@ -1900,20 +1896,15 @@ import {
   Event as CalendarEvent,
   EventProvider as CalendarEventProvider,
 } from "./Calendar/Event.ts";
-import { GetCalendarHttp } from "./Calendar/GetCalendarHttp.ts";
-import { GetEventHttp as GetCalendarEventHttp } from "./Calendar/GetEventHttp.ts";
 import { Tasklist, TasklistProvider } from "./Tasks/Tasklist.ts";
 import {
   Task as TasksTask,
   TaskProvider as TasksTaskProvider,
 } from "./Tasks/Task.ts";
-import { GetTasklistHttp } from "./Tasks/GetTasklistHttp.ts";
-import { GetTaskHttp } from "./Tasks/GetTaskHttp.ts";
 import {
   UsersDataSource,
   UsersDataSourceProvider,
 } from "./Fitness/UsersDataSource.ts";
-import { GetUsersDataSourceHttp } from "./Fitness/GetUsersDataSourceHttp.ts";
 import {
   UsersSshPublicKey,
   UsersSshPublicKeyProvider,
@@ -1923,30 +1914,23 @@ import {
   Note as KeepNote,
   NoteProvider as KeepNoteProvider,
 } from "./Keep/Note.ts";
-import { GetNoteHttp as GetKeepNoteHttp } from "./Keep/GetNoteHttp.ts";
 import { ContactGroup, ContactGroupProvider } from "./People/ContactGroup.ts";
 import {
   ContactPeople,
   ContactPeopleProvider,
 } from "./People/ContactPeople.ts";
-import { GetContactGroupHttp } from "./People/GetContactGroupHttp.ts";
-import { GetContactPeopleHttp } from "./People/GetContactPeopleHttp.ts";
 import {
   LicenseAssignment,
   LicenseAssignmentProvider,
 } from "./Licensing/LicenseAssignment.ts";
-import { GetLicenseAssignmentHttp } from "./Licensing/GetLicenseAssignmentHttp.ts";
 import {
   WebResource,
   WebResourceProvider,
 } from "./SiteVerification/WebResource.ts";
-import { GetWebResourceHttp } from "./SiteVerification/GetWebResourceHttp.ts";
 import {
   Deployment as ScriptDeployment,
   DeploymentProvider as ScriptDeploymentProvider,
 } from "./Script/Deployment.ts";
-import { GetDeploymentHttp as GetScriptDeploymentHttp } from "./Script/GetDeploymentHttp.ts";
-import { RunScriptsHttp } from "./Script/RunScriptsHttp.ts";
 import {
   Page as BloggerPage,
   PageProvider as BloggerPageProvider,
@@ -1955,8 +1939,6 @@ import {
   Post as BloggerPost,
   PostProvider as BloggerPostProvider,
 } from "./Blogger/Post.ts";
-import { GetPageHttp as GetBloggerPageHttp } from "./Blogger/GetPageHttp.ts";
-import { GetPostHttp as GetBloggerPostHttp } from "./Blogger/GetPostHttp.ts";
 import {
   Photo as StreetviewPhoto,
   PhotoProvider as StreetviewPhotoProvider,
@@ -1965,8 +1947,6 @@ import {
   PhotoSequence,
   PhotoSequenceProvider,
 } from "./Streetviewpublish/PhotoSequence.ts";
-import { GetPhotoHttp as GetStreetviewPhotoHttp } from "./Streetviewpublish/GetPhotoHttp.ts";
-import { GetPhotoSequenceHttp } from "./Streetviewpublish/GetPhotoSequenceHttp.ts";
 import {
   Feed as CloudassetFeed,
   FeedProvider as CloudassetFeedProvider,
@@ -3610,14 +3590,12 @@ import {
 } from "./BigQueryReservation/Assignment.ts";
 import { Placement, PlacementProvider } from "./Dfareporting/Placement.ts";
 import { Label, LabelProvider } from "./Drivelabels/Label.ts";
-import { GetLabelHttp } from "./Drivelabels/GetLabelHttp.ts";
 import { AndroidApp, AndroidAppProvider } from "./Firebase/AndroidApp.ts";
 import { Form, FormProvider } from "./Forms/Form.ts";
 import {
   Page as FactchecktoolsPage,
   PageProvider as FactchecktoolsPageProvider,
 } from "./Factchecktools/Page.ts";
-import { GetPageHttp as GetFactchecktoolsPageHttp } from "./Factchecktools/GetPageHttp.ts";
 import {
   AccountsLocation,
   AccountsLocationProvider,
@@ -3626,7 +3604,6 @@ import {
   PlaceActionLink,
   PlaceActionLinkProvider,
 } from "./Mybusinessplaceactions/PlaceActionLink.ts";
-import { GetPlaceActionLinkHttp } from "./Mybusinessplaceactions/GetPlaceActionLinkHttp.ts";
 import {
   CustomersDeploymentsDevice,
   CustomersDeploymentsDeviceProvider,
@@ -3736,7 +3713,6 @@ import {
   Job as YoutubeReportingJob,
   JobProvider as YoutubeReportingJobProvider,
 } from "./Youtubereporting/Job.ts";
-import { GetJobHttp as GetYoutubeReportingJobHttp } from "./Youtubereporting/GetJobHttp.ts";
 import {
   ScanConfig,
   ScanConfigProvider,
@@ -6425,7 +6401,6 @@ export const providers = () =>
         Layer.mergeAll(
           DeleteObjectHttp,
           GetObjectHttp,
-          GetFileHttp,
           PutObjectHttp,
           GetGoogleServiceAccountHttp,
           RunTransferJobHttp,
@@ -6495,33 +6470,14 @@ export const providers = () =>
           PauseSandboxEnvironmentHttp,
           QueryReasoningEngineHttp,
           ResumeSandboxEnvironmentHttp,
-          GetGmailpostmastertoolsDomainHttp,
         ),
         Layer.mergeAll(
-          GetDomainsUserHttp,
-          QueryDomainStatsHttp,
           GetCustomClasseHttp,
           GetPhraseSetHttp,
           RecognizeHttp,
-          GetCalendarHttp,
-          GetCalendarEventHttp,
-          GetTasklistHttp,
-          GetTaskHttp,
-          GetUsersDataSourceHttp,
           GetUsersSshPublicKeyHttp,
-          GetKeepNoteHttp,
-          GetContactGroupHttp,
-          GetContactPeopleHttp,
-          GetLicenseAssignmentHttp,
-          GetWebResourceHttp,
         ),
         Layer.mergeAll(
-          GetScriptDeploymentHttp,
-          RunScriptsHttp,
-          GetBloggerPageHttp,
-          GetBloggerPostHttp,
-          GetStreetviewPhotoHttp,
-          GetPhotoSequenceHttp,
           RunPipelineHttp,
           StopPipelineHttp,
           LookupHttp,
@@ -6564,10 +6520,6 @@ export const providers = () =>
           StartWorkstationHttp,
           StopWorkstationHttp,
           GetEntityHttp,
-          GetLabelHttp,
-          GetFactchecktoolsPageHttp,
-          GetPlaceActionLinkHttp,
-          GetYoutubeReportingJobHttp,
         ),
       ).pipe(Layer.provide(gcpLive)),
     ),

@@ -16,21 +16,22 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
-import { packEnvValue } from "../../RuntimeContext.ts";
 import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
-  applyHostBindings,
-  collectHostBindings,
-  defaultComputeServiceAccount,
-  deleteHostServiceAccount,
-  ensureHostServiceAccount,
-  hostServiceAccountEmail,
-  hostServiceAccountId,
   retryActAs,
+  type AppliedIamGrant,
   type GcpHostBinding,
 } from "../Host.ts";
+import {
+  alchemyRuntimeEnv,
+  isManagedServiceAccount,
+  makeGcpBootstrap,
+  mergeContainerEnv,
+  releaseHostIdentity,
+  resolveHostIdentity,
+} from "../HostRuntime.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -301,6 +302,10 @@ export type Service = Resource<
     serviceAccount: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
+    /** IAM roles bindings granted to the runtime service account. */
+    iamGrants: AppliedIamGrant[];
+    /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
+    codeHash: string | undefined;
   },
   GcpHostBinding,
   Providers
@@ -755,10 +760,13 @@ const templateNeedsSync = (
   return false;
 };
 
+const HOST_TYPE = "GCP.Run.Service";
+
 const toAttrs = (
   service: cloudrun.GoogleCloudRunV2Service,
   project: string,
-) => {
+  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+): Service["Attributes"] => {
   const name = service.name ?? "";
   const parsed = parseName(name);
   return {
@@ -782,14 +790,19 @@ const toAttrs = (
     createTime: service.createTime,
     updateTime: service.updateTime,
     serviceAccount: service.template?.serviceAccount,
-    managedServiceAccount:
-      (service.template?.serviceAccount ?? "") ===
-      hostServiceAccountEmail(
-        parsed.project || project,
-        hostServiceAccountId(parsed.serviceId),
-      ),
+    managedServiceAccount: isManagedServiceAccount({
+      project: parsed.project || project,
+      hostType: HOST_TYPE,
+      resourceName: name,
+      serviceAccount: service.template?.serviceAccount,
+    }),
+    iamGrants: extras.iamGrants ?? [],
+    codeHash: extras.codeHash,
   };
 };
+
+const bootstrapFor = (news: ServiceProps) =>
+  makeGcpBootstrap("CloudRun", news.handler ?? "default");
 
 const getByName = (name: string) =>
   cloudrun
@@ -966,8 +979,24 @@ export const ServiceProvider = () =>
         nextId !== undefined &&
         nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
-      if (!idChanged && !locationChanged) return undefined;
-      return { action: "replace" as const, deleteFirst: false };
+      if (idChanged || locationChanged) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      // A code-only change leaves the props untouched; hash the bundled
+      // program (and bootstrap) so it still surfaces as an update.
+      if (output !== undefined && news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const hash = yield* images.hash({
+          source: { main: news.main, handler: news.handler, build: news.build },
+          port: news.port ?? 8080,
+          isExternal: news.isExternal,
+          bootstrap: bootstrapFor(news),
+        });
+        if (hash !== undefined && hash !== output.codeHash) {
+          return { action: "update" as const };
+        }
+      }
+      return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -980,7 +1009,10 @@ export const ServiceProvider = () =>
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, {
+        iamGrants: output?.iamGrants,
+        codeHash: output?.codeHash,
+      });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -1021,87 +1053,62 @@ export const ServiceProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
-      const preview = collectHostBindings(
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
-      const userSa =
-        template.serviceAccount && template.serviceAccount.length > 0
-          ? template.serviceAccount
-          : undefined;
-      const managed =
-        userSa === undefined &&
-        (news.main !== undefined || preview.iam.length > 0);
-      const serviceAccount =
-        userSa ??
-        (managed
-          ? yield* ensureHostServiceAccount(env.project, serviceId)
-          : yield* defaultComputeServiceAccount(env.project));
-      template.serviceAccount = serviceAccount;
-      const collected = yield* applyHostBindings({
+      const identity = yield* resolveHostIdentity({
         project: env.project,
-        serviceAccount,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: template.serviceAccount,
+        effectNative: news.main !== undefined,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        revoke: managed,
+        output,
       });
-      const runtimeEnv = { ...collected.env, ...news.env };
+      template.serviceAccount = identity.serviceAccount;
+      let codeHash: string | undefined;
       if (news.main !== undefined) {
         const images = yield* makeImageSource;
-        const handler = news.handler ?? "default";
         const port = news.port ?? 8080;
         const image = yield* images
           .resolve({
             id,
             source: {
               main: news.main,
-              handler,
+              handler: news.handler ?? "default",
               build: news.build,
             },
             repositoryName: rfc1035(`${serviceId}-src`),
             location,
             port,
             isExternal: news.isExternal,
-            bootstrap: (importPath: string) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRun";
-
-globalThis.__ALCHEMY_RUNTIME__ = true;
-const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
-
-await bootstrap(entrypoint);
-`,
+            bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(
-            Effect.tapError(() =>
-              managed && output === undefined
-                ? deleteHostServiceAccount(env.project, serviceId)
-                : Effect.void,
-            ),
-          );
-        const existing = template.containers?.[0] ?? {};
+          .pipe(Effect.tapError(() => identity.cleanup));
+        codeHash = image.codeHash;
+        const container = template.containers?.[0] ?? {};
         template.containers = [
           {
-            ...existing,
+            ...container,
             image: image.imageUri,
-            ports: existing.ports ?? [{ containerPort: port }],
-            env: [
-              ...(existing.env ?? []),
-              ...Object.entries(runtimeEnv).map(([envName, value]) => ({
-                name: envName,
-                value: packEnvValue(value),
-              })),
-            ],
+            ports: container.ports ?? [{ containerPort: port }],
+            env: mergeContainerEnv(
+              container.env,
+              identity.env,
+              yield* alchemyRuntimeEnv,
+              news.env,
+            ),
           },
         ];
-      } else if (Object.keys(runtimeEnv).length > 0) {
-        const existing = template.containers?.[0];
-        if (existing !== undefined) {
-          existing.env = [
-            ...(existing.env ?? []),
-            ...Object.entries(runtimeEnv).map(([envName, value]) => ({
-              name: envName,
-              value: packEnvValue(value),
-            })),
-          ];
+      } else {
+        const runtimeEnv = { ...identity.env, ...news.env };
+        if (Object.keys(runtimeEnv).length > 0 && template.containers) {
+          template.containers = template.containers.map((container, index) =>
+            index === 0
+              ? {
+                  ...container,
+                  env: mergeContainerEnv(container.env, runtimeEnv),
+                }
+              : container,
+          );
         }
       }
 
@@ -1121,11 +1128,7 @@ await bootstrap(entrypoint);
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() =>
-              managed
-                ? deleteHostServiceAccount(env.project, serviceId)
-                : Effect.void,
-            ),
+            Effect.tapError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1226,7 +1229,10 @@ await bootstrap(entrypoint);
         return yield* new ServiceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, {
+        iamGrants: identity.grants,
+        codeHash,
+      });
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1244,8 +1250,6 @@ await bootstrap(entrypoint);
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
-      if (output.managedServiceAccount) {
-        yield* deleteHostServiceAccount(output.project, output.serviceId);
-      }
+      yield* releaseHostIdentity(output);
     }),
   });

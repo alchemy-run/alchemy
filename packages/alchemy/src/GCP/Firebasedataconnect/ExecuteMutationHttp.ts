@@ -13,6 +13,7 @@ export const ExecuteMutationHttp = Layer.effect(
   ExecuteMutation,
   makeConnectorHttpBinding({
     tag: "GCP.Firebasedataconnect.ExecuteMutation",
+    iam: { role: "roles/firebasedataconnect.dataAdmin" },
     operation:
       firebasedataconnect.executeMutationProjectsLocationsServicesConnectors,
   }),

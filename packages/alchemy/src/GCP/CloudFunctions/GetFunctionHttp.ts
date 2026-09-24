@@ -13,6 +13,7 @@ export const GetFunctionHttp = Layer.effect(
   GetFunction,
   makeFunctionHttpBinding({
     tag: "GCP.CloudFunctions.GetFunction",
+    iam: { role: "roles/cloudfunctions.viewer", on: "cloudfunctions.function" },
     operation: cloudfunctions.getProjectsLocationsFunctions,
   }),
 );

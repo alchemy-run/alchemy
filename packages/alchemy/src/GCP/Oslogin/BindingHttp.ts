@@ -1,15 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { UsersSshPublicKey } from "./UsersSshPublicKey.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for OS Login SSH public key bindings.
@@ -21,7 +13,11 @@ export const makeUsersSshPublicKeyHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  /**
+   * OS Login key APIs are not IAM-gated: a caller can only reach its own
+   * account's keys, so bindings pass `[]`.
+   */
+  iam: readonly BindingIam[];
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -30,7 +26,7 @@ export const makeUsersSshPublicKeyHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: sshKey,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: options.iam.map((iam) => grantFor(iam, sshKey.name)),
       });
       const name = yield* sshKey.name;
       return Effect.fn(`${options.tag}(${sshKey.LogicalId})`)(function* (

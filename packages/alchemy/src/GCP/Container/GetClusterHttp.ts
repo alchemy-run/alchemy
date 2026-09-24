@@ -13,6 +13,7 @@ export const GetClusterHttp = Layer.effect(
   GetCluster,
   makeContainerClusterHttpBinding({
     tag: "GCP.Container.GetCluster",
+    iam: { role: "roles/container.clusterViewer" },
     operation: container.getProjectsLocationsClusters,
   }),
 );

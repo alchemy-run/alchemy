@@ -13,6 +13,7 @@ export const RunQueryHttp = Layer.effect(
   RunQuery,
   makeIndexeHttpBinding({
     tag: "GCP.Datastore.RunQuery",
+    iam: { role: "roles/datastore.viewer" },
     operation: datastore.runQueryProjects,
   }),
 );

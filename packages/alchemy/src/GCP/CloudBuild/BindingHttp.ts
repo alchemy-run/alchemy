@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Repository } from "./Repository.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Build v2 repository bindings.
@@ -15,7 +13,7 @@ export const makeRepositoryHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E> | ((input: I) => Effect.Effect<A, E>);
 }) =>
   Effect.gen(function* () {
@@ -26,7 +24,7 @@ export const makeRepositoryHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: repository,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, repository.name)],
       });
       const name = yield* repository.name;
       return Effect.fn(`${options.tag}(${repository.LogicalId})`)(function* (

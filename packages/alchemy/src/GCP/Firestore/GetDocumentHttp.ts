@@ -13,6 +13,7 @@ export const GetDocumentHttp = Layer.effect(
   GetDocument,
   makeDocumentHttpBinding({
     tag: "GCP.Firestore.GetDocument",
+    iam: { role: "roles/datastore.viewer" },
     operation: firestore.getProjectsDatabasesDocuments,
   }),
 );

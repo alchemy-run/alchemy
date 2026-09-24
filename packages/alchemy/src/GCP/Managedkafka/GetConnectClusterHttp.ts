@@ -24,6 +24,7 @@ export const GetConnectClusterHttp: Layer.Layer<
     kafka.GetProjectsLocationsConnectClustersError
   >({
     tag: "GCP.Managedkafka.GetConnectCluster",
+    iam: { role: "roles/managedkafka.viewer" },
     operation: kafka.getProjectsLocationsConnectClusters,
   }),
 );

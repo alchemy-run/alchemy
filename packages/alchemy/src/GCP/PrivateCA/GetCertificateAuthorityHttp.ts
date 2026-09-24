@@ -13,6 +13,7 @@ export const GetCertificateAuthorityHttp = Layer.effect(
   GetCertificateAuthority,
   makeCertificateAuthorityHttpBinding({
     tag: "GCP.PrivateCA.GetCertificateAuthority",
+    iam: { role: "roles/privateca.auditor", on: "privateca.caPool" },
     operation: privateca.getProjectsLocationsCaPoolsCertificateAuthorities,
   }),
 );

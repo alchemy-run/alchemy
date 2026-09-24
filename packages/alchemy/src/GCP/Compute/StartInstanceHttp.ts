@@ -13,6 +13,8 @@ export const StartInstanceHttp = Layer.effect(
   StartInstance,
   makeInstanceHttpBinding({
     tag: "GCP.Compute.StartInstance",
+    // No narrower predefined role contains compute.instances.start.
+    iam: { role: "roles/compute.instanceAdmin.v1", on: "compute.instance" },
     operation: compute.startInstances,
   }),
 );

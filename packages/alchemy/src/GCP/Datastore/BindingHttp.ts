@@ -1,15 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Indexe } from "./Indexe.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Datastore bindings.
@@ -21,7 +13,7 @@ export const makeIndexeHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -30,7 +22,7 @@ export const makeIndexeHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: index,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, index.name)],
       });
       const project = yield* index.project;
       return Effect.fn(`${options.tag}(${index.LogicalId})`)(function* (

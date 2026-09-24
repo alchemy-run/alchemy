@@ -1,18 +1,19 @@
 /**
- * Process bootstrap for `GCP.Run.Job`. No HTTP server — the process
- * exits 0 once the bundled program finishes (Cloud Run waits on the
- * container).
+ * Process bootstrap for `GCP.Run.Job` and `GCP.Run.WorkerPool`. No HTTP
+ * server — the program's `run` executes, and for a Job the process exits 0
+ * once it finishes (Cloud Run marks the task complete on exit). A worker
+ * pool's long-running `run` loop keeps its instance alive.
+ *
+ * Runtime credentials come from the metadata server (the host's runtime
+ * service account).
  */
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import {
   entrypointLayer,
@@ -21,45 +22,6 @@ import {
   stackFromEnv,
 } from "./Process.ts";
 
-const metadataCredentials = Layer.effect(
-  Credentials,
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
-    return Effect.gen(function* () {
-      const response = yield* http.execute(
-        HttpClientRequest.get(
-          "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-        ).pipe(HttpClientRequest.setHeader("Metadata-Flavor", "Google")),
-      );
-      if (response.status !== 200) {
-        return yield* Effect.fail(
-          new Error(`metadata token HTTP ${response.status}`),
-        );
-      }
-      const body = yield* response.json;
-      const token =
-        typeof body === "object" &&
-        body !== null &&
-        "access_token" in body &&
-        typeof body.access_token === "string"
-          ? body.access_token
-          : undefined;
-      if (token === undefined) {
-        return yield* Effect.fail(
-          new Error("metadata token response missing access_token"),
-        );
-      }
-      const project = yield* Effect.sync(
-        () => process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCLOUD_PROJECT,
-      );
-      return {
-        accessToken: Redacted.make(token),
-        project,
-      };
-    }).pipe(Effect.orDie);
-  }),
-).pipe(Layer.provide(FetchHttpClient.layer));
-
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(
     BunServices.layer,
@@ -67,11 +29,11 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("program").pipe(
+  const program = resolveProgram("program", { telemetry: true }).pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),
-        Layer.provideMerge(metadataCredentials),
+        Layer.provideMerge(fromMetadataServer()),
         Layer.provideMerge(platform),
         Layer.provideMerge(
           Layer.succeed(

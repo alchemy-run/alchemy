@@ -13,6 +13,7 @@ export const GetInstanceHttp = Layer.effect(
   GetInstance,
   makeFilestoreInstanceHttpBinding({
     tag: "GCP.Filestore.GetInstance",
+    iam: { role: "roles/file.viewer" },
     operation: file.getProjectsLocationsInstances,
   }),
 );

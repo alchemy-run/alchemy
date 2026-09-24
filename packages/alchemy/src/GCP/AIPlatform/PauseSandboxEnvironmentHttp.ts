@@ -20,5 +20,6 @@ export const PauseSandboxEnvironmentHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.PauseSandboxEnvironment",
     operation: aiplatform.pauseReasoningEnginesSandboxEnvironments,
+    iam: { role: "roles/aiplatform.user" },
   }),
 );

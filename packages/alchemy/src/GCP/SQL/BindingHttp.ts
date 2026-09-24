@@ -1,21 +1,14 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Output from "../../Output.ts";
 import type { Instance } from "./Instance.ts";
 import type { User } from "./User.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud SQL instance and user bindings.
  * Distilled ops are OperationMethods: yield them once at Layer
- * construction (after providing Credentials + HttpClient) so the inner
+ * construction so the inner
  * runtime Effect is `Effect<A, E>` and does not leak `GcpOpContext`.
  * NOT exported from index.ts.
  */
@@ -25,7 +18,7 @@ export const makeSqlInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -34,7 +27,12 @@ export const makeSqlInstanceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: instance,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [
+          grantFor(
+            options.iam,
+            Output.interpolate`projects/${instance.project}/instances/${instance.instanceName}`,
+          ),
+        ],
       });
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;
@@ -61,7 +59,7 @@ export const makeSqlUserHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -70,7 +68,12 @@ export const makeSqlUserHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: user,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [
+          grantFor(
+            options.iam,
+            Output.interpolate`projects/${user.project}/instances/${user.instance}`,
+          ),
+        ],
       });
       const userName = yield* user.userName;
       const instance = yield* user.instance;

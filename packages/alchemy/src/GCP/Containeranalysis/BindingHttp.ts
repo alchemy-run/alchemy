@@ -1,10 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Note } from "./Note.ts";
 import type { Occurrence } from "./Occurrence.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Container Analysis get bindings.
@@ -16,7 +14,7 @@ export const makeNoteHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -25,7 +23,7 @@ export const makeNoteHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: note,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, note.name)],
       });
       const name = yield* note.name;
       return Effect.fn(`${options.tag}(${note.LogicalId})`)(function* (
@@ -45,7 +43,7 @@ export const makeOccurrenceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -54,7 +52,7 @@ export const makeOccurrenceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: occurrence,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, occurrence.name)],
       });
       const name = yield* occurrence.name;
       return Effect.fn(`${options.tag}(${occurrence.LogicalId})`)(function* (

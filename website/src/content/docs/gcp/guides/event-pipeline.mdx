@@ -85,8 +85,8 @@ export default class Ingest extends GCP.Function<Ingest>()(
 ```
 
 `GCP.Run.RunJob(drain)` is the interesting one: binding a Job to a
-Service grants `roles/run.developer` on the service's runtime account
-and returns a callable. That is how one host triggers another, with no
+Service grants `roles/run.jobsExecutorWithOverrides` on that one Job
+to the service's runtime account and returns a callable. That is how one host triggers another, with no
 job name to interpolate and no IAM policy to write.
 
 ### `POST /events`

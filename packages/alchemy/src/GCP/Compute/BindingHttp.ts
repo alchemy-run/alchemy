@@ -1,9 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Output from "../../Output.ts";
 import type { Instance } from "./Instance.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Compute Engine instance bindings.
@@ -15,7 +14,7 @@ export const makeInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -24,7 +23,12 @@ export const makeInstanceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: instance,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [
+          grantFor(
+            options.iam,
+            Output.interpolate`projects/${instance.project}/zones/${instance.zone}/instances/${instance.instanceName}`,
+          ),
+        ],
       });
       const instanceName = yield* instance.instanceName;
       const zone = yield* instance.zone;

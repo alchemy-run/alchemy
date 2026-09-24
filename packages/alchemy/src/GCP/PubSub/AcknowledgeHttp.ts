@@ -13,6 +13,7 @@ export const AcknowledgeHttp = Layer.effect(
   Acknowledge,
   makeSubscriptionHttpBinding({
     tag: "GCP.PubSub.Acknowledge",
+    iam: { role: "roles/pubsub.subscriber", on: "pubsub.subscription" },
     operation: pubsub.acknowledgeProjectsSubscriptions,
   }),
 );

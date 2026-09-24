@@ -13,6 +13,7 @@ export const CommitCursorHttp = Layer.effect(
   CommitCursor,
   makeSubscriptionHttpBinding({
     tag: "GCP.Pubsublite.CommitCursor",
+    iam: { role: "roles/pubsublite.subscriber" },
     field: "subscription",
     operation: pubsublite.commitCursorCursorProjectsLocationsSubscriptions,
   }),

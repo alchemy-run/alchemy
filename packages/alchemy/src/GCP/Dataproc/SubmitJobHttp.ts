@@ -1,11 +1,9 @@
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Cluster } from "./Cluster.ts";
 import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link SubmitJob}.
@@ -21,7 +19,9 @@ export const SubmitJobHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Dataproc.SubmitJob",
         resource: cluster,
-        iam: [{ role: defaultRoleFor("GCP.Dataproc.SubmitJob") }],
+        // dataproc.jobs.create is checked on the project (jobs are not
+        // children of the cluster); no narrower predefined role contains it.
+        iam: [{ role: "roles/dataproc.editor" }],
       });
       const projectId = yield* cluster.project;
       const region = yield* cluster.region;

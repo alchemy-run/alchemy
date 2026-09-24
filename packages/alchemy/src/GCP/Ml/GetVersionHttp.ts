@@ -14,5 +14,6 @@ export const GetVersionHttp = Layer.effect(
   makeVersionHttpBinding({
     tag: "GCP.Ml.GetVersion",
     operation: ml.getProjectsModelsVersions,
+    iam: { role: "roles/ml.modelUser", on: "ml.model" },
   }),
 );

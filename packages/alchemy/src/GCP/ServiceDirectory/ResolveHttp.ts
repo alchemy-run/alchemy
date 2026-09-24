@@ -1,11 +1,10 @@
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Resolve, type ResolveRequest } from "./Resolve.ts";
 import type { Service } from "./Service.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link Resolve}.
@@ -22,7 +21,15 @@ export const ResolveHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.ServiceDirectory.Resolve",
         resource: service,
-        iam: [{ role: defaultRoleFor("GCP.ServiceDirectory.Resolve") }],
+        iam: [
+          grantFor(
+            {
+              role: "roles/servicedirectory.viewer",
+              on: "servicedirectory.service",
+            },
+            service.name,
+          ),
+        ],
       });
       const name = yield* service.name;
       return Effect.fn(`GCP.ServiceDirectory.Resolve(${service.LogicalId})`)(

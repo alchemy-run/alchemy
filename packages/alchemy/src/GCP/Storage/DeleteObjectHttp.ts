@@ -13,6 +13,7 @@ export const DeleteObjectHttp = Layer.effect(
   DeleteObject,
   makeObjectHttpBinding({
     tag: "GCP.Storage.DeleteObject",
+    role: "roles/storage.objectUser",
     operation: storage.deleteObjects,
   }),
 );

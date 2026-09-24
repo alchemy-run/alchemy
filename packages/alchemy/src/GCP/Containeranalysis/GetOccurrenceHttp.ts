@@ -13,6 +13,8 @@ export const GetOccurrenceHttp = Layer.effect(
   GetOccurrence,
   makeOccurrenceHttpBinding({
     tag: "GCP.Containeranalysis.GetOccurrence",
+    // Occurrences have no IAM policy of their own.
+    iam: { role: "roles/containeranalysis.occurrences.viewer" },
     operation: containeranalysis.getProjectsOccurrences,
   }),
 );

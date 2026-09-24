@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { bindGcpHost } from "../Host.ts";
-import type { GcpHttpOp } from "../HttpBinding.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
 
@@ -14,7 +14,7 @@ export const makeTopicHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -24,7 +24,7 @@ export const makeTopicHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: topic,
-        iam: [{ role: "roles/pubsub.publisher" }],
+        iam: [grantFor(options.iam, topic.name)],
       });
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
         request: Omit<I, "topic">,
@@ -43,7 +43,7 @@ export const makeSubscriptionHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -53,7 +53,7 @@ export const makeSubscriptionHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: subscription,
-        iam: [{ role: "roles/pubsub.subscriber" }],
+        iam: [grantFor(options.iam, subscription.name)],
       });
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (
         request: Omit<I, "subscription">,

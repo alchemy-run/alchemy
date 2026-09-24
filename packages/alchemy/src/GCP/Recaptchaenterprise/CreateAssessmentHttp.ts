@@ -1,15 +1,13 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   CreateAssessment,
   type CreateAssessmentRequest,
 } from "./CreateAssessment.ts";
 import { lastSegment } from "./internal.ts";
 import type { Key } from "./Key.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateAssessment}.
@@ -26,9 +24,8 @@ export const CreateAssessmentHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Recaptchaenterprise.CreateAssessment",
         resource: key,
-        iam: [
-          { role: defaultRoleFor("GCP.Recaptchaenterprise.CreateAssessment") },
-        ],
+        // reCAPTCHA keys have no resource-level IAM.
+        iam: [{ role: "roles/recaptchaenterprise.agent" }],
       });
       const name = yield* key.name;
       return Effect.fn(

@@ -13,6 +13,7 @@ export const GetEnvironmentHttp = Layer.effect(
   GetEnvironment,
   makeEnvironmentHttpBinding({
     tag: "GCP.Composer.GetEnvironment",
+    iam: { role: "roles/composer.viewer" },
     nameKey: "name",
     operation: composer.getProjectsLocationsEnvironments,
   }),

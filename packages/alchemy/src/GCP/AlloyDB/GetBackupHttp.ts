@@ -13,6 +13,7 @@ export const GetBackupHttp = Layer.effect(
   GetBackup,
   makeAlloyDbBackupHttpBinding({
     tag: "GCP.AlloyDB.GetBackup",
+    iam: { role: "roles/alloydb.viewer" },
     operation: alloydb.getProjectsLocationsBackups,
   }),
 );

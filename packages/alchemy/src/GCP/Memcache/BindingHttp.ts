@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Instance } from "./Instance.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Memorystore Memcached instance bindings.
@@ -15,7 +13,7 @@ export const makeMemcacheInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -24,7 +22,7 @@ export const makeMemcacheInstanceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: instance,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, instance.name)],
       });
       const name = yield* instance.name;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (

@@ -13,6 +13,7 @@ export const GetNodeHttp = Layer.effect(
   GetNode,
   makeTpuNodeHttpBinding({
     tag: "GCP.Tpu.GetNode",
+    iam: { role: "roles/tpu.viewer" },
     operation: tpu.getProjectsLocationsNodes,
   }),
 );

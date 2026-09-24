@@ -13,6 +13,7 @@ export const GetClustersNodePoolHttp = Layer.effect(
   GetClustersNodePool,
   makeContainerClustersNodePoolHttpBinding({
     tag: "GCP.Container.GetClustersNodePool",
+    iam: { role: "roles/container.clusterViewer" },
     operation: container.getProjectsZonesClustersNodePools,
   }),
 );

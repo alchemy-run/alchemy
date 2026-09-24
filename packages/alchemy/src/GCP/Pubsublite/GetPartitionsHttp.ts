@@ -13,6 +13,7 @@ export const GetPartitionsHttp = Layer.effect(
   GetPartitions,
   makeTopicNameHttpBinding({
     tag: "GCP.Pubsublite.GetPartitions",
+    iam: { role: "roles/pubsublite.viewer" },
     operation: pubsublite.getPartitionsAdminProjectsLocationsTopics,
   }),
 );

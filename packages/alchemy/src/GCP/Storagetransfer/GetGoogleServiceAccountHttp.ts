@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetGoogleServiceAccount } from "./GetGoogleServiceAccount.ts";
 import type { TransferJob } from "./TransferJob.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetGoogleServiceAccount}.
@@ -25,11 +25,7 @@ export const GetGoogleServiceAccountHttp: Layer.Layer<
       yield* bindGcpHost({
         tag: "GCP.Storagetransfer.GetGoogleServiceAccount",
         resource: job,
-        iam: [
-          {
-            role: defaultRoleFor("GCP.Storagetransfer.GetGoogleServiceAccount"),
-          },
-        ],
+        iam: [{ role: "roles/storagetransfer.viewer" }],
       });
       const project = yield* job.project;
       return Effect.fn(

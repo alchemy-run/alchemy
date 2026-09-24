@@ -13,6 +13,7 @@ export const ExecuteQueryHttp = Layer.effect(
   ExecuteQuery,
   makeConnectorHttpBinding({
     tag: "GCP.Firebasedataconnect.ExecuteQuery",
+    iam: { role: "roles/firebasedataconnect.dataViewer" },
     operation:
       firebasedataconnect.executeQueryProjectsLocationsServicesConnectors,
   }),

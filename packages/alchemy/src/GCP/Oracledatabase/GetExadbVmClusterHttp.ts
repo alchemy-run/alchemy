@@ -14,5 +14,6 @@ export const GetExadbVmClusterHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetExadbVmCluster",
     operation: oracle.getProjectsLocationsExadbVmClusters,
+    iam: { role: "roles/oracledatabase.exadbVmClusterViewer" },
   }),
 );

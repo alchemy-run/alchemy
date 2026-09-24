@@ -14,6 +14,16 @@ const newCode = () =>
     (byte) => ALPHABET[byte % ALPHABET.length],
   ).join("");
 
+/** Constant-time comparison so response timing does not leak the key. */
+const sameKey = (expected: string, given: string | undefined) => {
+  if (given === undefined || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index++) {
+    diff |= expected.charCodeAt(index) ^ given.charCodeAt(index);
+  }
+  return diff === 0;
+};
+
 interface Link {
   url: string;
   clicks: number;
@@ -50,8 +60,8 @@ export default class Api extends GCP.Function<Api>()(
     const apiKey = yield* ApiKey;
 
     // Each binding grants one role on the runtime service account:
-    // roles/datastore.user for the document calls, roles/
-    // secretmanager.secretAccessor for the key.
+    // datastore.viewer / datastore.user for the document calls, and
+    // secretmanager.secretAccessor on the API key secret only.
     const getDocument = yield* GCP.Firestore.GetDocument(links);
     const patchDocument = yield* GCP.Firestore.PatchDocument(links);
     const deleteDocument = yield* GCP.Firestore.DeleteDocument(links);
@@ -96,7 +106,7 @@ export default class Api extends GCP.Function<Api>()(
         Effect.map((version) => {
           const data = version.payload?.data;
           if (data === undefined) return "unconfigured" as const;
-          return atob(data) === request.headers["x-api-key"]
+          return sameKey(atob(data), request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),

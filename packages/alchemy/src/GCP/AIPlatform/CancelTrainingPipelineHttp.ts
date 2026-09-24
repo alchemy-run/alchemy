@@ -20,5 +20,6 @@ export const CancelTrainingPipelineHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.CancelTrainingPipeline",
     operation: aiplatform.cancelProjectsLocationsTrainingPipelines,
+    iam: { role: "roles/aiplatform.user" },
   }),
 );

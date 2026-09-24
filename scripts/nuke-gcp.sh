@@ -10,7 +10,8 @@ if [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "${HOME}/.config/gcloud/
   export GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/gcloud/alchemy-testing-sa.json"
 fi
 
-bun alchemy unsafe nuke ./stacks/nuke.ts \
+bun alchemy unsafe nuke --config ./stacks/nuke-gcp.ts \
+  --include 'GCP.*' \
   --profile testing \
   --concurrency 16 \
   --timeout 300 \

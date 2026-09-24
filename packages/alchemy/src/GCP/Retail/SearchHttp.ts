@@ -14,5 +14,6 @@ export const SearchHttp = Layer.effect(
   makeServingConfigHttpBinding({
     tag: "GCP.Retail.Search",
     operation: retail.searchProjectsLocationsCatalogsServingConfigs,
+    iam: { role: "roles/retail.viewer" },
   }),
 );

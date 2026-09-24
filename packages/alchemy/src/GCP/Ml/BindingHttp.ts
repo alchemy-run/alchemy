@@ -1,10 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Model } from "./Model.ts";
 import type { ModelsVersion } from "./ModelsVersion.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for AI Platform (legacy ML Engine) bindings.
@@ -16,7 +14,7 @@ export const makeModelHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -25,7 +23,7 @@ export const makeModelHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: model,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, model.name)],
       });
       const name = yield* model.name;
       return Effect.fn(`${options.tag}(${model.LogicalId})`)(function* (
@@ -39,13 +37,17 @@ export const makeModelHttpBinding = <
     });
   });
 
+/**
+ * Versions have no IAM policy of their own; `iam.on` (`ml.model`) is
+ * granted on the version's parent model.
+ */
 export const makeVersionHttpBinding = <
   I extends { name?: string },
   A,
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -54,7 +56,7 @@ export const makeVersionHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: version,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, version.model)],
       });
       const name = yield* version.name;
       return Effect.fn(`${options.tag}(${version.LogicalId})`)(function* (

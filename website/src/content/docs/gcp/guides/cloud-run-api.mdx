@@ -86,8 +86,9 @@ needs into the revision, and hands back a callable.
 ```
 
 Those four lines are the entire IAM configuration of this service:
-`roles/datastore.user` for the document calls and
-`roles/secretmanager.secretAccessor` for the key. Delete a binding and
+`roles/datastore.viewer` and `roles/datastore.user` on the project for
+the document calls (Firestore has no per-database IAM), and
+`roles/secretmanager.secretAccessor` on the one secret for the key. Delete a binding and
 the role is revoked on the next deploy. See
 [How bindings grant IAM](/gcp/guides/bindings) for the mechanism.
 
@@ -136,7 +137,8 @@ messages.
 `AccessSecretVersion` takes no arguments; it reads the `latest`
 version of the bound secret. The container fetches it per request
 rather than caching it in the revision, so rotating the secret takes
-effect without a redeploy.
+effect without a redeploy. `sameKey` compares in constant time so the
+response timing does not leak the key.
 
 ```typescript
     const authorize = (request: HttpServerRequest) =>
@@ -144,7 +146,7 @@ effect without a redeploy.
         Effect.map((version) => {
           const data = version.payload?.data;
           if (data === undefined) return "unconfigured" as const;
-          return atob(data) === request.headers["x-api-key"]
+          return sameKey(atob(data), request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),
@@ -331,6 +333,16 @@ const newCode = () =>
     (byte) => ALPHABET[byte % ALPHABET.length],
   ).join("");
 
+/** Constant-time comparison so response timing does not leak the key. */
+const sameKey = (expected: string, given: string | undefined) => {
+  if (given === undefined || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index++) {
+    diff |= expected.charCodeAt(index) ^ given.charCodeAt(index);
+  }
+  return diff === 0;
+};
+
 interface Link {
   url: string;
   clicks: number;
@@ -367,8 +379,8 @@ export default class Api extends GCP.Function<Api>()(
     const apiKey = yield* ApiKey;
 
     // Each binding grants one role on the runtime service account:
-    // roles/datastore.user for the document calls, roles/
-    // secretmanager.secretAccessor for the key.
+    // datastore.viewer / datastore.user for the document calls, and
+    // secretmanager.secretAccessor on the API key secret only.
     const getDocument = yield* GCP.Firestore.GetDocument(links);
     const patchDocument = yield* GCP.Firestore.PatchDocument(links);
     const deleteDocument = yield* GCP.Firestore.DeleteDocument(links);
@@ -413,7 +425,7 @@ export default class Api extends GCP.Function<Api>()(
         Effect.map((version) => {
           const data = version.payload?.data;
           if (data === undefined) return "unconfigured" as const;
-          return atob(data) === request.headers["x-api-key"]
+          return sameKey(atob(data), request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),

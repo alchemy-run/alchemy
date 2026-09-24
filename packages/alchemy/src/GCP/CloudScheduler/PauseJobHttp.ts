@@ -23,6 +23,8 @@ export const PauseJobHttp: Layer.Layer<
     scheduler.PauseProjectsLocationsJobsError
   >({
     tag: "GCP.CloudScheduler.PauseJob",
+    // Only cloudscheduler.admin has jobs.pause; no resource-level IAM.
+    iam: { role: "roles/cloudscheduler.admin" },
     operation: scheduler.pauseProjectsLocationsJobs,
   }),
 );

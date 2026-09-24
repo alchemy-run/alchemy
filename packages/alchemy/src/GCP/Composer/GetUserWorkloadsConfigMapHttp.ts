@@ -13,6 +13,7 @@ export const GetUserWorkloadsConfigMapHttp = Layer.effect(
   GetUserWorkloadsConfigMap,
   makeUserWorkloadsConfigMapHttpBinding({
     tag: "GCP.Composer.GetUserWorkloadsConfigMap",
+    iam: { role: "roles/composer.viewer" },
     operation: composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps,
   }),
 );

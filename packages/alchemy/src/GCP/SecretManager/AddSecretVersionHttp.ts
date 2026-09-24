@@ -21,6 +21,10 @@ export const AddSecretVersionHttp = Layer.effect(
     AddSecretVersionRequest
   >({
     tag: "GCP.SecretManager.AddSecretVersion",
+    iam: {
+      role: "roles/secretmanager.secretVersionAdder",
+      on: "secretmanager.secret",
+    },
     operation: secretmanager.addVersionProjectsSecrets,
     toInput: (secretName, request) => ({
       parent: secretName,

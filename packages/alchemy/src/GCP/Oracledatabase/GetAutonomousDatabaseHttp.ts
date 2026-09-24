@@ -14,5 +14,6 @@ export const GetAutonomousDatabaseHttp = Layer.effect(
   makeOracleNameHttpBinding({
     tag: "GCP.Oracledatabase.GetAutonomousDatabase",
     operation: oracle.getProjectsLocationsAutonomousDatabases,
+    iam: { role: "roles/oracledatabase.autonomousDatabaseViewer" },
   }),
 );

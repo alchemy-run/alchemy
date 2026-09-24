@@ -1,11 +1,9 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Backup } from "./Backup.ts";
 import type { Instance } from "./Instance.ts";
 import type { InstancesSnapshot } from "./InstancesSnapshot.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
-import { type GcpHttpOp } from "../HttpBinding.ts";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Filestore instance, backup, and snapshot
@@ -17,7 +15,7 @@ export const makeFilestoreInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -26,7 +24,7 @@ export const makeFilestoreInstanceHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: instance,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, instance.name)],
       });
       const name = yield* instance.name;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
@@ -46,7 +44,7 @@ export const makeFilestoreBackupHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -55,7 +53,7 @@ export const makeFilestoreBackupHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: backup,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, backup.name)],
       });
       const name = yield* backup.name;
       return Effect.fn(`${options.tag}(${backup.LogicalId})`)(function* (
@@ -75,7 +73,7 @@ export const makeFilestoreSnapshotHttpBinding = <
   E,
 >(options: {
   tag: string;
-  role?: string;
+  iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -84,7 +82,7 @@ export const makeFilestoreSnapshotHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource: snapshot,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [grantFor(options.iam, snapshot.name)],
       });
       const name = yield* snapshot.name;
       return Effect.fn(`${options.tag}(${snapshot.LogicalId})`)(function* (

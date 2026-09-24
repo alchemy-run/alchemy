@@ -13,6 +13,7 @@ export const GetBackupHttp = Layer.effect(
   GetBackup,
   makeFilestoreBackupHttpBinding({
     tag: "GCP.Filestore.GetBackup",
+    iam: { role: "roles/file.viewer" },
     operation: file.getProjectsLocationsBackups,
   }),
 );

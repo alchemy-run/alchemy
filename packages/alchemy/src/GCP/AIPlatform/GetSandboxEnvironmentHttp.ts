@@ -20,5 +20,6 @@ export const GetSandboxEnvironmentHttp = Layer.effect(
   >({
     tag: "GCP.AIPlatform.GetSandboxEnvironment",
     operation: aiplatform.getReasoningEnginesSandboxEnvironments,
+    iam: { role: "roles/aiplatform.viewer" },
   }),
 );
