@@ -530,7 +530,50 @@ export const CodeSlide = ({
           })()}
         </svg>
       ) : null}
-      {step.aside?.image ? (
+      {step.aside?.at === "left" ? (
+        <div
+          style={{
+            position: "absolute",
+            left: AREA.x + 20,
+            bottom: 1080 - (AREA.y + AREA.height) + 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 34,
+          }}
+        >
+          {step.aside.image ? (
+            <div
+              style={{
+                width: 400,
+                padding: 12,
+                background: "#f4efe4",
+                borderRadius: 6,
+                boxShadow: "0 18px 50px rgba(0, 0, 0, 0.55)",
+                transform: `rotate(${-3 + (1 - photoIn) * 10}deg) scale(${photoIn})`,
+                transformOrigin: "center bottom",
+                opacity: Math.min(1, photoIn * 2),
+              }}
+            >
+              <Img src={staticFile(`intro/assets/${step.aside.image}`)} style={{ width: "100%", display: "block", borderRadius: 3 }} />
+            </div>
+          ) : null}
+          <div
+            style={{
+              fontFamily: hand,
+              fontWeight: 700,
+              fontSize: 54,
+              lineHeight: 1.05,
+              color: TONE[step.aside.tone ?? "construct"],
+              transform: `rotate(-4deg) scale(${0.85 + asideIn * 0.15})`,
+              opacity: asideIn,
+              whiteSpace: "pre",
+            }}
+          >
+            {step.aside.text}
+          </div>
+        </div>
+      ) : null}
+      {step.aside?.image && step.aside.at !== "left" ? (
         <div
           style={{
             position: "absolute",
@@ -550,7 +593,7 @@ export const CodeSlide = ({
           <Img src={staticFile(`intro/assets/${step.aside.image}`)} style={{ width: "100%", display: "block", borderRadius: 3 }} />
         </div>
       ) : null}
-      {step.aside ? (
+      {step.aside && step.aside.at !== "left" ? (
         <div
           style={{
             position: "absolute",

@@ -174,6 +174,8 @@ export interface CodeStep {
     tone?: Tone;
     /** A photo that pops in above the text: a path under `intro/assets/`. */
     image?: string;
+    /** Bottom-left, beside the photo, for slides whose right side is full. */
+    at?: "left" | "right";
   };
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;

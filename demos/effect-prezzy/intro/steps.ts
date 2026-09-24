@@ -60,7 +60,7 @@ export interface CodeSpec {
   /** Arcs from text in the code to a node or an edge's label in `diagram`. */
   diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
-  aside?: { text: string; tone?: Tone; image?: string };
+  aside?: { text: string; tone?: Tone; image?: string; at?: "left" | "right" };
   /** A big hand-drawn red X across the code: this approach is wrong. */
   cross?: boolean;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
@@ -1044,6 +1044,28 @@ export const steps: StepSpec[] = [
     ],
     notes:
       "So it's a much nicer way to write the template, but it's still a template generator. The code is gone by the time anything deploys. Anything that depends on the real cloud at deploy time is back to CloudFormation intrinsics. It's not really programmable infrastructure.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "It's a template generator, not programmable infrastructure",
+    src: { code: CDK },
+    marks: [{ kind: "underline", find: "class Api extends Construct", label: "runs once, at synth", side: "right", tone: "neutral" }],
+    beside: {
+      file: "cdk synth → template.yaml",
+      lang: "yaml",
+      src: { code: CDK_SYNTH },
+      marks: [{ kind: "underline", find: "Resources:", label: "what's actually deployed", side: "right", tone: "construct" }],
+    },
+    links: [
+      { from: 'new s3.Bucket(this, "Uploads")', to: "Uploads1E2F3A4B:" },
+      { from: "uploads.grantReadWrite(fn);", to: "FnServiceRoleDefaultPolicy:" },
+      { from: '"index.handler"', to: "Handler: index.handler" },
+    ],
+    aside: { text: "…and it was\nCloudFormation\nall along!", image: "scooby-unmasked.png", at: "left" },
+    notes:
+      "Pull the mask off the CDK, and it was CloudFormation all along. So it's a much nicer way to write the template, but it's still a template generator. The code is gone by the time anything deploys. Anything that depends on the real cloud at deploy time is back to CloudFormation intrinsics. It's not really programmable infrastructure.",
   },
   {
     kind: "code",
