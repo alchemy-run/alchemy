@@ -125,6 +125,8 @@ export interface MiniGraph {
   incoming?: { to: string; label: string; tone?: Tone };
   /** A dashed frame around the whole drawing, e.g. "everything construction builds". */
   frame?: { label: string; tone?: Tone };
+  /** Labelled boxes around groups of nodes, e.g. one per stage. */
+  groups?: { label: string; nodes: string[]; tone?: Tone }[];
   /** Hand-written labels at a position in the drawing. */
   labels?: {
     /** `\n` breaks lines. */

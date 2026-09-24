@@ -753,16 +753,16 @@ const STACK_4 = `export default Alchemy.Stack(
 );`;
 /** The same Stack deployed to two stages: the same resources, twice, isolated by name. */
 const stageColumn = (stage: string, x: number) => [
-  at({ id: `api-${stage}`, title: "Api", color: "#f38020" }, x, 90, [`${stage}-api`]),
-  at({ id: `uploads-${stage}`, title: "Uploads", color: "#8b7cf6" }, x, 250, [`${stage}-uploads`]),
-  at({ id: `jobs-${stage}`, title: "Jobs", color: "#e0a86b" }, x, 410, [`${stage}-jobs`]),
+  at({ id: `api-${stage}`, title: "Api", color: "#f38020" }, x, 130, [`${stage}-api`]),
+  at({ id: `uploads-${stage}`, title: "Uploads", color: "#8b7cf6" }, x, 280, [`${stage}-uploads`]),
+  at({ id: `jobs-${stage}`, title: "Jobs", color: "#e0a86b" }, x, 430, [`${stage}-jobs`]),
 ];
 const STAGES: MiniGraph = {
   nodes: [...stageColumn("dev", 140), ...stageColumn("prod", 530)],
   edges: [],
-  labels: [
-    { text: "--stage dev", x: 140, y: 10, tone: "runtime" },
-    { text: "--stage prod", x: 530, y: 10, tone: "good" },
+  groups: [
+    { label: "dev", nodes: ["api-dev", "uploads-dev", "jobs-dev"], tone: "runtime" },
+    { label: "prod", nodes: ["api-prod", "uploads-prod", "jobs-prod"], tone: "good" },
   ],
 };
 

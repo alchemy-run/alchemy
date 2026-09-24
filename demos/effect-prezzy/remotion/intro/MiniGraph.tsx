@@ -193,6 +193,26 @@ export const MiniGraphView = ({
               );
             })()
           : null}
+        {(graph.groups ?? []).map((group) => {
+          const members = graph.nodes.filter((n) => group.nodes.includes(n.id));
+          if (!members.length) return null;
+          const xs = members.flatMap((n) => [n.x - NODE.w / 2, n.x + NODE.w / 2]);
+          const ys = members.flatMap((n) => [n.y - NODE.h / 2, n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38]);
+          const x = Math.min(...xs) - 30;
+          const y = Math.min(...ys) - 44;
+          const w = Math.max(...xs) + 30 - x;
+          const h = Math.max(...ys) + 26 - y;
+          const color = TONE[group.tone ?? "construct"];
+          const q = prev?.groups?.some((g) => g.label === group.label) ? 1 : fade(local, delay, 8);
+          return (
+            <g key={group.label} opacity={q}>
+              <rect x={x} y={y} width={w} height={h} rx={22} fill={`${color}0d`} stroke={color} strokeWidth={2.5} />
+              <text x={x + w / 2} y={y + 30} textAnchor="middle" fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
+                {group.label}
+              </text>
+            </g>
+          );
+        })}
         {graph.incoming
           ? (() => {
               // Requests stream into the node from above, from outside the architecture.
