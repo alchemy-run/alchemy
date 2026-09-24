@@ -7,7 +7,8 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { Drill, MiniGraph, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import type { BundlePanel, Drill, MiniGraph, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import CLIENTS from "./bundle-clients.json" with { type: "json" };
 
 /** Where in the code: the first match of `text` (or the `nth`, 1-based). */
 export type Find = string | { text: string; nth?: number };
@@ -50,6 +51,8 @@ export interface CodeSpec {
   drill?: Drill;
   /** The code's requirements (Effect's Req), listed beside it. */
   req?: ReqPanel;
+  /** The Worker's bundle, beside the code. */
+  bundle?: BundlePanel;
   /** A second file shown side by side, on the right. */
   beside?: Pick<CodeSpec, "file" | "src" | "lang" | "tints" | "marks">;
   /** Lines from text in this file to text in `beside`. */
@@ -462,6 +465,8 @@ const api = (s: {
   marks?: CodeSpec["marks"];
   error?: CodeSpec["error"];
   quiet?: boolean;
+  bundle?: BundlePanel;
+  frames?: number;
   aside?: CodeSpec["aside"];
   stamp?: string;
 }): CodeSpec => ({
@@ -476,7 +481,11 @@ const api = (s: {
   quiet: s.quiet,
   aside: s.aside,
   stamp: s.stamp,
-  req: {
+  bundle: s.bundle,
+  frames: s.frames,
+  req: s.bundle
+    ? undefined
+    : {
     label: REQ_LABEL,
     items: s.req,
     parts: s.fetchReq ? [{ label: "fetch's Req", items: s.fetchReq }] : undefined,
@@ -744,6 +753,25 @@ const iac = (s: {
   fontSize: 32,
   notes: s.notes,
 });
+
+// ── the Worker bundle, for the tree-shaking steps ──────────────────────
+const BUNDLE_LABEL = "the Worker bundle";
+const USED_CLIENTS = ["get", "send"];
+const PRECISE: BundlePanel = {
+  label: BUNDLE_LABEL,
+  size: 38,
+  items: USED_CLIENTS,
+  used: USED_CLIENTS,
+  note: "just what the code calls",
+};
+/** Every R2, Queues and S3-compatible operation distilled knows about. */
+const EVERYTHING: BundlePanel = {
+  label: BUNDLE_LABEL,
+  size: 1840,
+  items: CLIENTS,
+  used: USED_CLIENTS,
+  note: "{extra} clients the code never calls",
+};
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -1539,6 +1567,7 @@ export const steps: StepSpec[] = [
       },
     ],
     req: PROVIDED,
+    bundle: PRECISE,
     notes:
       "At deploy time Alchemy runs the file through Rolldown and tree-shakes it hard. Anything the Worker doesn't reach is dropped. The binding layers you provide decide which runtime clients end up in the bundle.",
   }),
@@ -1546,8 +1575,10 @@ export const steps: StepSpec[] = [
     title: "A catch-all like R2.AllBindings would bundle every client",
     code: ALL_BINDINGS,
     quiet: true,
-    marks: [{ kind: "circle", find: "R2.AllBindings", label: "every R2 client, in every bundle", side: "right", tone: "bad" }],
+    marks: [{ kind: "circle", find: "R2.AllBindings", tone: "bad" }],
     req: PROVIDED,
+    bundle: EVERYTHING,
+    frames: 50,
     notes:
       "That's why there's no R2.AllBindings or Queues.AllBindings. A catch-all would be convenient, but it would pull every client for every operation into every bundle, whether you call it or not.",
   }),
@@ -1566,6 +1597,7 @@ export const steps: StepSpec[] = [
       },
     ],
     req: PROVIDED,
+    bundle: PRECISE,
     notes:
       "So you provide the specific bindings, one per capability. It's a little more typing, and it keeps each bundle down to exactly the code it runs.",
   }),

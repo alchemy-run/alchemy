@@ -2,6 +2,7 @@ import { AbsoluteFill, Img, interpolate, spring, staticFile, useVideoConfig } fr
 import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
+import { BundleView } from "./Bundle.tsx";
 import { DrillView } from "./Drill.tsx";
 import { ReqView, reqHeight } from "./Req.tsx";
 import { graphAnchor, MiniGraphView } from "./MiniGraph.tsx";
@@ -29,7 +30,7 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 /** Pixel geometry for the code block, centred in whatever space it gets. */
 const layout = (step: CodeStep, area: Area = AREA) => {
   const width =
-    area.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.error ? PANEL_WIDTH + 60 : 0);
+    area.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.bundle || step.error ? PANEL_WIDTH + 60 : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
@@ -439,6 +440,17 @@ export const CodeSlide = ({
           local={local}
           delay={marksStart}
           minTop={step.req ? g.top + reqHeight(step.req) + 20 : AREA.y}
+        />
+      ) : null}
+      {step.bundle ? (
+        <BundleView
+          bundle={step.bundle}
+          prev={prev?.bundle}
+          x={AREA.x + AREA.width - PANEL_WIDTH}
+          labelY={AREA.y}
+          top={g.top}
+          local={local}
+          delay={marksStart}
         />
       ) : null}
       {step.req ? (

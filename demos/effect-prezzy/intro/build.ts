@@ -220,7 +220,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   }));
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
-  const available = split || spec.beside ? 760 : spec.panel || spec.drill || spec.req ? 1060 : 1560;
+  const available = split || spec.beside ? 760 : spec.panel || spec.drill || spec.req || spec.bundle ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
@@ -240,6 +240,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     diagram: spec.diagram,
     drill: spec.drill,
     req: spec.req,
+    bundle: spec.bundle,
     beside,
     links: links.length ? links : undefined,
     aside: spec.aside,

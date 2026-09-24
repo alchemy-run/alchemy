@@ -59,6 +59,19 @@ export interface PanelItem {
   bar?: number;
 }
 
+/** The Worker's bundle beside the code: its size and every client in it. */
+export interface BundlePanel {
+  label: string;
+  /** Kilobytes. */
+  size: number;
+  /** Every client in the bundle. */
+  items: string[];
+  /** The clients the code actually calls. */
+  used?: string[];
+  /** Hand-written note under the wall; `{extra}` is the number of unused clients. */
+  note?: string;
+}
+
 /** One entry of an Effect's `Req`: open until something provides it. */
 export interface ReqItem {
   /** The requirement's type name, as the compiler prints it. */
@@ -144,6 +157,7 @@ export interface CodeStep {
   diagram?: MiniGraph;
   drill?: Drill;
   req?: ReqPanel;
+  bundle?: BundlePanel;
   /** A second file shown side by side, on the right. */
   beside?: CodeStep;
   /** Lines from text in this pane to text in `beside`: how the two are coupled. */
