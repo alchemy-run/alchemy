@@ -15,6 +15,8 @@ import {
   configPath,
   envFile,
   force,
+  include,
+  exclude,
   devStage,
   optionalConfig,
   profile,
@@ -38,6 +40,8 @@ export const devCommand = Command.make(
   "dev",
   {
     force,
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,

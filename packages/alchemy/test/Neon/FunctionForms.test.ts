@@ -56,7 +56,15 @@ test(
       "layer:constructor",
     );
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -74,7 +82,15 @@ test(
     );
     expect(yield* authorized.text).toBe("authorized");
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -259,5 +275,13 @@ test.provider(
         false,
       );
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

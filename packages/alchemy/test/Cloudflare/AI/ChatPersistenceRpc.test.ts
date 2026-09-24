@@ -83,7 +83,10 @@ test(
       expect(result.turns).toBe(2);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -116,7 +119,10 @@ test(
       expect(finish).toBeDefined();
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -145,5 +151,8 @@ test(
       expect(result.turns).toBe(4);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
+    timeout: 240_000,
+  },
 );

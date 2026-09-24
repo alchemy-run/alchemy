@@ -163,6 +163,7 @@ const resolveEnvironmentProps = (
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Environment: typeof EnvironmentResource = Object.assign(
   (

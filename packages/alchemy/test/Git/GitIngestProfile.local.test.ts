@@ -58,6 +58,7 @@ if (PROFILE_REPO === undefined) {
   test.skip(
     "profile: set GIT_PROFILE_REPO=/path/to/checkout to run",
     Effect.void,
+    { tags: ["provider:cloudflare", "local"] },
   );
 } else {
   const stack = beforeAll(deploy(LocalStack));
@@ -139,6 +140,14 @@ if (PROFILE_REPO === undefined) {
           `[ingest-profile] phases: ${phases}`,
       );
     }),
-    { timeout: 600_000 },
+    {
+      tags: [
+        "provider:cloudflare",
+        "provider:cloudflare:r2",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+      timeout: 600_000,
+    },
   );
 }

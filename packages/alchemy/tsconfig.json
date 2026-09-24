@@ -32,6 +32,8 @@
     ]
   },
   "references": [
+    { "path": "../../submodules/distilled/packages/doppler/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/infisical/tsconfig.json" },
     {
       "path": "../floci/tsconfig.json"
     },

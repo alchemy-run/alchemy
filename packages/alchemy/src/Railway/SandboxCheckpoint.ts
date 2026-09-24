@@ -101,7 +101,7 @@ export type SandboxCheckpoint = Resource<
  * @see https://docs.railway.com/sandboxes#checkpoints
  *
  * @resource
- * @product Railway
+ * @product Sandbox
  */
 export const SandboxCheckpoint = Resource<SandboxCheckpoint>(
   "Railway.SandboxCheckpoint",

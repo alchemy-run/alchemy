@@ -48,7 +48,7 @@ const importInSubprocess = (entry: string) => {
   ).pipe(Effect.scoped);
 };
 
-describe("lazy rolldown (#562)", () => {
+describe("lazy rolldown (#562)", { tags: ["unit", "local"] }, () => {
   for (const entry of entries) {
     it.effect(
       `importing ${entry} does not load rolldown's native binding`,

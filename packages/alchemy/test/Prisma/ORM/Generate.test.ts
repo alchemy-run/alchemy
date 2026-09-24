@@ -123,7 +123,10 @@ describe("Effect contract generation", (it) => {
           ],
         );
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"],
+      timeout: 120_000,
+    },
   );
 
   it.effect(
@@ -214,6 +217,9 @@ describe("Effect contract generation", (it) => {
         yield* fs.writeFileString(fields, fieldModule("text"));
         yield* waitForField('"value": Schema.String');
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"],
+      timeout: 120_000,
+    },
   );
 });

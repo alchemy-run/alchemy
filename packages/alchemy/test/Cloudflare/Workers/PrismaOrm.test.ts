@@ -88,7 +88,20 @@ test(
     );
     expect(missing).toEqual({ found: false, name: null });
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -101,7 +114,20 @@ test(
     );
     expect(result.name).toEqual("tx-gizmo");
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -121,7 +147,20 @@ test(
     );
     expect(rollback).toEqual({ outcome: "rolled-back", visible: false });
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -158,5 +197,18 @@ test(
       expect(result.found).toBe(true);
     }
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

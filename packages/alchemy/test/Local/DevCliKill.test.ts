@@ -64,6 +64,7 @@ const descendantsOf = (root: number) =>
 
 describe.skipIf(process.platform === "win32" || process.env.FAST)(
   "alchemy dev CLI process cleanup",
+  { tags: ["local"] },
   () => {
     // Expected failure: SIGKILL cannot be trapped, so nothing kills the
     // exec child, the provider sidecar, or workerd on the CLI's behalf.

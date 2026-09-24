@@ -90,5 +90,5 @@ test.provider(
         }),
       );
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 600_000 },
 );

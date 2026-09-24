@@ -89,7 +89,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertCollectionGone(collectionId);
     }),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:opensearchserverless",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );
 
 // Deletion is verified as INITIATED (status `DELETING`) or fully gone — full

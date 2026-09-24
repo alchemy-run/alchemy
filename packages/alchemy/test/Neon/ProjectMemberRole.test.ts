@@ -77,6 +77,9 @@ unit.effect(
         }),
       ).toBe("admin");
     }),
+  {
+    tags: ["unit", "provider:neon", "provider:neon:projectmemberrole", "local"],
+  },
 );
 
 unit.effect(
@@ -118,6 +121,15 @@ unit.effect(
         ),
       ).toBe(true);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:projectmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -161,6 +173,15 @@ unit.effect(
         ),
       ).toBe(true);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:projectmemberrole",
+      "local",
+    ],
+  },
 );
 
 unit.effect(
@@ -172,6 +193,15 @@ unit.effect(
       // @ts-expect-error Runtime validation protects JavaScript callers and persisted state.
       expect(yield* refused(validateProjectGovernanceRole("owner"))).toBe(true);
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:projectmemberrole",
+      "local",
+    ],
+  },
 );
 
 const { test } = Test.make({ providers: providers() });
@@ -238,7 +268,15 @@ test.provider(
         ).toBeUndefined();
       }
     }).pipe(Effect.provideService(SDK.Credentials, noCloudCredentials)),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:projectmemberrole",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -279,7 +317,15 @@ test.provider(
         yield* refused(provider.delete({ ...context, olds: news, output })),
       ).toBe(true);
     }).pipe(Effect.provideService(SDK.Credentials, noCloudCredentials)),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:projectmemberrole",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -392,5 +438,14 @@ test.provider.skipIf(!orgId || !memberId)(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:organizationmemberrole",
+      "provider:neon:project",
+      "provider:neon:projectmemberrole",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

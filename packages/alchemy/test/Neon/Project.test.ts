@@ -46,103 +46,112 @@ const expectPooledOrigin = (project: {
   expect(project.pooledOrigin.password).toBeDefined();
 };
 
-test.provider("create and delete project with default props", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "create and delete project with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const project = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("DefaultProject");
-      }),
-    );
+      const project = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("DefaultProject");
+        }),
+      );
 
-    expect(project.projectId).toBeDefined();
-    expect(project.projectName).toBeDefined();
-    expect(project.defaultBranchId).toBeDefined();
-    expect(project.connectionUri).toContain("postgres");
-    expect(project.pooledConnectionUri).toContain("postgres");
-    expectPooledOrigin(project);
+      expect(project.projectId).toBeDefined();
+      expect(project.projectName).toBeDefined();
+      expect(project.defaultBranchId).toBeDefined();
+      expect(project.connectionUri).toContain("postgres");
+      expect(project.pooledConnectionUri).toContain("postgres");
+      expectPooledOrigin(project);
 
-    const fetched = yield* getProject({ project_id: project.projectId });
-    expect(fetched.project.id).toEqual(project.projectId);
+      const fetched = yield* getProject({ project_id: project.projectId });
+      expect(fetched.project.id).toEqual(project.projectId);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
-test.provider("project with default props does not change on update", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "project with default props does not change on update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deploy = stack.deploy(Project("DefaultProjectUpdate"));
+      const deploy = stack.deploy(Project("DefaultProjectUpdate"));
 
-    const created = yield* deploy;
+      const created = yield* deploy;
 
-    expect(created.projectId).toBeDefined();
-    expect(created.projectName).toBeDefined();
-    expect(created.defaultBranchId).toBeDefined();
-    expect(created.connectionUri).toContain("postgres");
-    expectPooledOrigin(created);
+      expect(created.projectId).toBeDefined();
+      expect(created.projectName).toBeDefined();
+      expect(created.defaultBranchId).toBeDefined();
+      expect(created.connectionUri).toContain("postgres");
+      expectPooledOrigin(created);
 
-    const fetched = yield* getProject({ project_id: created.projectId });
-    expect(fetched.project.id).toEqual(created.projectId);
+      const fetched = yield* getProject({ project_id: created.projectId });
+      expect(fetched.project.id).toEqual(created.projectId);
 
-    const updated = yield* deploy;
+      const updated = yield* deploy;
 
-    expect(updated.projectId).toEqual(created.projectId);
-    expect(updated.projectName).toEqual(created.projectName);
-    expect(updated.defaultBranchId).toEqual(created.defaultBranchId);
-    expect(updated.connectionUri).toEqual(created.connectionUri);
-    expectPooledOrigin(updated);
+      expect(updated.projectId).toEqual(created.projectId);
+      expect(updated.projectName).toEqual(created.projectName);
+      expect(updated.defaultBranchId).toEqual(created.defaultBranchId);
+      expect(updated.connectionUri).toEqual(created.connectionUri);
+      expectPooledOrigin(updated);
 
-    const renamed = yield* stack.deploy(
-      Project("DefaultProjectUpdate", {
-        name: `${created.projectName}-renamed`,
-      }),
-    );
-    expect(renamed.projectId).toBe(created.projectId);
-    expect(
-      (yield* getProject({ project_id: renamed.projectId })).project.name,
-    ).toBe(`${created.projectName}-renamed`);
-    const preserved = yield* deploy;
-    expect(preserved.projectId).toBe(created.projectId);
-    expect(preserved.projectName).toBe(renamed.projectName);
+      const renamed = yield* stack.deploy(
+        Project("DefaultProjectUpdate", {
+          name: `${created.projectName}-renamed`,
+        }),
+      );
+      expect(renamed.projectId).toBe(created.projectId);
+      expect(
+        (yield* getProject({ project_id: renamed.projectId })).project.name,
+      ).toBe(`${created.projectName}-renamed`);
+      const preserved = yield* deploy;
+      expect(preserved.projectId).toBe(created.projectId);
+      expect(preserved.projectName).toBe(renamed.projectName);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
-test.provider("enable logical replication on update", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "enable logical replication on update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("LogicalReplicationProject", {
-          region: "aws-us-east-1",
-        });
-      }),
-    );
-    expect(initial.enableLogicalReplication).toEqual(false);
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("LogicalReplicationProject", {
+            region: "aws-us-east-1",
+          });
+        }),
+      );
+      expect(initial.enableLogicalReplication).toEqual(false);
 
-    const enabled = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("LogicalReplicationProject", {
-          region: "aws-us-east-1",
-          enableLogicalReplication: true,
-        });
-      }),
-    );
-    expect(enabled.projectId).toEqual(initial.projectId);
-    expect(enabled.enableLogicalReplication).toEqual(true);
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("LogicalReplicationProject", {
+            region: "aws-us-east-1",
+            enableLogicalReplication: true,
+          });
+        }),
+      );
+      expect(enabled.projectId).toEqual(initial.projectId);
+      expect(enabled.enableLogicalReplication).toEqual(true);
 
-    const fetched = yield* getProject({ project_id: enabled.projectId });
-    expect(fetched.project.settings).toMatchObject({
-      enable_logical_replication: true,
-    });
+      const fetched = yield* getProject({ project_id: enabled.projectId });
+      expect(fetched.project.settings).toMatchObject({
+        enable_logical_replication: true,
+      });
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 test.provider(
@@ -221,7 +230,10 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:project", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -305,7 +317,10 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:project", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -382,7 +397,10 @@ test.provider(
         ).toBe(true);
       }
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:project", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -433,28 +451,34 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:project", "live"],
+    timeout: 120_000,
+  },
 );
 
-test.provider("list enumerates the deployed project", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed project",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("ListProject");
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("ListProject");
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Project);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Project);
+      const all = yield* provider.list();
 
-    const found = all.find((p) => p.projectId === deployed.projectId);
-    expect(found).toBeDefined();
-    expectPooledOrigin(found!);
+      const found = all.find((p) => p.projectId === deployed.projectId);
+      expect(found).toBeDefined();
+      expectPooledOrigin(found!);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 /**
@@ -551,6 +575,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 test.provider(
@@ -603,4 +628,12 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+  },
 );

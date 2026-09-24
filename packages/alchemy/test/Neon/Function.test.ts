@@ -49,7 +49,10 @@ test.provider(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:function", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Live lifecycles below poll deployment rollout for minutes; skip under --fast.
@@ -162,7 +165,15 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(absent).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: functionRolloutTimeout },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: functionRolloutTimeout,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -238,5 +249,13 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
       for (const text of samples) expect(text).toBe("bare-v2");
     }),
-  { timeout: functionRolloutTimeout },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: functionRolloutTimeout,
+  },
 );

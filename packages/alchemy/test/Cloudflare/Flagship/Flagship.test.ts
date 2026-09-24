@@ -61,7 +61,15 @@ test(
     const result = yield* getJson(`${asyncWorkerUrl}/bool`);
     expect(result).toMatchObject({ mode: "async", enabled: false });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -76,7 +84,15 @@ test(
     expect(result.details.flagKey).toBe("nonexistent-flag");
     expect(result.details.value).toBe("fallback");
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -86,7 +102,15 @@ test(
     const result = yield* getJson(`${effectWorkerUrl}/bool`);
     expect(result).toMatchObject({ mode: "effect", enabled: false });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -101,5 +125,13 @@ test(
     expect(result.details.flagKey).toBe("nonexistent-flag");
     expect(result.details.value).toBe("fallback");
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

@@ -21,6 +21,7 @@ import { makeHttpSpriteBinding } from "./SpriteHttp.ts";
  * ```
  *
  * @layer
+ * @product Sprite
  * @provides Fly.Checkpoint
  */
 export const CheckpointHttp = Layer.effect(
