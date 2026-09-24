@@ -454,10 +454,6 @@ const api = Effect.gen(function* () {
 }).pipe(Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)]));`;
 const HOIST_TYPE = `type Hoisted<A> =
   A extends { fetch: Effect<any, any, infer R> } ? R : never;`;
-const INFERRED_DEV_1 = INFERRED_DEV.replace('\n      if (logs) yield* logs.put("last-read", file);', "").replace(
-  "Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)])",
-  "Effect.provide(R2.ReadBucket(Uploads))",
-);
 const INFERRED_DEV_2 = INFERRED_DEV.replace(
   "Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)])",
   "Effect.provide(R2.ReadBucket(Uploads))",
@@ -750,16 +746,11 @@ export const steps: StepSpec[] = [
       "Hang on. Reaching into fetch to find out what it uses… that's Functionless all over again. Peeking inside, just with types instead of the compiler. Let's keep going anyway and see where it breaks.",
   }),
   api({
-    title: "…which becomes really clear when you customize behavior",
-    code: INFERRED_DEV_1,
-    req: [BUCKET, GET_OBJECT_HOISTED],
-    notes: "And that becomes really clear the moment you customize behavior. Say that in dev only, we also want a Logs bucket. Construction is ordinary code, so that's just a conditional.",
-  }),
-  api({
-    title: "…and fetch writes to it when it's there",
+    title: "…which becomes really clear when your infrastructure is conditional",
     code: INFERRED_DEV_2,
     req: [BUCKET, GET_OBJECT_HOISTED, PUT_LOGS],
-    notes: "And fetch writes the last read to it, if it exists. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
+    notes:
+      "And that becomes really clear the moment your infrastructure is conditional. Say we only want a Logs bucket in dev, and fetch writes the last read to it when it's there. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
   }),
   api({
     title: "But a type can't tell that only happens in dev",

@@ -16,6 +16,9 @@ import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
 import { CodeSlide } from "./CodeSlide.tsx";
 
+/** Width available to a step title (the frame minus its side margins). */
+const TITLE_WIDTH = 1920 - 2 * 110;
+
 export interface IntroProps extends Record<string, unknown> {
   intro?: IntroJson;
 }
@@ -77,7 +80,9 @@ export const Intro = ({ intro }: IntroProps) => {
           right: 110,
           top: 44,
           fontFamily: sans,
-          fontSize: 52,
+          // One line always: a title too long for 52px shrinks just enough to fit.
+          fontSize: Math.min(52, Math.floor(TITLE_WIDTH / (step.title.length * 0.54))),
+          whiteSpace: "nowrap",
           fontWeight: 700,
           letterSpacing: -0.6,
           lineHeight: 1.15,
