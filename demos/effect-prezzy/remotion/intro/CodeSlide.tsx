@@ -10,6 +10,12 @@ import { Arrow, boxPath, circlePath, drawProgress, stroke, strikePath, TONE, und
 /** The code canvas, inside the frame and above the caption band. */
 /** Below the step title at the top of the frame. */
 const AREA = { x: 110, y: 170, width: 1700, height: 870 };
+export type Area = typeof AREA;
+/** Two files side by side: each gets half the canvas. The left pane starts where full-width code does. */
+export const SPLIT = {
+  left: { ...AREA, width: 850 },
+  right: { ...AREA, x: 990, width: 820 },
+};
 const PANEL_WIDTH = 560;
 /** Width kept for the drawing when a step has one. */
 export const DIAGRAM_WIDTH = 760;
@@ -21,9 +27,9 @@ const LINE = 1.55;
 const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 /** Pixel geometry for the code block, centred in whatever space it gets. */
-const layout = (step: CodeStep) => {
+const layout = (step: CodeStep, area: Area = AREA) => {
   const width =
-    AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.error ? PANEL_WIDTH + 60 : 0);
+    area.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.error ? PANEL_WIDTH + 60 : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
@@ -32,12 +38,12 @@ const layout = (step: CodeStep) => {
   const blockH = step.lines.length * lh;
   // Code sits at the same left edge on every step, so it never shifts sideways
   // when a panel comes or goes. Only a one-line hero snippet is centred.
-  const left = step.lines.length > 1 ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
+  const left = step.lines.length > 1 ? area.x + 30 : area.x + Math.max(0, (width - blockW) / 2);
   // With a drawing the program grows over several steps: pin its first line
   // so new lines extend downward instead of pushing the code up.
   // Code always starts at the same spot under its label; only a one-line hero is centred.
   const top =
-    step.diagram || step.lines.length > 1 ? AREA.y + 90 : AREA.y + 50 + Math.max(0, (AREA.height - 50 - blockH) / 2);
+    step.diagram || step.lines.length > 1 ? area.y + 90 : area.y + 50 + Math.max(0, (area.height - 50 - blockH) / 2);
   return { size, cw, lh, left, top, blockW, blockH, width };
 };
 
@@ -220,18 +226,21 @@ export const CodeSlide = ({
   prev,
   prev2,
   local,
+  area = AREA,
 }: {
   step: CodeStep;
   prev?: CodeStep;
   /** The step before `prev`: what was dimmed and drawn when this step began. */
   prev2?: CodeStep;
   local: number;
+  /** Where the code sits: the whole canvas, or one side of a split. */
+  area?: Area;
 }) => {
   const { fps } = useVideoConfig();
-  const g = layout(step);
+  const g = layout(step, area);
   const morph = prev && prev.group === step.group;
   const matched = matchLines(morph ? prev : undefined, step);
-  const pg = prev ? layout(prev) : g;
+  const pg = prev ? layout(prev, area) : g;
   const t = morph
     ? interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: (x) => 1 - (1 - x) ** 3 })
     : interpolate(local, [0, 6], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -275,8 +284,8 @@ export const CodeSlide = ({
         <div
           style={{
             position: "absolute",
-            left: AREA.x,
-            top: AREA.y,
+            left: area.x,
+            top: area.y,
             display: "flex",
             alignItems: "center",
             gap: 12,
@@ -610,3 +619,7 @@ const Panel = ({ step, local, delay }: { step: CodeStep; local: number; delay: n
     </div>
   );
 };
+
+/** Where a span of text sits on screen, for drawing between panes. */
+export const spanRect = (step: CodeStep, area: Area, span: { line: number; col: number; len: number }) =>
+  rect(step, layout(step, area), span);

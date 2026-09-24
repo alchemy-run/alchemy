@@ -27,6 +27,20 @@ export interface Mark {
   arrow?: boolean;
 }
 
+/** A span of text in a code block. */
+export interface Span {
+  line: number;
+  col: number;
+  len: number;
+}
+
+/** A line drawn from text in one pane to text in the pane beside it. */
+export interface CodeLink {
+  from: Span;
+  to: Span;
+  tone?: Tone;
+}
+
 export interface CodeError {
   line: number;
   col: number;
@@ -129,6 +143,10 @@ export interface CodeStep {
   diagram?: MiniGraph;
   drill?: Drill;
   req?: ReqPanel;
+  /** A second file shown side by side, on the right. */
+  beside?: CodeStep;
+  /** Lines from text in this pane to text in `beside`: how the two are coupled. */
+  links?: CodeLink[];
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;
   frames: number;

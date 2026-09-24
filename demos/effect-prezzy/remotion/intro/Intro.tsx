@@ -14,7 +14,8 @@ import { sans } from "../fonts.ts";
 import { Slide } from "../slides/Slide.tsx";
 import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
-import { CodeSlide } from "./CodeSlide.tsx";
+import { CodeSlide, SPLIT } from "./CodeSlide.tsx";
+import { LinksView } from "./Links.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
 const TITLE_WIDTH = 1920 - 2 * 110;
@@ -53,6 +54,8 @@ export const Intro = ({ intro }: IntroProps) => {
   const step = intro.steps[at]!;
   const local = frame - ranges[at]!.from;
   const prev: IntroStep | undefined = intro.steps[at - 1];
+  const prevCode = prev?.kind === "code" ? prev : undefined;
+  const prev2Code = intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined;
 
   if (step.kind === "slide") {
     return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle }} />;
@@ -64,12 +67,27 @@ export const Intro = ({ intro }: IntroProps) => {
     <AbsoluteFill>
       <Stage />
       {step.kind === "code" ? (
-        <CodeSlide
-          step={step}
-          prev={prev?.kind === "code" ? prev : undefined}
-          prev2={intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined}
-          local={local}
-        />
+        <>
+          <CodeSlide
+            step={step}
+            prev={prevCode}
+            prev2={prev2Code}
+            local={local}
+            area={step.beside ? SPLIT.left : undefined}
+          />
+          {step.beside ? (
+            <>
+              <CodeSlide
+                step={step.beside}
+                prev={prevCode?.beside}
+                prev2={prev2Code?.beside}
+                local={local}
+                area={SPLIT.right}
+              />
+              <LinksView step={step} prev={prevCode} left={SPLIT.left} right={SPLIT.right} local={local} delay={8} />
+            </>
+          ) : null}
+        </>
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}

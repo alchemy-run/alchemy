@@ -22,6 +22,7 @@ export interface CodeSpec {
   file?: string;
   pseudo?: boolean;
   src: Source;
+  lang?: "typescript" | "yaml";
   fontSize?: number;
   /** Tint lines by phase: a snippet region, or the lines from one match to another. */
   tints?: (({ region: string } | { from: Find; to?: Find }) & { tone: Tone })[];
@@ -49,6 +50,10 @@ export interface CodeSpec {
   drill?: Drill;
   /** The code's requirements (Effect's Req), listed beside it. */
   req?: ReqPanel;
+  /** A second file shown side by side, on the right. */
+  beside?: Pick<CodeSpec, "file" | "src" | "lang" | "tints" | "marks">;
+  /** Lines from text in this file to text in `beside`. */
+  links?: { from: Find; to: Find; tone?: Tone }[];
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -163,7 +168,7 @@ function api(req) {
 
 const program = (): StepSpec[] => [
   lang({
-    title: "Imagine a language where a variable can be a cloud resource",
+    title: "I wanted one language where a variable can be a cloud resource",
     src: { code: B1 },
     diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
     notes:
@@ -479,6 +484,61 @@ const STORAGE_S3 = `const StorageS3 = Layer.effect(Storage, Effect.gen(function*
   return { get: (key) => bucket.get(key) };
 }));`;
 
+// ── Act 0: infrastructure as code, and why combine it with runtime code ──
+const CFN = `Conditions:
+  IsProd: !Equals [!Ref Stage, prod]
+Resources:
+  Uploads:
+    Type: AWS::S3::Bucket
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyName: uploads
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "\${Uploads.Arn}/*"
+  Api:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt ApiRole.Arn
+      MemorySize: !If [IsProd, 1024, 256]
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref Uploads`;
+const CDK = `class Api extends Construct {
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
+    const uploads = new s3.Bucket(this, "Uploads");
+    const fn = new lambda.Function(this, "Fn", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      code: lambda.Code.fromAsset("dist"),
+      environment: {
+        BUCKET_NAME: uploads.bucketName,
+      },
+    });
+    uploads.grantReadWrite(fn);
+  }
+}`;
+const HANDLER = `const s3 = new S3Client({});
+
+export const handler = async (event) => {
+  await s3.send(new PutObjectCommand({
+    Bucket: process.env.BUCKET_NAME,
+    Key: event.key,
+    Body: event.body,
+  }));
+};`;
+const CDK_LINKS: NonNullable<CodeSpec["links"]> = [
+  { from: '"index.handler"', to: "export const handler" },
+  { from: "BUCKET_NAME", to: "process.env.BUCKET_NAME" },
+  { from: "grantReadWrite", to: "PutObjectCommand" },
+];
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -490,6 +550,91 @@ export const steps: StepSpec[] = [
     subtitle: "…without building a new language. Yet.",
     notes:
       "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language (at least not yet).",
+  },
+
+  // Act 0: why combine infrastructure and runtime code at all
+  {
+    kind: "code",
+    group: "cfn",
+    file: "template.yaml",
+    lang: "yaml",
+    title: "I started out writing CloudFormation",
+    src: { code: CFN },
+    notes:
+      "Some context first. I started out writing infrastructure as CloudFormation: a bucket, a role, a Lambda function, all in YAML.",
+  },
+  {
+    kind: "code",
+    group: "cfn",
+    file: "template.yaml",
+    lang: "yaml",
+    title: "…and I hated trying to program in YAML",
+    src: { code: CFN },
+    marks: [
+      { kind: "circle", find: "!If [IsProd, 1024, 256]", label: "an if statement, in YAML", side: "right", tone: "bad" },
+      { kind: "underline", find: '!Sub "${Uploads.Arn}/*"', label: "string templating for references", side: "right", tone: "bad" },
+    ],
+    notes:
+      "And I hated it. I'm a coder. I don't want to write config files, and I really don't want to program in YAML: conditions, string substitution, intrinsic functions.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "Then the AWS CDK came out, and I was hooked",
+    src: { code: CDK },
+    notes: "Then the AWS CDK came out and I was instantly hooked. The same infrastructure, as a TypeScript class.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "Finally, I could configure infrastructure with real code",
+    src: { code: CDK },
+    marks: [{ kind: "underline", find: "uploads.grantReadWrite(fn);", label: "the whole IAM policy", side: "right", tone: "good" }],
+    notes:
+      "Finally, real code: variables, functions, types, and abstractions like grantReadWrite that write the IAM policy for you.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "But the runtime code still lived in a separate program",
+    src: { code: CDK },
+    beside: { file: "src/handler.ts", src: { code: HANDLER } },
+    notes:
+      "But the CDK is still only infrastructure. The code that actually runs in the Lambda is a separate program, in a separate file, bundled and deployed separately.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "I was always juggling two programs that are really one",
+    src: { code: CDK },
+    beside: { file: "src/handler.ts", src: { code: HANDLER } },
+    links: CDK_LINKS,
+    frames: 45,
+    notes:
+      "And the two are coupled. The handler name has to match an export. The environment variable has to match what the handler reads. The grant has to cover every call the handler makes. Every change means juggling two programs that are really one.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "Rename one side, and nothing tells you the other broke",
+    src: { code: CDK.replace("BUCKET_NAME", "UPLOADS_BUCKET") },
+    beside: {
+      file: "src/handler.ts",
+      src: { code: HANDLER },
+      marks: [{ kind: "circle", find: "BUCKET_NAME", label: "undefined!", side: "right", tone: "bad" }],
+    },
+    links: [
+      { from: '"index.handler"', to: "export const handler" },
+      { from: "UPLOADS_BUCKET", to: "process.env.BUCKET_NAME", tone: "bad" },
+      { from: "grantReadWrite", to: "PutObjectCommand" },
+    ],
+    notes:
+      "Rename the environment variable in the infrastructure, and the handler still compiles, still deploys, and then fails at runtime. Neither program knows about the other. That's what made me want one program, and one language, for both.",
   },
   ...program(),
 

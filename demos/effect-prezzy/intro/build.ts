@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHighlighter } from "shiki";
 import { API } from "tsgo/unstable/sync";
-import type { CodeError, IntroJson, IntroStep, Mark, Token } from "../shared/intro.ts";
+import type { CodeError, CodeStep, IntroJson, IntroStep, Mark, Token } from "../shared/intro.ts";
 import { steps, type CodeSpec, type Find } from "./steps.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -125,10 +125,10 @@ const cut = (text: string, keep?: string[]): Cut => {
 };
 
 // ── highlighting ─────────────────────────────────────────────────────────
-const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript"] });
+const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml"] });
 const PSEUDO_KEYWORDS: Record<string, string> = { construct: "#a3c473", runtime: "#e0a86b" };
-const tokenize = (code: string, pseudo: boolean): Token[][] =>
-  highlighter.codeToTokens(code, { lang: "typescript", theme: "dark-plus" }).tokens.map((line) =>
+const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" = "typescript"): Token[][] =>
+  highlighter.codeToTokens(code, { lang, theme: "dark-plus" }).tokens.map((line) =>
     line.flatMap((token) => {
       if (!pseudo) return [{ text: token.content, color: token.color ?? "#d4d4d4" }];
       // The imagined language's own keywords.
@@ -151,7 +151,8 @@ const locate = (code: string, find: Find, title: string) => {
   return { line, col: at - (before.lastIndexOf("\n") + 1), len: text.length };
 };
 
-const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
+/** `split`: shown as one of two side-by-side panes, so it gets half the width. */
+const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => {
   let code: string;
   let regions = new Map<string, [number, number]>();
   let error: CodeError | undefined;
@@ -199,10 +200,19 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
       arrow: mark.arrow,
     };
   });
-  const lines = tokenize(code, !!spec.pseudo);
+  const lines = tokenize(code, !!spec.pseudo, spec.lang);
+  const beside = spec.beside
+    ? await resolveCode({ kind: "code", title: spec.title, group: spec.group, ...spec.beside }, true)
+    : undefined;
+  const besideCode = beside?.lines.map((l) => l.map((t) => t.text).join("")).join("\n") ?? "";
+  const links = (spec.links ?? []).map((link) => ({
+    from: locate(code, link.from, spec.title),
+    to: locate(besideCode, link.to, spec.title),
+    tone: link.tone,
+  }));
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
-  const available = spec.panel || spec.drill || spec.req ? 1060 : 1560;
+  const available = split || spec.beside ? 760 : spec.panel || spec.drill || spec.req ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
@@ -222,6 +232,8 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
     diagram: spec.diagram,
     drill: spec.drill,
     req: spec.req,
+    beside,
+    links: links.length ? links : undefined,
     quiet: spec.quiet,
     frames: spec.frames ?? 30,
   };
@@ -251,11 +263,14 @@ const groupSize = new Map<string, number>();
 steps.forEach((spec, i) => {
   const step = resolved[i]!;
   if (spec.kind !== "code" || step.kind !== "code" || spec.fontSize) return;
-  groupSize.set(step.group, Math.min(groupSize.get(step.group) ?? Infinity, step.fontSize));
+  groupSize.set(step.group, Math.min(groupSize.get(step.group) ?? Infinity, step.fontSize, step.beside?.fontSize ?? Infinity));
 });
 steps.forEach((spec, i) => {
   const step = resolved[i]!;
-  if (spec.kind === "code" && step.kind === "code" && !spec.fontSize) step.fontSize = groupSize.get(step.group)!;
+  if (spec.kind === "code" && step.kind === "code" && !spec.fontSize) {
+    step.fontSize = groupSize.get(step.group)!;
+    if (step.beside) step.beside.fontSize = step.fontSize;
+  }
 });
 
 await mkdir(out, { recursive: true });
