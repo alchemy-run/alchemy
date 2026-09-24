@@ -366,6 +366,7 @@ const REQ_LABEL = "Req · what it needs";
 const BUCKET: ReqItem = { name: "R2.BucketProvider", note: "to create the bucket" };
 const READ: ReqItem = { name: "R2.ReadBucket", note: "to read it at runtime" };
 const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
+const WRITE_LOGS: ReqItem = { name: "R2.WriteBucket", note: "only in dev" };
 const WRITE: ReqItem = { name: "Queues.WriteQueue", note: "to send at runtime" };
 const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
 const WORKER: ReqItem = { name: "Cloudflare.Worker", note: "native bindings run inside a Worker" };
@@ -972,11 +973,58 @@ export const steps: StepSpec[] = [
       "And that's the nail in the coffin. Try an S3 implementation: same code, but its get requires S3.GetObject, and the interface already promised R2. You can't swap implementations, which is the whole point of a service. Infrastructure requirements can't live in the runtime function's type.",
   },
   api({
-    title: "The binding is declared in construction instead",
+    title: "So what I actually ended up realizing…",
+    snippet: "api-02-bucket.ts",
+    req: [BUCKET],
+    notes:
+      "So let's go back to where we branched off: a bucket, declared in construction. What I actually ended up realizing is that I'd been trying to be too clever.",
+  }),
+  api({
+    title: "…is that a binding should be declared, just like a resource",
     snippet: "api-04-get.ts",
     req: [BUCKET, { ...READ, note: "declared in construction" }],
     notes:
-      "So the binding moved to construction. R2.ReadBucket(bucket) is a declaration that runs when the program is built, so it can be conditional: only declare the Logs binding in dev, and production never gets that permission. The requirement lands on the program, where a Layer can satisfy it, and fetch just calls the client it got back, so its type stays clean and a service built on it can have any implementation. That's the one difference from the imaginary language: you say what you'll do with a resource, up front.",
+      "It's still infrastructure as code, and I should embrace that. You declare a resource with yield*, so declare the binding the same way: R2.ReadBucket(bucket). The requirement lands on the program, where a Layer can satisfy it, and fetch just calls the client it got back. Its type stays clean, so a service built on it can have any implementation.",
+  }),
+  api({
+    title: "Conditional infrastructure is then just an if statement",
+    snippet: "api-04b-dev.ts",
+    req: [BUCKET, { ...READ, note: "declared in construction" }, WRITE_LOGS],
+    notes:
+      "And conditional infrastructure is just ordinary code. Only in dev do we create a Logs bucket and bind it for writing. No new syntax, no analysis: an if statement, or here a ternary.",
+  }),
+  api({
+    title: "Running the code discovers the bindings, not analyzing it",
+    snippet: "api-04b-dev.ts",
+    marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
+    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    notes:
+      "Here's the key. Alchemy doesn't read your code to find the bindings. It runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
+  }),
+  api({
+    title: "That's why construction runs at deploy time…",
+    snippet: "api-04b-dev.ts",
+    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
+    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "attach binding + policy", side: "right", tone: "construct" }],
+    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    notes:
+      "Which is why Alchemy is two-phase. The construction phase runs at deploy time: running it is how Alchemy discovers every resource and binding, and attaches the policies.",
+  }),
+  api({
+    title: "…and again at cold start, to create the clients",
+    snippet: "api-04b-dev.ts",
+    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
+    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "return an R2 client", side: "right", tone: "construct" }],
+    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    notes:
+      "And it runs again inside the deployed function, at cold start. The same line now returns a real client. The same code does both jobs, so the infrastructure and the runtime can never disagree, which is exactly the problem I had with the CDK and a separate handler.",
+  }),
+  api({
+    title: "…while fetch runs on every request",
+    snippet: "api-04b-dev.ts",
+    tints: [{ from: "fetch: Effect.gen", to: "})", tone: "runtime" }],
+    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    notes: "And fetch is the runtime phase. It runs for every request, using the clients that construction handed it.",
   }),
   api({
     title: "Sending to a queue works the same way",
