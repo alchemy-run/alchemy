@@ -160,66 +160,66 @@ function api(req) {
 
 const program = (): StepSpec[] => [
   lang({
-    title: "In a cloud language, a variable can be a resource",
+    title: "Imagine a language where a variable can be a cloud resource",
     src: { code: B1 },
     diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
     notes:
       "Imagine a programming language for the cloud. Declaring a bucket doesn't allocate memory: it creates a real bucket in the cloud.",
   }),
   lang({
-    title: "Change the code, and the cloud is reconciled to match",
+    title: "Change its configuration, and the cloud is updated to match",
     src: { code: B2 },
     diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
     notes:
       "Resources have configuration that changes over time. Turn on versioning in the code, and the language reconciles the real bucket to match.",
   }),
   lang({
-    title: "Resources outlive the program that declares them",
+    title: "Unlike variables, resources outlive the program",
     src: { code: BQ },
     diagram: { nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)], edges: [] },
     notes:
       "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
   }),
   lang({
-    title: "A function is a resource too",
+    title: "Functions are resources too",
     src: { code: EMPTY_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [] },
     notes: "Declaring a function deploys it: another node in the world.",
   }),
   lang({
-    title: "Reading the bucket connects the function to it",
+    title: "When the function reads the bucket, they become connected",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [USES[0]!] },
     notes: "Call bucket.get inside the function, and the function now depends on the bucket.",
   }),
   lang({
-    title: "The call needs permission to read the bucket",
+    title: "That connection needs permission to read the bucket",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [GET] },
     notes: "For the function to call bucket.get, it needs an IAM policy that allows s3:GetObject on this bucket.",
   }),
   lang({
-    title: "…and the bucket's name, as an environment variable",
+    title: "…and the bucket's name, passed in as an environment variable",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"], [ENV[0]!]), edges: [GET] },
     notes:
       "And it needs to know which bucket: its name is injected as an environment variable. The permission plus the configuration is what we call a binding.",
   }),
   lang({
-    title: "Sending to the queue creates another binding",
+    title: "Sending to the queue connects them the same way",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes: "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
   }),
   lang({
-    title: "The language infers every binding from the code",
+    title: "The language works all of this out from the code",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
       "A cloud language derives all of this by static analysis. Nobody writes policies or environment variables by hand: the program is a graph of resources, and the code is the source of truth for how they connect.",
   }),
   lang({
-    title: "What if the function creates a bucket?",
+    title: "But what if the function creates a bucket?",
     src: { code: SCRATCH },
     diagram: {
       nodes: [...GRAPH(["versioning: on"], ENV), SCRATCH_NODE],
@@ -230,7 +230,7 @@ const program = (): StepSpec[] => [
       "So far every resource was declared at the top. What if the function itself declares one? The function runs on every request, maybe thousands of times a second. Does each request get a new bucket? Who deletes them? Who gave the function permission to create them?",
   }),
   lang({
-    title: "It can't be: a request can't create infrastructure",
+    title: "It can't: a request can't create infrastructure",
     src: { code: SCRATCH },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -243,7 +243,7 @@ const program = (): StepSpec[] => [
       "It doesn't make sense. Infrastructure is created once, ahead of time, by the deploy. The function only uses it. So there are really two different kinds of code in this program.",
   }),
   lang({
-    title: "So a cloud program runs in two phases",
+    title: "So a cloud program is actually two phases",
     src: { code: VERSIONED },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
@@ -259,7 +259,7 @@ const program = (): StepSpec[] => [
       "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
   }),
   lang({
-    title: "Mark construction in the language: construct",
+    title: "One for construction, containing the resource declarations",
     src: { code: CONSTRUCT_ONLY },
     tints: [{ from: "const bucket", to: "const queue", tone: "construct" }],
     diagram: {
@@ -271,7 +271,7 @@ const program = (): StepSpec[] => [
       "In a real language we'd make the phases explicit. First, construction: a construct function runs once, at deploy time, and everything it declares becomes infrastructure.",
   }),
   lang({
-    title: "…and runtime: the code that runs on each request",
+    title: "One for runtime, where those resources implement the business logic",
     src: { code: COLORED_APP },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
@@ -287,7 +287,7 @@ const program = (): StepSpec[] => [
       "Then runtime: a runtime function inside it runs on every request, using the resources construction declared. These are colored functions: construct and runtime are different colors, and the compiler knows which is which.",
   }),
   lang({
-    title: "Now the compiler catches that mistake",
+    title: "Now creating a bucket at runtime is a compile error",
     src: { code: COLORED_BAD },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -298,7 +298,7 @@ const program = (): StepSpec[] => [
     notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
   }),
   lang({
-    title: "Inferring bindings is a kind of type checking",
+    title: "And inferring permissions becomes a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
     diagram: {
@@ -337,7 +337,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "punchcard",
     file: "punchcard · stack.ts",
-    title: "Punchcard: two phases on top of the AWS CDK",
+    title: "First, Punchcard: two phases on top of the AWS CDK",
     src: {
       code: `const topic = new SNS.Topic(stack, 'Topic', {
   shape: NotificationRecord
@@ -364,7 +364,7 @@ new Lambda.Function(stack, 'MyFunction', {
     kind: "code",
     group: "punchcard",
     file: "punchcard · stack.ts",
-    title: "…but the runtime shipped with all of the infrastructure code",
+    title: "But its runtime code shipped with all of the infrastructure code",
     src: {
       code: `const topic = new SNS.Topic(stack, 'Topic', {
   shape: NotificationRecord
@@ -400,7 +400,7 @@ new Lambda.Function(stack, 'MyFunction', {
     kind: "code",
     group: "functionless",
     file: "functionless · workflow.ts",
-    title: "Functionless: compile TypeScript by reading its AST",
+    title: "Then Functionless: reading the code's own AST",
     src: {
       code: `export default StepFunction(async (input: { todoId: string }) => {
   await StepFunction.waitSeconds(10);
@@ -428,7 +428,7 @@ new Lambda.Function(stack, 'MyFunction', {
   {
     kind: "slide",
     layout: "section",
-    title: "A square peg in a round hole",
+    title: "Both forced the language to do something it wasn't built for",
     eyebrow: "The lesson",
     heading: "A square peg in a round hole",
     subtitle: "Don't fight your language.",
@@ -439,7 +439,7 @@ new Lambda.Function(stack, 'MyFunction', {
   {
     kind: "code",
     group: "effect",
-    title: "Effect<A, Err, Req>",
+    title: "Then Effect came along",
     src: { code: "Effect<A, Err, Req>" },
     fontSize: 96,
     marks: [
@@ -452,7 +452,7 @@ new Lambda.Function(stack, 'MyFunction', {
   {
     kind: "code",
     group: "effect",
-    title: "Req: what a function needs from the outside world",
+    title: "Its Req type says what a function needs from the outside world",
     src: {
       code: `// what goes in, and what comes out
 function get(key: string): Promise<Buffer>
@@ -467,7 +467,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
   {
     kind: "code",
     group: "peek",
-    title: "Static analysis has to look inside the function",
+    title: "Without it, a tool would have to look inside every function",
     src: {
       code: `function get(key: string): Promise<Buffer> {
   return s3.getObject({ Bucket: BUCKET_NAME, Key: key })
@@ -480,7 +480,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
   {
     kind: "code",
     group: "peek",
-    title: "So lift the dependency into the type",
+    title: "With it, the dependency is right there in the type",
     src: {
       code: `function get(key: string): Effect<Buffer, NoSuchKey, GetObject> {
   return getObject({ Key: key })
@@ -494,7 +494,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "board",
     board: "layers",
     stage: 0,
-    title: "Context.Service and Layer separate interface from implementation",
+    title: "And Layers keep the interface apart from its implementation",
     notes:
       "The next piece: Context.Service and Layer solve the coupling problem Punchcard had. Code depends on a service's interface; a Layer implements it; they only meet where you provide it.",
   },
@@ -502,7 +502,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "worker",
     file: "src/Api.ts",
-    title: "yield* a resource, and you require its provider",
+    title: "In Alchemy, declaring a resource requires its provider",
     src: { snippet: "worker.ts", regions: ["show"] },
     tints: [{ region: "construct", tone: "construct" }],
     marks: [
@@ -515,7 +515,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "Only the Stack satisfies it, so providers never ship in the Worker",
+    title: "Only the Stack provides it, so providers never ship with the Worker",
     src: { snippet: "stack.ts", regions: ["show"] },
     marks: [
       { kind: "box", find: "providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers())", label: "satisfied here, at deploy time only", side: "above", tone: "construct" },
@@ -527,7 +527,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "binding",
     file: "src/Api.ts",
-    title: "A binding is a declaration",
+    title: "A binding just declares what the Worker may do",
     src: { snippet: "worker.ts", regions: ["show"] },
     tints: [{ region: "construct", tone: "construct" }],
     marks: [
@@ -539,7 +539,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "binding",
     file: "src/Api.ts",
-    title: "The type system makes you provide an implementation",
+    title: "Leave out the implementation, and it won't compile",
     src: { snippet: "missing-provide.error.ts", regions: ["show"] },
     tints: [{ region: "construct", tone: "construct" }],
     error: { pick: requirementLines("Type 'GetObject'") },
@@ -549,7 +549,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "binding",
     file: "src/Api.ts",
-    title: "Provide one: Http means over Alchemy's HTTP SDK",
+    title: "Provide one, like GetObjectHttp",
     src: { snippet: "worker.ts", regions: ["show"] },
     tints: [{ region: "construct", tone: "construct" }],
     marks: [{ kind: "underline", find: "AWS.S3.GetObjectHttp", label: "the implementation", side: "above", tone: "good" }],
@@ -560,7 +560,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "board",
     board: "fork",
     stage: 0,
-    title: "The implementation wires up the permissions too",
+    title: "The implementation sets up the permissions too",
     notes:
       "The layer also wires up permissions. On Lambda it adds a least-privilege statement to the Function's role. On a Cloudflare Worker, or anywhere outside AWS, it creates an IAM user that can only assume a role, and gives the Worker the keys to fetch short-lived credentials at runtime.",
   },
@@ -568,7 +568,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "binding",
     file: "src/Api.ts",
-    title: "Least privilege, by construction",
+    title: "So every permission is one the code declared",
     src: { snippet: "put-object.ts", regions: ["show"] },
     tints: [{ region: "construct", tone: "construct" }],
     marks: [{ kind: "highlight", find: "AWS.S3.PutObject(bucket)", label: "one new line…", side: "right", tone: "good" }],
@@ -588,7 +588,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "board",
     board: "pipeline",
     stage: 0,
-    title: "alchemy deploy is the compiler, without static analysis",
+    title: "alchemy deploy is the compiler, and TypeScript does the analysis",
     notes:
       "alchemy deploy acts as the compiler of your application. TypeScript does the static analysis with Effect and Layer types; running the program just builds the graph of resources and bindings, which is diffed into a plan you review.",
   },
@@ -626,7 +626,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "app",
     file: "src/Shorty.ts",
-    title: "The application depends only on the interface",
+    title: "The application depends only on its interface",
     src: { snippet: "app-d1.ts", regions: ["show"] },
     marks: [{ kind: "circle", find: "yield* Links", label: "just the interface", side: "right", tone: "construct" }],
     notes: "Business logic is written against the Links interface.",
@@ -635,7 +635,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "app",
     file: "src/Shorty.ts",
-    title: "Swap the infrastructure, keep the business logic",
+    title: "So you can swap the infrastructure and keep the business logic",
     src: { snippet: "app-neon.ts", regions: ["show"] },
     marks: [{ kind: "underline", find: "LinksNeon", label: "D1 → Neon Postgres", side: "above", tone: "good" }],
     notes: "Swap the Layer and the infrastructure changes underneath: D1, Neon, DynamoDB. The business logic doesn't change. We'll do this for real in the demo.",
@@ -646,7 +646,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "real-colors",
     file: "src/Api.ts",
-    title: "The same colors, in real code",
+    title: "Back to colored functions, in real code",
     src: { snippet: "runtime.ts", regions: ["show"] },
     tints: [
       { from: "Effect.gen(function* () {", to: "Cloudflare.R2.ReadBucket(bucket)", tone: "construct" },
@@ -659,7 +659,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "real-colors",
     file: "src/Api.ts",
-    title: "Runtime calls need RuntimeContext, which the constructor doesn't have",
+    title: "Calling a binding during construction is a type error",
     src: { snippet: "call-in-constructor.error.ts", regions: ["show"] },
     tints: [
       { from: "Effect.gen(function* () {", to: 'uploads.get("README.md").pipe', tone: "construct" },
@@ -674,7 +674,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "real-colors",
     file: "src/Api.ts",
-    title: "The escape hatch is explicit, like ts-expect-error",
+    title: "Unless you opt out explicitly, like ts-expect-error",
     src: { snippet: "phantom.ts", regions: ["show"] },
     tints: [
       { from: "Effect.gen(function* () {", to: 'uploads.get("README.md").pipe', tone: "construct" },
@@ -688,7 +688,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "future",
     pseudo: true,
-    title: "Today a DSL in TypeScript. Tomorrow, a syntax",
+    title: "Today it's TypeScript and Effect. Tomorrow, a language",
     src: { code: COLORED_APP },
     fontSize: 40,
     quiet: true,
