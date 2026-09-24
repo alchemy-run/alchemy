@@ -26,7 +26,9 @@ const layout = (step: CodeStep) => {
   const blockH = step.lines.length * lh;
   // With a drawing, code stays left-aligned so it grows in place.
   const left = step.diagram ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
-  const top = AREA.y + Math.max(0, (AREA.height - blockH) / 2);
+  // With a drawing the program grows over several steps: pin its first line
+  // so new lines extend downward instead of pushing the code up.
+  const top = step.diagram ? AREA.y + 150 : AREA.y + Math.max(0, (AREA.height - blockH) / 2);
   return { size, cw, lh, left, top, blockW, blockH, width };
 };
 
@@ -160,6 +162,27 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
           {step.pseudo ? "an imaginary cloud language" : step.file}
         </div>
       ) : null}
+      {/* lines new or changed since the previous step in this sequence, in diff green */}
+      {morph
+        ? step.lines.map((tokens, i) => {
+            if (matched.has(i) || !lineText(tokens).trim()) return null;
+            return (
+              <div
+                key={`added-${i}`}
+                style={{
+                  position: "absolute",
+                  left: g.left - 26,
+                  top: g.top + i * g.lh,
+                  width: g.blockW + 52,
+                  height: g.lh,
+                  background: "rgba(46, 160, 67, 0.22)",
+                  borderLeft: "4px solid #2ea043",
+                  opacity: newIn,
+                }}
+              />
+            );
+          })
+        : null}
       {/* phase tints: a bar in the gutter and a faint wash behind the lines */}
       {step.lines.map((_, i) => {
         const tint = tintOf(i);
