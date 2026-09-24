@@ -31,6 +31,21 @@ const DELETABLE_VERSION_STATES = new Set([
   "GENERATION_FAILED",
 ]);
 const DESTROYABLE_VERSION_STATES = new Set(["ENABLED", "DISABLED"]);
+const USABLE_VERSION_STATES = new Set(["ENABLED", "PENDING_GENERATION"]);
+
+/**
+ * Cloud KMS never deletes a key while any version is merely
+ * `DESTROY_SCHEDULED` (at least 24h), and a key ring never at all. On
+ * delete Alchemy destroys every version and replaces its ownership labels
+ * with this marker. A released key holds no usable key material, so any
+ * stack may reclaim it on create: reconcile re-stamps ownership and mints a
+ * fresh primary. Without this, a fixed `cryptoKeyId` is unusable for at
+ * least a day after destroy, and forever by any other stack.
+ */
+export const RELEASED_LABEL = "alchemy-released";
+
+const isReleased = (key: kms.CryptoKey) =>
+  (key.labels ?? {})[RELEASED_LABEL] !== undefined;
 
 export type CryptoKeyVersionTemplate = {
   /**
@@ -171,6 +186,13 @@ export type CryptoKey = Resource<
  * and then deleted. Keys created with `skipInitialVersionCreation: true`
  * have no versions and can be deleted immediately. Deleted CryptoKey
  * names cannot be reused.
+ *
+ * Until then, destroying a key *releases* it: every version is scheduled
+ * for destruction and the ownership labels are replaced by
+ * `alchemy-released`. A later deploy with the same `cryptoKeyId` — from
+ * this stack or any other — reclaims the released key and mints a fresh
+ * primary version, so a fixed key id survives destroy/redeploy cycles.
+ * Ciphertext encrypted under the old versions is not recoverable.
  *
  * ### Creating a CryptoKey
  * **Example:** Generated name on an existing KeyRing
@@ -406,10 +428,13 @@ const listKeysInRing = (parent: string) =>
       })
       .pipe(
         Effect.map((response) => ({
-          items: (response.cryptoKeys ?? []).filter((key) =>
-            Object.keys(key.labels ?? {}).some((label) =>
-              label.startsWith("alchemy-"),
-            ),
+          // Released keys hold no key material and belong to no stack.
+          items: (response.cryptoKeys ?? []).filter(
+            (key) =>
+              !isReleased(key) &&
+              Object.keys(key.labels ?? {}).some((label) =>
+                label.startsWith("alchemy-"),
+              ),
           ),
           nextPageToken: response.nextPageToken,
         })),
@@ -641,6 +666,61 @@ const clearRotation = (name: string, current: kms.CryptoKey) => {
     );
 };
 
+/**
+ * Mark a key reclaimable: keep user labels, drop the stack/stage/id
+ * ownership labels, and add {@link RELEASED_LABEL}.
+ */
+const releaseKey = (name: string, current: kms.CryptoKey) =>
+  isReleased(current)
+    ? Effect.void
+    : kms
+        .patchProjectsLocationsKeyRingsCryptoKeys({
+          name,
+          updateMask: "labels",
+          body: {
+            labels: { ...userLabels(current.labels), [RELEASED_LABEL]: "true" },
+          },
+        })
+        .pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.asVoid,
+        );
+
+/**
+ * Give a key usable material when it has none — a reclaimed released key,
+ * or one whose versions were destroyed out of band. Symmetric keys also
+ * need that version as their primary.
+ */
+const ensureUsableVersion = (
+  name: string,
+  current: kms.CryptoKey,
+  purpose: kms.CryptoKeyPurposeEnum | (string & {}),
+) =>
+  Effect.gen(function* () {
+    const symmetric = purpose === "ENCRYPT_DECRYPT";
+    if (symmetric && USABLE_VERSION_STATES.has(current.primary?.state ?? "")) {
+      return current;
+    }
+    const versions = yield* listVersions(name);
+    let usable = versions.find((version) =>
+      USABLE_VERSION_STATES.has(version.state ?? ""),
+    );
+    if (usable === undefined) {
+      usable =
+        yield* kms.createProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+          parent: name,
+          body: {},
+        });
+    }
+    if (!symmetric) return current;
+    const versionId = lastSegment(usable.name ?? "");
+    yield* kms.updatePrimaryVersionProjectsLocationsKeyRingsCryptoKeys({
+      name,
+      body: { cryptoKeyVersionId: versionId },
+    });
+    return yield* waitPrimaryReady(name);
+  });
+
 export const CryptoKeyProvider = () =>
   Provider.succeed(CryptoKey, {
     stables: [
@@ -741,7 +821,8 @@ export const CryptoKeyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+      return isReleased(existing) ||
+        (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -877,6 +958,13 @@ export const CryptoKeyProvider = () =>
         });
       }
 
+      if (
+        news.skipInitialVersionCreation !== true &&
+        news.importOnly !== true
+      ) {
+        current = yield* ensureUsableVersion(name, current, purpose);
+      }
+
       return toAttrs(current, env.project);
     }),
 
@@ -886,6 +974,7 @@ export const CryptoKeyProvider = () =>
       if (current === undefined) return;
 
       yield* clearRotation(name, current);
+      yield* releaseKey(name, current);
 
       const versions = yield* listVersions(name);
       yield* Effect.forEach(

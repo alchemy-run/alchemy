@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 const noRetryLayer = Layer.succeed(GcpRetry, { while: () => false });
 
@@ -216,7 +217,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) => error._tag === "UnknownGCPError",
+      while: isTransientGcpError,
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
@@ -379,7 +380,6 @@ export const listOwnedContactCenters = (project: string) =>
     Effect.catchIf(
       (error) =>
         error._tag === "ServiceUnavailable" ||
-        error._tag === "UnknownGCPError" ||
         error._tag === "InternalServerError" ||
         error._tag === "BadGateway" ||
         error._tag === "GatewayTimeout",

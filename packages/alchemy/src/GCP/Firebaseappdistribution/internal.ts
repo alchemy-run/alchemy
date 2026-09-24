@@ -9,6 +9,7 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export const MAX_DISPLAY_NAME = 1024;
 export const MAX_GROUP_ID = 63;
@@ -178,7 +179,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) => error._tag === "UnknownGCPError",
+      while: isTransientGcpError,
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),

@@ -187,7 +187,9 @@ const getByName = (name: string) =>
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-        Effect.catchTag("UnknownGCPError", () => Effect.succeed(undefined)),
+        Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
+          Effect.succeed(undefined),
+        ),
       );
 
 const waitUntilExists = (name: string) =>
@@ -361,7 +363,9 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           })
           .pipe(
             GcpRetry.none,
-            Effect.catchTag("UnknownGCPError", () => Effect.succeed(undefined)),
+            Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
+              Effect.succeed(undefined),
+            ),
             Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
             Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),

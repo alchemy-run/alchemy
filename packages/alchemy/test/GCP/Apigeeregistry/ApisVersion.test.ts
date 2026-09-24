@@ -1,21 +1,18 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as registry from "@distilled.cloud/gcp/apigeeregistry_v1";
-import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import {
   hasGcpCreds,
   location,
   logLevel,
+  noRetry,
   probeTags,
   project,
   runLifecycle,
 } from "./common.ts";
-
-const noRetry = Layer.succeed(GcpRetry, { while: () => false });
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -43,13 +40,7 @@ test.provider.skipIf(!hasGcpCreds)(
           })
           .pipe(Effect.provide(noRetry)),
       );
-      expect([
-        ...probeTags,
-        "UnknownGCPError",
-        "BadGateway",
-        "ServiceUnavailable",
-        "GatewayTimeout",
-      ]).toContain(error._tag);
+      expect(probeTags).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -146,7 +146,6 @@ const getPolicy = (name: string) =>
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-          Effect.catchTag("UnknownGCPError", () => Effect.succeed(undefined)),
         );
 
 const toCatalogId = (
@@ -202,7 +201,6 @@ const stampOwnership = Effect.fn(function* (
     Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
     Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-    Effect.catchTag("UnknownGCPError", () => Effect.succeed(undefined)),
   );
 });
 

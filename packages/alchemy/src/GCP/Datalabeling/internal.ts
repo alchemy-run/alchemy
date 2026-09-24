@@ -11,6 +11,7 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 /**
  * Data Labeling is shut down. The frontend hangs ~20s then returns HTTP
@@ -251,7 +252,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.provide(noRetryLayer),
     Effect.retry({
-      while: (error) => error._tag === "UnknownGCPError",
+      while: isTransientGcpError,
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
@@ -263,8 +264,7 @@ export const retryDelete = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.provide(noRetryLayer),
     Effect.retry({
-      while: (error) =>
-        error._tag === "Conflict" || error._tag === "UnknownGCPError",
+      while: (error) => error._tag === "Conflict" || isTransientGcpError(error),
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),

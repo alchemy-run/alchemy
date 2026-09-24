@@ -1,5 +1,6 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -23,7 +24,6 @@ const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 // Cloud KMS KeyRings and ImportJobs cannot be deleted. Reuse constant
 // ids so re-runs observe the existing resources instead of leaking.
-const KEY_RING_ID = "alchemy-test-keyring";
 const IMPORT_JOB_ID = "alchemy-test-importjob";
 
 const waitUntilGone = (name: string) =>

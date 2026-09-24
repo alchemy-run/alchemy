@@ -1,5 +1,6 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID, kmsTestId } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,10 +23,9 @@ const hasGcpCreds = !!(
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
-const KEY_RING_ID = "alchemy-test-keyring";
 // Encrypt/decrypt needs a version; versions cannot be deleted for ≥24h, so
 // this key is reused across runs (names cannot be reused after delete).
-const ENCRYPT_KEY_ID = "alchemy-test-cryptokey-enc";
+const ENCRYPT_KEY_ID = kmsTestId("cryptokey");
 
 const waitUntilGone = (name: string) =>
   kms.getProjectsLocationsKeyRingsCryptoKeys({ name }).pipe(
@@ -37,78 +37,6 @@ const waitUntilGone = (name: string) =>
       times: 10,
     }),
   );
-
-const waitPrimaryEnabled = (name: string) =>
-  kms.getProjectsLocationsKeyRingsCryptoKeys({ name }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("500 millis"),
-      until: (key) => key.primary?.state === "ENABLED",
-      times: 10,
-    }),
-  );
-
-const ensureEnabledPrimary = (name: string) =>
-  Effect.gen(function* () {
-    const current = yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
-      name,
-    });
-    const primary = current.primary;
-    if (primary?.state === "ENABLED") return;
-
-    if (primary?.state === "DESTROY_SCHEDULED" && primary.name) {
-      yield* kms
-        .restoreProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-          name: primary.name,
-          body: {},
-        })
-        .pipe(Effect.catchTag("BadRequest", () => Effect.void));
-      yield* kms
-        .patchProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-          name: primary.name,
-          updateMask: "state",
-          body: { state: "ENABLED" },
-        })
-        .pipe(Effect.catchTag("BadRequest", () => Effect.void));
-      yield* waitPrimaryEnabled(name);
-      return;
-    }
-
-    if (primary?.state === "DISABLED" && primary.name) {
-      yield* kms.patchProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-        name: primary.name,
-        updateMask: "state",
-        body: { state: "ENABLED" },
-      });
-      yield* waitPrimaryEnabled(name);
-      return;
-    }
-
-    const created =
-      yield* kms.createProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-        parent: name,
-        body: {},
-      });
-    if (created.name === undefined) return;
-    yield* kms
-      .getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-        name: created.name,
-      })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
-          until: (version) => version.state === "ENABLED",
-          times: 10,
-        }),
-      );
-    const versionId = created.name.split("/").pop();
-    if (versionId !== undefined) {
-      yield* kms.updatePrimaryVersionProjectsLocationsKeyRingsCryptoKeys({
-        name,
-        body: { cryptoKeyVersionId: versionId },
-      });
-    }
-    yield* waitPrimaryEnabled(name);
-  });
 
 test.provider.skipIf(!hasGcpCreds)(
   "getProjectsLocationsKeyRingsCryptoKeys on a missing key fails with NotFound",
@@ -191,13 +119,30 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
+const roundTrip = (name: string, text: string) =>
+  Effect.gen(function* () {
+    const plaintext = yield* Effect.sync(() =>
+      Buffer.from(text, "utf8").toString("base64"),
+    );
+    const { ciphertext } =
+      yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
+        name,
+        body: { plaintext },
+      });
+    const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({
+      name,
+      body: { ciphertext },
+    });
+    return decrypted.plaintext === plaintext;
+  });
+
 test.provider.skipIf(!hasGcpCreds)(
-  "encrypt and decrypt on a standing crypto key",
+  "destroy releases a fixed-id key and the next deploy reclaims it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const key = yield* stack.deploy(
+      const deploy = stack.deploy(
         Effect.gen(function* () {
           const ring = yield* GCP.KMS.KeyRing("Keys", {
             keyRingId: KEY_RING_ID,
@@ -211,35 +156,39 @@ test.provider.skipIf(!hasGcpCreds)(
         }),
       );
 
+      const key = yield* deploy;
       expect(key.name).toContain(`/cryptoKeys/${ENCRYPT_KEY_ID}`);
-      yield* ensureEnabledPrimary(key.name);
-
-      const plaintext = yield* Effect.sync(() =>
-        Buffer.from("alchemy-kms-roundtrip", "utf8").toString("base64"),
-      );
-      const encrypted = yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
+      expect(yield* roundTrip(key.name, "first")).toEqual(true);
+      const firstPrimary = (yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
         name: key.name,
-        body: { plaintext },
-      });
-      expect(encrypted.ciphertext).toEqual(expect.any(String));
-
-      const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({
-        name: key.name,
-        body: { ciphertext: encrypted.ciphertext },
-      });
-      expect(decrypted.plaintext).toEqual(plaintext);
+      })).primary?.name;
 
       yield* stack.destroy();
 
-      // Versions enter DESTROY_SCHEDULED (min 24h). The key remains so the
-      // next run can restore the primary rather than leak a new name.
-      const stillThere = yield* kms
-        .getProjectsLocationsKeyRingsCryptoKeys({ name: key.name })
-        .pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        );
-      expect(stillThere).toEqual("found");
+      // KMS keeps the key; Alchemy releases it: every version scheduled for
+      // destruction, ownership labels swapped for the released marker.
+      const released = yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
+        name: key.name,
+      });
+      expect(released.labels).toEqual({
+        env: "test",
+        "alchemy-released": "true",
+      });
+      expect(released.primary?.state).toEqual("DESTROY_SCHEDULED");
+
+      // Redeploying the same id reclaims it with fresh key material.
+      const reclaimed = yield* deploy;
+      expect(reclaimed.name).toEqual(key.name);
+      const live = yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
+        name: key.name,
+      });
+      expect(live.labels?.["alchemy-released"]).toBeUndefined();
+      expect(live.labels?.["alchemy-id"]).toEqual("cipher");
+      expect(live.primary?.state).toEqual("ENABLED");
+      expect(live.primary?.name).not.toEqual(firstPrimary);
+      expect(yield* roundTrip(key.name, "second")).toEqual(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { timeout: 120_000 },
 );

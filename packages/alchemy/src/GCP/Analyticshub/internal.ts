@@ -11,6 +11,7 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 40;
@@ -208,8 +209,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "UnknownGCPError" || error._tag === "NotFound",
+      while: (error) => isTransientGcpError(error) || error._tag === "NotFound",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
@@ -246,7 +246,6 @@ const isUnavailable = (error: { readonly _tag: string }) =>
   error._tag === "ServiceUnavailable" ||
   error._tag === "BadGateway" ||
   error._tag === "GatewayTimeout" ||
-  error._tag === "UnknownGCPError" ||
   (error._tag === "BadRequest" && unavailableMessage(error));
 
 export const deleteRetry = <A, E extends { readonly _tag: string }, R>(

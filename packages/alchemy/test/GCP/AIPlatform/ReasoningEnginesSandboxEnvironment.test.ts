@@ -52,7 +52,7 @@ test.provider.skipIf(!hasGcpCreds)(
         "NotFound",
         "Forbidden",
         "BadRequest",
-        "UnknownGCPError",
+        "SandboxEnvironmentsNotEnabled",
       ]).toContain(error._tag);
 
       yield* stack.destroy();
@@ -91,7 +91,7 @@ test.provider.skipIf(!runLifecycle)(
           }),
         )
         .pipe(
-          Effect.catchTag("UnknownGCPError", (error) => {
+          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
             expect(error.message ?? "").toMatch(
               /not implemented|not supported|not enabled/i,
             );

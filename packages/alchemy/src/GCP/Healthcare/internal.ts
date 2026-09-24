@@ -11,6 +11,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 256;
@@ -182,10 +183,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "TooManyRequests" ||
-        error._tag === "NotFound" ||
-        error._tag === "UnknownGCPError",
+      while: (error) => isTransientGcpError(error) || error._tag === "NotFound",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),

@@ -1,5 +1,6 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID, kmsTestId } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,9 +23,8 @@ const hasGcpCreds = !!(
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
-const KEY_RING_ID = "alchemy-test-keyring";
 // Versions enter DESTROY_SCHEDULED for ≥24h, so reuse a standing key.
-const CRYPTO_KEY_ID = "alchemy-test-cryptokey-ver";
+const CRYPTO_KEY_ID = kmsTestId("version");
 
 const waitUntilGone = (name: string) =>
   kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(

@@ -35,6 +35,7 @@ import {
   type TagTemplateFieldMap,
 } from "./internal.ts";
 import { createInternalLabels } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export type TagTemplateFieldType =
   datacatalog.GoogleCloudDatacatalogV1FieldType;
@@ -444,9 +445,7 @@ export const TagTemplateProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) =>
-                error._tag === "Conflict" ||
-                error._tag === "UnknownGCPError" ||
-                error._tag === "TooManyRequests",
+                error._tag === "Conflict" || isTransientGcpError(error),
               times: 8,
               schedule: Schedule.exponential("500 millis"),
             }),

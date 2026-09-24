@@ -10,6 +10,7 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export const DEFAULT_SERVICE_ID = "oauth2.googleapis.com";
 export const DEFAULT_ENFORCEMENT_MODE = "UNENFORCED";
@@ -218,7 +219,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) => error._tag === "UnknownGCPError",
+      while: isTransientGcpError,
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),

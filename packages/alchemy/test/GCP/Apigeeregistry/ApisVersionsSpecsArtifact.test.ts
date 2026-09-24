@@ -9,6 +9,7 @@ import {
   location,
   logLevel,
   openApi,
+  noRetry,
   probeTags,
   project,
   runLifecycle,
@@ -34,9 +35,11 @@ test.provider.skipIf(!hasGcpCreds)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        registry.getProjectsLocationsApisVersionsSpecsArtifacts({
-          name: `projects/${project}/locations/${location}/apis/missing/versions/missing/specs/missing/artifacts/alchemy-missing`,
-        }),
+        registry
+          .getProjectsLocationsApisVersionsSpecsArtifacts({
+            name: `projects/${project}/locations/${location}/apis/missing/versions/missing/specs/missing/artifacts/alchemy-missing`,
+          })
+          .pipe(Effect.provide(noRetry)),
       );
       expect(probeTags).toContain(error._tag);
 

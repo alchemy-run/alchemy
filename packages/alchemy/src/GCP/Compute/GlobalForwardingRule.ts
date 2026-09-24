@@ -304,7 +304,7 @@ const ownedProxyNames = (project: string) =>
         Stream.filter((name) => name.length > 0),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           Effect.succeed([] as string[]),
         ),
       );
@@ -315,7 +315,7 @@ const ownedProxyNames = (project: string) =>
         Stream.filter((name) => name.length > 0),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           Effect.succeed([] as string[]),
         ),
       );
@@ -671,7 +671,7 @@ export const GlobalForwardingRuleProvider = () =>
             Stream.map((rule) => toAttrs(rule, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+            Effect.catchTag(["NotFound", "Forbidden"], () =>
               Effect.succeed([] as GlobalForwardingRule["Attributes"][]),
             ),
           );

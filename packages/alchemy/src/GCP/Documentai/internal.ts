@@ -11,6 +11,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export const DEFAULT_LOCATION = "us";
 /**
@@ -292,8 +293,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "TooManyRequests" || error._tag === "UnknownGCPError",
+      while: isTransientGcpError,
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),

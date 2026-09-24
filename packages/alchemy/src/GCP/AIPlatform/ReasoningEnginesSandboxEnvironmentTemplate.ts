@@ -177,7 +177,9 @@ const getByName = (name: string) =>
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-          Effect.catchTag("UnknownGCPError", () => Effect.succeed(undefined)),
+          Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
+            Effect.succeed(undefined),
+          ),
         );
 
 const listAt = (parent: string) =>

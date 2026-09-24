@@ -981,11 +981,8 @@ export const WorkerPoolProvider = () =>
         const env = yield* GcpEnvironment.current;
         // WorkerPools list rejects the `-` wildcard; Services/Jobs accept it.
         return yield* listAt(env.project, "-").pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            listAt(env.project, DEFAULT_LOCATION),
-          ),
-          Effect.catchIf(
-            (error) => error._tag === "UnknownGCPError",
+          Effect.catchTag(
+            ["NotFound", "Forbidden", "LocationWildcardUnsupported"],
             () => listAt(env.project, DEFAULT_LOCATION),
           ),
         );

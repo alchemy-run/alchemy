@@ -30,6 +30,7 @@ import {
   toDisplayName,
   updateMaskOf,
 } from "./internal.ts";
+import { isTransientGcpError } from "../Errors.ts";
 
 export type TaxonomiesPolicyTagProps = {
   /**
@@ -311,9 +312,7 @@ export const TaxonomiesPolicyTagProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) =>
-                error._tag === "Conflict" ||
-                error._tag === "UnknownGCPError" ||
-                error._tag === "TooManyRequests",
+                error._tag === "Conflict" || isTransientGcpError(error),
               times: 8,
               schedule: Schedule.exponential("500 millis"),
             }),

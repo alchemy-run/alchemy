@@ -219,7 +219,7 @@ test.provider.skipIf(!runLifecycle)(
           }),
         )
         .pipe(
-          Effect.catchTag("UnknownGCPError", (error) => {
+          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
             expect(error.message ?? "").toMatch(
               /not implemented|not supported|not enabled/i,
             );
@@ -299,7 +299,7 @@ test.provider.skipIf(!runLifecycle)(
           }),
         )
         .pipe(
-          Effect.catchTag("UnknownGCPError", (error) => {
+          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
             expect(error.message ?? "").toMatch(
               /not implemented|not supported|not enabled/i,
             );
