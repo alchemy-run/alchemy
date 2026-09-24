@@ -14,7 +14,6 @@ export default AWS.Lambda.Function(
     const uploads = yield* R2.ReadBucket(bucket);
     const queue = yield* Queues.Queue("Jobs");
     const jobs = yield* Queues.WriteQueue(queue);
-    yield* uploads.get("hello.txt")/*hide*/.pipe(Effect.orDie)/*end*/;
     return {
       fetch: Effect.gen(function* () {
         const file = yield* uploads.get("hello.txt");
@@ -26,7 +25,6 @@ export default AWS.Lambda.Function(
     Effect.provide([
       R2.ReadBucketBinding,
       Queues.WriteQueueBinding,
-      Alchemy.RuntimeContext.phantom,
     ]),
   ),
 );

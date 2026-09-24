@@ -913,14 +913,14 @@ export const steps: StepSpec[] = [
     title: "Now let's run it on AWS Lambda instead",
     snippet: "api-10-lambda.error.ts",
     error: { hide: true },
-    req: [...PROVIDED.slice(0, 4), WORKER, PHANTOM],
-    notes: "The program doesn't care where it runs. Swap Cloudflare.Worker for AWS.Lambda.Function.",
+    req: [...PROVIDED.slice(0, 4), WORKER],
+    notes: "Drop the construction-time read and the opt-out: that was a detour. The program doesn't care where it runs, so swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
     title: "It won't compile, because the native bindings need a Worker",
     snippet: "api-10-lambda.error.ts",
     error: { pick: firstLine("Type 'WorkerEnvironment'") },
-    req: [...PROVIDED.slice(0, 4), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }, PHANTOM],
+    req: [...PROVIDED.slice(0, 4), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
     notes:
       "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
   }),
@@ -935,7 +935,6 @@ export const steps: StepSpec[] = [
       met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
       QUEUE,
       met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
-      PHANTOM,
     ],
     notes:
       "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. The permission changes with the layer too: each one mints an API token scoped to exactly what the code declared. Same program, different runtime, different layer.",
@@ -955,7 +954,6 @@ export const steps: StepSpec[] = [
         met(QUEUE, "the Stack, at deploy time"),
         PROVIDED[3]!,
         PROVIDED[4]!,
-        PHANTOM,
       ],
     },
     notes:
