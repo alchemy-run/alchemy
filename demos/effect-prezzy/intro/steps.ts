@@ -1524,31 +1524,6 @@ export const steps: StepSpec[] = [
       "And that solves peeking inside. Alchemy doesn't read your code to find the bindings. It just runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
   }),
   api({
-    title: "That's why construction runs at deploy time…",
-    snippet: "api-04b-dev.ts",
-    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
-    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "attach binding + policy", side: "right", tone: "construct" }],
-    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
-    notes:
-      "Which is why Alchemy is two-phase. The construction phase runs at deploy time: running it is how Alchemy discovers every resource and binding, and attaches the policies.",
-  }),
-  api({
-    title: "…and again at cold start, to create the clients",
-    snippet: "api-04b-dev.ts",
-    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "runtime" }],
-    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "return an R2 client", side: "right", tone: "runtime" }],
-    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
-    notes:
-      "And it runs again inside the deployed function, at cold start. The same line now returns a real client. The same code does both jobs, so the infrastructure and the runtime can never disagree, which is exactly the problem I had with the CDK and a separate handler.",
-  }),
-  api({
-    title: "…while fetch runs on every request",
-    snippet: "api-04b-dev.ts",
-    tints: [{ from: "fetch: Effect.gen", to: "})", tone: "runtime" }],
-    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
-    notes: "And fetch is the runtime phase. It runs for every request, using the clients that construction handed it.",
-  }),
-  api({
     title: "A queue works the same way",
     snippet: "api-05-queue.ts",
     req: [READ, WRITE],
