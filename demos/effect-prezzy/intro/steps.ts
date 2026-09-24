@@ -1018,19 +1018,11 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "cdk",
     file: "infra/api.ts",
-    title: "Still, I liked the CDK a lot…",
-    src: { code: CDK },
-    notes: "Still, I liked the CDK a lot. It was a huge step up from YAML.",
-  },
-  {
-    kind: "code",
-    group: "cdk",
-    file: "infra/api.ts",
-    title: "…but it bothered me that the runtime code lived elsewhere",
+    title: "It also bothered me that the runtime code lived elsewhere",
     src: { code: CDK },
     beside: { file: "src/handler.ts", src: { code: HANDLER } },
     notes:
-      "But it always bothered me that the code that actually runs in the Lambda lives somewhere else entirely: a separate file, bundled and deployed separately.",
+      "It also always bothered me that the code that actually runs in the Lambda lives somewhere else entirely: a separate file, bundled and deployed separately.",
   },
   {
     kind: "code",
