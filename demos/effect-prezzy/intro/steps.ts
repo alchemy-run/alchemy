@@ -1870,15 +1870,6 @@ export const steps: StepSpec[] = [
       "And the providers we gave the Stack satisfy them. That's why it can be every Cloudflare provider: this code runs during deploy, and none of it ships in the Worker.",
   },
 
-  // Act 6: the compiler
-  {
-    kind: "board",
-    board: "pipeline",
-    stage: 0,
-    title: "TypeScript checks it, and alchemy deploy compiles it",
-    notes:
-      "alchemy deploy acts as the compiler of your application. TypeScript does the static analysis with Effect and Layer types; running the program just builds the graph of resources and bindings, which is diffed into a plan you review.",
-  },
 
   {
     kind: "code",
