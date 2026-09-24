@@ -56,10 +56,10 @@ const matchLines = (prev: CodeStep | undefined, step: CodeStep) => {
   const from = new Map<number, number>();
   if (!prev || prev.group !== step.group) return from;
   const used = new Set<number>();
-  const prevText = prev.lines.map(lineText);
+  const prevText = prev.lines.map((l) => lineText(l).trim());
   step.lines.forEach((line, i) => {
-    const text = lineText(line);
-    if (!text.trim()) return;
+    const text = lineText(line).trim();
+    if (!text) return;
     let best = -1;
     for (let j = 0; j < prevText.length; j++) {
       if (used.has(j) || prevText[j] !== text) continue;
@@ -80,10 +80,14 @@ const matchLines = (prev: CodeStep | undefined, step: CodeStep) => {
 const modifiedLines = (prev: CodeStep, step: CodeStep, matched: Map<number, number>) => {
   const out = new Map<number, { from: number; start: number; end: number }>();
   const taken = new Set(matched.values());
-  const prevText = prev.lines.map(lineText);
+  // Compare without indentation, so re-indenting a line isn't an edit.
+  const prevText = prev.lines.map((l) => lineText(l).trimStart());
+  const prevIndent = prev.lines.map((l) => lineText(l).length - lineText(l).trimStart().length);
   step.lines.forEach((line, i) => {
-    const text = lineText(line);
-    if (matched.has(i) || !text.trim()) return;
+    const full = lineText(line);
+    const indent = full.length - full.trimStart().length;
+    const text = full.trimStart();
+    if (matched.has(i) || !text) return;
     let best: { from: number; start: number; end: number; score: number } | undefined;
     prevText.forEach((old, j) => {
       if (taken.has(j) || !old.trim()) return;
@@ -96,10 +100,12 @@ const modifiedLines = (prev: CodeStep, step: CodeStep, matched: Map<number, numb
       const insertion = score >= old.length && old.trim().length >= 2;
       // The old line with something taken out: nothing new to highlight.
       const deletion = score >= text.length && text.trim().length >= 2;
-      if (!insertion && !deletion && score < Math.max(old.length, text.length) * 0.5) return;
+      // Re-indented lines only count when they just lost text (e.g. being wrapped).
+      if (!deletion && prevIndent[j] !== indent) return;
+      if (!insertion && !deletion && score < Math.max(old.length, text.length) * 0.4) return;
       if (!deletion && text.length - suf <= pre) return;
       if (!best || score > best.score || (score === best.score && Math.abs(j - i) < Math.abs(best.from - i)))
-        best = { from: j, start: pre, end: text.length - suf, score };
+        best = { from: j, start: indent + pre, end: indent + text.length - suf, score };
     });
     if (best) {
       taken.add(best.from);
@@ -379,7 +385,9 @@ export const CodeSlide = ({
         // An edited line glides from its old position; only the new part fades in.
         const from = matched.get(i) ?? span?.from;
         const y0 = from !== undefined ? pg.top + from * pg.lh : g.top + i * g.lh;
-        const x0 = from !== undefined ? pg.left : g.left;
+        const indentOf = (t: string) => t.length - t.trimStart().length;
+        const shift = from !== undefined ? (indentOf(lineText(prev!.lines[from] ?? [])) - indentOf(lineText(tokens))) * g.cw : 0;
+        const x0 = from !== undefined ? pg.left + shift : g.left;
         const y = y0 + (g.top + i * g.lh - y0) * t;
         const x = x0 + (g.left - x0) * t;
         const size = (from !== undefined ? pg.size : g.size) + (g.size - (from !== undefined ? pg.size : g.size)) * t;

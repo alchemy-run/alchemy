@@ -371,7 +371,7 @@ const PROVIDED: ReqItem[] = [
   met(READ, "ReadBucketBinding\nadds a native R2 binding"),
   QUEUE,
   met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
-  met(WORKER, "Api is a Worker"),
+  met(WORKER, "it runs in a Worker"),
 ];
 
 /** The first line of the compiler's message that starts with `prefix`. */
@@ -790,11 +790,11 @@ interface Storage {
       "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding, and nothing else: the program can only do what the code declared.",
   }),
   api({
-    title: "Finally, we hand it to a Worker to run it in the cloud",
+    title: "Finally, we wrap it in a Worker to run it in the cloud",
     snippet: "api-07-worker.ts",
     req: PROVIDED,
     notes:
-      "To run the program in the cloud, hand it to a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
+      "To run the program in the cloud, wrap it in a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
   }),
   api({
     title: "But what if we read during construction?",
