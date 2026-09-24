@@ -112,11 +112,10 @@ const markEmpty = (el: HTMLElement) => {
 const makeEditable = (el: HTMLElement) => {
   markEmpty(el);
   if (el.isContentEditable) return;
-  try {
-    el.contentEditable = "plaintext-only";
-  } catch {
-    el.contentEditable = "true";
-  }
+  // "true", not "plaintext-only": Chrome forces `white-space: pre-wrap` on
+  // plaintext-only elements, which renders source line breaks. Rich-text
+  // input is blocked below instead.
+  el.contentEditable = "true";
   el.spellcheck = false;
 };
 
@@ -200,6 +199,12 @@ const textNodes = (el: HTMLElement): string[] => {
   return out;
 };
 
+/** Browsers type spaces as non-breaking ones at run edges; keep real ones. */
+const plainSpaces = (after: string[], before: string[]) =>
+  after.map((text, i) =>
+    before[i]?.includes("\u00a0") ? text : text.replace(/\u00a0/g, " "),
+  );
+
 interface Snapshot {
   html: string;
   texts: string[];
@@ -210,7 +215,7 @@ const saveInline = async (el: HTMLElement) => {
   const snap = snapshots.get(el);
   if (!snap) return;
   snapshots.delete(el);
-  const after = textNodes(el);
+  const after = plainSpaces(textNodes(el), snap.texts);
   if (after.join("\u0000") === snap.texts.join("\u0000")) return;
   const result = await post(SAVE_ENDPOINT, {
     id: el.dataset.copy,
@@ -427,7 +432,7 @@ const leaveSource = async (el: HTMLElement) => {
     if (el.dataset.copyEditing === "loading") delete el.dataset.copyEditing;
     return;
   }
-  const source = el.innerText.replace(/\s+$/, "");
+  const source = el.innerText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
   delete el.dataset.copyEditing;
   if (source === (state.base ?? "").replace(/\s+$/, "")) {
     state.draft = undefined;
@@ -588,7 +593,18 @@ listen(
   true,
 );
 
-// The `contenteditable="true"` fallback would otherwise paste rich HTML.
+// Editable elements are plain text: no bold/italic shortcuts or rich drops.
+listen("beforeinput", (event) => {
+  if (!target(event)) return;
+  if (
+    event.inputType.startsWith("format") ||
+    event.inputType === "insertFromDrop"
+  ) {
+    event.preventDefault();
+  }
+});
+
+// Paste as plain text.
 listen("paste", (event) => {
   if (!target(event) || !event.clipboardData) return;
   event.preventDefault();

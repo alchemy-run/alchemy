@@ -8,6 +8,7 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import HeroDeployTerminal from "../components/marketing-islands/HeroDeployTerminal.tsx";
+import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import HeroCodeBlock from "../components/marketing/HeroCodeBlock.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -16,6 +17,13 @@ import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 
 // Hero: the smallest complete-looking Worker (KV only; `Sessions` and
 // `Bindings` are declared elsewhere in the file).
+// Sentiment section layout. In dev all three render and ?sentiment=
+// wall|marquee|featured picks one (static pages can't read the query).
+const SENTIMENT_LAYOUT = "wall" as const;
+const SENTIMENT_PREVIEW = import.meta.env.DEV
+  ? (["wall", "marquee", "featured"] as const)
+  : null;
+
 const HERO_SRC = `export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
@@ -359,15 +367,50 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── GET STARTED ───────────────── -->
+  <!-- ───────────────── SENTIMENT ───────────────── -->
   <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1" aria-labelledby="sentiment-h">
+    <div class="v2-container">
+      <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
+      <p class="v2-lede" data-copy>
+        What builders say after putting Alchemy in front of their agents,
+        their Cloudflare apps, and their production infrastructure.
+      </p>
+      {
+        SENTIMENT_PREVIEW ? (
+          <>
+            {SENTIMENT_PREVIEW.map((l) => (
+              <div class="v2-snt-preview" data-layout={l} hidden={l !== SENTIMENT_LAYOUT}>
+                <Sentiment layout={l} />
+              </div>
+            ))}
+            <script
+              is:inline
+              set:html={`(() => {
+                const want = new URLSearchParams(location.search).get("sentiment");
+                if (!want) return;
+                document.querySelectorAll(".v2-snt-preview").forEach((el) => {
+                  el.hidden = el.dataset.layout !== want;
+                });
+              })();`}
+            />
+          </>
+        ) : (
+          <Sentiment layout={SENTIMENT_LAYOUT} />
+        )
+      }
+    </div>
+  </section>
+
+  <!-- ───────────────── GET STARTED ───────────────── -->
+  <AlchemicalDivider variant="circle" class="v2-divider" />
   <section class="v2-section v2-pat-6 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
-          <code class="v2-steps__code">bun add alchemy@latest effect</code>
+          <code class="v2-steps__code">pnpm add alchemy@latest effect</code>
         </li>
         <li id="agent-prompt">
           <span class="v2-steps__label" data-copy>Paste this into your coding agent</span>
@@ -375,7 +418,7 @@ const PROVIDERS = [
         </li>
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Ship</span>
-          <code class="v2-steps__code">bun alchemy deploy</code>
+          <code class="v2-steps__code">pnpm alchemy deploy</code>
         </li>
       </ol>
       <div class="v2-cta-buttons">
@@ -614,9 +657,6 @@ const PROVIDERS = [
     margin: 0 auto;
   }
 
-  :global(html) {
-    scroll-behavior: smooth;
-  }
   #agent-prompt {
     scroll-margin-top: 96px;
   }
@@ -723,7 +763,7 @@ const PROVIDERS = [
     padding: 80px 32px;
   }
   /* Sections are separated by the original site's geometric dividers:
-     triangle → square → pentagon → hexagon → heptagon, down the page. */
+     triangle → square → pentagon → hexagon → circle, down the page. */
   :global(.v2-divider) {
     margin: 0 auto;
   }

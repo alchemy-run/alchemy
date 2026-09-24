@@ -16,6 +16,7 @@ const cols: FooterCol[] = [
     links: [
       { label: "Docs", href: "/getting-started" },
       { label: "Tutorial", href: "/cloudflare/tutorial/part-1" },
+      { label: "Compare", href: "/compare" },
       { label: "Effect", href: "https://effect.website" },
       // todo(sam): create an /examples landing page (or sidebar entry)
       // and re-enable: { label: "Examples", href: "/examples" }
@@ -39,9 +40,8 @@ const cols: FooterCol[] = [
       { label: "Privacy", href: "/privacy" },
     ],
   },
-  // todo(sam): write the comparison pages and re-enable this whole
-  // column. Suggested locations: /compare/pulumi, /compare/sst,
-  // /compare/terraform, /compare/cdk.
+  // todo(sam): /compare covers SST, Pulumi, and Terraform on one page.
+  // Split into per-tool pages (and add CDK) to re-enable this column.
   // {
   //   h: "Compare",
   //   links: [

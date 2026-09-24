@@ -104,6 +104,12 @@ const MARKETING_PAGES: Record<string, Omit<Entry, "slug" | "kind">> = {
       "Snap together cloud resources and let Alchemy take care of the wiring so you can focus on your product.",
     eyebrow: "infrastructure as effects",
   },
+  compare: {
+    title: "Alchemy vs SST, Pulumi & Terraform",
+    description:
+      "One TypeScript program for your infrastructure and the code that runs on it, with no wrapped engines underneath.",
+    eyebrow: "compare",
+  },
   privacy: {
     title: "Privacy & Telemetry",
     description:

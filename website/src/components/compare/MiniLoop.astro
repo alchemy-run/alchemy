@@ -1,0 +1,125 @@
+---
+/**
+ * The compare page's small deploy → test → destroy → edit loop, colored to
+ * show where a tool's loop breaks.
+ */
+export type LoopState = "ok" | "manual" | "diy" | "broken";
+
+interface Props {
+  tool: string;
+  /** deploy, test, destroy, edit */
+  nodes: [LoopState, LoopState, LoopState, LoopState];
+  /** arc i runs from node i to node i + 1 */
+  arcs: [LoopState, LoopState, LoopState, LoopState];
+}
+
+const { tool, nodes, arcs } = Astro.props;
+
+const STEPS = ["deploy", "test", "destroy", "edit"];
+const c = 60;
+const r = 40;
+const pt = (deg: number) => {
+  const t = (deg * Math.PI) / 180;
+  return [+(c + r * Math.cos(t)).toFixed(1), +(c + r * Math.sin(t)).toFixed(1)];
+};
+const degs = [-90, 0, 90, 180];
+const points = degs.map(pt);
+const arcPaths = degs.map((d) => {
+  const [x0, y0] = pt(d + 22);
+  const [x1, y1] = pt(d + 68);
+  return `M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`;
+});
+const verb = (s: LoopState) =>
+  s === "ok"
+    ? "works"
+    : s === "manual"
+      ? "is manual"
+      : s === "diy"
+        ? "is yours to build"
+        : "falls short";
+const label = `${tool}: ${STEPS.map((step, i) => `${step} ${verb(nodes[i]!)}`).join(", ")}.`;
+---
+
+<svg viewBox="0 0 120 120" class="dg-mini" role="img" aria-label={label}>
+  {arcPaths.map((d, i) => <path class={`dg-mini__arc is-${arcs[i]}`} d={d} />)}
+  {
+    points.map(([x, y], i) => (
+      <g transform={`translate(${x} ${y})`} class={`dg-mini__node is-${nodes[i]}`}>
+        <circle r="11" />
+        {nodes[i] === "broken" && (
+          <path d="M -4 -4 L 4 4 M 4 -4 L -4 4" class="dg-mini__x" />
+        )}
+      </g>
+    ))
+  }
+  {
+    STEPS.map((step, i) => {
+      const [x, y] = points[i]!;
+      const dy = i === 0 ? -16 : i === 2 ? 23 : 3;
+      const dx = i === 1 ? 16 : i === 3 ? -16 : 0;
+      const anchor = i === 1 ? "start" : i === 3 ? "end" : "middle";
+      return (
+        <text x={x! + dx} y={y! + dy} text-anchor={anchor} class="dg-mini__label">
+          {step}
+        </text>
+      );
+    })
+  }
+</svg>
+
+<style>
+  .dg-mini {
+    width: 150px;
+    align-self: center;
+    overflow: visible;
+  }
+  .dg-mini__arc {
+    fill: none;
+    stroke-width: 2;
+  }
+  .dg-mini__arc.is-ok {
+    stroke: var(--alc-accent);
+  }
+  .dg-mini__arc.is-manual {
+    stroke: var(--alc-fg-3);
+    stroke-dasharray: 2 4;
+  }
+  .dg-mini__arc.is-diy {
+    stroke: var(--alc-warn);
+    stroke-dasharray: 5 4;
+  }
+  .dg-mini__arc.is-broken {
+    stroke: var(--alc-danger);
+    stroke-dasharray: 1 7;
+    stroke-linecap: round;
+  }
+  .dg-mini__node circle {
+    fill: var(--alc-bg);
+    stroke-width: 1.5;
+  }
+  .dg-mini__node.is-ok circle {
+    stroke: var(--alc-accent);
+    fill: color-mix(in srgb, var(--alc-accent) 22%, var(--alc-bg));
+  }
+  .dg-mini__node.is-manual circle {
+    stroke: var(--alc-fg-3);
+    stroke-dasharray: 2 3;
+  }
+  .dg-mini__node.is-diy circle {
+    stroke: var(--alc-warn);
+    stroke-dasharray: 4 3;
+  }
+  .dg-mini__node.is-broken circle {
+    stroke: var(--alc-danger);
+    fill: color-mix(in srgb, var(--alc-danger) 18%, var(--alc-bg));
+  }
+  .dg-mini__x {
+    stroke: var(--alc-danger);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .dg-mini__label {
+    font: 600 9.5px var(--alc-font-sans);
+    fill: var(--alc-fg-2);
+  }
+</style>

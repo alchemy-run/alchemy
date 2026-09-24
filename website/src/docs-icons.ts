@@ -72,6 +72,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Command: l("square-terminal"),
   Reference: l("code"),
   Blog: l("newspaper"),
+  Compare: l("scale"),
 };
 
 /** Sidebar group-heading icons, keyed by (normalized) group label. */
