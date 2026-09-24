@@ -1389,12 +1389,43 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
+    title: "A Stack is a set of resources you deploy as one unit",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [
+      { kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" },
+      { kind: "underline", find: "yield* Api", label: "and everything it declares", side: "right", tone: "construct" },
+    ],
+    notes:
+      "Which brings us to the Stack. A Stack is the root of the program: a collection of resources that are deployed, updated and destroyed together, as one unit. Here that's the Api Worker and everything it declares.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "…and each stage is its own isolated copy of it",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [{ kind: "circle", find: '"App"', label: "one app", side: "right", tone: "construct" }],
+    panel: {
+      title: "One Stack, many stages",
+      items: [
+        { title: "alchemy deploy --stage dev-sam", body: "your own copy, while you work", tone: "runtime" },
+        { title: "alchemy deploy --stage pr-42", body: "a preview for every pull request", tone: "construct" },
+        { title: "alchemy deploy --stage prod", body: "production", tone: "good" },
+      ],
+    },
+    notes:
+      "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own bucket, its own queue, its own Worker and its own state. Your dev copy, a preview per pull request, and production never share a resource.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
     title: "The requirement bubbles up to the Stack",
     src: { snippet: "stack.ts", regions: ["show"] },
     marks: [{ kind: "underline", find: "yield* Api", label: "brings its providers along", side: "right", tone: "construct" }],
     req: { label: REQ_LABEL, items: [BUCKET, QUEUE] },
     notes:
-      "The Stack is the root of the program. It yields the Worker, and the Worker's remaining requirements, the providers, bubble up to it.",
+      "And because the Stack yields the Worker, the Worker's remaining requirements, the providers, bubble up to it.",
   },
   {
     kind: "code",
