@@ -963,9 +963,9 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "cdk",
     file: "infra/api.ts",
-    title: "Then the AWS CDK came out, and I switched to it",
+    title: "Then the AWS CDK came out",
     src: { code: CDK },
-    notes: "Then the AWS CDK came out, and I switched to it. The same infrastructure, as a TypeScript class.",
+    notes: "Then the AWS CDK came out. The same infrastructure, as a TypeScript class.",
   },
   {
     kind: "code",
