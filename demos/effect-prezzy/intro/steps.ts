@@ -348,6 +348,19 @@ const program = (): StepSpec[] => [
     notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
   }),
   lang({
+    title: "…and so is reading the bucket during construction",
+    src: { code: COLORED_EARLY },
+    quiet: true,
+    marks: [{ kind: "strike", find: 'bucket.get("hello.txt")', tone: "bad" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"], ENV),
+      edges: BINDINGS,
+      cards: [{ text: "✗ can't call runtime code at deploy time", tone: "bad" }],
+    },
+    notes:
+      "And the rule goes both ways. Reading the bucket is runtime code, and construction runs at deploy time, before there's any request to serve. So calling bucket.get there is a compile error too.",
+  }),
+  lang({
     title: "And inferring permissions becomes a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
@@ -1742,12 +1755,12 @@ export const steps: StepSpec[] = [
   }),
   lang({
     group: "phase-callback",
-    title: "And construction can't call runtime code either",
+    title: "…and that construction can't call runtime code",
     src: { code: COLORED_EARLY },
     quiet: true,
     marks: [{ kind: "strike", find: 'bucket.get("hello.txt")', label: "no request yet", side: "right", tone: "bad" }],
     notes:
-      "And the rule goes both ways. Reading the bucket is runtime code. Construction runs at deploy time, before there's any request, so calling it there should be an error too.",
+      "And the other direction: reading the bucket during construction, when there's no request yet, was an error too.",
   }),
   api({
     title: "So let's make that mistake in Alchemy",
