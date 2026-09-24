@@ -1040,8 +1040,8 @@ export const steps: StepSpec[] = [
   api({
     title: "…and again at cold start, to create the clients",
     snippet: "api-04b-dev.ts",
-    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
-    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "return an R2 client", side: "right", tone: "construct" }],
+    tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "runtime" }],
+    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "return an R2 client", side: "right", tone: "runtime" }],
     req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes:
       "And it runs again inside the deployed function, at cold start. The same line now returns a real client. The same code does both jobs, so the infrastructure and the runtime can never disagree, which is exactly the problem I had with the CDK and a separate handler.",
