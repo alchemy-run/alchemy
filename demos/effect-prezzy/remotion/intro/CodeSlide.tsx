@@ -202,7 +202,8 @@ export const CodeSlide = ({
       {/* lines new or changed since the previous step in this sequence, in diff green */}
       {morph
         ? step.lines.map((tokens, i) => {
-            if (matched.has(i) || !lineText(tokens).trim()) return null;
+            // One highlight per line: a phase tint takes precedence over "changed".
+            if (matched.has(i) || !lineText(tokens).trim() || tintOf(i)) return null;
             return (
               <div
                 key={`added-${i}`}
