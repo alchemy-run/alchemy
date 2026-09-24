@@ -9,7 +9,7 @@
  *
  *   pnpm intro:build
  */
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHighlighter } from "shiki";
 import { API } from "tsgo/unstable/sync";
@@ -39,13 +39,19 @@ const flatten = (chain: Chain, depth = 0): string[] => [
   ...(chain.messageChain ?? []).flatMap((child) => flatten(child, depth + 1)),
 ];
 
+// Type-checking is the slow part; skip it when no snippet changed since the last build.
+const cacheFile = path.join(out, "diagnostics.json");
+const snippetNames = (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts") || f === "tsconfig.json");
+const stamp = (await Promise.all(snippetNames.map(async (f) => `${f}:${(await stat(path.join(snippetsDir, f))).mtimeMs}`))).join("|");
+const cached = await readFile(cacheFile, "utf8").then((t) => JSON.parse(t) as { stamp: string; diagnostics: [string, Diagnostic[]][] }, () => undefined);
+const diagnostics = new Map<string, Diagnostic[]>(cached?.stamp === stamp ? cached.diagnostics : []);
+if (cached?.stamp !== stamp) {
 console.log("● type-checking intro/snippets (tsgo)");
 const api = new API({ cwd: snippetsDir });
 const configFile = path.join(snippetsDir, "tsconfig.json");
 const snapshot = api.createSnapshot({ openProjects: [configFile] });
 const project = snapshot.getConfiguredProject(configFile);
 if (!project) throw new Error("could not open intro/snippets/tsconfig.json");
-const diagnostics = new Map<string, Diagnostic[]>();
 for (const file of (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"))) {
   const full = path.join(snippetsDir, file);
   const list = [
@@ -63,6 +69,9 @@ for (const file of (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"))
   );
 }
 api.close();
+await mkdir(out, { recursive: true });
+await writeFile(cacheFile, JSON.stringify({ stamp, diagnostics: [...diagnostics] }));
+}
 
 const snippetFiles = (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"));
 for (const file of snippetFiles) {

@@ -12,6 +12,8 @@
     "deck.ts",
     "render.ts",
     "intro/build.ts",
+    "intro/watch.ts",
+    "dev.ts",
     "intro/steps.ts",
     "remotion.config.ts"
   ],

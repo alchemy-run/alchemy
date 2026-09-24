@@ -1,4 +1,13 @@
-import { AbsoluteFill, staticFile, useCurrentFrame, type CalculateMetadataFunction } from "remotion";
+import { useEffect, useState } from "react";
+import {
+  AbsoluteFill,
+  continueRender,
+  delayRender,
+  staticFile,
+  useCurrentFrame,
+  watchStaticFile,
+  type CalculateMetadataFunction,
+} from "remotion";
 import { introTimeline, type IntroJson, type IntroStep } from "../../shared/intro.ts";
 import { VIDEO } from "../../shared/types.ts";
 import { Caption } from "../scene/Scene.tsx";
@@ -58,4 +67,27 @@ export const Intro = ({ intro }: IntroProps) => {
       <Caption text={step.title} since={captionSince} />
     </AbsoluteFill>
   );
+};
+
+/**
+ * Studio-only live preview: loads intro.json itself and reloads it whenever
+ * `pnpm dev` rebuilds it, so edits to intro/steps.ts or a snippet show up
+ * without restarting anything. Scrub or press → in the Studio timeline.
+ */
+export const IntroLive = () => {
+  const [intro, setIntro] = useState<IntroJson>();
+  const [handle] = useState(() => delayRender("loading intro.json"));
+  useEffect(() => {
+    const load = () =>
+      fetch(`${staticFile("intro/intro.json")}?t=${Date.now()}`)
+        .then((r) => r.json())
+        .then((json: IntroJson) => {
+          setIntro(json);
+          continueRender(handle);
+        });
+    load();
+    const watcher = watchStaticFile("intro/intro.json", () => load());
+    return () => watcher.cancel();
+  }, [handle]);
+  return <Intro intro={intro} />;
 };

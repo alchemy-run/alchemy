@@ -10,7 +10,8 @@
     "render": "node render.ts",
     "present": "pnpm tcut present out/presentation --open",
     "tcut": "bunx bun@1.4.2 ../../submodules/tcut/packages/tcut/src/cli.ts",
-    "intro:build": "node intro/build.ts"
+    "intro:build": "node intro/build.ts",
+    "dev": "node dev.ts"
   },
   "dependencies": {
     "@effect/sql-d1": "catalog:",
