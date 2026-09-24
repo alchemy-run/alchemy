@@ -136,6 +136,8 @@ export interface SceneCapture {
         duration: number;
         /** Which tab is on screen from each clip time on (marked once the screen has repainted). */
         tabs: { at: number; tab: TerminalTab }[];
+        /** Clip times where output resumes after a pause: the presenter stops just before each. */
+        pauses?: number[];
       }
     | undefined;
   beats: Beat[];

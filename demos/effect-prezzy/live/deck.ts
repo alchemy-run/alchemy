@@ -25,6 +25,24 @@ const fetchJson = async <T,>(file: string): Promise<T | undefined> => {
 };
 
 /**
+ * Clip times where the recorded terminal starts printing again after at least
+ * 1.5s of silence: natural places to stop and talk (e.g. a plan waiting for approval).
+ */
+const terminalPauses = async (id: string): Promise<number[]> => {
+  const response = await fetch(`/${id}/terminal.cast?t=${Date.now()}`);
+  if (!response.ok) return [];
+  const pauses: number[] = [];
+  let previous = 0;
+  for (const line of (await response.text()).split("\n").slice(1)) {
+    if (!line.startsWith("[")) continue;
+    const [time] = JSON.parse(line) as [number];
+    if (time - previous > 1.5) pauses.push(time);
+    previous = time;
+  }
+  return pauses;
+};
+
+/**
  * Loads every deck item the same way render.ts does, splits it into
  * presenter steps, and skips scenes that haven't been captured yet.
  */
@@ -48,6 +66,7 @@ export const loadDeck = async () => {
     } else {
       const capture = await fetchJson<SceneCapture>(`${item.id}/scene.json`);
       if (!capture) continue;
+      if (capture.terminal) capture.terminal.pauses ??= await terminalPauses(item.id);
       const plan = await schedule(capture, VIDEO.fps);
       items.push({ item, durationInFrames: plan.durationInFrames, inputProps: { id: item.id, capture, plan } });
       for (const step of plan.steps) steps.push({ item: index, ...step });

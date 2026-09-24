@@ -80,7 +80,7 @@ function App() {
     if (!p) return;
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    // The Player rewinds to inFrame when it ends; hold the step's last frame instead.
+    // moveToBeginningWhenEnded={false} keeps the last frame; settle() pins it.
     const onEnded = () => {
       setPlaying(false);
       settle();
@@ -188,6 +188,7 @@ function App() {
           fps={VIDEO.fps}
           inFrame={step.from}
           outFrame={step.to - 1}
+          moveToBeginningWhenEnded={false}
           acknowledgeRemotionLicense
           // Only the presenter's keys control playback.
           spaceKeyToPlayOrPause={false}

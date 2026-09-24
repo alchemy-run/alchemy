@@ -183,15 +183,37 @@ export const schedule = async (
   }
   const durationInFrames = Math.max(1, frame);
 
-  // Steps: a new one at every step beat; empty ones (e.g. a step right before a patch's own) are dropped.
+  // Steps: the presenter stops before every step beat, every code edit, and every
+  // switch to another window, so nothing advances without a keypress. Empty ones
+  // (two stops at the same frame) collapse into the later one.
   const marks: { title: string; notes: string; from: number }[] = [
     { title: capture.title, notes: capture.notes, from: 0 },
   ];
+  let title = capture.title;
+  let notes = capture.notes;
   for (const segment of segments) {
-    if (segment.beat.kind !== "step") continue;
-    const mark = { title: segment.beat.title, notes: segment.beat.notes, from: segment.from };
-    if (marks.at(-1)!.from === mark.from) marks[marks.length - 1] = mark;
-    else marks.push(mark);
+    const beat = segment.beat;
+    if (beat.kind === "step") {
+      title = beat.title;
+      notes = beat.notes;
+    }
+    const stop =
+      beat.kind === "step" ||
+      beat.kind === "editor.patch" ||
+      (segment.app !== segment.previous && segment.duration > 0);
+    if (stop) {
+      const mark = { title, notes, from: segment.from };
+      if (marks.at(-1)!.from === mark.from) marks[marks.length - 1] = mark;
+      else marks.push(mark);
+    }
+    // Inside a long terminal run, also stop where output resumes after a pause.
+    if (beat.kind === "terminal") {
+      for (const at of capture.terminal?.pauses ?? []) {
+        if (at <= beat.start + 0.5 || at >= beat.end - 0.5) continue;
+        const from = segment.from + segment.switchFrames + Math.round((at - beat.start) * fps);
+        if (from > marks.at(-1)!.from) marks.push({ title, notes, from });
+      }
+    }
   }
   const steps: Step[] = marks.map((mark, i) => ({
     ...mark,

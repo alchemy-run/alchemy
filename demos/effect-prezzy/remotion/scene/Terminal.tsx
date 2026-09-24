@@ -1,4 +1,5 @@
-import { Freeze, OffthreadVideo, staticFile } from "remotion";
+import { useEffect, useRef } from "react";
+import { Freeze, getRemotionEnvironment, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import {
   TAB_BAR,
   TERMINAL,
@@ -149,6 +150,46 @@ const Chrome = ({ active }: { active: TerminalTab }) => (
   </div>
 );
 
+/**
+ * In the live presenter, seeking a video to an exact frame on every frame
+ * stalls, so the terminal plays as a normal <video> kept in step with the
+ * timeline: it plays while clip time advances and is re-seeked only when it
+ * drifts or jumps.
+ */
+const LiveClip = ({ src, time }: { src: string; time: number }) => {
+  const ref = useRef<HTMLVideoElement>(null);
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const last = useRef({ frame, time });
+  const idle = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const advancing = frame === last.current.frame + 1 && time > last.current.time;
+    last.current = { frame, time };
+    if (Math.abs(video.currentTime - time) > 0.25) video.currentTime = time;
+    if (advancing && video.paused) video.play().catch(() => {});
+    if (!advancing && !video.paused) video.pause();
+    // The timeline stopped (end of a step, pause): stop the clip on the frame it's showing.
+    clearTimeout(idle.current);
+    idle.current = setTimeout(() => {
+      video.pause();
+      video.currentTime = last.current.time;
+    }, (2 * 1000) / fps);
+  }, [frame, time, fps]);
+  useEffect(() => () => clearTimeout(idle.current), []);
+  return (
+    <video
+      ref={ref}
+      src={src}
+      muted
+      playsInline
+      preload="auto"
+      style={{ width: TERMINAL.width, height: TERMINAL.height, display: "block" }}
+    />
+  );
+};
+
 export const Terminal = ({
   capture,
   plan,
@@ -167,7 +208,9 @@ export const Terminal = ({
   const videoFrame = Math.min(Math.round(time * fps), last);
   return (
     <Window background={BACKGROUND} bar={<Chrome active={active} />}>
-      {capture.terminal ? (
+      {capture.terminal && getRemotionEnvironment().isPlayer ? (
+        <LiveClip src={staticFile(capture.terminal.clip)} time={time} />
+      ) : capture.terminal ? (
         <Freeze frame={videoFrame}>
           <OffthreadVideo
             src={staticFile(capture.terminal.clip)}
