@@ -33,6 +33,36 @@ const serviceSuites: Record<string, ReadonlyArray<string>> = {
   Organizations: ["Organization.test.ts"],
 };
 
+// Opt-in gates whose tests are gated only for live-AWS cost, quota, slow
+// provisioning, or preview access. Floci emulates all of them, so enable them
+// here unless the caller set them explicitly. Gates that need real-account
+// values (ARNs, domains, verified identities) stay off.
+const flociOptInGates = [
+  "ALCHEMY_TEST_IDENTITY_CENTER",
+  "AWS_LAMBDA_TEST_SHUTDOWN",
+  "AWS_TEST_APIGWV2_VPCLINK",
+  "AWS_TEST_APPSYNC_CACHE",
+  "AWS_TEST_CLOUDHSM",
+  "AWS_TEST_CLOUDMAP_PUBLIC",
+  "AWS_TEST_CODEARTIFACT_EVENTS",
+  "AWS_TEST_CONFIG_RECORDER",
+  "AWS_TEST_EFS_MULTI_AZ",
+  "AWS_TEST_METRICSTREAM",
+  "AWS_TEST_NAT_GATEWAY",
+  "AWS_TEST_NETWORKFIREWALL",
+  "AWS_TEST_RDS_DBCLUSTER",
+  "AWS_TEST_RDS_DBCLUSTER_ENDPOINT",
+  "AWS_TEST_RDS_DBINSTANCE",
+  "AWS_TEST_RDS_DBSUBNETGROUP",
+  "AWS_TEST_RE2_AGGREGATOR",
+  "AWS_TEST_SERVICE_QUOTAS",
+  "AWS_TEST_SES_DEDICATED_IP",
+  "AWS_TEST_WAF_ASSOCIATION",
+  "AWS_TEST_WAF_CLOUDFRONT",
+  "CLOUDFRONT_TEST_VPC_ORIGIN",
+  "LAMBDA_TEST_NETWORK_CONNECTOR",
+];
+
 const dualizedServices = (): string[] => {
   const source = readFileSync(providersFile, "utf8");
   const names = new Set<string>(["Local"]);
@@ -182,6 +212,7 @@ if (dryRun) {
 
 process.env.ALCHEMY_TEST_DEV = "1";
 process.env.AWS_ENDPOINT_URL = "http://localhost:4566";
+for (const gate of flociOptInGates) process.env[gate] ??= "1";
 if (external) {
   process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
   console.log(

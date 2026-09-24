@@ -40,8 +40,42 @@ import {
   flociProvidersUrl,
   makeDevWatchProvider,
 } from "../Local/DevWatchProvider.ts";
+import { registerRpcErrorClasses } from "../../Local/RpcSerialization.ts";
 import { imageSourceTrigger, restartFamilyTasks } from "./EcsDevWatch.ts";
-import { Service, ServiceProvider, type ServiceProps } from "./Service.ts";
+import {
+  MissingListenerCertificate,
+  MissingRuleListener,
+  MixedListenerOwnership,
+  MixedLoadBalancerProtocols,
+  NetworkListenerRuleUnsupported,
+  OwnedOnlyLoadBalancerOption,
+  RequestCountScalingRequiresLoadBalancer,
+  Service,
+  ServiceDidNotStabilize,
+  ServiceHealthTargetNotFound,
+  ServiceHostedZoneNotFound,
+  ServiceProvider,
+  ServiceRuleActionConflict,
+  UnsupportedListenerProtocol,
+  type ServiceProps,
+} from "./Service.ts";
+
+// This provider runs in the RPC sidecar; register its typed failures so
+// callers receive instances of the real classes.
+registerRpcErrorClasses(
+  MissingListenerCertificate,
+  MissingRuleListener,
+  MixedListenerOwnership,
+  MixedLoadBalancerProtocols,
+  NetworkListenerRuleUnsupported,
+  OwnedOnlyLoadBalancerOption,
+  RequestCountScalingRequiresLoadBalancer,
+  ServiceDidNotStabilize,
+  ServiceHealthTargetNotFound,
+  ServiceHostedZoneNotFound,
+  ServiceRuleActionConflict,
+  UnsupportedListenerProtocol,
+);
 
 /** Cluster ARN from either form of the `cluster` prop (see ServiceProvider). */
 const clusterArnOfProps = (

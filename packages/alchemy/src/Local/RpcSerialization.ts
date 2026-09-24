@@ -101,6 +101,94 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
 
 const serializeError = Schema.encodeSync(Schema.Defect());
 
+/** Wire form of a tagged failure: its tag plus every field the error carries. */
+interface TaggedErrorMarker {
+  readonly _tag: "~alchemy/Rpc/TaggedError";
+  readonly tag: string;
+  readonly name: string | undefined;
+  readonly message: string | undefined;
+  readonly stack: string | undefined;
+  readonly fields: Record<string, unknown>;
+}
+
+const taggedErrorClasses = new Map<string, new (...args: any) => object>();
+
+/**
+ * Registers tagged error classes that a provider may fail with across the RPC
+ * sidecar boundary, so the caller receives instances of the real class (for
+ * `instanceof`) rather than plain tagged objects. Registration is by `_tag`;
+ * call it next to the class definitions so both processes register them.
+ */
+export const registerRpcErrorClasses = (
+  ...classes: ReadonlyArray<new (...args: any) => { readonly _tag: string }>
+): void => {
+  for (const cls of classes) {
+    // `Data.TaggedError` sets `_tag` per instance, so read it from a probe.
+    const probe = Reflect.construct(cls, [{}]) as { readonly _tag: string };
+    taggedErrorClasses.set(probe._tag, cls);
+  }
+};
+
+const hasStringTag = (value: unknown): value is { readonly _tag: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  typeof value._tag === "string";
+
+const serializeFailure = (error: unknown): unknown => {
+  // Keep a tagged failure's tag and fields so the caller can still
+  // `catchTag` on it (Schema.Defect alone reduces it to name + message).
+  if (!hasStringTag(error)) return serializeError(error);
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(error)) {
+    if (key === "_tag") continue;
+    fields[key] = serializeRpcArgs(value);
+  }
+  const asError = error instanceof Error ? error : undefined;
+  return {
+    _tag: "~alchemy/Rpc/TaggedError",
+    tag: error._tag,
+    name: asError?.name,
+    message: asError?.message,
+    stack: asError?.stack,
+    fields,
+  } satisfies TaggedErrorMarker;
+};
+
+const isTaggedErrorMarker = (value: unknown): value is TaggedErrorMarker =>
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  value._tag === "~alchemy/Rpc/TaggedError" &&
+  "tag" in value &&
+  typeof value.tag === "string";
+
+const deserializeFailure = (error: unknown): unknown => {
+  if (!isTaggedErrorMarker(error)) return error;
+  const fields = deserializeRpcArgs(error.fields) as Record<string, unknown>;
+  const cls = taggedErrorClasses.get(error.tag);
+  const revived: Record<string, unknown> =
+    cls === undefined
+      ? error.message === undefined
+        ? {}
+        : (new Error(error.message) as unknown as Record<string, unknown>)
+      : (Object.create(cls.prototype) as Record<string, unknown>);
+  Object.assign(revived, fields);
+  revived._tag = error.tag;
+  for (const key of ["name", "message", "stack"] as const) {
+    const value = error[key];
+    if (value !== undefined && !(key in fields)) {
+      Object.defineProperty(revived, key, {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+      });
+    }
+  }
+  return revived;
+};
+
 const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcEffectHandler<Args, Success, Error>,
   registerCall?: Effect.Effect<void, never, Scope.Scope>,
@@ -134,7 +222,7 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
             case "Fail":
               return {
                 _tag: "Fail",
-                error: serializeError(reason.error) as Error,
+                error: serializeFailure(reason.error) as Error,
               };
             case "Die":
               return { _tag: "Die", defect: serializeError(reason.defect) };
@@ -178,7 +266,9 @@ const unwrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
           exit.cause.map((reason): Cause.Reason<Error> => {
             switch (reason._tag) {
               case "Fail":
-                return Cause.makeFailReason(reason.error);
+                return Cause.makeFailReason(
+                  deserializeFailure(reason.error) as Error,
+                );
               case "Die":
                 return Cause.makeDieReason(reason.defect);
               case "Interrupt":

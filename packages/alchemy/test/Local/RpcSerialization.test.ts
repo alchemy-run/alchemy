@@ -1,4 +1,5 @@
 import {
+  registerRpcErrorClasses,
   unwrapRpcHandlers,
   wrapRpcHandlers,
   type RpcWrapped,
@@ -6,11 +7,23 @@ import {
 import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+
+class RpcRegisteredError extends Data.TaggedError("RpcRegisteredError")<{
+  readonly message: string;
+  readonly arn: string;
+  readonly secret: Redacted.Redacted<string>;
+}> {}
+
+class RpcUnregisteredError extends Data.TaggedError("RpcUnregisteredError")<{
+  readonly message: string;
+  readonly code: number;
+}> {}
 
 /**
  * Builds a client whose wrap→unwrap path mirrors the production wire:
@@ -187,6 +200,61 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
           }
         }
       }),
+    );
+
+    it.effect("revives a registered tagged error class with its fields", () =>
+      Effect.gen(function* () {
+        registerRpcErrorClasses(RpcRegisteredError);
+        const handlers = {
+          boom: (): Effect.Effect<never, RpcRegisteredError> =>
+            Effect.fail(
+              new RpcRegisteredError({
+                message: "did not stabilize",
+                arn: "arn:aws:ecs:us-east-1:000000000000:task-definition/app:3",
+                secret: Redacted.make("hush"),
+              }),
+            ),
+        };
+        const exit = yield* Effect.exit(roundTrip(handlers).boom());
+        const found = Exit.isFailure(exit)
+          ? Cause.findErrorOption(exit.cause)
+          : undefined;
+        expect(found?._tag).toBe("Some");
+        if (found?._tag === "Some") {
+          const error = found.value;
+          expect(error).toBeInstanceOf(RpcRegisteredError);
+          expect(error).toBeInstanceOf(Error);
+          expect(error._tag).toBe("RpcRegisteredError");
+          expect(error.message).toBe("did not stabilize");
+          expect(error.arn).toBe(
+            "arn:aws:ecs:us-east-1:000000000000:task-definition/app:3",
+          );
+          expect(Redacted.value(error.secret)).toBe("hush");
+        }
+      }),
+    );
+
+    it.effect(
+      "keeps an unregistered tagged error's tag and fields for catchTag",
+      () =>
+        Effect.gen(function* () {
+          const handlers = {
+            boom: (): Effect.Effect<never, RpcUnregisteredError> =>
+              Effect.fail(
+                new RpcUnregisteredError({ message: "nope", code: 7 }),
+              ),
+          };
+          const caught = yield* roundTrip(handlers)
+            .boom()
+            .pipe(
+              Effect.catchTag("RpcUnregisteredError", (error) =>
+                Effect.succeed(error),
+              ),
+            );
+          expect(caught._tag).toBe("RpcUnregisteredError");
+          expect(caught.code).toBe(7);
+          expect(caught.message).toBe("nope");
+        }),
     );
 
     it.effect("propagates Die (defect)", () =>
