@@ -589,6 +589,24 @@ const GET_OBJECT_HOISTED = met(
 const SERVICE = `class Storage extends Context.Service<Storage, {
   get(key: string): Effect<File, NotFound>;
 }>()("Storage") {}`;
+/** The idiomatic Effect Layer: yield dependencies in the body, return methods that close over them. */
+const STORAGE_LIVE = `const StorageLive = Layer.effect(
+  Storage,
+  Effect.gen(function* () {
+    const db = yield* Database;
+    return {
+      get: (key) => db.get(key),
+    };
+  }),
+);`;
+/** The same thing as a class: the constructor takes the dependency, the methods use it. */
+const STORAGE_CLASS = `class StorageImpl {
+  constructor(private db: Database) {}
+
+  get(key: string) {
+    return this.db.get(key);
+  }
+}`;
 const SERVICE_R2 = SERVICE.replace("Effect<File, NotFound>", "Effect<File, NotFound, R2.GetObject<Uploads>>");
 const STORAGE_R2 = `const StorageR2 = Layer.effect(Storage, Effect.gen(function* () {
   const bucket = yield* R2.Bucket("Uploads");
@@ -1443,19 +1461,67 @@ export const steps: StepSpec[] = [
     notes:
       "And that's the nail in the coffin. Try an S3 implementation: same code, but its get requires S3.GetObject, and the interface already promised R2. You can't swap implementations, which is the whole point of a service. Infrastructure requirements can't live in the runtime function's type.",
   },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "But Effect already has a pattern for this",
+    src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
+    marks: [{ kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" }],
+    notes:
+      "But Effect already has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
+  },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "…and returns methods that close over them",
+    src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
+    marks: [
+      { kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" },
+      { kind: "underline", find: "get: (key) => db.get(key),", label: "methods that close over them", side: "right", tone: "runtime" },
+    ],
+    notes:
+      "And then it returns the implementation: methods that close over those dependencies. The interface stays clean, because the dependency lives in the constructor, not in the method's type.",
+  },
+  {
+    kind: "code",
+    group: "ctor",
+    file: "src/Storage.ts",
+    title: "It's an effectful constructor, like a class constructor",
+    src: { code: STORAGE_LIVE },
+    beside: { file: "the same idea, as a class", src: { code: STORAGE_CLASS } },
+    links: [
+      { from: "yield* Database", to: "constructor(private db: Database)" },
+      { from: "db.get(key)", to: "this.db.get(key)", tone: "runtime" },
+    ],
+    frames: 40,
+    notes:
+      "It's called an effectful constructor, and it's just like a class constructor: take your dependencies once, up front, and the methods use them. The difference is the constructor is an Effect, so its dependencies are tracked in the type.",
+  },
+  api({
+    title: "And a cloud program is an effectful constructor too",
+    snippet: "api-02-bucket.ts",
+    marks: [
+      { kind: "underline", find: 'const bucket = yield* R2.Bucket("Uploads");', label: "yields its resources", side: "right", tone: "construct" },
+      { kind: "underline", find: "fetch: Effect.gen(function* () {", label: "returns what runs later", side: "right", tone: "runtime" },
+    ],
+    req: [],
+    notes:
+      "And look at our cloud program. It's the same shape: yield resources in the body, return a fetch handler that closes over them. A cloud program is an effectful constructor, and it fits Effect's Layers perfectly.",
+  }),
   api({
     title: "So what I actually ended up realizing…",
     snippet: "api-02-bucket.ts",
     req: [],
-    notes:
-      "So let's go back to where we branched off: a bucket, declared in construction. What I actually ended up realizing is that I'd been trying to be too clever.",
+    notes: "So what I actually ended up realizing is that I'd been fighting the model instead of using it.",
   }),
   api({
-    title: "…is that a binding should be declared, just like a resource",
+    title: "…is that a binding is just another dependency to yield",
     snippet: "api-04-get.ts",
     req: [{ ...READ, note: "declared in construction" }],
     notes:
-      "It's still infrastructure as code, and I should embrace that. You declare a resource with yield*, so declare the binding the same way: R2.ReadBucket(bucket). The requirement lands on the program, where a Layer can satisfy it, and fetch just calls the client it got back. Its type stays clean, so a service built on it can have any implementation.",
+      "A binding is just another dependency of the constructor. Yield R2.ReadBucket(bucket) in the body, exactly like the Storage layer yields Database, and fetch closes over the client it got back. The requirement lands on the program, where a Layer can satisfy it, and fetch's type stays clean, so a service built on it can have any implementation. It's still infrastructure as code, and I should embrace that.",
   }),
   api({
     title: "Conditional infrastructure is then just an if statement",
