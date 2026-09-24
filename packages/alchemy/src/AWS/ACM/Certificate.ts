@@ -1,6 +1,7 @@
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,11 @@ import {
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
+import {
+  resolveDnsValidator,
+  type DnsValidationRecord,
+  type DnsValidatorDescriptor,
+} from "./DnsValidator.ts";
 
 export interface CertificateProps {
   /**
@@ -42,6 +48,20 @@ export interface CertificateProps {
    * pending.
    */
   hostedZoneId?: string;
+  /**
+   * Publish the DNS validation records through a non-Route 53 DNS provider
+   * instead — e.g. `Cloudflare.DNS.AcmValidator()` for a domain whose DNS
+   * lives in a Cloudflare zone. The provider upserts the validation CNAMEs
+   * (DNS-only) and waits for issuance, exactly like the Route 53 path.
+   * Takes precedence over {@link hostedZoneId}.
+   *
+   * The implementation is registered by the DNS provider's `providers()`
+   * layer (e.g. `Cloudflare.providers()`), which must be part of the stack.
+   * Validation records are left in place when the certificate is deleted —
+   * ACM reuses the same CNAME for every certificate on a domain, so
+   * removing it could break a sibling certificate's renewal.
+   */
+  dnsValidation?: DnsValidatorDescriptor;
   /**
    * Requested key algorithm.
    */
@@ -184,12 +204,33 @@ const resolveEffectiveSans = (
 };
 
 /**
+ * ACM refused to issue the certificate because a CAA record on the domain
+ * does not authorize Amazon. Alchemy never writes CAA records itself — add
+ * the records named in the message at the zone apex and redeploy.
+ */
+export class CertificateCaaError extends Data.TaggedError(
+  "CertificateCaaError",
+)<{
+  readonly certificateArn: string;
+  readonly domainName: string;
+}> {
+  override get message() {
+    return (
+      `ACM could not issue ${this.certificateArn} for ${this.domainName}: a CAA record on the domain does not authorize Amazon (CAA_ERROR). ` +
+      `Add CAA records at the zone apex — \`0 issue "amazon.com"\` and \`0 issue "amazonaws.com"\` (plus the same with \`issuewild\` for wildcard names) — then redeploy.`
+    );
+  }
+}
+
+/**
  * An ACM certificate for CloudFront and other AWS endpoints.
  *
  * `Certificate` requests an ACM certificate in `us-east-1`, which is the
- * region required for CloudFront viewer certificates. When `hostedZoneId` is
- * provided for DNS validation, the provider creates or updates the Route 53
- * validation records and waits for the certificate to be issued.
+ * region required for CloudFront viewer certificates. With DNS validation,
+ * the provider creates or updates the validation records — in Route 53
+ * (`hostedZoneId`, or the inferred public zone), or through a pluggable
+ * `dnsValidation` validator such as `Cloudflare.DNS.AcmValidator()` — and
+ * waits for the certificate to be issued.
  * ### Requesting Certificates
  * **Example:** DNS-Validated Certificate
  * ```typescript
@@ -216,6 +257,17 @@ const resolveEffectiveSans = (
  *   domainName: "www.example.com",
  *   hostedZoneId: "Z1234567890",
  *   export: "ENABLED",
+ * });
+ * ```
+ *
+ * **Example:** Certificate Validated Through Cloudflare DNS
+ * ```typescript
+ * // For a domain whose DNS lives in Cloudflare: the validation CNAMEs are
+ * // upserted (DNS-only) in the Cloudflare zone and the provider waits for
+ * // issuance. Requires `Cloudflare.providers()` in the stack.
+ * const cert = yield* Certificate("WebsiteCertificate", {
+ *   domainName: "www.example.com",
+ *   dnsValidation: Cloudflare.DNS.AcmValidator(),
  * });
  * ```
  *
@@ -368,6 +420,14 @@ export const CertificateProvider = () =>
               return Effect.succeed(detail);
             }
             if (isTerminalFailure(detail.Status)) {
+              if (detail.FailureReason === "CAA_ERROR") {
+                return Effect.fail(
+                  new CertificateCaaError({
+                    certificateArn,
+                    domainName: detail.DomainName ?? "",
+                  }),
+                );
+              }
               return Effect.fail(
                 new Error(
                   `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
@@ -630,10 +690,11 @@ export const CertificateProvider = () =>
           yield* session.note(certificateArn);
 
           // Sync DNS validation: ensure validation records are upserted and
-          // the cert reaches `ISSUED`. The zone is the explicit
-          // `hostedZoneId` when given; otherwise the most specific public
-          // zone containing `domainName` is inferred. When neither yields a
-          // zone, validation is left to the caller (external DNS) and the
+          // the cert reaches `ISSUED`. A `dnsValidation` validator (e.g.
+          // Cloudflare) publishes the records itself. Otherwise the zone is
+          // the explicit `hostedZoneId` when given, or the most specific
+          // public zone containing `domainName`; when neither yields a zone,
+          // validation is left to the caller (external DNS) and the
           // certificate is returned pending — the pre-inference behavior.
           // For an already-issued cert this is a fast-path: we only wait
           // for validation records when the cert isn't already issued.
@@ -641,14 +702,22 @@ export const CertificateProvider = () =>
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
             certificate.Status !== "ISSUED"
           ) {
-            const validationZoneId =
-              news.hostedZoneId ??
-              (yield* findPublicHostedZoneId(news.domainName));
-            if (validationZoneId !== undefined) {
+            if (news.dnsValidation !== undefined) {
+              const validator = yield* resolveDnsValidator(news.dnsValidation);
               const withRecords =
                 yield* waitForValidationRecords(certificateArn);
-              yield* upsertValidationRecords(validationZoneId, withRecords);
+              yield* validator.upsert(validationRecordsOf(withRecords));
               certificate = yield* waitForIssued(certificateArn);
+            } else {
+              const validationZoneId =
+                news.hostedZoneId ??
+                (yield* findPublicHostedZoneId(news.domainName));
+              if (validationZoneId !== undefined) {
+                const withRecords =
+                  yield* waitForValidationRecords(certificateArn);
+                yield* upsertValidationRecords(validationZoneId, withRecords);
+                certificate = yield* waitForIssued(certificateArn);
+              }
             }
           }
 
@@ -825,6 +894,32 @@ const toAttrs = (
   issuedAt: detail.IssuedAt,
   notAfter: detail.NotAfter,
 });
+
+/**
+ * The distinct validation records of a certificate. A wildcard and its apex
+ * (`*.example.com` + `example.com`) share one CNAME, so dedupe by type+name.
+ * @internal exported for tests
+ */
+export const validationRecordsOf = (
+  certificate: acm.CertificateDetail,
+): DnsValidationRecord[] => [
+  ...new Map(
+    (certificate.DomainValidationOptions ?? []).flatMap((option) =>
+      option.ResourceRecord
+        ? [
+            [
+              `${option.ResourceRecord.Type}:${option.ResourceRecord.Name.toLowerCase()}`,
+              {
+                name: option.ResourceRecord.Name,
+                type: option.ResourceRecord.Type,
+                value: option.ResourceRecord.Value,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  ).values(),
+];
 
 const isTerminalFailure = (status: acm.CertificateStatus | undefined) =>
   status === "FAILED" || status === "VALIDATION_TIMED_OUT";
