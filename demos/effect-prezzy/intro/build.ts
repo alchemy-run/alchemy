@@ -9,7 +9,7 @@
  *
  *   pnpm intro:build
  */
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHighlighter } from "shiki";
 import { API } from "tsgo/unstable/sync";
@@ -276,5 +276,7 @@ steps.forEach((spec, i) => {
 
 await mkdir(out, { recursive: true });
 const json: IntroJson = { steps: resolved };
+// Images the steps reference (e.g. an aside's photo), served next to intro.json.
+await cp(path.join(import.meta.dirname, "assets"), path.join(out, "assets"), { recursive: true });
 await writeFile(path.join(out, "intro.json"), `${JSON.stringify(json, null, 2)}\n`);
 console.log(`✔ ${resolved.length} intro steps → out/capture/intro/intro.json`);

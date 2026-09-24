@@ -1,4 +1,4 @@
-import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, interpolate, spring, staticFile, useVideoConfig } from "remotion";
 import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
@@ -242,6 +242,11 @@ export const CodeSlide = ({
   const matched = matchLines(morph ? prev : undefined, step);
   const pg = prev ? layout(prev, area) : g;
   const asideIn = prev?.aside?.text === step.aside?.text ? 1 : interpolate(local, [4, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // The photo lands after the text, with a little overshoot.
+  const photoIn =
+    prev?.aside?.image === step.aside?.image
+      ? 1
+      : spring({ frame: local - 12, fps, config: { damping: 11, stiffness: 160 } });
   const t = morph
     ? interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: (x) => 1 - (1 - x) ** 3 })
     : interpolate(local, [0, 6], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -459,6 +464,26 @@ export const CodeSlide = ({
           local={local}
           delay={marksStart}
         />
+      ) : null}
+      {step.aside?.image ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 1920 - (AREA.x + AREA.width) + 40,
+            bottom: 1080 - (AREA.y + AREA.height) + 170,
+            width: 330,
+            padding: 12,
+            paddingBottom: 12,
+            background: "#f4efe4",
+            borderRadius: 6,
+            boxShadow: "0 18px 50px rgba(0, 0, 0, 0.55)",
+            transform: `rotate(${4 - (1 - photoIn) * 10}deg) scale(${photoIn})`,
+            transformOrigin: "center bottom",
+            opacity: Math.min(1, photoIn * 2),
+          }}
+        >
+          <Img src={staticFile(`intro/assets/${step.aside.image}`)} style={{ width: "100%", display: "block", borderRadius: 3 }} />
+        </div>
       ) : null}
       {step.aside ? (
         <div

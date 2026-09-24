@@ -55,7 +55,7 @@ export interface CodeSpec {
   /** Lines from text in this file to text in `beside`. */
   links?: { from: Find; to: Find; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
-  aside?: { text: string; tone?: Tone };
+  aside?: { text: string; tone?: Tone; image?: string };
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -1167,9 +1167,9 @@ export const steps: StepSpec[] = [
       met(WRITE_LOGS, "WriteBucketBinding\nno permission in prod"),
       WORKER,
     ],
-    aside: { text: "usually, pragmatism beats purity" },
+    aside: { text: "usually, pragmatism beats purity", image: "michael-pointing.jpg" },
     notes:
-      "A small trade-off: a few bytes of unused client code in production, in exchange for a program that stays plain code. Usually, pragmatism beats purity.",
+      "A small trade-off: a few bytes of unused client code in production, in exchange for a program that stays plain code. Usually, pragmatism beats purity. Sorry, Michael.",
   }),
   api({
     title: "So far, though, it's just a program that nothing runs",
