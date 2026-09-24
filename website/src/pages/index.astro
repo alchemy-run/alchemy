@@ -8,6 +8,7 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import HeroDeployTerminal from "../components/marketing-islands/HeroDeployTerminal.tsx";
+import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import HeroCodeBlock from "../components/marketing/HeroCodeBlock.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -359,15 +360,28 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── GET STARTED ───────────────── -->
+  <!-- ───────────────── SENTIMENT ───────────────── -->
   <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1" aria-labelledby="sentiment-h">
+    <div class="v2-container">
+      <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
+      <p class="v2-lede" data-copy>
+        What builders say after putting Alchemy in front of their agents,
+        their Cloudflare apps, and their production infrastructure.
+      </p>
+      <Sentiment />
+    </div>
+  </section>
+
+  <!-- ───────────────── GET STARTED ───────────────── -->
+  <AlchemicalDivider variant="circle" class="v2-divider" />
   <section class="v2-section v2-pat-6 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
-          <code class="v2-steps__code">bun add alchemy@latest effect</code>
+          <code class="v2-steps__code">pnpm add alchemy@latest effect</code>
         </li>
         <li id="agent-prompt">
           <span class="v2-steps__label" data-copy>Paste this into your coding agent</span>
