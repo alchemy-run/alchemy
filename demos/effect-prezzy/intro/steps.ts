@@ -1335,24 +1335,24 @@ export const steps: StepSpec[] = [
       "Here's what I was after: least privilege, guaranteed by the type checker. The type lists exactly what the code touches, and the layer you provide for each requirement grants exactly that permission. If it compiles, the function can do what it uses, and nothing more.",
   }),
   api({
-    title: "It looked just like the imaginary language…",
-    code: INFERRED,
-    quiet: true,
-    cross: true,
-    req: [],
-    fetchReq: [GET_OBJECT],
-    notes:
-      "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
-  }),
-  api({
-    title: "Providing its layer would grant exactly that permission",
+    title: "Providing its layer grants exactly that permission",
     code: INFERRED_ON_FETCH,
     quiet: true,
     marks: [{ kind: "underline", find: "Effect.provide(R2.ReadBucket(bucket))", label: "grants s3:GetObject", side: "right", tone: "good" }],
     req: [],
     fetchReq: [met(GET_OBJECT, "R2.ReadBucket(bucket)\ngrants s3:GetObject")],
     notes:
-      "Here's the mechanism. To satisfy R2.GetObject, you provide a layer for it, R2.ReadBucket for this bucket. And providing that layer is what grants the policy: s3:GetObject on Uploads, and nothing more.",
+      "And here's how it gets granted. To satisfy R2.GetObject, you provide a layer for it, R2.ReadBucket for this bucket. And providing that layer is what grants the policy: s3:GetObject on Uploads, and nothing more.",
+  }),
+  api({
+    title: "It looked just like the imaginary language…",
+    code: INFERRED_ON_FETCH,
+    quiet: true,
+    cross: true,
+    req: [],
+    fetchReq: [met(GET_OBJECT, "R2.ReadBucket(bucket)\ngrants s3:GetObject")],
+    notes:
+      "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
   }),
   api({
     title: "First, the layer has to go on fetch, which runs at runtime",
