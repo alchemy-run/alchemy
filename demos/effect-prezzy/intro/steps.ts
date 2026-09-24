@@ -817,14 +817,14 @@ export const steps: StepSpec[] = [
     group: "cfn",
     file: "template.yaml",
     lang: "yaml",
-    title: "…and I hated trying to program in YAML",
+    title: "…but I never liked trying to program in YAML",
     src: { code: CFN },
     marks: [
       { kind: "circle", find: "!If [IsProd, 1024, 256]", label: "an if statement, in YAML", side: "right", tone: "bad" },
       { kind: "underline", find: '!Sub "${Uploads.Arn}/*"', label: "string templating for references", side: "right", tone: "bad" },
     ],
     notes:
-      "And I hated it. I'm a coder. I don't want to write config files, and I really don't want to program in YAML: conditions, string substitution, intrinsic functions.",
+      "But I never liked it. I'm a coder. I don't want to write config files, and I really don't want to program in YAML: conditions, string substitution, intrinsic functions.",
   },
   {
     kind: "code",
@@ -893,11 +893,11 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "cdk",
     file: "infra/api.ts",
-    title: "…but I hated that the runtime code lived somewhere else",
+    title: "…but it bothered me that the runtime code lived elsewhere",
     src: { code: CDK },
     beside: { file: "src/handler.ts", src: { code: HANDLER } },
     notes:
-      "But I always hated that the code that actually runs in the Lambda lives somewhere else entirely: a separate file, bundled and deployed separately.",
+      "But it always bothered me that the code that actually runs in the Lambda lives somewhere else entirely: a separate file, bundled and deployed separately.",
   },
   {
     kind: "code",
