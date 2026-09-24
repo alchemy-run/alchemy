@@ -176,7 +176,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Instance = Resource<Instance>("GCP.Compute.Instance");

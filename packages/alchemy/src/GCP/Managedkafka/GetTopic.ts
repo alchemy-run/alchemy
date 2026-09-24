@@ -23,7 +23,6 @@ export interface GetTopicRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Managedkafka
  */
 export interface GetTopic extends Binding.Service<

@@ -170,7 +170,6 @@ export type Binding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Agentregistry
  */
 export const Binding = Resource<Binding>("GCP.Agentregistry.Binding");

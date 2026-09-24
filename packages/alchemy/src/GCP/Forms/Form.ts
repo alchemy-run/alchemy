@@ -85,7 +85,6 @@ export type Form = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Forms
  */
 export const Form = Resource<Form>("GCP.Forms.Form");

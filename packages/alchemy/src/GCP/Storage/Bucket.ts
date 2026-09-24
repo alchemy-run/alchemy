@@ -169,7 +169,6 @@ export type Bucket = Resource<
  * `forceDestroy: true` deletes objects before the bucket. `alchemy destroy` waits until the bucket is gone.
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const Bucket = Resource<Bucket>("GCP.Storage.Bucket");

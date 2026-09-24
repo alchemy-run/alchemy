@@ -171,7 +171,6 @@ export type RegionInstanceTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionInstanceTemplate = Resource<RegionInstanceTemplate>(

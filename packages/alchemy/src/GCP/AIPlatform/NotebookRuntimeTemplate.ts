@@ -207,7 +207,6 @@ export type NotebookRuntimeTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const NotebookRuntimeTemplate = Resource<NotebookRuntimeTemplate>(

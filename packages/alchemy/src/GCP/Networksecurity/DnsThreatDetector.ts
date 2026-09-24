@@ -127,7 +127,6 @@ export type DnsThreatDetector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const DnsThreatDetector = Resource<DnsThreatDetector>(

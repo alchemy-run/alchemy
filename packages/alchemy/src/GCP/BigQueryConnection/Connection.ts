@@ -361,7 +361,6 @@ export type Connection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryConnection
  */
 export const Connection = Resource<Connection>(

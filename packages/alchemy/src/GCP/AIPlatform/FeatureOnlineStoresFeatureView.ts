@@ -212,7 +212,6 @@ export type FeatureOnlineStoresFeatureView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const FeatureOnlineStoresFeatureView =

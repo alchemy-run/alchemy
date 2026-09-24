@@ -93,7 +93,6 @@ export type Snapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category PubSub
  */
 export const Snapshot = Resource<Snapshot>("GCP.PubSub.Snapshot");

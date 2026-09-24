@@ -163,7 +163,6 @@ export type EnvironmentsKeystoresAliases = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsKeystoresAliases =

@@ -145,7 +145,6 @@ export type MirroringDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const MirroringDeployment = Resource<MirroringDeployment>(

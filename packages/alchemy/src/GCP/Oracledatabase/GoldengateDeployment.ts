@@ -266,7 +266,6 @@ export type GoldengateDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const GoldengateDeployment = Resource<GoldengateDeployment>(

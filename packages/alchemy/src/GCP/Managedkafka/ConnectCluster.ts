@@ -177,7 +177,6 @@ export type ConnectCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const ConnectCluster = Resource<ConnectCluster>(

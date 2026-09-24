@@ -107,7 +107,6 @@ export type Productdeliverytime = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Productdeliverytime = Resource<Productdeliverytime>(

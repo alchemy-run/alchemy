@@ -178,7 +178,6 @@ export type AdvertisersInsertionOrder = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersInsertionOrder = Resource<AdvertisersInsertionOrder>(

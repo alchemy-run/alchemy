@@ -143,7 +143,6 @@ export type Assignment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryReservation
  */
 export const Assignment = Resource<Assignment>(

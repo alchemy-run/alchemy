@@ -169,7 +169,6 @@ export type OrganizationsLocationsDiscoveryConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsLocationsDiscoveryConfig =

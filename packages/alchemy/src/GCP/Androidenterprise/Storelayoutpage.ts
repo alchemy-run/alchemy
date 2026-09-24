@@ -99,7 +99,6 @@ export type Storelayoutpage = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidenterprise
  */
 export const Storelayoutpage = Resource<Storelayoutpage>(

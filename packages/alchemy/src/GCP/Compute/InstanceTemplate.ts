@@ -220,7 +220,6 @@ export type InstanceTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InstanceTemplate = Resource<InstanceTemplate>(

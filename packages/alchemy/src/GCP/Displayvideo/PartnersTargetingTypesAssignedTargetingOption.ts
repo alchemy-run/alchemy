@@ -81,7 +81,6 @@ export type PartnersTargetingTypesAssignedTargetingOption = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const PartnersTargetingTypesAssignedTargetingOption =

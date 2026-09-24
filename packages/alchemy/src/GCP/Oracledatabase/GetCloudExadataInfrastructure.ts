@@ -20,7 +20,6 @@ export interface GetCloudExadataInfrastructureRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetCloudExadataInfrastructure extends Binding.Service<

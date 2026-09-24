@@ -144,7 +144,6 @@ export type ApisVersionsOperation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const ApisVersionsOperation = Resource<ApisVersionsOperation>(

@@ -173,7 +173,6 @@ export type Posture = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securityposture
  */
 export const Posture = Resource<Posture>("GCP.Securityposture.Posture");

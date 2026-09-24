@@ -186,7 +186,6 @@ export type ServicesConnector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebasedataconnect
  */
 export const ServicesConnector = Resource<ServicesConnector>(

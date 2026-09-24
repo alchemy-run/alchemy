@@ -131,7 +131,6 @@ export type Source = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const Source = Resource<Source>("GCP.Migrationcenter.Source");

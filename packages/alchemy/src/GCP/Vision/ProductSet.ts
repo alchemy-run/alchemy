@@ -122,7 +122,6 @@ export type ProductSet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vision
  */
 export const ProductSet = Resource<ProductSet>("GCP.Vision.ProductSet");

@@ -184,7 +184,6 @@ export type PersistentResource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const PersistentResource = Resource<PersistentResource>(

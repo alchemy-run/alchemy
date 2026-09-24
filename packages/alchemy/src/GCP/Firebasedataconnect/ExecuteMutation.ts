@@ -30,7 +30,6 @@ export interface ExecuteMutationRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebasedataconnect
  */
 export interface ExecuteMutation extends Binding.Service<

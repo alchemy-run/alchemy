@@ -140,7 +140,6 @@ export type PrivateCloudsLoggingServer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const PrivateCloudsLoggingServer = Resource<PrivateCloudsLoggingServer>(

@@ -122,7 +122,6 @@ export type DataStoresSession = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresSession = Resource<DataStoresSession>(

@@ -23,7 +23,6 @@ export interface GetWorkerPoolRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Run
  */
 export interface GetWorkerPool extends Binding.Service<

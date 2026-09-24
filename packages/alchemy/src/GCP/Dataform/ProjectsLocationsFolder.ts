@@ -101,7 +101,6 @@ export type ProjectsLocationsFolder = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const ProjectsLocationsFolder = Resource<ProjectsLocationsFolder>(

@@ -242,7 +242,6 @@ export type GlobalForwardingRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const GlobalForwardingRule = Resource<GlobalForwardingRule>(

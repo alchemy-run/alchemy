@@ -184,7 +184,6 @@ export type AdvertisersLineItem = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersLineItem = Resource<AdvertisersLineItem>(

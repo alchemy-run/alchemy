@@ -28,7 +28,6 @@ export interface FetchGitRefsRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Developerconnect
  */
 export interface FetchGitRefs extends Binding.Service<

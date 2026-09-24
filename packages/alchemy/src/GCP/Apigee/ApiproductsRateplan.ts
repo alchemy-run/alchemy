@@ -167,7 +167,6 @@ export type ApiproductsRateplan = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const ApiproductsRateplan = Resource<ApiproductsRateplan>(

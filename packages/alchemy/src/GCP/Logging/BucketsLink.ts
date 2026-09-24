@@ -116,7 +116,6 @@ export type BucketsLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BucketsLink = Resource<BucketsLink>("GCP.Logging.BucketsLink");

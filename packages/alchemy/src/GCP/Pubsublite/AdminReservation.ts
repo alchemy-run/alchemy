@@ -109,7 +109,6 @@ export type AdminReservation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Pubsublite
  */
 export const AdminReservation = Resource<AdminReservation>(

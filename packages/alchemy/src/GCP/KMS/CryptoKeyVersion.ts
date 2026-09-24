@@ -158,7 +158,6 @@ export type CryptoKeyVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category KMS
  */
 export const CryptoKeyVersion = Resource<CryptoKeyVersion>(

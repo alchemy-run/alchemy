@@ -102,7 +102,6 @@ export type EncryptionConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const EncryptionConfig = Resource<EncryptionConfig>(

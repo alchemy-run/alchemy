@@ -188,7 +188,6 @@ export type Repository = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const Repository = Resource<Repository>("GCP.Dataform.Repository");

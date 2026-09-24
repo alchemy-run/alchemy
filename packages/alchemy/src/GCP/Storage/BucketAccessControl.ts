@@ -91,7 +91,6 @@ export type BucketAccessControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const BucketAccessControl = Resource<BucketAccessControl>(

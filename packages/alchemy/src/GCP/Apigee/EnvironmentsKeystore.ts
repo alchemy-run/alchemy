@@ -85,7 +85,6 @@ export type EnvironmentsKeystore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsKeystore = Resource<EnvironmentsKeystore>(

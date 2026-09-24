@@ -95,7 +95,6 @@ export type PartnersChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const PartnersChannel = Resource<PartnersChannel>(

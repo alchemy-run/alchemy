@@ -191,7 +191,6 @@ export type CollectionsDataStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsDataStore = Resource<CollectionsDataStore>(

@@ -117,7 +117,6 @@ export type AdclientsCustomchannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Adsense
  */
 export const AdclientsCustomchannel = Resource<AdclientsCustomchannel>(

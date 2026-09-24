@@ -116,7 +116,6 @@ export type InstanceGroupManagerResizeRequest = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InstanceGroupManagerResizeRequest =

@@ -154,7 +154,6 @@ export type ApisVersionsSpec = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigeeregistry
  */
 export const ApisVersionsSpec = Resource<ApisVersionsSpec>(

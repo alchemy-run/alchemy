@@ -30,7 +30,6 @@ export interface ExecuteSqlRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category SQL
  */
 export interface ExecuteSql extends Binding.Service<

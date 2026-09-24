@@ -393,7 +393,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Filestore
  */
 export const Instance = Resource<Instance>("GCP.Filestore.Instance");

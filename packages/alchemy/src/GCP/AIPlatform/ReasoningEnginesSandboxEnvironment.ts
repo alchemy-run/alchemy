@@ -135,7 +135,6 @@ export type ReasoningEnginesSandboxEnvironment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const ReasoningEnginesSandboxEnvironment =

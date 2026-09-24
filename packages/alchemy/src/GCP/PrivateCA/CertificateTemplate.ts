@@ -283,7 +283,6 @@ export type CertificateTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category PrivateCA
  */
 export const CertificateTemplate = Resource<CertificateTemplate>(

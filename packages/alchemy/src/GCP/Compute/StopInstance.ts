@@ -23,7 +23,6 @@ export interface StopInstanceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Compute
  */
 export interface StopInstance extends Binding.Service<

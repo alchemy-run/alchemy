@@ -201,7 +201,6 @@ export type CoursesCourseWork = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesCourseWork = Resource<CoursesCourseWork>(

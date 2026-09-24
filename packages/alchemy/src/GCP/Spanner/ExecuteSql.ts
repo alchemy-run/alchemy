@@ -25,7 +25,6 @@ export type ExecuteSqlError =
  * ```
  *
  * @binding
- * @product GCP
  * @category Spanner
  */
 export interface ExecuteSql extends Binding.Service<

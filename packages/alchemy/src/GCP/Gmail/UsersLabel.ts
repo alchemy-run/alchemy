@@ -130,7 +130,6 @@ export type UsersLabel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersLabel = Resource<UsersLabel>("GCP.Gmail.UsersLabel");

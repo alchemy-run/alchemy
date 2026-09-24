@@ -112,7 +112,6 @@ export type PropertiesDataStreamsMeasurementProtocolSecret = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticsadmin
  */
 export const PropertiesDataStreamsMeasurementProtocolSecret =

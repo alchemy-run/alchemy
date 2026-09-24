@@ -135,7 +135,6 @@ export type RegionHealthSource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionHealthSource = Resource<RegionHealthSource>(

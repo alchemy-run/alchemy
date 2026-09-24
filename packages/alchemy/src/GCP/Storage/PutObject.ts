@@ -38,7 +38,6 @@ export type PutObjectRequest = PutObjectContent;
  * ```
  *
  * @binding
- * @product GCP
  * @category Storage
  */
 export interface PutObject extends Binding.Service<

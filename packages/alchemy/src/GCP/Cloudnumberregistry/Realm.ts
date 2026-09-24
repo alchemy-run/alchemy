@@ -166,7 +166,6 @@ export type Realm = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudnumberregistry
  */
 export const Realm = Resource<Realm>("GCP.Cloudnumberregistry.Realm");

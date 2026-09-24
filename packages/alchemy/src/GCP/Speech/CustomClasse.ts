@@ -117,7 +117,6 @@ export type CustomClasse = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Speech
  */
 export const CustomClasse = Resource<CustomClasse>("GCP.Speech.CustomClasse");

@@ -132,7 +132,6 @@ export type KmsConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const KmsConfig = Resource<KmsConfig>("GCP.Netapp.KmsConfig");

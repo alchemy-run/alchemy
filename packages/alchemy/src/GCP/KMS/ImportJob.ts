@@ -129,7 +129,6 @@ export type ImportJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category KMS
  */
 export const ImportJob = Resource<ImportJob>("GCP.KMS.ImportJob");

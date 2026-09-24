@@ -98,7 +98,6 @@ export type Video = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Youtube
  */
 export const Video = Resource<Video>("GCP.Youtube.Video");

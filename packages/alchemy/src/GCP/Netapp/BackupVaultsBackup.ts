@@ -168,7 +168,6 @@ export type BackupVaultsBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const BackupVaultsBackup = Resource<BackupVaultsBackup>(

@@ -97,7 +97,6 @@ export type DatasetsDatasetVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const DatasetsDatasetVersion = Resource<DatasetsDatasetVersion>(

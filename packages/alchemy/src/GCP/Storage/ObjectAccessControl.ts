@@ -109,7 +109,6 @@ export type ObjectAccessControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const ObjectAccessControl = Resource<ObjectAccessControl>(

@@ -177,7 +177,6 @@ export type Image = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Image = Resource<Image>("GCP.Compute.Image");

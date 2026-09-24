@@ -116,7 +116,6 @@ export type ObservationJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apim
  */
 export const ObservationJob = Resource<ObservationJob>(

@@ -78,7 +78,6 @@ export type CrossSiteNetwork = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const CrossSiteNetwork = Resource<CrossSiteNetwork>(

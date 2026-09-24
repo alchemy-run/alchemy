@@ -23,7 +23,6 @@ export interface GetPartitionsRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface GetPartitions extends Binding.Service<

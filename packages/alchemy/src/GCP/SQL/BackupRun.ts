@@ -123,7 +123,6 @@ export type BackupRun = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const BackupRun = Resource<BackupRun>("GCP.SQL.BackupRun");

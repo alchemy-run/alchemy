@@ -26,7 +26,6 @@ export interface ValidateMessageRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PubSub
  */
 export interface ValidateMessage extends Binding.Service<

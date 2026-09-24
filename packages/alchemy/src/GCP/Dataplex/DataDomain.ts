@@ -131,7 +131,6 @@ export type DataDomain = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataDomain = Resource<DataDomain>("GCP.Dataplex.DataDomain");

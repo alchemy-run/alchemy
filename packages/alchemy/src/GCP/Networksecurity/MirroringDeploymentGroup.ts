@@ -157,7 +157,6 @@ export type MirroringDeploymentGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const MirroringDeploymentGroup = Resource<MirroringDeploymentGroup>(

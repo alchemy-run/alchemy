@@ -202,7 +202,6 @@ export type Subnetwork = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Subnetwork = Resource<Subnetwork>("GCP.Compute.Subnetwork");

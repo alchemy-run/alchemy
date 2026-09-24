@@ -127,7 +127,6 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudchannel
  */
 export const ChannelPartnerLinksChannelPartnerRepricingConfig =

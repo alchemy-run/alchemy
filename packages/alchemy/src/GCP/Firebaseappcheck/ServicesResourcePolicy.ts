@@ -124,7 +124,6 @@ export type ServicesResourcePolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseappcheck
  */
 export const ServicesResourcePolicy = Resource<ServicesResourcePolicy>(

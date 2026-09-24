@@ -153,7 +153,6 @@ export type StoragePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const StoragePool = Resource<StoragePool>("GCP.Compute.StoragePool");

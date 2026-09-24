@@ -241,7 +241,6 @@ export type AccountConnector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Developerconnect
  */
 export const AccountConnector = Resource<AccountConnector>(

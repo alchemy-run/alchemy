@@ -157,7 +157,6 @@ export type AppsGuardrail = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsGuardrail = Resource<AppsGuardrail>("GCP.Ces.AppsGuardrail");

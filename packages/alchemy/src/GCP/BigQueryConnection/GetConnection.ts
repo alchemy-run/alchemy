@@ -23,7 +23,6 @@ export interface GetConnectionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category BigQueryConnection
  */
 export interface GetConnection extends Binding.Service<

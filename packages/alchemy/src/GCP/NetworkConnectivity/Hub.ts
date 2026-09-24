@@ -174,7 +174,6 @@ export type Hub = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const Hub = Resource<Hub>("GCP.NetworkConnectivity.Hub");

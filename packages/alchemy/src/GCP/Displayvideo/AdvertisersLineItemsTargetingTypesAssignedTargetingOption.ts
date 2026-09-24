@@ -153,7 +153,6 @@ export type AdvertisersLineItemsTargetingTypesAssignedTargetingOption =
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersLineItemsTargetingTypesAssignedTargetingOption =

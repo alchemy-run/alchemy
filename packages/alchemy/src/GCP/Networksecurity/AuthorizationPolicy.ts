@@ -160,7 +160,6 @@ export type AuthorizationPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const AuthorizationPolicy = Resource<AuthorizationPolicy>(

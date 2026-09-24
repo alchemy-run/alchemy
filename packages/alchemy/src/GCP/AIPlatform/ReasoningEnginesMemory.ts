@@ -139,7 +139,6 @@ export type ReasoningEnginesMemory = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const ReasoningEnginesMemory = Resource<ReasoningEnginesMemory>(

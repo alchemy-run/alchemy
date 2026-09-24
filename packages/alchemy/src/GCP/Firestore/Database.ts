@@ -224,7 +224,6 @@ export type Database = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firestore
  */
 export const Database = Resource<Database>("GCP.Firestore.Database");

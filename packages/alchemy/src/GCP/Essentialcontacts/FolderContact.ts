@@ -128,7 +128,6 @@ export type FolderContact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Essentialcontacts
  */
 export const FolderContact = Resource<FolderContact>(

@@ -95,7 +95,6 @@ export type InstancesNatAddresses = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const InstancesNatAddresses = Resource<InstancesNatAddresses>(

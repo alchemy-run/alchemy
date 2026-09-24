@@ -167,7 +167,6 @@ export type Route = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Route = Resource<Route>("GCP.Compute.Route");

@@ -34,7 +34,6 @@ export interface GetObjectRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Storage
  */
 export interface GetObject extends Binding.Service<

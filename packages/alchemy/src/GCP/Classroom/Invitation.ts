@@ -84,7 +84,6 @@ export type Invitation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const Invitation = Resource<Invitation>("GCP.Classroom.Invitation");

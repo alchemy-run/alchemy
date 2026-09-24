@@ -92,7 +92,6 @@ export type CreativeFieldValue = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const CreativeFieldValue = Resource<CreativeFieldValue>(

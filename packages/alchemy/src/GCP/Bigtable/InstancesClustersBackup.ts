@@ -145,7 +145,6 @@ export type InstancesClustersBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const InstancesClustersBackup = Resource<InstancesClustersBackup>(

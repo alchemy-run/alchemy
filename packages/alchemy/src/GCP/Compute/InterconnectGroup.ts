@@ -115,7 +115,6 @@ export type InterconnectGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InterconnectGroup = Resource<InterconnectGroup>(

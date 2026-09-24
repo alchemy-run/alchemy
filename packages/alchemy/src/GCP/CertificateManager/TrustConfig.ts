@@ -189,7 +189,6 @@ export type TrustConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CertificateManager
  */
 export const TrustConfig = Resource<TrustConfig>(

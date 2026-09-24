@@ -137,7 +137,6 @@ export type SpacesMember = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Chat
  */
 export const SpacesMember = Resource<SpacesMember>("GCP.Chat.SpacesMember");

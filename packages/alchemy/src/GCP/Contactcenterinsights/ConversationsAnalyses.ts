@@ -88,7 +88,6 @@ export type ConversationsAnalyses = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const ConversationsAnalyses = Resource<ConversationsAnalyses>(

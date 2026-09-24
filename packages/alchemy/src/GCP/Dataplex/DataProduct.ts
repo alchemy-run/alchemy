@@ -143,7 +143,6 @@ export type DataProduct = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataProduct = Resource<DataProduct>("GCP.Dataplex.DataProduct");

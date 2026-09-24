@@ -126,7 +126,6 @@ export type DatasetsConsentStoresAttributeDefinition = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsConsentStoresAttributeDefinition =

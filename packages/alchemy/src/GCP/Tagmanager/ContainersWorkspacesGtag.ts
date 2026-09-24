@@ -124,7 +124,6 @@ export type ContainersWorkspacesGtag = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersWorkspacesGtag = Resource<ContainersWorkspacesGtag>(

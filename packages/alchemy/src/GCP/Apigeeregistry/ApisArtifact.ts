@@ -118,7 +118,6 @@ export type ApisArtifact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigeeregistry
  */
 export const ApisArtifact = Resource<ApisArtifact>(

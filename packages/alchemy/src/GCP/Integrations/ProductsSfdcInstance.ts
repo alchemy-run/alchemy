@@ -123,7 +123,6 @@ export type ProductsSfdcInstance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const ProductsSfdcInstance = Resource<ProductsSfdcInstance>(

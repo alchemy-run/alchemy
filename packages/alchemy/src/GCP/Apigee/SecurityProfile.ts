@@ -157,7 +157,6 @@ export type SecurityProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SecurityProfile = Resource<SecurityProfile>(

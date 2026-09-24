@@ -25,7 +25,6 @@ export interface QueryReasoningEngineRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AIPlatform
  */
 export interface QueryReasoningEngine extends Binding.Service<

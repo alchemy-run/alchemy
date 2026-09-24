@@ -110,7 +110,6 @@ export type EnvironmentsArchiveDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsArchiveDeployment =

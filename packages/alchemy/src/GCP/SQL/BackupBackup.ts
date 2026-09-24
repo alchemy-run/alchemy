@@ -141,7 +141,6 @@ export type BackupBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const BackupBackup = Resource<BackupBackup>("GCP.SQL.BackupBackup");

@@ -23,7 +23,6 @@ export interface GetConnectionInfoRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AlloyDB
  */
 export interface GetConnectionInfo extends Binding.Service<

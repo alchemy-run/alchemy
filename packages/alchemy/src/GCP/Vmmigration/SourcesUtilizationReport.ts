@@ -124,7 +124,6 @@ export type SourcesUtilizationReport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const SourcesUtilizationReport = Resource<SourcesUtilizationReport>(

@@ -119,7 +119,6 @@ export type AppsDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsDeployment = Resource<AppsDeployment>(

@@ -24,7 +24,6 @@ export interface StopPipelineRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Datapipelines
  */
 export interface StopPipeline extends Binding.Service<

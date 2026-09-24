@@ -149,7 +149,6 @@ export type AgentsTool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsTool = Resource<AgentsTool>("GCP.Dialogflow.AgentsTool");

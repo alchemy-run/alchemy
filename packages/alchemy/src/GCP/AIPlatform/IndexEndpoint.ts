@@ -125,7 +125,6 @@ export type IndexEndpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const IndexEndpoint = Resource<IndexEndpoint>(

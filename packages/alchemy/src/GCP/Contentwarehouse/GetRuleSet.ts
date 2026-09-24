@@ -23,7 +23,6 @@ export interface GetRuleSetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Contentwarehouse
  */
 export interface GetRuleSet extends Binding.Service<

@@ -139,7 +139,6 @@ export type OrganizationsSecurityProfileGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const OrganizationsSecurityProfileGroup =

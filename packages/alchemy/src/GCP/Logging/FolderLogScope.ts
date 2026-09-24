@@ -116,7 +116,6 @@ export type FolderLogScope = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderLogScope = Resource<FolderLogScope>(

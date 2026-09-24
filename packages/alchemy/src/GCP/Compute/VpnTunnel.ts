@@ -258,7 +258,6 @@ export type VpnTunnel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const VpnTunnel = Resource<VpnTunnel>("GCP.Compute.VpnTunnel");

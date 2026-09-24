@@ -130,7 +130,6 @@ export type Page = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Blogger
  */
 export const Page = Resource<Page>("GCP.Blogger.Page");

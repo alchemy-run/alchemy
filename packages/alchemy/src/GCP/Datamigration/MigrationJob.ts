@@ -300,7 +300,6 @@ export type MigrationJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamigration
  */
 export const MigrationJob = Resource<MigrationJob>(

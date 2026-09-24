@@ -168,7 +168,6 @@ export type License = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const License = Resource<License>("GCP.Compute.License");

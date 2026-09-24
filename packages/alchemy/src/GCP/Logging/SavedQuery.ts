@@ -169,7 +169,6 @@ export type SavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const SavedQuery = Resource<SavedQuery>("GCP.Logging.SavedQuery");

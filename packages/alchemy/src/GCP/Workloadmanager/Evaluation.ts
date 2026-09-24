@@ -225,7 +225,6 @@ export type Evaluation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workloadmanager
  */
 export const Evaluation = Resource<Evaluation>(

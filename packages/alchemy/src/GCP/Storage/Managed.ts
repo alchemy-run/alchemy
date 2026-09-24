@@ -79,7 +79,6 @@ export type Managed = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const Managed = Resource<Managed>("GCP.Storage.Managed");

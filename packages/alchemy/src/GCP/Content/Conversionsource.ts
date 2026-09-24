@@ -121,7 +121,6 @@ export type Conversionsource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Conversionsource = Resource<Conversionsource>(

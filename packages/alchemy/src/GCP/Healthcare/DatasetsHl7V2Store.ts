@@ -138,7 +138,6 @@ export type DatasetsHl7V2Store = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsHl7V2Store = Resource<DatasetsHl7V2Store>(

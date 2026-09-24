@@ -100,7 +100,6 @@ export type Api = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Api = Resource<Api>("GCP.Apigee.Api");

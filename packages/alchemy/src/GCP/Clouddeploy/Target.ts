@@ -296,7 +296,6 @@ export type Target = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Clouddeploy
  */
 export const Target = Resource<Target>("GCP.Clouddeploy.Target");

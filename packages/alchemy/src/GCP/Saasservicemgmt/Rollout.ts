@@ -197,7 +197,6 @@ export type Rollout = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const Rollout = Resource<Rollout>("GCP.Saasservicemgmt.Rollout");

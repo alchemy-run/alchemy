@@ -116,7 +116,6 @@ export type Teamdrive = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const Teamdrive = Resource<Teamdrive>("GCP.Drive.Teamdrive");

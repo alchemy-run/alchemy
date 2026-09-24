@@ -23,7 +23,6 @@ export interface GetSchemaRegistryRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Managedkafka
  */
 export interface GetSchemaRegistry extends Binding.Service<

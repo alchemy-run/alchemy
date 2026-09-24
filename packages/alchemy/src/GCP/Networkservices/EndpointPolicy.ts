@@ -205,7 +205,6 @@ export type EndpointPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const EndpointPolicy = Resource<EndpointPolicy>(

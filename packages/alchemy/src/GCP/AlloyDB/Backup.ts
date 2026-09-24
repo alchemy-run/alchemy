@@ -171,7 +171,6 @@ export type Backup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AlloyDB
  */
 export const Backup = Resource<Backup>("GCP.AlloyDB.Backup");

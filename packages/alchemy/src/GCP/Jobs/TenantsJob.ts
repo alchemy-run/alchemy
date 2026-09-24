@@ -297,7 +297,6 @@ export type TenantsJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Jobs
  */
 export const TenantsJob = Resource<TenantsJob>("GCP.Jobs.TenantsJob");

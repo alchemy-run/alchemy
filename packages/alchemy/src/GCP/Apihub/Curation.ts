@@ -130,7 +130,6 @@ export type Curation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Curation = Resource<Curation>("GCP.Apihub.Curation");

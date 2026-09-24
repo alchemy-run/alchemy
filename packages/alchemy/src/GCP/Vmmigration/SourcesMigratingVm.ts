@@ -157,7 +157,6 @@ export type SourcesMigratingVm = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const SourcesMigratingVm = Resource<SourcesMigratingVm>(

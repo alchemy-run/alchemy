@@ -23,7 +23,6 @@ export interface GetWorkstationConfigRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Workstations
  */
 export interface GetWorkstationConfig extends Binding.Service<

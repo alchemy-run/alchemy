@@ -173,7 +173,6 @@ export type DataExchange = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticshub
  */
 export const DataExchange = Resource<DataExchange>(

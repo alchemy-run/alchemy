@@ -23,7 +23,6 @@ export interface GetUserRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AlloyDB
  */
 export interface GetUser extends Binding.Service<

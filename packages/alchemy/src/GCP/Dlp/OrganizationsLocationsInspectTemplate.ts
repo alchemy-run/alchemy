@@ -132,7 +132,6 @@ export type OrganizationsLocationsInspectTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsLocationsInspectTemplate =

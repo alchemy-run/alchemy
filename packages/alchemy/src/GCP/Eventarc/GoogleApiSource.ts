@@ -191,7 +191,6 @@ export type GoogleApiSource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const GoogleApiSource = Resource<GoogleApiSource>(

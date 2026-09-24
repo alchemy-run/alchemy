@@ -101,7 +101,6 @@ export type CollectionsDataStoresConversation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsDataStoresConversation =

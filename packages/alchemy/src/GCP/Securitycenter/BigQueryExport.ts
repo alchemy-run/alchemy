@@ -110,7 +110,6 @@ export type BigQueryExport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const BigQueryExport = Resource<BigQueryExport>(

@@ -94,7 +94,6 @@ export type AdvertisersChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersChannel = Resource<AdvertisersChannel>(

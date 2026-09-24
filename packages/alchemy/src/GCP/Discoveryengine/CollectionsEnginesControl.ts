@@ -140,7 +140,6 @@ export type CollectionsEnginesControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesControl = Resource<CollectionsEnginesControl>(

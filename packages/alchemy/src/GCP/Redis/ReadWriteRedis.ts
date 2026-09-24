@@ -18,7 +18,6 @@ import type { Instance } from "./Instance.ts";
  * ```
  *
  * @binding
- * @product GCP
  * @category Redis
  */
 export interface ReadWriteRedis extends Binding.Service<

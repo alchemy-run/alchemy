@@ -125,7 +125,6 @@ export type Sharedflow = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Sharedflow = Resource<Sharedflow>("GCP.Apigee.Sharedflow");

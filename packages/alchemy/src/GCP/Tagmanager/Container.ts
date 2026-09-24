@@ -149,7 +149,6 @@ export type Container = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const Container = Resource<Container>("GCP.Tagmanager.Container");

@@ -111,7 +111,6 @@ export type AgentsFlowsPage = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsFlowsPage = Resource<AgentsFlowsPage>(

@@ -199,7 +199,6 @@ export type ServerTlsPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const ServerTlsPolicy = Resource<ServerTlsPolicy>(

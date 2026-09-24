@@ -114,7 +114,6 @@ export type RepositoriesPackagesTag = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ArtifactRegistry
  */
 export const RepositoriesPackagesTag = Resource<RepositoriesPackagesTag>(

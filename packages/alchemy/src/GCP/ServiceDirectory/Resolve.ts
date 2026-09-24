@@ -30,7 +30,6 @@ export interface ResolveRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category ServiceDirectory
  */
 export interface Resolve extends Binding.Service<

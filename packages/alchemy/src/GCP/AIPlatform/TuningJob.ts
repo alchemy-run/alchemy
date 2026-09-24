@@ -124,7 +124,6 @@ export type TuningJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const TuningJob = Resource<TuningJob>("GCP.AIPlatform.TuningJob");

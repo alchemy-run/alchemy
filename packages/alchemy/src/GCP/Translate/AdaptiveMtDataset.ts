@@ -121,7 +121,6 @@ export type AdaptiveMtDataset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Translate
  */
 export const AdaptiveMtDataset = Resource<AdaptiveMtDataset>(

@@ -133,7 +133,6 @@ export type InstancesTablesAuthorizedView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const InstancesTablesAuthorizedView =

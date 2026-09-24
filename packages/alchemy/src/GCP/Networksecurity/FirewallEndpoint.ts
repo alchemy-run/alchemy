@@ -144,7 +144,6 @@ export type FirewallEndpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const FirewallEndpoint = Resource<FirewallEndpoint>(

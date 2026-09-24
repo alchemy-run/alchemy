@@ -140,7 +140,6 @@ export type Repository = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CloudBuild
  */
 export const Repository = Resource<Repository>("GCP.CloudBuild.Repository");

@@ -156,7 +156,6 @@ export type PluginsInstance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const PluginsInstance = Resource<PluginsInstance>(

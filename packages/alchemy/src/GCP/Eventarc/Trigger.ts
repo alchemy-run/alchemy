@@ -323,7 +323,6 @@ export type Trigger = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const Trigger = Resource<Trigger>("GCP.Eventarc.Trigger");

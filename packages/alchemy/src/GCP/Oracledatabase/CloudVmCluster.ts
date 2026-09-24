@@ -232,7 +232,6 @@ export type CloudVmCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const CloudVmCluster = Resource<CloudVmCluster>(

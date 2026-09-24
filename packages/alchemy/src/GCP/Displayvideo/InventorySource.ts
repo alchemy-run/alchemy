@@ -246,7 +246,6 @@ export type InventorySource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const InventorySource = Resource<InventorySource>(

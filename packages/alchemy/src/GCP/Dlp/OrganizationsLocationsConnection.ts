@@ -110,7 +110,6 @@ export type OrganizationsLocationsConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsLocationsConnection =

@@ -142,7 +142,6 @@ export type InstanceConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const InstanceConfig = Resource<InstanceConfig>(

@@ -154,7 +154,6 @@ export type Datastore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const Datastore = Resource<Datastore>("GCP.Vmwareengine.Datastore");

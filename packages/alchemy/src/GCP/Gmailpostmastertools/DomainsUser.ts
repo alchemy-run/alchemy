@@ -104,7 +104,6 @@ export type DomainsUser = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail Postmaster Tools
  */
 export const DomainsUser = Resource<DomainsUser>(

@@ -107,7 +107,6 @@ export type Group = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const Group = Resource<Group>("GCP.Monitoring.Group");

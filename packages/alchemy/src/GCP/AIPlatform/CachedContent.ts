@@ -141,7 +141,6 @@ export type CachedContent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const CachedContent = Resource<CachedContent>(

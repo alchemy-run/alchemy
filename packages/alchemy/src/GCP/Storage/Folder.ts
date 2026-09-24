@@ -81,7 +81,6 @@ export type Folder = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const Folder = Resource<Folder>("GCP.Storage.Folder");

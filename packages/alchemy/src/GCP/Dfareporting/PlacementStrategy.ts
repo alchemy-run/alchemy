@@ -84,7 +84,6 @@ export type PlacementStrategy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const PlacementStrategy = Resource<PlacementStrategy>(

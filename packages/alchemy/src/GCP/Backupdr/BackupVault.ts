@@ -182,7 +182,6 @@ export type BackupVault = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Backupdr
  */
 export const BackupVault = Resource<BackupVault>("GCP.Backupdr.BackupVault");

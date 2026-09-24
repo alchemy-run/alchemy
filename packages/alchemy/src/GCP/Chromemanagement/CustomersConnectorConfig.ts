@@ -172,7 +172,6 @@ export type CustomersConnectorConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Chromemanagement
  */
 export const CustomersConnectorConfig = Resource<CustomersConnectorConfig>(

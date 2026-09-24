@@ -137,7 +137,6 @@ export type UsersSettingsSendA = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsSendA = Resource<UsersSettingsSendA>(

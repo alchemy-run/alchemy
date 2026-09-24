@@ -25,7 +25,6 @@ export interface GetOccurrenceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Containeranalysis
  */
 export interface GetOccurrence extends Binding.Service<

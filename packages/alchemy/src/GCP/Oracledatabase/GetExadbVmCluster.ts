@@ -20,7 +20,6 @@ export interface GetExadbVmClusterRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetExadbVmCluster extends Binding.Service<

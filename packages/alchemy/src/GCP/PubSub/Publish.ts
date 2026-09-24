@@ -25,7 +25,6 @@ export interface PublishRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PubSub
  */
 export interface Publish extends Binding.Service<

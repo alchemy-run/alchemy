@@ -102,7 +102,6 @@ export type InstancesTablesSchemaBundle = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const InstancesTablesSchemaBundle =

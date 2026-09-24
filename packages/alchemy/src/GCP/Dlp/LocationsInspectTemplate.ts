@@ -130,7 +130,6 @@ export type LocationsInspectTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const LocationsInspectTemplate = Resource<LocationsInspectTemplate>(

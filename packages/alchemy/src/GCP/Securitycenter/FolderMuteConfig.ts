@@ -130,7 +130,6 @@ export type FolderMuteConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const FolderMuteConfig = Resource<FolderMuteConfig>(

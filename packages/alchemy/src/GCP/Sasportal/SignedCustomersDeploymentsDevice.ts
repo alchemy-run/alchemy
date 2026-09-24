@@ -160,7 +160,6 @@ export type SignedCustomersDeploymentsDevice = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Sasportal
  */
 export const SignedCustomersDeploymentsDevice =

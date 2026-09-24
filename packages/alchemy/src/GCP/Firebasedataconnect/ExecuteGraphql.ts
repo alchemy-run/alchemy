@@ -27,7 +27,6 @@ export interface ExecuteGraphqlRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebasedataconnect
  */
 export interface ExecuteGraphql extends Binding.Service<

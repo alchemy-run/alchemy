@@ -132,7 +132,6 @@ export type TagKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ResourceManager
  */
 export const TagKey = Resource<TagKey>("GCP.ResourceManager.TagKey");

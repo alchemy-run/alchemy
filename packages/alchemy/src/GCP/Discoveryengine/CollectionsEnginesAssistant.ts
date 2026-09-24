@@ -131,7 +131,6 @@ export type CollectionsEnginesAssistant = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesAssistant =

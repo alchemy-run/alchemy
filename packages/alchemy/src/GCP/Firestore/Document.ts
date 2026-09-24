@@ -134,7 +134,6 @@ export type Document = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firestore
  */
 export const Document = Resource<Document>("GCP.Firestore.Document");

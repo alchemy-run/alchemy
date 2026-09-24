@@ -110,7 +110,6 @@ export type GroupsMembership = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const GroupsMembership = Resource<GroupsMembership>(

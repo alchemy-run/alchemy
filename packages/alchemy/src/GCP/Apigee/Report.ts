@@ -183,7 +183,6 @@ export type Report = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Report = Resource<Report>("GCP.Apigee.Report");

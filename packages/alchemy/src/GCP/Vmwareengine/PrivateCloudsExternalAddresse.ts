@@ -122,7 +122,6 @@ export type PrivateCloudsExternalAddresse = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const PrivateCloudsExternalAddresse =

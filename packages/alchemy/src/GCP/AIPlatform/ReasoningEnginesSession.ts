@@ -115,7 +115,6 @@ export type ReasoningEnginesSession = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const ReasoningEnginesSession = Resource<ReasoningEnginesSession>(

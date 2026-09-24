@@ -112,7 +112,6 @@ export type AccessPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Accesscontextmanager
  */
 export const AccessPolicy = Resource<AccessPolicy>(

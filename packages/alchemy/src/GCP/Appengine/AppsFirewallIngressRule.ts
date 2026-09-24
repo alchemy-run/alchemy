@@ -117,7 +117,6 @@ export type AppsFirewallIngressRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Appengine
  */
 export const AppsFirewallIngressRule = Resource<AppsFirewallIngressRule>(

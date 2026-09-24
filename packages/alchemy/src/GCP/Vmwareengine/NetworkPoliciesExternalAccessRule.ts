@@ -183,7 +183,6 @@ export type NetworkPoliciesExternalAccessRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const NetworkPoliciesExternalAccessRule =

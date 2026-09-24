@@ -149,7 +149,6 @@ export type ContainersEnvironment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersEnvironment = Resource<ContainersEnvironment>(

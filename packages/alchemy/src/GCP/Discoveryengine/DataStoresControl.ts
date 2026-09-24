@@ -199,7 +199,6 @@ export type DataStoresControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresControl = Resource<DataStoresControl>(

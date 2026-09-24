@@ -93,7 +93,6 @@ export type IdentityMappingStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const IdentityMappingStore = Resource<IdentityMappingStore>(

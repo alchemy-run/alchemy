@@ -23,7 +23,6 @@ export interface GetBackupRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AlloyDB
  */
 export interface GetBackup extends Binding.Service<

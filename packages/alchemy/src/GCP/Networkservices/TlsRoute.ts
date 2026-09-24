@@ -184,7 +184,6 @@ export type TlsRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const TlsRoute = Resource<TlsRoute>("GCP.Networkservices.TlsRoute");

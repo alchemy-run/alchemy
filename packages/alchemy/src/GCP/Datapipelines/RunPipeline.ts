@@ -24,7 +24,6 @@ export interface RunPipelineRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Datapipelines
  */
 export interface RunPipeline extends Binding.Service<

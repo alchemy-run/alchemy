@@ -189,7 +189,6 @@ export type RegionHealthCheck = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionHealthCheck = Resource<RegionHealthCheck>(

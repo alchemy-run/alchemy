@@ -180,7 +180,6 @@ export type ClientTlsPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const ClientTlsPolicy = Resource<ClientTlsPolicy>(

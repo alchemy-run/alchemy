@@ -122,7 +122,6 @@ export type RowAccessPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQuery
  */
 export const RowAccessPolicy = Resource<RowAccessPolicy>(

@@ -159,7 +159,6 @@ export type FutureReservation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const FutureReservation = Resource<FutureReservation>(

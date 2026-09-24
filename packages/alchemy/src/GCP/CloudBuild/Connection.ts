@@ -361,7 +361,6 @@ export type Connection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CloudBuild
  */
 export const Connection = Resource<Connection>("GCP.CloudBuild.Connection");

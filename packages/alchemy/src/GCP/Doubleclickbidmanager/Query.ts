@@ -213,7 +213,6 @@ export type Query = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Doubleclickbidmanager
  */
 export const Query = Resource<Query>("GCP.Doubleclickbidmanager.Query");

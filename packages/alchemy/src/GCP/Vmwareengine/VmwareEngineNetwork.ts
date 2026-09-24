@@ -159,7 +159,6 @@ export type VmwareEngineNetwork = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const VmwareEngineNetwork = Resource<VmwareEngineNetwork>(

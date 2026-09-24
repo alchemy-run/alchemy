@@ -117,7 +117,6 @@ export type Ruleset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaserules
  */
 export const Ruleset = Resource<Ruleset>("GCP.Firebaserules.Ruleset");

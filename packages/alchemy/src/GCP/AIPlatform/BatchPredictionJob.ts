@@ -201,7 +201,6 @@ export type BatchPredictionJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const BatchPredictionJob = Resource<BatchPredictionJob>(

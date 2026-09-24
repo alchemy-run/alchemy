@@ -145,7 +145,6 @@ export type DiscoveryClient = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const DiscoveryClient = Resource<DiscoveryClient>(

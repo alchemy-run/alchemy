@@ -23,7 +23,6 @@ export interface GetInstanceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Bigtable
  */
 export interface GetInstance extends Binding.Service<

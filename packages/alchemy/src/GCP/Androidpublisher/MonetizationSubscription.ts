@@ -162,7 +162,6 @@ export type MonetizationSubscription = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidpublisher
  */
 export const MonetizationSubscription = Resource<MonetizationSubscription>(

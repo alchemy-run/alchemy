@@ -173,7 +173,6 @@ export type CustomRange = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudnumberregistry
  */
 export const CustomRange = Resource<CustomRange>(

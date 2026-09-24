@@ -208,7 +208,6 @@ export type Cluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const Cluster = Resource<Cluster>("GCP.Bigtable.Cluster");

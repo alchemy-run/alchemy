@@ -160,7 +160,6 @@ export type AddressGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const AddressGroup = Resource<AddressGroup>(

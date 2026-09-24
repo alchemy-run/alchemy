@@ -133,7 +133,6 @@ export type IntegrationsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const IntegrationsVersion = Resource<IntegrationsVersion>(

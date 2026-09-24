@@ -174,7 +174,6 @@ export type VpnGateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const VpnGateway = Resource<VpnGateway>("GCP.Compute.VpnGateway");

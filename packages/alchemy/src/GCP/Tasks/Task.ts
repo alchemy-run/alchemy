@@ -184,7 +184,6 @@ export type Task = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tasks
  */
 export const Task = Resource<Task>("GCP.Tasks.Task");

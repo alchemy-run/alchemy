@@ -121,7 +121,6 @@ export type BillingBucketsLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BillingBucketsLink = Resource<BillingBucketsLink>(

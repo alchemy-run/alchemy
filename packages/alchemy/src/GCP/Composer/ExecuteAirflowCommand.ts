@@ -27,7 +27,6 @@ export interface ExecuteAirflowCommandRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Composer
  */
 export interface ExecuteAirflowCommand extends Binding.Service<

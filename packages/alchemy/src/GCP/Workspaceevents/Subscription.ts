@@ -187,7 +187,6 @@ export type Subscription = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workspaceevents
  */
 export const Subscription = Resource<Subscription>(

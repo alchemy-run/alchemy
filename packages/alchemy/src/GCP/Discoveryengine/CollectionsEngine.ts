@@ -183,7 +183,6 @@ export type CollectionsEngine = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEngine = Resource<CollectionsEngine>(

@@ -95,7 +95,6 @@ export type CreativeField = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const CreativeField = Resource<CreativeField>(

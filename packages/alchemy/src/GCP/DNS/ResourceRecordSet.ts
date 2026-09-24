@@ -120,7 +120,6 @@ export type ResourceRecordSet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category DNS
  */
 export const ResourceRecordSet = Resource<ResourceRecordSet>(

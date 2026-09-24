@@ -121,7 +121,6 @@ export type ChannelConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const ChannelConnection = Resource<ChannelConnection>(

@@ -147,7 +147,6 @@ export type Model = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ml
  */
 export const Model = Resource<Model>("GCP.Ml.Model");

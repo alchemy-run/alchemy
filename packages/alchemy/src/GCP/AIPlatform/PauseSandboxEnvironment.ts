@@ -23,7 +23,6 @@ export interface PauseSandboxEnvironmentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AIPlatform
  */
 export interface PauseSandboxEnvironment extends Binding.Service<

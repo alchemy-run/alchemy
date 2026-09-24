@@ -136,7 +136,6 @@ export type Database = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const Database = Resource<Database>("GCP.SQL.Database");

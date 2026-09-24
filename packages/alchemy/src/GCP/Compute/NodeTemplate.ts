@@ -159,7 +159,6 @@ export type NodeTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const NodeTemplate = Resource<NodeTemplate>("GCP.Compute.NodeTemplate");

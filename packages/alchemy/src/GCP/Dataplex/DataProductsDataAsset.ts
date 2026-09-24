@@ -116,7 +116,6 @@ export type DataProductsDataAsset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataProductsDataAsset = Resource<DataProductsDataAsset>(

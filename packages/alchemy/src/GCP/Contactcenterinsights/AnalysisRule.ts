@@ -157,7 +157,6 @@ export type AnalysisRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AnalysisRule = Resource<AnalysisRule>(

@@ -154,7 +154,6 @@ export type AppsAgent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsAgent = Resource<AppsAgent>("GCP.Ces.AppsAgent");

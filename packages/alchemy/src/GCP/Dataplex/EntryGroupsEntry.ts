@@ -180,7 +180,6 @@ export type EntryGroupsEntry = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const EntryGroupsEntry = Resource<EntryGroupsEntry>(

@@ -129,7 +129,6 @@ export type Notification = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const Notification = Resource<Notification>("GCP.Storage.Notification");

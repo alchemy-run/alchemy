@@ -321,7 +321,6 @@ export type Pipeline = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const Pipeline = Resource<Pipeline>("GCP.Eventarc.Pipeline");

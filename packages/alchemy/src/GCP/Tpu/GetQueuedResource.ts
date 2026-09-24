@@ -23,7 +23,6 @@ export interface GetQueuedResourceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Tpu
  */
 export interface GetQueuedResource extends Binding.Service<

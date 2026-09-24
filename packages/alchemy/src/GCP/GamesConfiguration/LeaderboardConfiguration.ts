@@ -159,7 +159,6 @@ export type LeaderboardConfiguration = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category GamesConfiguration
  */
 export const LeaderboardConfiguration = Resource<LeaderboardConfiguration>(

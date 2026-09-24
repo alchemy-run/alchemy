@@ -312,7 +312,6 @@ export type Workload = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Assuredworkloads
  */
 export const Workload = Resource<Workload>("GCP.Assuredworkloads.Workload");

@@ -219,7 +219,6 @@ export type Backend = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseapphosting
  */
 export const Backend = Resource<Backend>("GCP.Firebaseapphosting.Backend");

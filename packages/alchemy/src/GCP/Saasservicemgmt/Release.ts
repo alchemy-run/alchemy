@@ -173,7 +173,6 @@ export type Release = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const Release = Resource<Release>("GCP.Saasservicemgmt.Release");

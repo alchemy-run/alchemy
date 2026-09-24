@@ -123,7 +123,6 @@ export type DatasetsConsentStoresConsentArtifact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsConsentStoresConsentArtifact =

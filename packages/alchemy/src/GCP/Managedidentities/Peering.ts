@@ -133,7 +133,6 @@ export type Peering = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedidentities
  */
 export const Peering = Resource<Peering>("GCP.Managedidentities.Peering");

@@ -199,7 +199,6 @@ export type TcpRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const TcpRoute = Resource<TcpRoute>("GCP.Networkservices.TcpRoute");

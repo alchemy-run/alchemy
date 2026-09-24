@@ -228,7 +228,6 @@ export type ModelsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ml
  */
 export const ModelsVersion = Resource<ModelsVersion>("GCP.Ml.ModelsVersion");

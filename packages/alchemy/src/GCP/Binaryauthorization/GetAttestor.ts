@@ -23,7 +23,6 @@ export interface GetAttestorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Binaryauthorization
  */
 export interface GetAttestor extends Binding.Service<

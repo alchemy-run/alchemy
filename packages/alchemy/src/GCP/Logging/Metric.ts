@@ -236,7 +236,6 @@ export type Metric = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const Metric = Resource<Metric>("GCP.Logging.Metric");

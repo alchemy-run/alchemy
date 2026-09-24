@@ -25,7 +25,6 @@ export interface PullRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PubSub
  */
 export interface Pull extends Binding.Service<

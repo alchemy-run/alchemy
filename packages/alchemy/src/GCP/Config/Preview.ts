@@ -188,7 +188,6 @@ export type Preview = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Config
  */
 export const Preview = Resource<Preview>("GCP.Config.Preview");

@@ -209,7 +209,6 @@ export type DbSystem = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const DbSystem = Resource<DbSystem>("GCP.Oracledatabase.DbSystem");

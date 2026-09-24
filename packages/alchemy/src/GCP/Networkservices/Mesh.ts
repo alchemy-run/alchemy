@@ -129,7 +129,6 @@ export type Mesh = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const Mesh = Resource<Mesh>("GCP.Networkservices.Mesh");

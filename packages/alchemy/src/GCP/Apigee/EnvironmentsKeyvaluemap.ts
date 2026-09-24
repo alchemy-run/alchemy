@@ -94,7 +94,6 @@ export type EnvironmentsKeyvaluemap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsKeyvaluemap = Resource<EnvironmentsKeyvaluemap>(

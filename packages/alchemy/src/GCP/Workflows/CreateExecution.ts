@@ -26,7 +26,6 @@ export interface CreateExecutionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Workflows
  */
 export interface CreateExecution extends Binding.Service<

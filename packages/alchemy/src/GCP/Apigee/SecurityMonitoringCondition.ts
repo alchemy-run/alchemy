@@ -132,7 +132,6 @@ export type SecurityMonitoringCondition = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SecurityMonitoringCondition =

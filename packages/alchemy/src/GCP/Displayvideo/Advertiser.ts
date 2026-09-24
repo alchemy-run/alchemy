@@ -247,7 +247,6 @@ export type Advertiser = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const Advertiser = Resource<Advertiser>("GCP.Displayvideo.Advertiser");

@@ -121,7 +121,6 @@ export type InstantSnapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InstantSnapshot = Resource<InstantSnapshot>(

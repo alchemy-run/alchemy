@@ -96,7 +96,6 @@ export type EndpointAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EndpointAttachment = Resource<EndpointAttachment>(

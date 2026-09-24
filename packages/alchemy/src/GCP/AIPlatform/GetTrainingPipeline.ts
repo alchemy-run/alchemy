@@ -23,7 +23,6 @@ export interface GetTrainingPipelineRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AIPlatform
  */
 export interface GetTrainingPipeline extends Binding.Service<

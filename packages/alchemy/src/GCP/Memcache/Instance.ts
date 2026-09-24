@@ -230,7 +230,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Memcache
  */
 export const Instance = Resource<Instance>("GCP.Memcache.Instance");

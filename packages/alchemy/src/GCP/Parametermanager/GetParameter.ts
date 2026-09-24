@@ -18,7 +18,6 @@ import type { Parameter } from "./Parameter.ts";
  * ```
  *
  * @binding
- * @product GCP
  * @category Parametermanager
  */
 export interface GetParameter extends Binding.Service<

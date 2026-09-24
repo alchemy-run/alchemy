@@ -98,7 +98,6 @@ export type InstancesLogicalView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const InstancesLogicalView = Resource<InstancesLogicalView>(

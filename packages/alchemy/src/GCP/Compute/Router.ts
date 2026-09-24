@@ -188,7 +188,6 @@ export type Router = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Router = Resource<Router>("GCP.Compute.Router");

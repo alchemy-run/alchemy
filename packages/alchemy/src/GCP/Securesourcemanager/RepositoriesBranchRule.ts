@@ -206,7 +206,6 @@ export type RepositoriesBranchRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securesourcemanager
  */
 export const RepositoriesBranchRule = Resource<RepositoriesBranchRule>(

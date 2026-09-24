@@ -187,7 +187,6 @@ export type Collector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Rapidmigrationassessment
  */
 export const Collector = Resource<Collector>(

@@ -144,7 +144,6 @@ export type RegionBackendBucket = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionBackendBucket = Resource<RegionBackendBucket>(

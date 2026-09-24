@@ -102,7 +102,6 @@ export type Group = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseappdistribution
  */
 export const Group = Resource<Group>("GCP.Firebaseappdistribution.Group");

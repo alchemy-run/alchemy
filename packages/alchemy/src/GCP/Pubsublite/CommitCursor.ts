@@ -25,7 +25,6 @@ export interface CommitCursorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface CommitCursor extends Binding.Service<

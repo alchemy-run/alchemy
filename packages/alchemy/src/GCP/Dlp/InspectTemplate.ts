@@ -116,7 +116,6 @@ export type InspectTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const InspectTemplate = Resource<InspectTemplate>(

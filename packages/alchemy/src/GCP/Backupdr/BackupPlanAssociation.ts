@@ -145,7 +145,6 @@ export type BackupPlanAssociation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Backupdr
  */
 export const BackupPlanAssociation = Resource<BackupPlanAssociation>(

@@ -140,7 +140,6 @@ export type GoldengateConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const GoldengateConnection = Resource<GoldengateConnection>(

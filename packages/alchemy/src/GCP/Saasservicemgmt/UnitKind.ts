@@ -195,7 +195,6 @@ export type UnitKind = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const UnitKind = Resource<UnitKind>("GCP.Saasservicemgmt.UnitKind");

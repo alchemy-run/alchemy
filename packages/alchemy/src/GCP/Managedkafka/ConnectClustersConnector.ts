@@ -115,7 +115,6 @@ export type ConnectClustersConnector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const ConnectClustersConnector = Resource<ConnectClustersConnector>(

@@ -270,7 +270,6 @@ export type Key = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Recaptchaenterprise
  */
 export const Key = Resource<Key>("GCP.Recaptchaenterprise.Key");

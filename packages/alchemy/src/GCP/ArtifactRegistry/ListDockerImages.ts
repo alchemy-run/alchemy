@@ -23,7 +23,6 @@ export interface ListDockerImagesRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category ArtifactRegistry
  */
 export interface ListDockerImages extends Binding.Service<

@@ -491,7 +491,6 @@ export type WorkstationClustersWorkstationConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workstations
  */
 export const WorkstationClustersWorkstationConfig =

@@ -123,7 +123,6 @@ export type AppsExample = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsExample = Resource<AppsExample>("GCP.Ces.AppsExample");

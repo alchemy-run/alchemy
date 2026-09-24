@@ -155,7 +155,6 @@ export type AccessPoliciesServicePerimeter = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Accesscontextmanager
  */
 export const AccessPoliciesServicePerimeter =

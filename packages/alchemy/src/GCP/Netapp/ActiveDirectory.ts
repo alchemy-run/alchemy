@@ -227,7 +227,6 @@ export type ActiveDirectory = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const ActiveDirectory = Resource<ActiveDirectory>(

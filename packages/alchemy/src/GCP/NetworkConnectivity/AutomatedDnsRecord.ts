@@ -198,7 +198,6 @@ export type AutomatedDnsRecord = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const AutomatedDnsRecord = Resource<AutomatedDnsRecord>(

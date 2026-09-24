@@ -119,7 +119,6 @@ export type RagCorpora = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const RagCorpora = Resource<RagCorpora>("GCP.AIPlatform.RagCorpora");

@@ -129,7 +129,6 @@ export type RolloutPlan = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RolloutPlan = Resource<RolloutPlan>("GCP.Compute.RolloutPlan");

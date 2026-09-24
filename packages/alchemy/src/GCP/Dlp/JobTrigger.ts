@@ -127,7 +127,6 @@ export type JobTrigger = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const JobTrigger = Resource<JobTrigger>("GCP.Dlp.JobTrigger");

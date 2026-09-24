@@ -97,7 +97,6 @@ export type Catalog = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Biglake
  */
 export const Catalog = Resource<Catalog>("GCP.Biglake.Catalog");

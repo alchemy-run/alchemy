@@ -196,7 +196,6 @@ export type MerchantReview = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category MerchantapiReviews
  */
 export const MerchantReview = Resource<MerchantReview>(

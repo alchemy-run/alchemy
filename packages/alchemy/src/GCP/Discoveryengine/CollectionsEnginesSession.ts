@@ -127,7 +127,6 @@ export type CollectionsEnginesSession = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesSession = Resource<CollectionsEnginesSession>(

@@ -166,7 +166,6 @@ export type Enterprise = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidmanagement
  */
 export const Enterprise = Resource<Enterprise>(

@@ -167,7 +167,6 @@ export type Apiproduct = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Apiproduct = Resource<Apiproduct>("GCP.Apigee.Apiproduct");

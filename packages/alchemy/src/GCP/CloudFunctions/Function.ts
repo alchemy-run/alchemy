@@ -427,7 +427,6 @@ export type FunctionShape = Main<FunctionServices>;
  * Cloud Run is the gen2 runtime.
  *
  * @resource
- * @product GCP
  * @category CloudFunctions
  */
 export const Function: Platform<

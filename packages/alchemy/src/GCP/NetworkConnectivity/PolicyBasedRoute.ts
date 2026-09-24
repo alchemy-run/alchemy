@@ -242,7 +242,6 @@ export type PolicyBasedRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const PolicyBasedRoute = Resource<PolicyBasedRoute>(

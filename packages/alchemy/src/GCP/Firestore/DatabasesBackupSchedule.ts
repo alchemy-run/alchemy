@@ -118,7 +118,6 @@ export type DatabasesBackupSchedule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firestore
  */
 export const DatabasesBackupSchedule = Resource<DatabasesBackupSchedule>(

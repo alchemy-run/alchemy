@@ -203,7 +203,6 @@ export type AgentsWebhook = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsWebhook = Resource<AgentsWebhook>(

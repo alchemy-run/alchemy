@@ -130,7 +130,6 @@ export type AnalyticsDatastore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const AnalyticsDatastore = Resource<AnalyticsDatastore>(

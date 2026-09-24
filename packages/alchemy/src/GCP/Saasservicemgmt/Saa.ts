@@ -147,7 +147,6 @@ export type Saa = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const Saa = Resource<Saa>("GCP.Saasservicemgmt.Saa");

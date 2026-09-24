@@ -315,7 +315,6 @@ export type AutonomousDatabase = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const AutonomousDatabase = Resource<AutonomousDatabase>(

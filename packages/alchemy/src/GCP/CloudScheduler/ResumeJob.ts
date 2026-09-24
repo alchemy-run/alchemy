@@ -23,7 +23,6 @@ export interface ResumeJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudScheduler
  */
 export interface ResumeJob extends Binding.Service<

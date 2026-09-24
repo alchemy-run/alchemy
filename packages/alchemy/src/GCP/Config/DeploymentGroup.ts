@@ -159,7 +159,6 @@ export type DeploymentGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Config
  */
 export const DeploymentGroup = Resource<DeploymentGroup>(

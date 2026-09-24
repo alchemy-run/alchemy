@@ -151,7 +151,6 @@ export type Instruction = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalabeling
  */
 export const Instruction = Resource<Instruction>(

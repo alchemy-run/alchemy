@@ -150,7 +150,6 @@ export type Application = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apphub
  */
 export const Application = Resource<Application>("GCP.Apphub.Application");

@@ -137,7 +137,6 @@ export type OrganizationsDeidentifyTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsDeidentifyTemplate =

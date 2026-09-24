@@ -139,7 +139,6 @@ export type PhotoSequence = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Streetviewpublish
  */
 export const PhotoSequence = Resource<PhotoSequence>(

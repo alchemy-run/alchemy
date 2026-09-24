@@ -146,7 +146,6 @@ export type AppsToolset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsToolset = Resource<AppsToolset>("GCP.Ces.AppsToolset");

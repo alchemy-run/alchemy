@@ -124,7 +124,6 @@ export type Project = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ResourceManager
  */
 export const Project = Resource<Project>("GCP.ResourceManager.Project");

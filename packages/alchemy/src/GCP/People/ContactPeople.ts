@@ -187,7 +187,6 @@ export type ContactPeople = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category People
  */
 export const ContactPeople = Resource<ContactPeople>(

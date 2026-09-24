@@ -23,7 +23,6 @@ export interface GetTableRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Bigtable
  */
 export interface GetTable extends Binding.Service<

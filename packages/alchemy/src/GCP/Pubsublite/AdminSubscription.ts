@@ -168,7 +168,6 @@ export type AdminSubscription = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Pubsublite
  */
 export const AdminSubscription = Resource<AdminSubscription>(

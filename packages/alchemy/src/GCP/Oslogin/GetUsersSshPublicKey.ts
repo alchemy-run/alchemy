@@ -23,7 +23,6 @@ export interface GetUsersSshPublicKeyRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oslogin
  */
 export interface GetUsersSshPublicKey extends Binding.Service<

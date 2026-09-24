@@ -136,7 +136,6 @@ export type SchemaRegistriesSubjectsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const SchemaRegistriesSubjectsVersion =

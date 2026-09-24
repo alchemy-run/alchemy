@@ -178,7 +178,6 @@ export type PostureDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securityposture
  */
 export const PostureDeployment = Resource<PostureDeployment>(

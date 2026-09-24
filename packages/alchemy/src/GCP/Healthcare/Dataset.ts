@@ -91,7 +91,6 @@ export type Dataset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const Dataset = Resource<Dataset>("GCP.Healthcare.Dataset");

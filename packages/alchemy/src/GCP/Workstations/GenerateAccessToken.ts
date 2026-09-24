@@ -26,7 +26,6 @@ export interface GenerateAccessTokenRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Workstations
  */
 export interface GenerateAccessToken extends Binding.Service<

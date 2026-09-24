@@ -245,7 +245,6 @@ export type FloodlightActivity = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const FloodlightActivity = Resource<FloodlightActivity>(

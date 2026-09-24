@@ -178,7 +178,6 @@ export type Plugin = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Plugin = Resource<Plugin>("GCP.Apihub.Plugin");

@@ -177,7 +177,6 @@ export type EventTag = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const EventTag = Resource<EventTag>("GCP.Dfareporting.EventTag");

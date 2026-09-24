@@ -140,7 +140,6 @@ export type AppGateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Beyondcorp
  */
 export const AppGateway = Resource<AppGateway>("GCP.Beyondcorp.AppGateway");

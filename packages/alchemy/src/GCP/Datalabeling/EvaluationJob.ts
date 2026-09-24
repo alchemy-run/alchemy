@@ -178,7 +178,6 @@ export type EvaluationJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalabeling
  */
 export const EvaluationJob = Resource<EvaluationJob>(

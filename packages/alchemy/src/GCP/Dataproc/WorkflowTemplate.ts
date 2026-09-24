@@ -132,7 +132,6 @@ export type WorkflowTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const WorkflowTemplate = Resource<WorkflowTemplate>(

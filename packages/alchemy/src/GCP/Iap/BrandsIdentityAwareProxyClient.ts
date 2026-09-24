@@ -97,7 +97,6 @@ export type BrandsIdentityAwareProxyClient = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Iap
  */
 export const BrandsIdentityAwareProxyClient =

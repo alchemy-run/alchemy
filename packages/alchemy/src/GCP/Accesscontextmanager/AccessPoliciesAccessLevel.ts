@@ -149,7 +149,6 @@ export type AccessPoliciesAccessLevel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Accesscontextmanager
  */
 export const AccessPoliciesAccessLevel = Resource<AccessPoliciesAccessLevel>(

@@ -249,7 +249,6 @@ export type InterconnectAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InterconnectAttachment = Resource<InterconnectAttachment>(

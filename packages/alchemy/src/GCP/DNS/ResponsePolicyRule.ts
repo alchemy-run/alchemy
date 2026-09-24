@@ -121,7 +121,6 @@ export type ResponsePolicyRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category DNS
  */
 export const ResponsePolicyRule = Resource<ResponsePolicyRule>(

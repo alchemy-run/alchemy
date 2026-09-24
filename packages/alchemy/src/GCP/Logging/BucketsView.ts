@@ -128,7 +128,6 @@ export type BucketsView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BucketsView = Resource<BucketsView>("GCP.Logging.BucketsView");

@@ -166,7 +166,6 @@ export type CloudExadataInfrastructure = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const CloudExadataInfrastructure = Resource<CloudExadataInfrastructure>(

@@ -184,7 +184,6 @@ export type OrganizationSecurityPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const OrganizationSecurityPolicy = Resource<OrganizationSecurityPolicy>(

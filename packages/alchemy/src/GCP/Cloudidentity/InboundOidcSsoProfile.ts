@@ -110,7 +110,6 @@ export type InboundOidcSsoProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const InboundOidcSsoProfile = Resource<InboundOidcSsoProfile>(

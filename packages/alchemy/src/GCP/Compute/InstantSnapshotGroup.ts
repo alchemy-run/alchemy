@@ -99,7 +99,6 @@ export type InstantSnapshotGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InstantSnapshotGroup = Resource<InstantSnapshotGroup>(

@@ -111,7 +111,6 @@ export type OrganizationBucketsLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationBucketsLink = Resource<OrganizationBucketsLink>(

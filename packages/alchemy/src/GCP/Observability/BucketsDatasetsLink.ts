@@ -137,7 +137,6 @@ export type BucketsDatasetsLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Observability
  */
 export const BucketsDatasetsLink = Resource<BucketsDatasetsLink>(

@@ -247,7 +247,6 @@ export type ServiceAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const ServiceAttachment = Resource<ServiceAttachment>(

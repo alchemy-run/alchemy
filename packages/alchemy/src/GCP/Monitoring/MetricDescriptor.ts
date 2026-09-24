@@ -189,7 +189,6 @@ export type MetricDescriptor = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const MetricDescriptor = Resource<MetricDescriptor>(

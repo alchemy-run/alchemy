@@ -192,7 +192,6 @@ export type AccountTypesUserList = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamanager
  */
 export const AccountTypesUserList = Resource<AccountTypesUserList>(

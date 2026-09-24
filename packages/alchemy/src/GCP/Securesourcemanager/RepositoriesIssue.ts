@@ -122,7 +122,6 @@ export type RepositoriesIssue = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securesourcemanager
  */
 export const RepositoriesIssue = Resource<RepositoriesIssue>(

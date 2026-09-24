@@ -31,7 +31,6 @@ export interface TestRulesetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebaserules
  */
 export interface TestRuleset extends Binding.Service<

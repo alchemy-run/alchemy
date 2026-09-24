@@ -24,7 +24,6 @@ export interface FetchReadTokenRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Developerconnect
  */
 export interface FetchReadToken extends Binding.Service<

@@ -157,7 +157,6 @@ export type DataExchangesQueryTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticshub
  */
 export const DataExchangesQueryTemplate = Resource<DataExchangesQueryTemplate>(

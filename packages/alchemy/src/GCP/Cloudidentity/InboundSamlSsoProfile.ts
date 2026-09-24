@@ -102,7 +102,6 @@ export type InboundSamlSsoProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const InboundSamlSsoProfile = Resource<InboundSamlSsoProfile>(

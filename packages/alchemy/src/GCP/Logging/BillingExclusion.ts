@@ -121,7 +121,6 @@ export type BillingExclusion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BillingExclusion = Resource<BillingExclusion>(

@@ -147,7 +147,6 @@ export type RepositoriesAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ArtifactRegistry
  */
 export const RepositoriesAttachment = Resource<RepositoriesAttachment>(

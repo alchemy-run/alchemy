@@ -123,7 +123,6 @@ export type SacRealm = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const SacRealm = Resource<SacRealm>("GCP.Networksecurity.SacRealm");

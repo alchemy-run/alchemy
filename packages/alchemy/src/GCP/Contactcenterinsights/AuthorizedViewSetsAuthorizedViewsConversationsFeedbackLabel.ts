@@ -120,7 +120,6 @@ export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel =
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel =

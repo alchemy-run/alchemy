@@ -210,7 +210,6 @@ export type Key = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ApiKeys
  */
 export const Key = Resource<Key>("GCP.ApiKeys.Key");

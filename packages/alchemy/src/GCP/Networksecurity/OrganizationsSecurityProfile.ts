@@ -207,7 +207,6 @@ export type OrganizationsSecurityProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const OrganizationsSecurityProfile =

@@ -155,7 +155,6 @@ export type DataStoresBranchesDocument = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresBranchesDocument = Resource<DataStoresBranchesDocument>(

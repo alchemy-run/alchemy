@@ -133,7 +133,6 @@ export type Device = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const Device = Resource<Device>("GCP.Cloudidentity.Device");

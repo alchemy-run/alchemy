@@ -171,7 +171,6 @@ export type InstancesInstancePartition = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const InstancesInstancePartition = Resource<InstancesInstancePartition>(

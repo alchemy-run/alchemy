@@ -98,7 +98,6 @@ export type CustomEmoji = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Chat
  */
 export const CustomEmoji = Resource<CustomEmoji>("GCP.Chat.CustomEmoji");

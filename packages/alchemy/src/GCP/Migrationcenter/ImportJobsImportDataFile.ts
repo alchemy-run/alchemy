@@ -117,7 +117,6 @@ export type ImportJobsImportDataFile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const ImportJobsImportDataFile = Resource<ImportJobsImportDataFile>(

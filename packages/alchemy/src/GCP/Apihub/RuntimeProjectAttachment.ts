@@ -90,7 +90,6 @@ export type RuntimeProjectAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const RuntimeProjectAttachment = Resource<RuntimeProjectAttachment>(

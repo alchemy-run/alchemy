@@ -87,7 +87,6 @@ export type Namespace = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ServiceDirectory
  */
 export const Namespace = Resource<Namespace>("GCP.ServiceDirectory.Namespace");

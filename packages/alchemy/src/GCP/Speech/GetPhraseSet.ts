@@ -23,7 +23,6 @@ export interface GetPhraseSetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Speech
  */
 export interface GetPhraseSet extends Binding.Service<

@@ -86,7 +86,6 @@ export type EnvironmentsResourcefile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsResourcefile = Resource<EnvironmentsResourcefile>(

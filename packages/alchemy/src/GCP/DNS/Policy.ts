@@ -157,7 +157,6 @@ export type Policy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category DNS
  */
 export const Policy = Resource<Policy>("GCP.DNS.Policy");

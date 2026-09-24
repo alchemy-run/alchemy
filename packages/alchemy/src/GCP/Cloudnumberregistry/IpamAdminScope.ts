@@ -131,7 +131,6 @@ export type IpamAdminScope = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudnumberregistry
  */
 export const IpamAdminScope = Resource<IpamAdminScope>(

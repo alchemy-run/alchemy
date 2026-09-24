@@ -230,7 +230,6 @@ export type NfsShare = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Baremetalsolution
  */
 export const NfsShare = Resource<NfsShare>("GCP.Baremetalsolution.NfsShare");

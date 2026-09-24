@@ -155,7 +155,6 @@ export type Document = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contentwarehouse
  */
 export const Document = Resource<Document>("GCP.Contentwarehouse.Document");

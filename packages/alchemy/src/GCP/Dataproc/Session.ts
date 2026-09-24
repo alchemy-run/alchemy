@@ -126,7 +126,6 @@ export type Session = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const Session = Resource<Session>("GCP.Dataproc.Session");

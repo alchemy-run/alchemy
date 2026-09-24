@@ -114,7 +114,6 @@ export type NetworkMonitoringProvider = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkmanagement
  */
 export const NetworkMonitoringProvider = Resource<NetworkMonitoringProvider>(

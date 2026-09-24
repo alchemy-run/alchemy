@@ -33,7 +33,6 @@ export interface CreateAssessmentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Recaptchaenterprise
  */
 export interface CreateAssessment extends Binding.Service<

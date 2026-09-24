@@ -157,7 +157,6 @@ export type LocationsSecret = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SecretManager
  */
 export const LocationsSecret = Resource<LocationsSecret>(

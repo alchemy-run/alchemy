@@ -116,7 +116,6 @@ export type CollectionsDataStoresSession = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsDataStoresSession =

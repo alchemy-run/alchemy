@@ -99,7 +99,6 @@ export type SslCert = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const SslCert = Resource<SslCert>("GCP.SQL.SslCert");

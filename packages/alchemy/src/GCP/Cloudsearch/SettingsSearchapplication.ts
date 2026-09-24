@@ -165,7 +165,6 @@ export type SettingsSearchapplication = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudsearch
  */
 export const SettingsSearchapplication = Resource<SettingsSearchapplication>(

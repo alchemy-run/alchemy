@@ -205,7 +205,6 @@ export type CryptoKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category KMS
  */
 export const CryptoKey = Resource<CryptoKey>("GCP.KMS.CryptoKey");

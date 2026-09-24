@@ -123,7 +123,6 @@ export type FolderBigQueryExport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const FolderBigQueryExport = Resource<FolderBigQueryExport>(

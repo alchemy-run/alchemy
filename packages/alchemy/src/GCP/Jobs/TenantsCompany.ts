@@ -161,7 +161,6 @@ export type TenantsCompany = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Jobs
  */
 export const TenantsCompany = Resource<TenantsCompany>(

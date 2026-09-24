@@ -117,7 +117,6 @@ export type RepositoriesIssuesIssueComment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securesourcemanager
  */
 export const RepositoriesIssuesIssueComment =

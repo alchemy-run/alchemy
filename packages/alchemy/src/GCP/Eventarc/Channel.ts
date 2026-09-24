@@ -147,7 +147,6 @@ export type Channel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const Channel = Resource<Channel>("GCP.Eventarc.Channel");

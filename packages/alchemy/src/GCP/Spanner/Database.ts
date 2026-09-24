@@ -148,7 +148,6 @@ export type Database = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const Database = Resource<Database>("GCP.Spanner.Database");

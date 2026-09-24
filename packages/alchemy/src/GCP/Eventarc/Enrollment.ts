@@ -165,7 +165,6 @@ export type Enrollment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const Enrollment = Resource<Enrollment>("GCP.Eventarc.Enrollment");

@@ -96,7 +96,6 @@ export type User = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const User = Resource<User>("GCP.Displayvideo.User");

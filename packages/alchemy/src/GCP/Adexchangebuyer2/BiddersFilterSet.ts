@@ -178,7 +178,6 @@ export type BiddersFilterSet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Adexchangebuyer2
  */
 export const BiddersFilterSet = Resource<BiddersFilterSet>(

@@ -245,7 +245,6 @@ export type BackendsBuild = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseapphosting
  */
 export const BackendsBuild = Resource<BackendsBuild>(

@@ -23,7 +23,6 @@ export interface GetSandboxEnvironmentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AIPlatform
  */
 export interface GetSandboxEnvironment extends Binding.Service<

@@ -163,7 +163,6 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const SpokesGatewayAdvertisedRoute =

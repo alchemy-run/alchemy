@@ -154,7 +154,6 @@ export type ConversionWorkspace = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamigration
  */
 export const ConversionWorkspace = Resource<ConversionWorkspace>(

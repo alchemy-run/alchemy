@@ -23,7 +23,6 @@ export interface GetEntityRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Connectors
  */
 export interface GetEntity extends Binding.Service<

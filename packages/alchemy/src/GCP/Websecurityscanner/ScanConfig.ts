@@ -276,7 +276,6 @@ export type ScanConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Websecurityscanner
  */
 export const ScanConfig = Resource<ScanConfig>(

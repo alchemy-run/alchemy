@@ -183,7 +183,6 @@ export type RegionDisk = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionDisk = Resource<RegionDisk>("GCP.Compute.RegionDisk");

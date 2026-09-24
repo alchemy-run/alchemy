@@ -194,7 +194,6 @@ export type Dataset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQuery
  */
 export const Dataset = Resource<Dataset>("GCP.BigQuery.Dataset");

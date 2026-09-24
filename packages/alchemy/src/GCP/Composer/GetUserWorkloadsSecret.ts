@@ -24,7 +24,6 @@ export interface GetUserWorkloadsSecretRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Composer
  */
 export interface GetUserWorkloadsSecret extends Binding.Service<

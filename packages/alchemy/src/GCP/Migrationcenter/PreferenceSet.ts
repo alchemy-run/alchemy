@@ -125,7 +125,6 @@ const DEFAULT_VM: VirtualMachinePreferences = {
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const PreferenceSet = Resource<PreferenceSet>(

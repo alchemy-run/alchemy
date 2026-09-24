@@ -23,7 +23,6 @@ export interface DeleteObjectRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Storage
  */
 export interface DeleteObject extends Binding.Service<

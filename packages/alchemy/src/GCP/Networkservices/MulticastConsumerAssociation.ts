@@ -135,7 +135,6 @@ export type MulticastConsumerAssociation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const MulticastConsumerAssociation =

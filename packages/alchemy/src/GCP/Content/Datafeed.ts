@@ -157,7 +157,6 @@ export type Datafeed = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Datafeed = Resource<Datafeed>("GCP.Content.Datafeed");

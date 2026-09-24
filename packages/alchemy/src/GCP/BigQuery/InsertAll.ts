@@ -25,7 +25,6 @@ export interface InsertAllRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category BigQuery
  */
 export interface InsertAll extends Binding.Service<

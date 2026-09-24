@@ -120,7 +120,6 @@ export type FolderNotificationConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const FolderNotificationConfig = Resource<FolderNotificationConfig>(

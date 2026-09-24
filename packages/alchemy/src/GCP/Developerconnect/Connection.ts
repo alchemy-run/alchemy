@@ -410,7 +410,6 @@ export type Connection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Developerconnect
  */
 export const Connection = Resource<Connection>(

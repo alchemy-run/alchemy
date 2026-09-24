@@ -86,7 +86,6 @@ export type TagBinding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ResourceManager
  */
 export const TagBinding = Resource<TagBinding>(

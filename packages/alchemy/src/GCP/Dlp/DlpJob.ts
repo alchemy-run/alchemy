@@ -93,7 +93,6 @@ export type DlpJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const DlpJob = Resource<DlpJob>("GCP.Dlp.DlpJob");

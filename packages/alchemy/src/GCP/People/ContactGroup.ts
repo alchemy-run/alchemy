@@ -114,7 +114,6 @@ export type ContactGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category People
  */
 export const ContactGroup = Resource<ContactGroup>("GCP.People.ContactGroup");

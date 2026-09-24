@@ -119,7 +119,6 @@ export type EvaluationItem = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const EvaluationItem = Resource<EvaluationItem>(

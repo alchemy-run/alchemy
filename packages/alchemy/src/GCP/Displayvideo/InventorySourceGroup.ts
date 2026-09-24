@@ -89,7 +89,6 @@ export type InventorySourceGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const InventorySourceGroup = Resource<InventorySourceGroup>(

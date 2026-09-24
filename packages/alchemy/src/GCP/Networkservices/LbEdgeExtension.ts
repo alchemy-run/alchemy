@@ -217,7 +217,6 @@ export type LbEdgeExtension = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const LbEdgeExtension = Resource<LbEdgeExtension>(

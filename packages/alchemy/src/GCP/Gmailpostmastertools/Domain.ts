@@ -93,7 +93,6 @@ export type Domain = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail Postmaster Tools
  */
 export const Domain = Resource<Domain>("GCP.Gmailpostmastertools.Domain");

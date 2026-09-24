@@ -35,7 +35,6 @@ export interface GetParameterVersionRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Parametermanager
  */
 export interface GetParameterVersion extends Binding.Service<

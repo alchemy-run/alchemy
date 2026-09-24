@@ -10,7 +10,6 @@ import type { Instance } from "./Instance.ts";
  * {@link WriteRedisHttp}.
  *
  * @binding
- * @product GCP
  * @category Redis
  */
 export interface WriteRedis extends Binding.Service<

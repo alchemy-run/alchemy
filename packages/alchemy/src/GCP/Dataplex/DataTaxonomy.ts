@@ -130,7 +130,6 @@ export type DataTaxonomy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataTaxonomy = Resource<DataTaxonomy>("GCP.Dataplex.DataTaxonomy");

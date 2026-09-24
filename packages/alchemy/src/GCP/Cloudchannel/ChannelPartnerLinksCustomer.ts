@@ -172,7 +172,6 @@ export type ChannelPartnerLinksCustomer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudchannel
  */
 export const ChannelPartnerLinksCustomer =

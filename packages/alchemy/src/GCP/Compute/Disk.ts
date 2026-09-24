@@ -167,7 +167,6 @@ export type Disk = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Disk = Resource<Disk>("GCP.Compute.Disk");

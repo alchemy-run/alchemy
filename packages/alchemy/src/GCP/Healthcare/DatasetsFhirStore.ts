@@ -143,7 +143,6 @@ export type DatasetsFhirStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsFhirStore = Resource<DatasetsFhirStore>(

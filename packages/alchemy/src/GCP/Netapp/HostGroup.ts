@@ -146,7 +146,6 @@ export type HostGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const HostGroup = Resource<HostGroup>("GCP.Netapp.HostGroup");

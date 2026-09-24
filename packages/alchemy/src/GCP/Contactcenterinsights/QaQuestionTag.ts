@@ -92,7 +92,6 @@ export type QaQuestionTag = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const QaQuestionTag = Resource<QaQuestionTag>(

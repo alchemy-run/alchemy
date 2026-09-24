@@ -27,7 +27,6 @@ export interface StartManualRunsRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category BigQueryDataTransfer
  */
 export interface StartManualRuns extends Binding.Service<

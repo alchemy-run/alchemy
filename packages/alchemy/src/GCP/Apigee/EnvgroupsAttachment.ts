@@ -82,7 +82,6 @@ export type EnvgroupsAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvgroupsAttachment = Resource<EnvgroupsAttachment>(

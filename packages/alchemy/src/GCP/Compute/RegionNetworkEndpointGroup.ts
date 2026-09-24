@@ -239,7 +239,6 @@ export type RegionNetworkEndpointGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionNetworkEndpointGroup = Resource<RegionNetworkEndpointGroup>(

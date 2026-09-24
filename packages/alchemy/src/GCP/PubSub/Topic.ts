@@ -111,7 +111,6 @@ export type Topic = Resource<
  * **Example:** `alchemy destroy` deletes the topic after its subscriptions.
  *
  * @resource
- * @product GCP
  * @category PubSub
  */
 export const Topic = Resource<Topic>("GCP.PubSub.Topic");

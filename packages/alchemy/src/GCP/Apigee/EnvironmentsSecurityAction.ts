@@ -184,7 +184,6 @@ export type EnvironmentsSecurityAction = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsSecurityAction = Resource<EnvironmentsSecurityAction>(

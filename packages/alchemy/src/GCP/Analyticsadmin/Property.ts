@@ -154,7 +154,6 @@ export type Property = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticsadmin
  */
 export const Property = Resource<Property>("GCP.Analyticsadmin.Property");

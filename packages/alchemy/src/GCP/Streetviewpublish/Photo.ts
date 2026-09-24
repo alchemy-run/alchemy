@@ -184,7 +184,6 @@ export type Photo = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Streetviewpublish
  */
 export const Photo = Resource<Photo>("GCP.Streetviewpublish.Photo");

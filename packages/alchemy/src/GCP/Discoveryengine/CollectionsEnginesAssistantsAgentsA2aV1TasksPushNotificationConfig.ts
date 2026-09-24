@@ -104,7 +104,6 @@ export type CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig =
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig =

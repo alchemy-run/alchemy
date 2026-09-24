@@ -171,7 +171,6 @@ export type RegionUrlMap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionUrlMap = Resource<RegionUrlMap>("GCP.Compute.RegionUrlMap");

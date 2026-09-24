@@ -141,7 +141,6 @@ export type EvaluationRun = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const EvaluationRun = Resource<EvaluationRun>(

@@ -168,7 +168,6 @@ export type ApisConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigateway
  */
 export const ApisConfig = Resource<ApisConfig>("GCP.Apigateway.ApisConfig");

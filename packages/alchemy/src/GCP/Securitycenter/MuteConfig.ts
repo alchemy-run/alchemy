@@ -116,7 +116,6 @@ export type MuteConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const MuteConfig = Resource<MuteConfig>("GCP.Securitycenter.MuteConfig");

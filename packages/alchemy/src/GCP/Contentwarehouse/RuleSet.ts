@@ -122,7 +122,6 @@ const DEFAULT_RULES: Rule[] = [
  * ```
  *
  * @resource
- * @product GCP
  * @category Contentwarehouse
  */
 export const RuleSet = Resource<RuleSet>("GCP.Contentwarehouse.RuleSet");

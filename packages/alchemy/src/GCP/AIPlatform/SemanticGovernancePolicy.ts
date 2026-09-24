@@ -117,7 +117,6 @@ export type SemanticGovernancePolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const SemanticGovernancePolicy = Resource<SemanticGovernancePolicy>(

@@ -145,7 +145,6 @@ export type PrivateConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datastream
  */
 export const PrivateConnection = Resource<PrivateConnection>(

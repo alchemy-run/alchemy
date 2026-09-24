@@ -109,7 +109,6 @@ export type GatewaySecurityPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const GatewaySecurityPolicy = Resource<GatewaySecurityPolicy>(

@@ -84,7 +84,6 @@ export type ContentCategory = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const ContentCategory = Resource<ContentCategory>(

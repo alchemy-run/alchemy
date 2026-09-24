@@ -163,7 +163,6 @@ export type AdvertisersCreative = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersCreative = Resource<AdvertisersCreative>(

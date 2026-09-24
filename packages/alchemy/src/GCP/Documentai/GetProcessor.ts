@@ -23,7 +23,6 @@ export interface GetProcessorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Documentai
  */
 export interface GetProcessor extends Binding.Service<

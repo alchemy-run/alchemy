@@ -111,7 +111,6 @@ export type TagValue = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ResourceManager
  */
 export const TagValue = Resource<TagValue>("GCP.ResourceManager.TagValue");

@@ -33,7 +33,6 @@ export interface TranslateTextRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Translate
  */
 export interface TranslateText extends Binding.Service<

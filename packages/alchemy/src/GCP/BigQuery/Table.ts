@@ -227,7 +227,6 @@ export type Table = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQuery
  */
 export const Table = Resource<Table>("GCP.BigQuery.Table");

@@ -172,7 +172,6 @@ export type RepositoriesPullRequestsPullRequestComment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securesourcemanager
  */
 export const RepositoriesPullRequestsPullRequestComment =

@@ -191,7 +191,6 @@ export type Address = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Address = Resource<Address>("GCP.Compute.Address");

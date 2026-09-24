@@ -140,7 +140,6 @@ export type ClustersAcl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const ClustersAcl = Resource<ClustersAcl>(

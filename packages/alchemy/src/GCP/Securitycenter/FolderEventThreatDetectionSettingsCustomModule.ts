@@ -136,7 +136,6 @@ export type FolderEventThreatDetectionSettingsCustomModule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const FolderEventThreatDetectionSettingsCustomModule =

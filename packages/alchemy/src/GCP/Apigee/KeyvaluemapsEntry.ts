@@ -100,7 +100,6 @@ export type KeyvaluemapsEntry = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const KeyvaluemapsEntry = Resource<KeyvaluemapsEntry>(

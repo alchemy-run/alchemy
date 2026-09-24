@@ -130,7 +130,6 @@ export type VolumesSnapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const VolumesSnapshot = Resource<VolumesSnapshot>(

@@ -172,7 +172,6 @@ export type DataPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigquerydatapolicy
  */
 export const DataPolicy = Resource<DataPolicy>(

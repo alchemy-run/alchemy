@@ -31,7 +31,6 @@ export interface PredictRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Ml
  */
 export interface Predict extends Binding.Service<

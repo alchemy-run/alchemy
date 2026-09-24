@@ -183,7 +183,6 @@ export type PrivateConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const PrivateConnection = Resource<PrivateConnection>(

@@ -173,7 +173,6 @@ export type TrainingPipeline = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const TrainingPipeline = Resource<TrainingPipeline>(

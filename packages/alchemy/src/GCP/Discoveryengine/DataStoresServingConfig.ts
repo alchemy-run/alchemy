@@ -166,7 +166,6 @@ export type DataStoresServingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresServingConfig = Resource<DataStoresServingConfig>(

@@ -241,7 +241,6 @@ export type AuthzPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const AuthzPolicy = Resource<AuthzPolicy>(

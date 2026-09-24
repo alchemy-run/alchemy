@@ -126,7 +126,6 @@ export type FolderSecurityHealthAnalyticsSettingsCustomModule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const FolderSecurityHealthAnalyticsSettingsCustomModule =

@@ -110,7 +110,6 @@ export type AdvertisersTargetingTypesAssignedTargetingOption = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersTargetingTypesAssignedTargetingOption =

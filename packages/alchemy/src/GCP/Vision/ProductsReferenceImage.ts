@@ -136,7 +136,6 @@ export type ProductsReferenceImage = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vision
  */
 export const ProductsReferenceImage = Resource<ProductsReferenceImage>(

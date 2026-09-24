@@ -335,7 +335,6 @@ export type Spoke = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const Spoke = Resource<Spoke>("GCP.NetworkConnectivity.Spoke");

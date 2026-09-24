@@ -122,7 +122,6 @@ export type SessionTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const SessionTemplate = Resource<SessionTemplate>(

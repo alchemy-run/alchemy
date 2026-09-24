@@ -132,7 +132,6 @@ export type HyperparameterTuningJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const HyperparameterTuningJob = Resource<HyperparameterTuningJob>(

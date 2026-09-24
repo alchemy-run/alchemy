@@ -177,7 +177,6 @@ export type AchievementConfiguration = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category GamesConfiguration
  */
 export const AchievementConfiguration = Resource<AchievementConfiguration>(

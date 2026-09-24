@@ -174,7 +174,6 @@ export type LbTrafficExtension = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const LbTrafficExtension = Resource<LbTrafficExtension>(

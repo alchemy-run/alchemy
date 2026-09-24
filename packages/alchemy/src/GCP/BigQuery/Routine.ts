@@ -257,7 +257,6 @@ export type Routine = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQuery
  */
 export const Routine = Resource<Routine>("GCP.BigQuery.Routine");

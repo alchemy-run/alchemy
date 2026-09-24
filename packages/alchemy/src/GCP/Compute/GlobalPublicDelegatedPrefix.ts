@@ -112,7 +112,6 @@ export type GlobalPublicDelegatedPrefix = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const GlobalPublicDelegatedPrefix =

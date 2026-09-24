@@ -197,7 +197,6 @@ export type RegionAutoscaler = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionAutoscaler = Resource<RegionAutoscaler>(

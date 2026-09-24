@@ -143,7 +143,6 @@ export type DiscoveryConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const DiscoveryConfig = Resource<DiscoveryConfig>(

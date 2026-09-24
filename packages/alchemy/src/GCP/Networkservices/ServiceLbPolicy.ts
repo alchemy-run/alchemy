@@ -171,7 +171,6 @@ export type ServiceLbPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const ServiceLbPolicy = Resource<ServiceLbPolicy>(

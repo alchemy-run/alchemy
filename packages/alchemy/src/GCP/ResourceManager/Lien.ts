@@ -101,7 +101,6 @@ export type Lien = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ResourceManager
  */
 export const Lien = Resource<Lien>("GCP.ResourceManager.Lien");

@@ -106,7 +106,6 @@ export type MattersSavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vault
  */
 export const MattersSavedQuery = Resource<MattersSavedQuery>(

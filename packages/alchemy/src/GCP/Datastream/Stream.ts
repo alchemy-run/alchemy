@@ -212,7 +212,6 @@ export type Stream = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datastream
  */
 export const Stream = Resource<Stream>("GCP.Datastream.Stream");

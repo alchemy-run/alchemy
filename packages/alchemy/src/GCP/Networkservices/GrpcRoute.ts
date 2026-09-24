@@ -254,7 +254,6 @@ export type GrpcRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const GrpcRoute = Resource<GrpcRoute>("GCP.Networkservices.GrpcRoute");

@@ -235,7 +235,6 @@ export type Subscription = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Reseller
  */
 export const Subscription = Resource<Subscription>("GCP.Reseller.Subscription");

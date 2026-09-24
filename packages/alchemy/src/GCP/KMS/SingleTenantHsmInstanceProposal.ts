@@ -191,7 +191,6 @@ export type SingleTenantHsmInstanceProposal = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category KMS
  */
 export const SingleTenantHsmInstanceProposal =

@@ -80,7 +80,6 @@ export type LakesEntitiesPartition = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const LakesEntitiesPartition = Resource<LakesEntitiesPartition>(

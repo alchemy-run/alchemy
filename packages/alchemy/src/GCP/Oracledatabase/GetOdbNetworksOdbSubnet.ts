@@ -20,7 +20,6 @@ export interface GetOdbNetworksOdbSubnetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetOdbNetworksOdbSubnet extends Binding.Service<

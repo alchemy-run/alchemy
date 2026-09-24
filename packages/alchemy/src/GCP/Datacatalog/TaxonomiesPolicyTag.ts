@@ -107,7 +107,6 @@ export type TaxonomiesPolicyTag = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datacatalog
  */
 export const TaxonomiesPolicyTag = Resource<TaxonomiesPolicyTag>(

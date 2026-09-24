@@ -232,7 +232,6 @@ export type Reservation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Reservation = Resource<Reservation>("GCP.Compute.Reservation");

@@ -140,7 +140,6 @@ export type AppsAuthorizedCertificate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Appengine
  */
 export const AppsAuthorizedCertificate = Resource<AppsAuthorizedCertificate>(

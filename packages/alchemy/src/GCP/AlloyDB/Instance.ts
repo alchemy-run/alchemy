@@ -253,7 +253,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AlloyDB
  */
 export const Instance = Resource<Instance>("GCP.AlloyDB.Instance");

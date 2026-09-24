@@ -150,7 +150,6 @@ export interface Page extends Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Factchecktools
  */
 export const Page = Resource<Page>("GCP.Factchecktools.Page");

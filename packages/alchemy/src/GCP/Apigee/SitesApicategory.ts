@@ -96,7 +96,6 @@ export type SitesApicategory = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SitesApicategory = Resource<SitesApicategory>(

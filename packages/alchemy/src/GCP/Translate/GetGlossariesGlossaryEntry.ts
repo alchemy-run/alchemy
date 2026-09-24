@@ -23,7 +23,6 @@ export interface GetGlossariesGlossaryEntryRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Translate
  */
 export interface GetGlossariesGlossaryEntry extends Binding.Service<

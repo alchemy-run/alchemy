@@ -127,7 +127,6 @@ export type Featurestore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Featurestore = Resource<Featurestore>(

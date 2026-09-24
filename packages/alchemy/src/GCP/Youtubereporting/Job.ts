@@ -112,7 +112,6 @@ export type Job = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Youtubereporting
  */
 export const Job = Resource<Job>("GCP.Youtubereporting.Job");

@@ -121,7 +121,6 @@ export type MattersExport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vault
  */
 export const MattersExport = Resource<MattersExport>("GCP.Vault.MattersExport");

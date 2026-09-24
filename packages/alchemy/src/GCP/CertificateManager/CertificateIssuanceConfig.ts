@@ -201,7 +201,6 @@ export type CertificateIssuanceConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CertificateManager
  */
 export const CertificateIssuanceConfig = Resource<CertificateIssuanceConfig>(

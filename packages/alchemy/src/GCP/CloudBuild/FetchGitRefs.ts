@@ -28,7 +28,6 @@ export interface FetchGitRefsRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudBuild
  */
 export interface FetchGitRefs extends Binding.Service<

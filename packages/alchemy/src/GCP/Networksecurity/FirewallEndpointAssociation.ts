@@ -152,7 +152,6 @@ export type FirewallEndpointAssociation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const FirewallEndpointAssociation =

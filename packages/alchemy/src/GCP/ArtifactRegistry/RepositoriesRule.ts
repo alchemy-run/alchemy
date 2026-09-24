@@ -146,7 +146,6 @@ export type RepositoriesRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ArtifactRegistry
  */
 export const RepositoriesRule = Resource<RepositoriesRule>(

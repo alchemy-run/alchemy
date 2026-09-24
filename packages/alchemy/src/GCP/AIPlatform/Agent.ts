@@ -158,7 +158,6 @@ export type Agent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Agent = Resource<Agent>("GCP.AIPlatform.Agent");

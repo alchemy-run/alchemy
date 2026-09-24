@@ -107,7 +107,6 @@ export type UsersSshPublicKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oslogin
  */
 export const UsersSshPublicKey = Resource<UsersSshPublicKey>(

@@ -23,7 +23,6 @@ export interface GetTopicRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface GetTopic extends Binding.Service<

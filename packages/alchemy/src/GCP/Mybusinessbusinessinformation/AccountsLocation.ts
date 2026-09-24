@@ -116,7 +116,6 @@ export type AccountsLocation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Mybusinessbusinessinformation
  */
 export const AccountsLocation = Resource<AccountsLocation>(

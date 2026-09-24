@@ -155,7 +155,6 @@ export type FoldersLocationsGlobalPolicyOrchestrator = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Osconfig
  */
 export const FoldersLocationsGlobalPolicyOrchestrator =

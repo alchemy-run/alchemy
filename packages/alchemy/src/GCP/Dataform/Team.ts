@@ -89,7 +89,6 @@ export type Team = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const Team = Resource<Team>("GCP.Dataform.Team");

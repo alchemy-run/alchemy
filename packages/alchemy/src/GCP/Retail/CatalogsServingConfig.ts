@@ -177,7 +177,6 @@ export type CatalogsServingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Retail
  */
 export const CatalogsServingConfig = Resource<CatalogsServingConfig>(

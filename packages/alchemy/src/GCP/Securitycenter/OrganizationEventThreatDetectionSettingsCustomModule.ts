@@ -136,7 +136,6 @@ export type OrganizationEventThreatDetectionSettingsCustomModule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const OrganizationEventThreatDetectionSettingsCustomModule =

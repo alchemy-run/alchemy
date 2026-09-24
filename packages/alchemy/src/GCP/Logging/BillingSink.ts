@@ -177,7 +177,6 @@ export type BillingSink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BillingSink = Resource<BillingSink>("GCP.Logging.BillingSink");

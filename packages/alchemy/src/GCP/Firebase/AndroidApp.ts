@@ -102,7 +102,6 @@ export type AndroidApp = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebase
  */
 export const AndroidApp = Resource<AndroidApp>("GCP.Firebase.AndroidApp");

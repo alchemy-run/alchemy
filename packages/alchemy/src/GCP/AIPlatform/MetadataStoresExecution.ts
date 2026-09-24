@@ -122,7 +122,6 @@ export type MetadataStoresExecution = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const MetadataStoresExecution = Resource<MetadataStoresExecution>(

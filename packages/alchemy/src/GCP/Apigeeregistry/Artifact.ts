@@ -110,7 +110,6 @@ export type Artifact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigeeregistry
  */
 export const Artifact = Resource<Artifact>("GCP.Apigeeregistry.Artifact");

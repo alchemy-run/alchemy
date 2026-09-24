@@ -23,7 +23,6 @@ export interface GetNodePoolRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Container
  */
 export interface GetNodePool extends Binding.Service<

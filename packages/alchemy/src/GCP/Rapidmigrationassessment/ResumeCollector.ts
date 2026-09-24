@@ -25,7 +25,6 @@ export interface ResumeCollectorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Rapidmigrationassessment
  */
 export interface ResumeCollector extends Binding.Service<

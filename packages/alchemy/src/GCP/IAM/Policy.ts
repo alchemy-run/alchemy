@@ -159,7 +159,6 @@ export type Policy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category IAM
  */
 export const Policy = Resource<Policy>("GCP.IAM.Policy");

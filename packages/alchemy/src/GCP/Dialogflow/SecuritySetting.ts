@@ -182,7 +182,6 @@ export type SecuritySetting = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const SecuritySetting = Resource<SecuritySetting>(

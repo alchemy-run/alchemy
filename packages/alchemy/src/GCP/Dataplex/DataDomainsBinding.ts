@@ -89,7 +89,6 @@ export type DataDomainsBinding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataDomainsBinding = Resource<DataDomainsBinding>(

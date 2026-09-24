@@ -194,7 +194,6 @@ export type AuthzExtension = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const AuthzExtension = Resource<AuthzExtension>(

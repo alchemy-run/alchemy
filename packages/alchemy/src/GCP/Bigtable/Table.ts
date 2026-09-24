@@ -148,7 +148,6 @@ export type Table = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const Table = Resource<Table>("GCP.Bigtable.Table");

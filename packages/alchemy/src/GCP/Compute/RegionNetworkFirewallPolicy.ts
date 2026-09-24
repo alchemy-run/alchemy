@@ -142,7 +142,6 @@ export type RegionNetworkFirewallPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionNetworkFirewallPolicy =

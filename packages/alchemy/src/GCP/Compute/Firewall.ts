@@ -199,7 +199,6 @@ export type Firewall = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Firewall = Resource<Firewall>("GCP.Compute.Firewall");

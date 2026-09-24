@@ -189,7 +189,6 @@ export type ConversionWorkspacesMappingRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamigration
  */
 export const ConversionWorkspacesMappingRule =

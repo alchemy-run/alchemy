@@ -232,7 +232,6 @@ export type HealthCheck = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const HealthCheck = Resource<HealthCheck>("GCP.Compute.HealthCheck");

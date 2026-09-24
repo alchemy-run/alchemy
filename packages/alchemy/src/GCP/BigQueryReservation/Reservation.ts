@@ -224,7 +224,6 @@ export type Reservation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryReservation
  */
 export const Reservation = Resource<Reservation>(

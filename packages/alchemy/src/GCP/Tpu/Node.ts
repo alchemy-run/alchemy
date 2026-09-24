@@ -316,7 +316,6 @@ export type Node = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tpu
  */
 export const Node = Resource<Node>("GCP.Tpu.Node");

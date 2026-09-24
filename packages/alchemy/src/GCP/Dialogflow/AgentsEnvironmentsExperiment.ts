@@ -129,7 +129,6 @@ export type AgentsEnvironmentsExperiment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsEnvironmentsExperiment =

@@ -254,7 +254,6 @@ export type Service = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const Service = Resource<Service>("GCP.Monitoring.Service");

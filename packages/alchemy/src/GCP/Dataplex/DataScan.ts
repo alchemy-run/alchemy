@@ -178,7 +178,6 @@ export type DataScan = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataScan = Resource<DataScan>("GCP.Dataplex.DataScan");

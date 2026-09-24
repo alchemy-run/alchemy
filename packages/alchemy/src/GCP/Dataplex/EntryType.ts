@@ -176,7 +176,6 @@ export type EntryType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const EntryType = Resource<EntryType>("GCP.Dataplex.EntryType");

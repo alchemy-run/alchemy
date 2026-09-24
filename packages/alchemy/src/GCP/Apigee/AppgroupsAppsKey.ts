@@ -139,7 +139,6 @@ export type AppgroupsAppsKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const AppgroupsAppsKey = Resource<AppgroupsAppsKey>(

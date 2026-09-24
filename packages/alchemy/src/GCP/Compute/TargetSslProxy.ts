@@ -157,7 +157,6 @@ export type TargetSslProxy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetSslProxy = Resource<TargetSslProxy>(

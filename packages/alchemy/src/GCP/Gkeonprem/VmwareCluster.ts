@@ -282,7 +282,6 @@ export type VmwareCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkeonprem
  */
 export const VmwareCluster = Resource<VmwareCluster>(

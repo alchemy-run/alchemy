@@ -132,7 +132,6 @@ export type Developer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Developer = Resource<Developer>("GCP.Apigee.Developer");

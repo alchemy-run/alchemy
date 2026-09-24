@@ -179,7 +179,6 @@ export type DatabasesCollectionGroupsIndexe = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firestore
  */
 export const DatabasesCollectionGroupsIndexe =

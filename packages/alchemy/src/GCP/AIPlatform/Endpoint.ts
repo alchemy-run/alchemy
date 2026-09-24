@@ -225,7 +225,6 @@ export type Endpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Endpoint = Resource<Endpoint>("GCP.AIPlatform.Endpoint");

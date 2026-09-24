@@ -140,7 +140,6 @@ export type RegionNotificationEndpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionNotificationEndpoint = Resource<RegionNotificationEndpoint>(

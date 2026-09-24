@@ -133,7 +133,6 @@ export type CertificateMap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CertificateManager
  */
 export const CertificateMap = Resource<CertificateMap>(

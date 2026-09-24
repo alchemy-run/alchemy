@@ -264,7 +264,6 @@ export type StoragePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const StoragePool = Resource<StoragePool>("GCP.Netapp.StoragePool");

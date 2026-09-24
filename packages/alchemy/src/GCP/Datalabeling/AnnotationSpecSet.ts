@@ -121,7 +121,6 @@ export type AnnotationSpecSet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalabeling
  */
 export const AnnotationSpecSet = Resource<AnnotationSpecSet>(

@@ -143,7 +143,6 @@ export type InterceptDeploymentGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const InterceptDeploymentGroup = Resource<InterceptDeploymentGroup>(

@@ -25,7 +25,6 @@ export interface AcknowledgeRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PubSub
  */
 export interface Acknowledge extends Binding.Service<

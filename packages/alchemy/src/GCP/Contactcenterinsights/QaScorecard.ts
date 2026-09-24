@@ -104,7 +104,6 @@ export type QaScorecard = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const QaScorecard = Resource<QaScorecard>(

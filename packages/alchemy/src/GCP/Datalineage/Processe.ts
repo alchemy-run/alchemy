@@ -127,7 +127,6 @@ export type Processe = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalineage
  */
 export const Processe = Resource<Processe>("GCP.Datalineage.Processe");

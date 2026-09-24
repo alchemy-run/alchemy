@@ -113,7 +113,6 @@ export type Connection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ServiceNetworking
  */
 export const Connection = Resource<Connection>(

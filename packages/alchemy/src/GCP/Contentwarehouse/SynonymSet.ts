@@ -93,7 +93,6 @@ const DEFAULT_SYNONYMS: Synonym[] = [{ words: ["sale", "invoice", "bill"] }];
  * ```
  *
  * @resource
- * @product GCP
  * @category Contentwarehouse
  */
 export const SynonymSet = Resource<SynonymSet>(

@@ -207,7 +207,6 @@ export type AgentGateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const AgentGateway = Resource<AgentGateway>(

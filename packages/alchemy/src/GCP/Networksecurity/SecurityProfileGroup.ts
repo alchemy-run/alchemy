@@ -147,7 +147,6 @@ export type SecurityProfileGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const SecurityProfileGroup = Resource<SecurityProfileGroup>(

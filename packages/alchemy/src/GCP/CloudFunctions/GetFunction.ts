@@ -23,7 +23,6 @@ export interface GetFunctionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudFunctions
  */
 export interface GetFunction extends Binding.Service<

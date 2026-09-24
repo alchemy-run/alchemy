@@ -205,7 +205,6 @@ export type Pipeline = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datapipelines
  */
 export const Pipeline = Resource<Pipeline>("GCP.Datapipelines.Pipeline");

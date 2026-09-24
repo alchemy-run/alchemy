@@ -182,7 +182,6 @@ export type CaPool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category PrivateCA
  */
 export const CaPool = Resource<CaPool>("GCP.PrivateCA.CaPool");

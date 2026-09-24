@@ -128,7 +128,6 @@ export type Taxonomy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datacatalog
  */
 export const Taxonomy = Resource<Taxonomy>("GCP.Datacatalog.Taxonomy");

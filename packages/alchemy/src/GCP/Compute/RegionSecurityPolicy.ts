@@ -178,7 +178,6 @@ export type RegionSecurityPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionSecurityPolicy = Resource<RegionSecurityPolicy>(

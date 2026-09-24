@@ -217,7 +217,6 @@ export type WasmPlugin = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const WasmPlugin = Resource<WasmPlugin>(

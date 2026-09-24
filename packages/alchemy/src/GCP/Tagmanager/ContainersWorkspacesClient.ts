@@ -149,7 +149,6 @@ export type ContainersWorkspacesClient = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersWorkspacesClient = Resource<ContainersWorkspacesClient>(

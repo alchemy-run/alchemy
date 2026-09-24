@@ -112,7 +112,6 @@ export type DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalabeling
  */
 export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage =

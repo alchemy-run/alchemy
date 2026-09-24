@@ -125,7 +125,6 @@ export type PrivateConnectionsRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datastream
  */
 export const PrivateConnectionsRoute = Resource<PrivateConnectionsRoute>(

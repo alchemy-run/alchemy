@@ -120,7 +120,6 @@ export type NasJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const NasJob = Resource<NasJob>("GCP.AIPlatform.NasJob");

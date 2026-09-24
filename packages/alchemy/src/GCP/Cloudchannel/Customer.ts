@@ -183,7 +183,6 @@ export type Customer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudchannel
  */
 export const Customer = Resource<Customer>("GCP.Cloudchannel.Customer");

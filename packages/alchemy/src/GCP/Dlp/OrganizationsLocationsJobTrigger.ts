@@ -152,7 +152,6 @@ export type OrganizationsLocationsJobTrigger = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsLocationsJobTrigger =

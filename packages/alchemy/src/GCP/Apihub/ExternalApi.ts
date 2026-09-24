@@ -146,7 +146,6 @@ export type ExternalApi = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const ExternalApi = Resource<ExternalApi>("GCP.Apihub.ExternalApi");

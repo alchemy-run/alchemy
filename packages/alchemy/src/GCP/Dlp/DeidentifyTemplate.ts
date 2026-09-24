@@ -125,7 +125,6 @@ export type DeidentifyTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const DeidentifyTemplate = Resource<DeidentifyTemplate>(

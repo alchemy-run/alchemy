@@ -204,7 +204,6 @@ export type RestorePlansRestore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkebackup
  */
 export const RestorePlansRestore = Resource<RestorePlansRestore>(

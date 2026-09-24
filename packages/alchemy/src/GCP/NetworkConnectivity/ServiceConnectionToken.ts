@@ -116,7 +116,6 @@ export type ServiceConnectionToken = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const ServiceConnectionToken = Resource<ServiceConnectionToken>(

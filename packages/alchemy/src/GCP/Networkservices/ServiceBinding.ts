@@ -115,7 +115,6 @@ export type ServiceBinding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const ServiceBinding = Resource<ServiceBinding>(

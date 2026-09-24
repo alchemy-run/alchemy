@@ -154,7 +154,6 @@ export type Processor = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Documentai
  */
 export const Processor = Resource<Processor>("GCP.Documentai.Processor");

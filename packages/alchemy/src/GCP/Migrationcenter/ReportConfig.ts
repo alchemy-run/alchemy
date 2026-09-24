@@ -117,7 +117,6 @@ export type ReportConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const ReportConfig = Resource<ReportConfig>(

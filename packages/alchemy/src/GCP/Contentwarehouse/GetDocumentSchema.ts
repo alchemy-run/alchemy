@@ -23,7 +23,6 @@ export interface GetDocumentSchemaRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Contentwarehouse
  */
 export interface GetDocumentSchema extends Binding.Service<

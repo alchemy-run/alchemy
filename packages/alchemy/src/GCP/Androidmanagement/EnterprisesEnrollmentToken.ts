@@ -141,7 +141,6 @@ export type EnterprisesEnrollmentToken = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidmanagement
  */
 export const EnterprisesEnrollmentToken = Resource<EnterprisesEnrollmentToken>(

@@ -141,7 +141,6 @@ export type AssetsExportJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const AssetsExportJob = Resource<AssetsExportJob>(

@@ -174,7 +174,6 @@ export type SecurityGateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Beyondcorp
  */
 export const SecurityGateway = Resource<SecurityGateway>(

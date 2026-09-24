@@ -119,7 +119,6 @@ export type ProductsSfdcInstancesSfdcChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const ProductsSfdcInstancesSfdcChannel =

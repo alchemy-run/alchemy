@@ -131,7 +131,6 @@ export type RestoreChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkebackup
  */
 export const RestoreChannel = Resource<RestoreChannel>(

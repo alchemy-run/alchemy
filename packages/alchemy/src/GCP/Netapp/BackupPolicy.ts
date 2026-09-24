@@ -152,7 +152,6 @@ export type BackupPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const BackupPolicy = Resource<BackupPolicy>("GCP.Netapp.BackupPolicy");

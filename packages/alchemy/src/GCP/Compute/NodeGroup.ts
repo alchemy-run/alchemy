@@ -159,7 +159,6 @@ export type NodeGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const NodeGroup = Resource<NodeGroup>("GCP.Compute.NodeGroup");

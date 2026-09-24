@@ -28,7 +28,6 @@ export interface DeleteDocumentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firestore
  */
 export interface DeleteDocument extends Binding.Service<

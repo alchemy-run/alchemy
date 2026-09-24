@@ -113,7 +113,6 @@ export type Service = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ServiceDirectory
  */
 export const Service = Resource<Service>("GCP.ServiceDirectory.Service");

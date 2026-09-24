@@ -130,7 +130,6 @@ export type SfdcInstancesSfdcChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const SfdcInstancesSfdcChannel = Resource<SfdcInstancesSfdcChannel>(

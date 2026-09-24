@@ -136,7 +136,6 @@ export type Attestor = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Binaryauthorization
  */
 export const Attestor = Resource<Attestor>("GCP.Binaryauthorization.Attestor");

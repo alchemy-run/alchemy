@@ -199,7 +199,6 @@ export type TransferJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storagetransfer
  */
 export const TransferJob = Resource<TransferJob>(

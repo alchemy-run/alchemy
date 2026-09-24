@@ -168,7 +168,6 @@ export type NetworkPeering = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const NetworkPeering = Resource<NetworkPeering>(

@@ -23,7 +23,6 @@ export interface GetSynonymSetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Contentwarehouse
  */
 export interface GetSynonymSet extends Binding.Service<

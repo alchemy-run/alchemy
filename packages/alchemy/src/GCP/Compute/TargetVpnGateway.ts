@@ -119,7 +119,6 @@ export type TargetVpnGateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetVpnGateway = Resource<TargetVpnGateway>(

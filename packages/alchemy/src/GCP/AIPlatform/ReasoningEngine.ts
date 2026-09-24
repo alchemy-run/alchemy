@@ -130,7 +130,6 @@ export type ReasoningEngine = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const ReasoningEngine = Resource<ReasoningEngine>(

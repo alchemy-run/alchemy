@@ -166,7 +166,6 @@ export type Network = Resource<
  * specifically want the pre-created ranges.
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Network = Resource<Network>("GCP.Compute.Network");

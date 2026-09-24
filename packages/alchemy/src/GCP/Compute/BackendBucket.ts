@@ -129,7 +129,6 @@ export type BackendBucket = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const BackendBucket = Resource<BackendBucket>(

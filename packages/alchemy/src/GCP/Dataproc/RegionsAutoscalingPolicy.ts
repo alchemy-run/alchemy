@@ -94,7 +94,6 @@ export type RegionsAutoscalingPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const RegionsAutoscalingPolicy = Resource<RegionsAutoscalingPolicy>(

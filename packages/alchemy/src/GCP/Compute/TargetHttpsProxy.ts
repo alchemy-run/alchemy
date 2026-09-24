@@ -196,7 +196,6 @@ export type TargetHttpsProxy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetHttpsProxy = Resource<TargetHttpsProxy>(

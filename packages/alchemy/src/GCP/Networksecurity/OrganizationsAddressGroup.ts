@@ -157,7 +157,6 @@ export type OrganizationsAddressGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const OrganizationsAddressGroup = Resource<OrganizationsAddressGroup>(

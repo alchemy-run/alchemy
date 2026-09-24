@@ -100,7 +100,6 @@ export type Schema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category PubSub
  */
 export const Schema = Resource<Schema>("GCP.PubSub.Schema");

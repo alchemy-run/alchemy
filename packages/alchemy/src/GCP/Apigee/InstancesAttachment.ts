@@ -71,7 +71,6 @@ export type InstancesAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const InstancesAttachment = Resource<InstancesAttachment>(

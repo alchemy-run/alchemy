@@ -206,7 +206,6 @@ export type ExadbVmCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const ExadbVmCluster = Resource<ExadbVmCluster>(

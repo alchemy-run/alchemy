@@ -128,7 +128,6 @@ export type AutoscalingPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const AutoscalingPolicy = Resource<AutoscalingPolicy>(

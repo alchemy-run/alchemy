@@ -117,7 +117,6 @@ export type DatasetsConsentStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsConsentStore = Resource<DatasetsConsentStore>(

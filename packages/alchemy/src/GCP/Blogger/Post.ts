@@ -177,7 +177,6 @@ export type Post = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Blogger
  */
 export const Post = Resource<Post>("GCP.Blogger.Post");

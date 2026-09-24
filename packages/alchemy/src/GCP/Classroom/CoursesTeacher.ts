@@ -74,7 +74,6 @@ export type CoursesTeacher = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesTeacher = Resource<CoursesTeacher>(

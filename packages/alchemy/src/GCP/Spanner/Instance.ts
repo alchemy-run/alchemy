@@ -204,7 +204,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const Instance = Resource<Instance>("GCP.Spanner.Instance");

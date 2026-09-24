@@ -25,7 +25,6 @@ export interface GetReleaseExecutableRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebaserules
  */
 export interface GetReleaseExecutable extends Binding.Service<

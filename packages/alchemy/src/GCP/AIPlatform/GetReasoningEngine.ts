@@ -23,7 +23,6 @@ export interface GetReasoningEngineRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AIPlatform
  */
 export interface GetReasoningEngine extends Binding.Service<

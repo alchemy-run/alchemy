@@ -67,7 +67,6 @@ export type Edit = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidpublisher
  */
 export const Edit = Resource<Edit>("GCP.Androidpublisher.Edit");

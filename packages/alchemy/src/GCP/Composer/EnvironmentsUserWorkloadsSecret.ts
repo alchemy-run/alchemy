@@ -131,7 +131,6 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Composer
  */
 export const EnvironmentsUserWorkloadsSecret =

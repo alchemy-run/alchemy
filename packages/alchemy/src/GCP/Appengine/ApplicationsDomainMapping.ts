@@ -147,7 +147,6 @@ export type ApplicationsDomainMapping = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Appengine
  */
 export const ApplicationsDomainMapping = Resource<ApplicationsDomainMapping>(

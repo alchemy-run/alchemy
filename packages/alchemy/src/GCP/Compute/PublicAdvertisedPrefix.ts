@@ -131,7 +131,6 @@ export type PublicAdvertisedPrefix = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const PublicAdvertisedPrefix = Resource<PublicAdvertisedPrefix>(

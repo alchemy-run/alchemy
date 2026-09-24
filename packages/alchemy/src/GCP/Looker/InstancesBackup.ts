@@ -113,7 +113,6 @@ export type InstancesBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Looker
  */
 export const InstancesBackup = Resource<InstancesBackup>(

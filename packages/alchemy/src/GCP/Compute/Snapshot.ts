@@ -149,7 +149,6 @@ export type Snapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Snapshot = Resource<Snapshot>("GCP.Compute.Snapshot");

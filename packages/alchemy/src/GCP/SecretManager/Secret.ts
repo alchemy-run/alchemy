@@ -202,7 +202,6 @@ export type Secret = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SecretManager
  */
 export const Secret = Resource<Secret>("GCP.SecretManager.Secret");

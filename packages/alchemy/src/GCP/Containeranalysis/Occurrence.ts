@@ -193,7 +193,6 @@ export type Occurrence = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Containeranalysis
  */
 export const Occurrence = Resource<Occurrence>(

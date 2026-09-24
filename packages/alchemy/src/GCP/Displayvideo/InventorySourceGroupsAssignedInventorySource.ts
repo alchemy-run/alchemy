@@ -83,7 +83,6 @@ export type InventorySourceGroupsAssignedInventorySource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const InventorySourceGroupsAssignedInventorySource =

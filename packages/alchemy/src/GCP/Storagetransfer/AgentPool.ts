@@ -115,7 +115,6 @@ export type AgentPool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storagetransfer
  */
 export const AgentPool = Resource<AgentPool>("GCP.Storagetransfer.AgentPool");

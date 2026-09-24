@@ -87,7 +87,6 @@ export type Keyvaluemap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Keyvaluemap = Resource<Keyvaluemap>("GCP.Apigee.Keyvaluemap");

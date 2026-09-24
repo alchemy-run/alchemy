@@ -182,7 +182,6 @@ export type Conversation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const Conversation = Resource<Conversation>(

@@ -123,7 +123,6 @@ export type UsersSettingsFilter = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsFilter = Resource<UsersSettingsFilter>(

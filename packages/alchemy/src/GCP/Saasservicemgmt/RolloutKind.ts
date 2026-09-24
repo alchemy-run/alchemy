@@ -180,7 +180,6 @@ export type RolloutKind = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const RolloutKind = Resource<RolloutKind>(

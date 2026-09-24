@@ -148,7 +148,6 @@ export type SslPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const SslPolicy = Resource<SslPolicy>("GCP.Compute.SslPolicy");

@@ -166,7 +166,6 @@ export type AdvertisersCampaign = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersCampaign = Resource<AdvertisersCampaign>(

@@ -200,7 +200,6 @@ export type RegionInstanceGroupManager = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionInstanceGroupManager = Resource<RegionInstanceGroupManager>(

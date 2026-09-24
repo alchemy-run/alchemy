@@ -158,7 +158,6 @@ export type ApplicationsWorkload = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apphub
  */
 export const ApplicationsWorkload = Resource<ApplicationsWorkload>(

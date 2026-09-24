@@ -157,7 +157,6 @@ export type ApisVersionsSpec = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const ApisVersionsSpec = Resource<ApisVersionsSpec>(

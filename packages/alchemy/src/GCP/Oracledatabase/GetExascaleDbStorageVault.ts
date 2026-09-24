@@ -20,7 +20,6 @@ export interface GetExascaleDbStorageVaultRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetExascaleDbStorageVault extends Binding.Service<

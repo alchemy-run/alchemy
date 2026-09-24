@@ -161,7 +161,6 @@ export type Api = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Api = Resource<Api>("GCP.Apihub.Api");

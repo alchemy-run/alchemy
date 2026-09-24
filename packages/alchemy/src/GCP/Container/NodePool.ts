@@ -297,7 +297,6 @@ export type NodePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Container
  */
 export const NodePool = Resource<NodePool>("GCP.Container.NodePool");

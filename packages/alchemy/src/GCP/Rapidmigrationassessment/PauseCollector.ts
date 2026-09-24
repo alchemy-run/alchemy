@@ -25,7 +25,6 @@ export interface PauseCollectorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Rapidmigrationassessment
  */
 export interface PauseCollector extends Binding.Service<

@@ -131,7 +131,6 @@ export type Glossary = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const Glossary = Resource<Glossary>("GCP.Dataplex.Glossary");

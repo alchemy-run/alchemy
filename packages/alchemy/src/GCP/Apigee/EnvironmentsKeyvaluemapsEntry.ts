@@ -91,7 +91,6 @@ export type EnvironmentsKeyvaluemapsEntry = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsKeyvaluemapsEntry =

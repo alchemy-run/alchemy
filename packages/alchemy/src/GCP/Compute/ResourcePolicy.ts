@@ -177,7 +177,6 @@ export type ResourcePolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const ResourcePolicy = Resource<ResourcePolicy>(

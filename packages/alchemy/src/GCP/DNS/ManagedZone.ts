@@ -143,7 +143,6 @@ export type ManagedZone = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category DNS
  */
 export const ManagedZone = Resource<ManagedZone>("GCP.DNS.ManagedZone");

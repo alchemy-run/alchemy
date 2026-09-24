@@ -137,7 +137,6 @@ export type ExascaleDbStorageVault = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const ExascaleDbStorageVault = Resource<ExascaleDbStorageVault>(

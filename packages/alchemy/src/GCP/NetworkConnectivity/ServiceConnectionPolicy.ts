@@ -221,7 +221,6 @@ export type ServiceConnectionPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const ServiceConnectionPolicy = Resource<ServiceConnectionPolicy>(

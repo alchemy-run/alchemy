@@ -130,7 +130,6 @@ export type OrganizationMuteConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const OrganizationMuteConfig = Resource<OrganizationMuteConfig>(

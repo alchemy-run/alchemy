@@ -33,7 +33,6 @@ export interface ValidateAttestationRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Binaryauthorization
  */
 export interface ValidateAttestation extends Binding.Service<

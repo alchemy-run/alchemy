@@ -109,7 +109,6 @@ export type DatabasesUserCred = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firestore
  */
 export const DatabasesUserCred = Resource<DatabasesUserCred>(

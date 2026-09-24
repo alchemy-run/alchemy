@@ -174,7 +174,6 @@ export type UrlMap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const UrlMap = Resource<UrlMap>("GCP.Compute.UrlMap");

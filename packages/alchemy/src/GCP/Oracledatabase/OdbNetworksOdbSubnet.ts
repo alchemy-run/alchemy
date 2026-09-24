@@ -124,7 +124,6 @@ export type OdbNetworksOdbSubnet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const OdbNetworksOdbSubnet = Resource<OdbNetworksOdbSubnet>(

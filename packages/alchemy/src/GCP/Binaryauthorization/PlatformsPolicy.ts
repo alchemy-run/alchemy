@@ -135,7 +135,6 @@ export type PlatformsPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Binaryauthorization
  */
 export const PlatformsPolicy = Resource<PlatformsPolicy>(

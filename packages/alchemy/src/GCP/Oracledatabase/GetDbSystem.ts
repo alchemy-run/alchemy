@@ -20,7 +20,6 @@ export interface GetDbSystemRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetDbSystem extends Binding.Service<

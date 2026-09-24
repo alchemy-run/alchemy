@@ -177,7 +177,6 @@ export type Feed = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudasset
  */
 export const Feed = Resource<Feed>("GCP.Cloudasset.Feed");

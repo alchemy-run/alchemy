@@ -33,7 +33,6 @@ export interface ExchangeDebugTokenRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebaseappcheck
  */
 export interface ExchangeDebugToken extends Binding.Service<

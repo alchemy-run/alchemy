@@ -124,7 +124,6 @@ export type OrganizationExclusion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationExclusion = Resource<OrganizationExclusion>(

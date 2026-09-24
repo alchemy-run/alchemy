@@ -160,7 +160,6 @@ export type ConnectionsGitRepositoryLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Developerconnect
  */
 export const ConnectionsGitRepositoryLink =

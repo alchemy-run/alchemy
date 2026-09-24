@@ -137,7 +137,6 @@ export type RegionSslPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionSslPolicy = Resource<RegionSslPolicy>(

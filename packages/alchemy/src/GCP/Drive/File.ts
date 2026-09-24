@@ -168,7 +168,6 @@ export type File = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const File = Resource<File>("GCP.Drive.File");

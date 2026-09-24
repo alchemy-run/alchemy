@@ -164,7 +164,6 @@ export type InstancesBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const InstancesBackup = Resource<InstancesBackup>(

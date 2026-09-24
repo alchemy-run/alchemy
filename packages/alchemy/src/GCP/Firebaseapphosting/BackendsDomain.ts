@@ -179,7 +179,6 @@ export type BackendsDomain = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseapphosting
  */
 export const BackendsDomain = Resource<BackendsDomain>(

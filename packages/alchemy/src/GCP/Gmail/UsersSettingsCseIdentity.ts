@@ -94,7 +94,6 @@ export type UsersSettingsCseIdentity = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsCseIdentity = Resource<UsersSettingsCseIdentity>(

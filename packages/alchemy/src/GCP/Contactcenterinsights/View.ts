@@ -93,7 +93,6 @@ export type View = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const View = Resource<View>("GCP.Contactcenterinsights.View");

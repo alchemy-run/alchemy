@@ -120,7 +120,6 @@ export type UrlList = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const UrlList = Resource<UrlList>("GCP.Networksecurity.UrlList");

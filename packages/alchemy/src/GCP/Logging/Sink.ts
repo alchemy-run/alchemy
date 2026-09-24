@@ -209,7 +209,6 @@ export type Sink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const Sink = Resource<Sink>("GCP.Logging.Sink");

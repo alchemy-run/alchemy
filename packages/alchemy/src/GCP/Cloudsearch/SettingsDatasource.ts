@@ -144,7 +144,6 @@ export type SettingsDatasource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudsearch
  */
 export const SettingsDatasource = Resource<SettingsDatasource>(

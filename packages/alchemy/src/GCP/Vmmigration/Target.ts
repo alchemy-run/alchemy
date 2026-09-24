@@ -97,7 +97,6 @@ export type Target = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const Target = Resource<Target>("GCP.Vmmigration.Target");

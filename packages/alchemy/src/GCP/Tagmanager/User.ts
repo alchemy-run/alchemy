@@ -113,7 +113,6 @@ export type User = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const User = Resource<User>("GCP.Tagmanager.User");

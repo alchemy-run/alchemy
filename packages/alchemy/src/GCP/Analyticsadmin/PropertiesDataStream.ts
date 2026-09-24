@@ -172,7 +172,6 @@ export type PropertiesDataStream = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticsadmin
  */
 export const PropertiesDataStream = Resource<PropertiesDataStream>(

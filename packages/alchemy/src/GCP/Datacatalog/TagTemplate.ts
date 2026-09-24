@@ -150,7 +150,6 @@ export type TagTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datacatalog
  */
 export const TagTemplate = Resource<TagTemplate>("GCP.Datacatalog.TagTemplate");

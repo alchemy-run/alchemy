@@ -133,7 +133,6 @@ export type BillingBucketsView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BillingBucketsView = Resource<BillingBucketsView>(

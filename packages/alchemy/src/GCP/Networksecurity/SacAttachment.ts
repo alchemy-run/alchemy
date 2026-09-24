@@ -121,7 +121,6 @@ export type SacAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const SacAttachment = Resource<SacAttachment>(

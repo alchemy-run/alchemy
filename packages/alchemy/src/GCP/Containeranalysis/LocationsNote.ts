@@ -118,7 +118,6 @@ export type LocationsNote = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Containeranalysis
  */
 export const LocationsNote = Resource<LocationsNote>(

@@ -149,7 +149,6 @@ export type CollectionsDataStoresControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsDataStoresControl =

@@ -140,7 +140,6 @@ export type ProductsAuthConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const ProductsAuthConfig = Resource<ProductsAuthConfig>(

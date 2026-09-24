@@ -154,7 +154,6 @@ export type MulticloudDataTransferConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const MulticloudDataTransferConfig =

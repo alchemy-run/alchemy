@@ -24,7 +24,6 @@ export interface RegisterCollectorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Rapidmigrationassessment
  */
 export interface RegisterCollector extends Binding.Service<

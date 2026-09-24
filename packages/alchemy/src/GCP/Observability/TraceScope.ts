@@ -115,7 +115,6 @@ export type TraceScope = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Observability
  */
 export const TraceScope = Resource<TraceScope>("GCP.Observability.TraceScope");

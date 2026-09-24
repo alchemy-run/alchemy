@@ -107,7 +107,6 @@ export type DatasetsConsentStoresUserDataMapping = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsConsentStoresUserDataMapping =

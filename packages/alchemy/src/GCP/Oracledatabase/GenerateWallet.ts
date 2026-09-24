@@ -22,7 +22,6 @@ export interface GenerateWalletRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GenerateWallet extends Binding.Service<

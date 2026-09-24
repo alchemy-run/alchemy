@@ -324,7 +324,6 @@ export type TransferConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryDataTransfer
  */
 export const TransferConfig = Resource<TransferConfig>(

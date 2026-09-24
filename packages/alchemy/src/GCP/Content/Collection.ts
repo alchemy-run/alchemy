@@ -163,7 +163,6 @@ export type Collection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Collection = Resource<Collection>("GCP.Content.Collection");

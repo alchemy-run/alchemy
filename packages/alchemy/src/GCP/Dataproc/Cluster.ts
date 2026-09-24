@@ -330,7 +330,6 @@ export type Cluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const Cluster = Resource<Cluster>("GCP.Dataproc.Cluster");

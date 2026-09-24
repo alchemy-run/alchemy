@@ -129,7 +129,6 @@ export type MetadataStoresArtifact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const MetadataStoresArtifact = Resource<MetadataStoresArtifact>(

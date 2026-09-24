@@ -134,7 +134,6 @@ export type InboundSsoAssignment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const InboundSsoAssignment = Resource<InboundSsoAssignment>(

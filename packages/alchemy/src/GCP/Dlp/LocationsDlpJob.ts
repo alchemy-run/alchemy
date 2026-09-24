@@ -146,7 +146,6 @@ export type LocationsDlpJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const LocationsDlpJob = Resource<LocationsDlpJob>(

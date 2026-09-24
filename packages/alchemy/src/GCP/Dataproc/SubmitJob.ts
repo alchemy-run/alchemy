@@ -36,7 +36,6 @@ export interface SubmitJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Dataproc
  */
 export interface SubmitJob extends Binding.Service<

@@ -31,7 +31,6 @@ export interface RunJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Run
  */
 export interface RunJob extends Binding.Service<

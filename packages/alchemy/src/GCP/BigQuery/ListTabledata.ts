@@ -23,7 +23,6 @@ export interface ListTabledataRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category BigQuery
  */
 export interface ListTabledata extends Binding.Service<

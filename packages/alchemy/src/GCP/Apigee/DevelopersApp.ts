@@ -141,7 +141,6 @@ export type DevelopersApp = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const DevelopersApp = Resource<DevelopersApp>(

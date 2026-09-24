@@ -263,7 +263,6 @@ export type VolumesReplication = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const VolumesReplication = Resource<VolumesReplication>(

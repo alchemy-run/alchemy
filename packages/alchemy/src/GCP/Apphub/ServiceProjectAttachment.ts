@@ -95,7 +95,6 @@ export type ServiceProjectAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apphub
  */
 export const ServiceProjectAttachment = Resource<ServiceProjectAttachment>(

@@ -104,7 +104,6 @@ export type AppsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsVersion = Resource<AppsVersion>("GCP.Ces.AppsVersion");

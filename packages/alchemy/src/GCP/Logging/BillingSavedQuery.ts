@@ -182,7 +182,6 @@ export type BillingSavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const BillingSavedQuery = Resource<BillingSavedQuery>(

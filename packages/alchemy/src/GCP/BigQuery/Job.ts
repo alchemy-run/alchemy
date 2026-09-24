@@ -158,7 +158,6 @@ export type Job = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQuery
  */
 export const Job = Resource<Job>("GCP.BigQuery.Job");

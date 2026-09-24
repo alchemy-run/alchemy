@@ -183,7 +183,6 @@ export type CustomersConfiguration = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androiddeviceprovisioning
  */
 export const CustomersConfiguration = Resource<CustomersConfiguration>(

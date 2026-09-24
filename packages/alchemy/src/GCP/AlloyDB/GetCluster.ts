@@ -23,7 +23,6 @@ export interface GetClusterRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category AlloyDB
  */
 export interface GetCluster extends Binding.Service<

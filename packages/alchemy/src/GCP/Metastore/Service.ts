@@ -242,7 +242,6 @@ export type Service = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Metastore
  */
 export const Service = Resource<Service>("GCP.Metastore.Service");

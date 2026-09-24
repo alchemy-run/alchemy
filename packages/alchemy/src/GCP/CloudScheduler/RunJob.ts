@@ -24,7 +24,6 @@ export interface RunJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudScheduler
  */
 export interface RunJob extends Binding.Service<

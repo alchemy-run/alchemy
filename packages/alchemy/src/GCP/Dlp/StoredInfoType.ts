@@ -119,7 +119,6 @@ export type StoredInfoType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const StoredInfoType = Resource<StoredInfoType>(

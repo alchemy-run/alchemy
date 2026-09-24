@@ -153,7 +153,6 @@ export type WasmPluginsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const WasmPluginsVersion = Resource<WasmPluginsVersion>(

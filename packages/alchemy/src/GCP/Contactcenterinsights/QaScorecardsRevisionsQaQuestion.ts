@@ -184,7 +184,6 @@ export type QaScorecardsRevisionsQaQuestion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const QaScorecardsRevisionsQaQuestion =

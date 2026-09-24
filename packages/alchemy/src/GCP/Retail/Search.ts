@@ -25,7 +25,6 @@ export interface SearchRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Retail
  */
 export interface Search extends Binding.Service<

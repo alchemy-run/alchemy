@@ -158,7 +158,6 @@ export type MessageBus = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Eventarc
  */
 export const MessageBus = Resource<MessageBus>("GCP.Eventarc.MessageBus");

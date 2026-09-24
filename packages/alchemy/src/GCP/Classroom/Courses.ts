@@ -164,7 +164,6 @@ export type Courses = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const Courses = Resource<Courses>("GCP.Classroom.Courses");

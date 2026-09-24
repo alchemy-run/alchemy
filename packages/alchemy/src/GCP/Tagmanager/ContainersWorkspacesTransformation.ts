@@ -129,7 +129,6 @@ export type ContainersWorkspacesTransformation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersWorkspacesTransformation =

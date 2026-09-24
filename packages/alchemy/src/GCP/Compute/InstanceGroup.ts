@@ -121,7 +121,6 @@ export type InstanceGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const InstanceGroup = Resource<InstanceGroup>(

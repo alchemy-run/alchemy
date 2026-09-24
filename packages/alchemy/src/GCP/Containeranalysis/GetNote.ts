@@ -23,7 +23,6 @@ export interface GetNoteRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Containeranalysis
  */
 export interface GetNote extends Binding.Service<

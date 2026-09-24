@@ -187,7 +187,6 @@ export type TlsInspectionPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const TlsInspectionPolicy = Resource<TlsInspectionPolicy>(

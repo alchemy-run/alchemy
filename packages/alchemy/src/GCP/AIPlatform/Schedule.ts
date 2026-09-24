@@ -183,7 +183,6 @@ export type Schedule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Schedule = Resource<Schedule>("GCP.AIPlatform.Schedule");

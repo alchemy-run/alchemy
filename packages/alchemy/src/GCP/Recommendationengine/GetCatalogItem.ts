@@ -23,7 +23,6 @@ export interface GetCatalogItemRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Recommendationengine
  */
 export interface GetCatalogItem extends Binding.Service<

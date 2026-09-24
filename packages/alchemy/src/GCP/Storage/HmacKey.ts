@@ -93,7 +93,6 @@ export type HmacKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const HmacKey = Resource<HmacKey>("GCP.Storage.HmacKey");

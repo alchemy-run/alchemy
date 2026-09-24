@@ -108,7 +108,6 @@ export type CustomersNodesDeployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Sasportal
  */
 export const CustomersNodesDeployment = Resource<CustomersNodesDeployment>(

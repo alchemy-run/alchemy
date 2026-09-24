@@ -147,7 +147,6 @@ export type HttpHealthCheck = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const HttpHealthCheck = Resource<HttpHealthCheck>(

@@ -124,7 +124,6 @@ export type Webapp = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidenterprise
  */
 export const Webapp = Resource<Webapp>("GCP.Androidenterprise.Webapp");

@@ -96,7 +96,6 @@ export type MetadataStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const MetadataStore = Resource<MetadataStore>(

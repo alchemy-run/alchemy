@@ -237,7 +237,6 @@ export type Certificate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CertificateManager
  */
 export const Certificate = Resource<Certificate>(

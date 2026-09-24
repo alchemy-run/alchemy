@@ -139,7 +139,6 @@ export type TargetInstance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetInstance = Resource<TargetInstance>(

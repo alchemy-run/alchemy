@@ -165,7 +165,6 @@ export type CustomConstraint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category OrgPolicy
  */
 export const CustomConstraint = Resource<CustomConstraint>(

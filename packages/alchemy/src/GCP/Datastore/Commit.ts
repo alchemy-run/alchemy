@@ -39,7 +39,6 @@ export interface CommitRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Datastore
  */
 export interface Commit extends Binding.Service<

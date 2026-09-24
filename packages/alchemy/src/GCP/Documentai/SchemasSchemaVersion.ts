@@ -132,7 +132,6 @@ export type SchemasSchemaVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Documentai
  */
 export const SchemasSchemaVersion = Resource<SchemasSchemaVersion>(

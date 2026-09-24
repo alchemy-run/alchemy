@@ -224,7 +224,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const Instance = Resource<Instance>("GCP.SQL.Instance");

@@ -95,7 +95,6 @@ export type AdvertisersLocationList = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersLocationList = Resource<AdvertisersLocationList>(

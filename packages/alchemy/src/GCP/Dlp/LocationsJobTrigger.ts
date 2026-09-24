@@ -148,7 +148,6 @@ export type LocationsJobTrigger = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const LocationsJobTrigger = Resource<LocationsJobTrigger>(

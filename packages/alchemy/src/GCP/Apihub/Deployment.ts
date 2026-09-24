@@ -199,7 +199,6 @@ export type Deployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Deployment = Resource<Deployment>("GCP.Apihub.Deployment");

@@ -21,7 +21,6 @@ export interface QueryRequest extends bigquery.QueryRequest {}
  * ```
  *
  * @binding
- * @product GCP
  * @category BigQuery
  */
 export interface Query extends Binding.Service<

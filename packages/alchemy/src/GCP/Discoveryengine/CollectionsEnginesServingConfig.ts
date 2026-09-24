@@ -140,7 +140,6 @@ export type CollectionsEnginesServingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesServingConfig =

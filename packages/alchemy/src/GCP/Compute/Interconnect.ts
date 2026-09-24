@@ -222,7 +222,6 @@ export type Interconnect = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Interconnect = Resource<Interconnect>("GCP.Compute.Interconnect");

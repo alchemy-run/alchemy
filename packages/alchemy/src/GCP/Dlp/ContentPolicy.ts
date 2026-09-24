@@ -150,7 +150,6 @@ export type ContentPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const ContentPolicy = Resource<ContentPolicy>("GCP.Dlp.ContentPolicy");

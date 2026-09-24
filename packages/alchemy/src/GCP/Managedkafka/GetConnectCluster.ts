@@ -23,7 +23,6 @@ export interface GetConnectClusterRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Managedkafka
  */
 export interface GetConnectCluster extends Binding.Service<

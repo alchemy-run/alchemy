@@ -20,7 +20,6 @@ import type { ParametersVersion } from "./ParametersVersion.ts";
  * ```
  *
  * @binding
- * @product GCP
  * @category Parametermanager
  */
 export interface RenderParameterVersion extends Binding.Service<

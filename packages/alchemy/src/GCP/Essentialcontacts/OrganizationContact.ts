@@ -131,7 +131,6 @@ export type OrganizationContact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Essentialcontacts
  */
 export const OrganizationContact = Resource<OrganizationContact>(

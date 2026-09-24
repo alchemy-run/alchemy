@@ -172,7 +172,6 @@ export type Inappproduct = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidpublisher
  */
 export const Inappproduct = Resource<Inappproduct>(

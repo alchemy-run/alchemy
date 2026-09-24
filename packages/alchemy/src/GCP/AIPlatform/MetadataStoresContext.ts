@@ -117,7 +117,6 @@ export type MetadataStoresContext = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const MetadataStoresContext = Resource<MetadataStoresContext>(

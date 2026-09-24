@@ -155,7 +155,6 @@ export type InterceptEndpointGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const InterceptEndpointGroup = Resource<InterceptEndpointGroup>(

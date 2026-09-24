@@ -100,7 +100,6 @@ export type FolderBucketsView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderBucketsView = Resource<FolderBucketsView>(

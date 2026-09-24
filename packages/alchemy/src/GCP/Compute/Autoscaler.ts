@@ -239,7 +239,6 @@ export type Autoscaler = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const Autoscaler = Resource<Autoscaler>("GCP.Compute.Autoscaler");

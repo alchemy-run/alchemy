@@ -23,7 +23,6 @@ export interface GetDdlRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Spanner
  */
 export interface GetDdl extends Binding.Service<

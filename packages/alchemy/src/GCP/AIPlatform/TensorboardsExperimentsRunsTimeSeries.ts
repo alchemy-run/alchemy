@@ -123,7 +123,6 @@ export type TensorboardsExperimentsRunsTimeSeries = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const TensorboardsExperimentsRunsTimeSeries =

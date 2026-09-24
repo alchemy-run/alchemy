@@ -87,7 +87,6 @@ export type SpecialistPool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const SpecialistPool = Resource<SpecialistPool>(

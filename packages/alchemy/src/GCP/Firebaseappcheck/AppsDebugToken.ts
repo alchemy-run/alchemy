@@ -125,7 +125,6 @@ export type AppsDebugToken = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaseappcheck
  */
 export const AppsDebugToken = Resource<AppsDebugToken>(

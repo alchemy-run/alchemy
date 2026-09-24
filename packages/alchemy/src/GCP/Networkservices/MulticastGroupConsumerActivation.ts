@@ -156,7 +156,6 @@ export type MulticastGroupConsumerActivation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const MulticastGroupConsumerActivation =

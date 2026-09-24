@@ -145,7 +145,6 @@ export type SavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudasset
  */
 export const SavedQuery = Resource<SavedQuery>("GCP.Cloudasset.SavedQuery");

@@ -253,7 +253,6 @@ export type DeliveryPipelinesAutomation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Clouddeploy
  */
 export const DeliveryPipelinesAutomation =

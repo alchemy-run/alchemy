@@ -234,7 +234,6 @@ export type ConnectivityTest = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkmanagement
  */
 export const ConnectivityTest = Resource<ConnectivityTest>(

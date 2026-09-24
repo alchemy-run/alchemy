@@ -24,7 +24,6 @@ export interface GetCertificateAuthorityRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PrivateCA
  */
 export interface GetCertificateAuthority extends Binding.Service<

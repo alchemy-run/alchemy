@@ -191,7 +191,6 @@ export type OrganizationSink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationSink = Resource<OrganizationSink>(

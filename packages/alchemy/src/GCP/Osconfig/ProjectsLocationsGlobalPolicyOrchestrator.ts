@@ -158,7 +158,6 @@ export type ProjectsLocationsGlobalPolicyOrchestrator = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Osconfig
  */
 export const ProjectsLocationsGlobalPolicyOrchestrator =

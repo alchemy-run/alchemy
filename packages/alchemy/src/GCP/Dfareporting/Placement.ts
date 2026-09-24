@@ -185,7 +185,6 @@ export type Placement = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const Placement = Resource<Placement>("GCP.Dfareporting.Placement");

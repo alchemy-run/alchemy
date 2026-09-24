@@ -25,7 +25,6 @@ export interface GetPlatformsPolicyRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Binaryauthorization
  */
 export interface GetPlatformsPolicy extends Binding.Service<

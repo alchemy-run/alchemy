@@ -122,7 +122,6 @@ export type NotificationChannel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const NotificationChannel = Resource<NotificationChannel>(

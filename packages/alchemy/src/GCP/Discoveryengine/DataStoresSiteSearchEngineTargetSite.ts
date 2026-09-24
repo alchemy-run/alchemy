@@ -115,7 +115,6 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresSiteSearchEngineTargetSite =

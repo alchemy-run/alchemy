@@ -140,7 +140,6 @@ export type PlaceActionLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Mybusinessplaceactions
  */
 export const PlaceActionLink = Resource<PlaceActionLink>(

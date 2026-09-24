@@ -138,7 +138,6 @@ export type Tenant = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const Tenant = Resource<Tenant>("GCP.Saasservicemgmt.Tenant");

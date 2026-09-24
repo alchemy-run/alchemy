@@ -20,7 +20,6 @@ export interface GetCloudVmClusterRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetCloudVmCluster extends Binding.Service<

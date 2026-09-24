@@ -140,7 +140,6 @@ export type Dashboard = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const Dashboard = Resource<Dashboard>(

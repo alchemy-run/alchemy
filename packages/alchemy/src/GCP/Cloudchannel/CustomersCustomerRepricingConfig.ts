@@ -136,7 +136,6 @@ export type CustomersCustomerRepricingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudchannel
  */
 export const CustomersCustomerRepricingConfig =

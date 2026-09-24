@@ -115,7 +115,6 @@ export type LicenseAssignment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Licensing
  */
 export const LicenseAssignment = Resource<LicenseAssignment>(

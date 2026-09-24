@@ -91,7 +91,6 @@ export type Envgroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Envgroup = Resource<Envgroup>("GCP.Apigee.Envgroup");

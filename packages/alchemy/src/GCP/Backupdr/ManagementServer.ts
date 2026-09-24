@@ -174,7 +174,6 @@ export type ManagementServer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Backupdr
  */
 export const ManagementServer = Resource<ManagementServer>(

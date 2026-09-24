@@ -165,7 +165,6 @@ export type AppsTool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const AppsTool = Resource<AppsTool>("GCP.Ces.AppsTool");

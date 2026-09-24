@@ -24,7 +24,6 @@ export interface GenerateDownloadUrlRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudFunctions
  */
 export interface GenerateDownloadUrl extends Binding.Service<

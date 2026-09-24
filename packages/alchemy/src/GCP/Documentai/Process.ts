@@ -31,7 +31,6 @@ export interface ProcessRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Documentai
  */
 export interface Process extends Binding.Service<

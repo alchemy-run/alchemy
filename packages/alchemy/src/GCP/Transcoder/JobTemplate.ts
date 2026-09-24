@@ -167,7 +167,6 @@ export type JobTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Transcoder
  */
 export const JobTemplate = Resource<JobTemplate>("GCP.Transcoder.JobTemplate");

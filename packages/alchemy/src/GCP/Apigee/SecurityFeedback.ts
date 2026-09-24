@@ -129,7 +129,6 @@ export type SecurityFeedback = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SecurityFeedback = Resource<SecurityFeedback>(

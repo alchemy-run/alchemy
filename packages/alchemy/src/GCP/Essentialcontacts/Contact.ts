@@ -114,7 +114,6 @@ export type Contact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Essentialcontacts
  */
 export const Contact = Resource<Contact>("GCP.Essentialcontacts.Contact");

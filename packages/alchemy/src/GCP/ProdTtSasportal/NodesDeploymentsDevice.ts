@@ -136,7 +136,6 @@ export type NodesDeploymentsDevice = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ProdTtSasportal
  */
 export const NodesDeploymentsDevice = Resource<NodesDeploymentsDevice>(

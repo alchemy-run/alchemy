@@ -133,7 +133,6 @@ export type Index = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Index = Resource<Index>("GCP.AIPlatform.Index");

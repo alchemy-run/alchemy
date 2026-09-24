@@ -153,7 +153,6 @@ export type Permission = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const Permission = Resource<Permission>("GCP.Drive.Permission");

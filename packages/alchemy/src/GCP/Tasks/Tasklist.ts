@@ -94,7 +94,6 @@ export type Tasklist = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tasks
  */
 export const Tasklist = Resource<Tasklist>("GCP.Tasks.Tasklist");

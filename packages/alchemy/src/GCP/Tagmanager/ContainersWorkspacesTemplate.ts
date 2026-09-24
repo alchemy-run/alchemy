@@ -144,7 +144,6 @@ export type ContainersWorkspacesTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersWorkspacesTemplate =

@@ -151,7 +151,6 @@ export type AgentsGenerator = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsGenerator = Resource<AgentsGenerator>(

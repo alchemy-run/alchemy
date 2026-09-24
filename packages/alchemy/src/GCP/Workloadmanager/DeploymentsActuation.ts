@@ -135,7 +135,6 @@ export type DeploymentsActuation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workloadmanager
  */
 export const DeploymentsActuation = Resource<DeploymentsActuation>(

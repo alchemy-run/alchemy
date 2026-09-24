@@ -163,7 +163,6 @@ export type SecurityGatewaysApplication = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Beyondcorp
  */
 export const SecurityGatewaysApplication =

@@ -100,7 +100,6 @@ export type AuthorizedViewSetsAuthorizedViewsConversationsAssessment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AuthorizedViewSetsAuthorizedViewsConversationsAssessment =

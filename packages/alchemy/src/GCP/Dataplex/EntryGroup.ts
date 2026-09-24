@@ -128,7 +128,6 @@ export type EntryGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const EntryGroup = Resource<EntryGroup>("GCP.Dataplex.EntryGroup");

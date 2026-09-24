@@ -151,7 +151,6 @@ export type DashboardsChart = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const DashboardsChart = Resource<DashboardsChart>(

@@ -237,7 +237,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Instance = Resource<Instance>("GCP.Apigee.Instance");

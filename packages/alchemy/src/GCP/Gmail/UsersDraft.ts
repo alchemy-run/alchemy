@@ -139,7 +139,6 @@ export type UsersDraft = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersDraft = Resource<UsersDraft>("GCP.Gmail.UsersDraft");

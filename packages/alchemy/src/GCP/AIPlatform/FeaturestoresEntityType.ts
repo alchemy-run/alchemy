@@ -118,7 +118,6 @@ export type FeaturestoresEntityType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const FeaturestoresEntityType = Resource<FeaturestoresEntityType>(

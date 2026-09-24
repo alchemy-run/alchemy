@@ -349,7 +349,6 @@ export type WorkerPoolShape =
  * ```
  *
  * @resource
- * @product GCP
  * @category Run
  */
 export const WorkerPool: Platform<

@@ -23,7 +23,6 @@ export interface GetWorkstationClusterRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Workstations
  */
 export interface GetWorkstationCluster extends Binding.Service<

@@ -25,7 +25,6 @@ export interface ComputeHeadCursorRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface ComputeHeadCursor extends Binding.Service<

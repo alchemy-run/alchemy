@@ -23,7 +23,6 @@ export interface GetAclPolicyRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Redis
  */
 export interface GetAclPolicy extends Binding.Service<

@@ -223,7 +223,6 @@ export type User = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SQL
  */
 export const User = Resource<User>("GCP.SQL.User");

@@ -90,7 +90,6 @@ export type IssueModelsIssue = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const IssueModelsIssue = Resource<IssueModelsIssue>(

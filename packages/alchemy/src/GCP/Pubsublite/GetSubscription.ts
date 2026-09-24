@@ -23,7 +23,6 @@ export interface GetSubscriptionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface GetSubscription extends Binding.Service<

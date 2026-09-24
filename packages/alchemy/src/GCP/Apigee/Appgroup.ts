@@ -123,7 +123,6 @@ export type Appgroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Appgroup = Resource<Appgroup>("GCP.Apigee.Appgroup");

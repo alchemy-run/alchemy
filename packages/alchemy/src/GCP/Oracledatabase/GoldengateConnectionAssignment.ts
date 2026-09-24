@@ -131,7 +131,6 @@ export type GoldengateConnectionAssignment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const GoldengateConnectionAssignment =

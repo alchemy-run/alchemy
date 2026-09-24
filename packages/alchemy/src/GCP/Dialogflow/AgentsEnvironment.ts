@@ -114,7 +114,6 @@ export type AgentsEnvironment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsEnvironment = Resource<AgentsEnvironment>(

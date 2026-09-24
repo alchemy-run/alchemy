@@ -134,7 +134,6 @@ export type AssessmentRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AssessmentRule = Resource<AssessmentRule>(

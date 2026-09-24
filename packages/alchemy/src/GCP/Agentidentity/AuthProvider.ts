@@ -182,7 +182,6 @@ export type AuthProvider = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Agentidentity
  */
 export const AuthProvider = Resource<AuthProvider>(

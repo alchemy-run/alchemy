@@ -209,7 +209,6 @@ export type Space = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Chat
  */
 export const Space = Resource<Space>("GCP.Chat.Space");

@@ -118,7 +118,6 @@ export type Deployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Script
  */
 export const Deployment = Resource<Deployment>("GCP.Script.Deployment");

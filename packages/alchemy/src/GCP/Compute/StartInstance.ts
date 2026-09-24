@@ -23,7 +23,6 @@ export interface StartInstanceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Compute
  */
 export interface StartInstance extends Binding.Service<

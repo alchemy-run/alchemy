@@ -104,7 +104,6 @@ export type RegionInstantSnapshotGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionInstantSnapshotGroup = Resource<RegionInstantSnapshotGroup>(

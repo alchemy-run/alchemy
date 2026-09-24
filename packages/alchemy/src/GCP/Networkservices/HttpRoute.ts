@@ -340,7 +340,6 @@ export type HttpRoute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const HttpRoute = Resource<HttpRoute>("GCP.Networkservices.HttpRoute");

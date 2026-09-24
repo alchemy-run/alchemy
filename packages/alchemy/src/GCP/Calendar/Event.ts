@@ -273,7 +273,6 @@ export type Event = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Calendar
  */
 export const Event = Resource<Event>("GCP.Calendar.Event");

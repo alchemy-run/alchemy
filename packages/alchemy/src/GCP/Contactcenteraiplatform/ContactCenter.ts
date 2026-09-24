@@ -234,7 +234,6 @@ export type ContactCenter = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenteraiplatform
  */
 export const ContactCenter = Resource<ContactCenter>(

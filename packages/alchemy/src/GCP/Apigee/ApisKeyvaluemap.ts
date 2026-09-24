@@ -81,7 +81,6 @@ export type ApisKeyvaluemap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const ApisKeyvaluemap = Resource<ApisKeyvaluemap>(

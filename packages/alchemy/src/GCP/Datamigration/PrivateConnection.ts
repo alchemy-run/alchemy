@@ -142,7 +142,6 @@ export type PrivateConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamigration
  */
 export const PrivateConnection = Resource<PrivateConnection>(

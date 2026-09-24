@@ -126,7 +126,6 @@ export type ClustersUser = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AlloyDB
  */
 export const ClustersUser = Resource<ClustersUser>("GCP.AlloyDB.ClustersUser");

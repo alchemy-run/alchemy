@@ -23,7 +23,6 @@ export interface GetInstancesSnapshotRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Filestore
  */
 export interface GetInstancesSnapshot extends Binding.Service<

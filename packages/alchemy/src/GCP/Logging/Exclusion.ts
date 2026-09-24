@@ -109,7 +109,6 @@ export type Exclusion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const Exclusion = Resource<Exclusion>("GCP.Logging.Exclusion");

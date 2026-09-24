@@ -84,7 +84,6 @@ export type AdvertisersNegativeKeywordList = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersNegativeKeywordList =

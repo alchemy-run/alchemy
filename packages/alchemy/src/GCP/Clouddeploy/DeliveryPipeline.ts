@@ -189,7 +189,6 @@ export type DeliveryPipeline = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Clouddeploy
  */
 export const DeliveryPipeline = Resource<DeliveryPipeline>(

@@ -19,7 +19,6 @@ import type { Key } from "./Key.ts";
  * ```
  *
  * @binding
- * @product GCP
  * @category ApiKeys
  */
 export interface GetKeyString extends Binding.Service<

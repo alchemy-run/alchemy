@@ -127,7 +127,6 @@ export type LocationsOccurrence = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Containeranalysis
  */
 export const LocationsOccurrence = Resource<LocationsOccurrence>(

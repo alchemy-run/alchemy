@@ -175,7 +175,6 @@ export type Queue = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CloudTasks
  */
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");

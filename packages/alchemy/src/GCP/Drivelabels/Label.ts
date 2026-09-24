@@ -199,7 +199,6 @@ export type Label = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drivelabels
  */
 export const Label = Resource<Label>("GCP.Drivelabels.Label");

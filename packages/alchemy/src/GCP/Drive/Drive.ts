@@ -126,7 +126,6 @@ export type Drive = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const Drive = Resource<Drive>("GCP.Drive.Drive");

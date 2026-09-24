@@ -185,7 +185,6 @@ export type InsightsConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Developerconnect
  */
 export const InsightsConfig = Resource<InsightsConfig>(

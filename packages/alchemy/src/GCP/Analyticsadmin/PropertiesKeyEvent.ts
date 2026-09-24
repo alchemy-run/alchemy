@@ -130,7 +130,6 @@ export type PropertiesKeyEvent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticsadmin
  */
 export const PropertiesKeyEvent = Resource<PropertiesKeyEvent>(

@@ -102,7 +102,6 @@ export type AuthorizedViewSetsAuthorizedView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AuthorizedViewSetsAuthorizedView =

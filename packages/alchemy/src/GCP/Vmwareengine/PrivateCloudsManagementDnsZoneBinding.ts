@@ -152,7 +152,6 @@ export type PrivateCloudsManagementDnsZoneBinding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const PrivateCloudsManagementDnsZoneBinding =

@@ -123,7 +123,6 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Composer
  */
 export const EnvironmentsUserWorkloadsConfigMap =

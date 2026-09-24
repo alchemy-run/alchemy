@@ -190,7 +190,6 @@ export type AgentsIntent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsIntent = Resource<AgentsIntent>(

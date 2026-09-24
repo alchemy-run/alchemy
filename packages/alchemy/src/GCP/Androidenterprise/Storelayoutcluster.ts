@@ -117,7 +117,6 @@ export type Storelayoutcluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidenterprise
  */
 export const Storelayoutcluster = Resource<Storelayoutcluster>(

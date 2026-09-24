@@ -169,7 +169,6 @@ export type DataTaxonomiesAttribute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataTaxonomiesAttribute = Resource<DataTaxonomiesAttribute>(

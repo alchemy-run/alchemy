@@ -121,7 +121,6 @@ export type OrganizationsNotificationConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const OrganizationsNotificationConfig =

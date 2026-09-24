@@ -160,7 +160,6 @@ export type Federation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Metastore
  */
 export const Federation = Resource<Federation>("GCP.Metastore.Federation");

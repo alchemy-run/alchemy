@@ -141,7 +141,6 @@ export type ProcessesRunsLineageEvent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalineage
  */
 export const ProcessesRunsLineageEvent = Resource<ProcessesRunsLineageEvent>(

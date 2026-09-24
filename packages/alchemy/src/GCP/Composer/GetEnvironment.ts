@@ -23,7 +23,6 @@ export interface GetEnvironmentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Composer
  */
 export interface GetEnvironment extends Binding.Service<

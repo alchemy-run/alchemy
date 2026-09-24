@@ -138,7 +138,6 @@ export type OrganizationBucketsView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationBucketsView = Resource<OrganizationBucketsView>(

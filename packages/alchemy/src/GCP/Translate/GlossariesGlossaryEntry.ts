@@ -168,7 +168,6 @@ export type GlossariesGlossaryEntry = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Translate
  */
 export const GlossariesGlossaryEntry = Resource<GlossariesGlossaryEntry>(

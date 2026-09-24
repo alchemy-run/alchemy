@@ -209,7 +209,6 @@ export type Deployment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Deploymentmanager
  */
 export const Deployment = Resource<Deployment>(

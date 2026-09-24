@@ -189,7 +189,6 @@ export type Instance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const Instance = Resource<Instance>("GCP.Bigtable.Instance");

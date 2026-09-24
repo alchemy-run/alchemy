@@ -113,7 +113,6 @@ export type RepositoriesWorkflowInvocation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const RepositoriesWorkflowInvocation =

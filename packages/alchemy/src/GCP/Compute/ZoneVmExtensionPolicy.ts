@@ -139,7 +139,6 @@ export type ZoneVmExtensionPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const ZoneVmExtensionPolicy = Resource<ZoneVmExtensionPolicy>(

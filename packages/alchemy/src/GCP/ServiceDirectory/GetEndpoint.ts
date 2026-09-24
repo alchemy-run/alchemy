@@ -23,7 +23,6 @@ export interface GetEndpointRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category ServiceDirectory
  */
 export interface GetEndpoint extends Binding.Service<

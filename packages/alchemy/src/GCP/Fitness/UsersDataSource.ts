@@ -149,7 +149,6 @@ export type UsersDataSource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Fitness
  */
 export const UsersDataSource = Resource<UsersDataSource>(

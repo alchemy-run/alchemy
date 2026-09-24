@@ -293,7 +293,6 @@ export type UptimeCheckConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const UptimeCheckConfig = Resource<UptimeCheckConfig>(

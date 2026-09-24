@@ -202,7 +202,6 @@ export type Unit = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const Unit = Resource<Unit>("GCP.Saasservicemgmt.Unit");

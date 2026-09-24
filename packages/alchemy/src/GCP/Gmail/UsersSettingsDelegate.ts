@@ -65,7 +65,6 @@ export type UsersSettingsDelegate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsDelegate = Resource<UsersSettingsDelegate>(

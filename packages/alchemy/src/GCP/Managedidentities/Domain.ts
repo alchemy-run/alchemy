@@ -165,7 +165,6 @@ export type Domain = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedidentities
  */
 export const Domain = Resource<Domain>("GCP.Managedidentities.Domain");

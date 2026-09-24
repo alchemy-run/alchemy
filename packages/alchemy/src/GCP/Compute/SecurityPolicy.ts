@@ -194,7 +194,6 @@ export type SecurityPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const SecurityPolicy = Resource<SecurityPolicy>(

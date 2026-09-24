@@ -212,7 +212,6 @@ export type AppsServicesVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Appengine
  */
 export const AppsServicesVersion = Resource<AppsServicesVersion>(

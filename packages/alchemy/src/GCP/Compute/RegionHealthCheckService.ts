@@ -134,7 +134,6 @@ export type RegionHealthCheckService = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionHealthCheckService = Resource<RegionHealthCheckService>(

@@ -156,7 +156,6 @@ export type ModelDeploymentMonitoringJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const ModelDeploymentMonitoringJob =

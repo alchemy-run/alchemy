@@ -33,7 +33,6 @@ export interface CreateTaskRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudTasks
  */
 export interface CreateTask extends Binding.Service<

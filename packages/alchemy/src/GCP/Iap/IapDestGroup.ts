@@ -113,7 +113,6 @@ export type IapDestGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Iap
  */
 export const IapDestGroup = Resource<IapDestGroup>("GCP.Iap.IapDestGroup");

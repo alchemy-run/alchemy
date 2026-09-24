@@ -171,7 +171,6 @@ export type RepositoriesReleaseConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const RepositoriesReleaseConfig = Resource<RepositoriesReleaseConfig>(

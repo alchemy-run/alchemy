@@ -28,7 +28,6 @@ export interface FetchReadWriteTokenRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Developerconnect
  */
 export interface FetchReadWriteToken extends Binding.Service<

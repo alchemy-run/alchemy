@@ -269,7 +269,6 @@ const DEFAULT_CRITERIA: ReportCriteria = {
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const Report = Resource<Report>("GCP.Dfareporting.Report");

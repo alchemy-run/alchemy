@@ -127,7 +127,6 @@ export type SourcesDiskMigrationJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const SourcesDiskMigrationJob = Resource<SourcesDiskMigrationJob>(

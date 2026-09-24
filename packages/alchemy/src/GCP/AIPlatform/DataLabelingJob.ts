@@ -148,7 +148,6 @@ export type DataLabelingJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const DataLabelingJob = Resource<DataLabelingJob>(

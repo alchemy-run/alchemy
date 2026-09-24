@@ -287,7 +287,6 @@ export type ForwardingRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const ForwardingRule = Resource<ForwardingRule>(

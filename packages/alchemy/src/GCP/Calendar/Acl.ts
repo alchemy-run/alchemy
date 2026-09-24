@@ -99,7 +99,6 @@ export type Acl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Calendar
  */
 export const Acl = Resource<Acl>("GCP.Calendar.Acl");

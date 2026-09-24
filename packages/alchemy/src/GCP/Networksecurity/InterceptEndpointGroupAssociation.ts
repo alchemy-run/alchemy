@@ -150,7 +150,6 @@ export type InterceptEndpointGroupAssociation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const InterceptEndpointGroupAssociation =

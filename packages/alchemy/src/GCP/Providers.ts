@@ -6536,4 +6536,6 @@ export const providers = () =>
     Layer.provideMerge(gcpLive),
     Layer.provideMerge(DockerLive),
     Layer.orDie,
+    // Erased on purpose: checking every consumer against the inferred union
+    // of ~1,000 provider layers exhausts the type-checker's memory.
   ) as Layer.Layer<any, never, never>;

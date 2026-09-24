@@ -150,7 +150,6 @@ export type AspectType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const AspectType = Resource<AspectType>("GCP.Dataplex.AspectType");

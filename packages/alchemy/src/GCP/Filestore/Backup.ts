@@ -179,7 +179,6 @@ export type Backup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Filestore
  */
 export const Backup = Resource<Backup>("GCP.Filestore.Backup");

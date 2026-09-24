@@ -178,7 +178,6 @@ export type Group = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudidentity
  */
 export const Group = Resource<Group>("GCP.Cloudidentity.Group");

@@ -209,7 +209,6 @@ export type ConnectionProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datamigration
  */
 export const ConnectionProfile = Resource<ConnectionProfile>(

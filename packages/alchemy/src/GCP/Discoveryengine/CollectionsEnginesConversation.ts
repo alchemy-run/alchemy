@@ -98,7 +98,6 @@ export type CollectionsEnginesConversation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsEnginesConversation =

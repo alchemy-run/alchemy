@@ -23,7 +23,6 @@ export interface GetClustersNodePoolRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Container
  */
 export interface GetClustersNodePool extends Binding.Service<

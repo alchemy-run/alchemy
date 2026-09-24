@@ -185,7 +185,6 @@ export type AdminTopic = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Pubsublite
  */
 export const AdminTopic = Resource<AdminTopic>("GCP.Pubsublite.AdminTopic");

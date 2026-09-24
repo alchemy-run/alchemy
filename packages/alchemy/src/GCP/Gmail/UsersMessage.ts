@@ -156,7 +156,6 @@ export type UsersMessage = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersMessage = Resource<UsersMessage>("GCP.Gmail.UsersMessage");

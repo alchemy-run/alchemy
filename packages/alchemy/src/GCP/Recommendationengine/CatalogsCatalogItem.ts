@@ -190,7 +190,6 @@ export type CatalogsCatalogItem = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Recommendationengine
  */
 export const CatalogsCatalogItem = Resource<CatalogsCatalogItem>(

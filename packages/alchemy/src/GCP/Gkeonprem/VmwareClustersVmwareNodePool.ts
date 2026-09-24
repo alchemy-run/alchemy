@@ -180,7 +180,6 @@ export type VmwareClustersVmwareNodePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkeonprem
  */
 export const VmwareClustersVmwareNodePool =

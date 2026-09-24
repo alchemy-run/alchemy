@@ -117,7 +117,6 @@ export type DomainsBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedidentities
  */
 export const DomainsBackup = Resource<DomainsBackup>(

@@ -139,7 +139,6 @@ export type Parameter = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Parametermanager
  */
 export const Parameter = Resource<Parameter>("GCP.Parametermanager.Parameter");

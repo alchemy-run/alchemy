@@ -187,7 +187,6 @@ export type AppConnection = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Beyondcorp
  */
 export const AppConnection = Resource<AppConnection>(

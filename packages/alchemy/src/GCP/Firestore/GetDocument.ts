@@ -28,7 +28,6 @@ export interface GetDocumentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firestore
  */
 export interface GetDocument extends Binding.Service<

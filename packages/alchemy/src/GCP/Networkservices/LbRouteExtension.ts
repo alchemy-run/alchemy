@@ -159,7 +159,6 @@ export type LbRouteExtension = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const LbRouteExtension = Resource<LbRouteExtension>(

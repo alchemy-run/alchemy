@@ -167,7 +167,6 @@ export type GlobalAddress = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const GlobalAddress = Resource<GlobalAddress>(

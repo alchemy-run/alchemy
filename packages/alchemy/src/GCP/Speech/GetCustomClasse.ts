@@ -23,7 +23,6 @@ export interface GetCustomClasseRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Speech
  */
 export interface GetCustomClasse extends Binding.Service<

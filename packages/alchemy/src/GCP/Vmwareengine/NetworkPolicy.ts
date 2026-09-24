@@ -141,7 +141,6 @@ export type NetworkPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const NetworkPolicy = Resource<NetworkPolicy>(

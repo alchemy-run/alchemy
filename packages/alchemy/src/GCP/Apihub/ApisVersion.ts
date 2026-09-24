@@ -143,7 +143,6 @@ export type ApisVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const ApisVersion = Resource<ApisVersion>("GCP.Apihub.ApisVersion");

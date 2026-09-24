@@ -99,7 +99,6 @@ export type Space = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Space = Resource<Space>("GCP.Apigee.Space");

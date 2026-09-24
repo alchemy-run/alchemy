@@ -20,7 +20,6 @@ export interface GetGoldengateDeploymentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface GetGoldengateDeployment extends Binding.Service<

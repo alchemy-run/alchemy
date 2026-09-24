@@ -167,7 +167,6 @@ export type ContainersWorkspacesTrigger = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tagmanager
  */
 export const ContainersWorkspacesTrigger =

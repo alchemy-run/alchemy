@@ -136,7 +136,6 @@ export type GlossariesCategory = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const GlossariesCategory = Resource<GlossariesCategory>(

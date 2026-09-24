@@ -104,7 +104,6 @@ export type AgentsFlowsVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsFlowsVersion = Resource<AgentsFlowsVersion>(

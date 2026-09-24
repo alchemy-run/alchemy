@@ -156,7 +156,6 @@ export type RegionalEndpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const RegionalEndpoint = Resource<RegionalEndpoint>(

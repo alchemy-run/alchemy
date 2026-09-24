@@ -144,7 +144,6 @@ export type Product = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vision
  */
 export const Product = Resource<Product>("GCP.Vision.Product");

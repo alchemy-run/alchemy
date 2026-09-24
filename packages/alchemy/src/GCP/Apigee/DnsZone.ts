@@ -112,7 +112,6 @@ export type DnsZone = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const DnsZone = Resource<DnsZone>("GCP.Apigee.DnsZone");

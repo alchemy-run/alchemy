@@ -221,7 +221,6 @@ export type Environment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Composer
  */
 export const Environment = Resource<Environment>("GCP.Composer.Environment");

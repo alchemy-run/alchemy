@@ -95,7 +95,6 @@ export type CollectionsDataStoresSchema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const CollectionsDataStoresSchema =

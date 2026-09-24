@@ -129,7 +129,6 @@ export type OnlineEvaluator = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const OnlineEvaluator = Resource<OnlineEvaluator>(

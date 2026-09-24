@@ -288,7 +288,6 @@ export type BareMetalCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkeonprem
  */
 export const BareMetalCluster = Resource<BareMetalCluster>(

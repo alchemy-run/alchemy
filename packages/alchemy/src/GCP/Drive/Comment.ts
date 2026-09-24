@@ -108,7 +108,6 @@ export type Comment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const Comment = Resource<Comment>("GCP.Drive.Comment");

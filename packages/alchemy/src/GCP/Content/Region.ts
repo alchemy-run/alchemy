@@ -112,7 +112,6 @@ export type Region = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Region = Resource<Region>("GCP.Content.Region");

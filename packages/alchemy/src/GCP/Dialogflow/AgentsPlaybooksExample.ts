@@ -153,7 +153,6 @@ export type AgentsPlaybooksExample = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsPlaybooksExample = Resource<AgentsPlaybooksExample>(

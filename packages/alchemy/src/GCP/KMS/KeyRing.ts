@@ -71,7 +71,6 @@ export type KeyRing = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category KMS
  */
 export const KeyRing = Resource<KeyRing>("GCP.KMS.KeyRing");

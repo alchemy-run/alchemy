@@ -103,7 +103,6 @@ export type TensorboardsExperiment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const TensorboardsExperiment = Resource<TensorboardsExperiment>(

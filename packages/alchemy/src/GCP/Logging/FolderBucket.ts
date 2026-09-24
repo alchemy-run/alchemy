@@ -183,7 +183,6 @@ export type FolderBucket = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderBucket = Resource<FolderBucket>("GCP.Logging.FolderBucket");

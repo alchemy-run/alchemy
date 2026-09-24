@@ -26,7 +26,6 @@ export interface GetUserWorkloadsConfigMapRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Composer
  */
 export interface GetUserWorkloadsConfigMap extends Binding.Service<

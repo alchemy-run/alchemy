@@ -23,7 +23,6 @@ export interface GetServiceRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Run
  */
 export interface GetService extends Binding.Service<

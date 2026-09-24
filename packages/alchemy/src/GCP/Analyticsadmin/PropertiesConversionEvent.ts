@@ -139,7 +139,6 @@ export type PropertiesConversionEvent = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticsadmin
  */
 export const PropertiesConversionEvent = Resource<PropertiesConversionEvent>(

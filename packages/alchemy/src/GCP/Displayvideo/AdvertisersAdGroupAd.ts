@@ -112,7 +112,6 @@ export type AdvertisersAdGroupAd = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Displayvideo
  */
 export const AdvertisersAdGroupAd = Resource<AdvertisersAdGroupAd>(

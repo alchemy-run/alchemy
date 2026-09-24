@@ -233,7 +233,6 @@ export type Gateway = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkservices
  */
 export const Gateway = Resource<Gateway>("GCP.Networkservices.Gateway");

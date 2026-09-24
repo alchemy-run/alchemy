@@ -136,7 +136,6 @@ export type Batche = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataproc
  */
 export const Batche = Resource<Batche>("GCP.Dataproc.Batche");

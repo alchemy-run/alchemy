@@ -134,7 +134,6 @@ export type SupportEventSubscription = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudsupport
  */
 export const SupportEventSubscription = Resource<SupportEventSubscription>(

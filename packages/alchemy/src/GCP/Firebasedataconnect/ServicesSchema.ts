@@ -251,7 +251,6 @@ export type ServicesSchema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebasedataconnect
  */
 export const ServicesSchema = Resource<ServicesSchema>(

@@ -126,7 +126,6 @@ export type EnvironmentsApisRevisionsDebugsession = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsApisRevisionsDebugsession =

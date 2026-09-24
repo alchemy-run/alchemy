@@ -174,7 +174,6 @@ export type OrganizationLogBucket = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationLogBucket = Resource<OrganizationLogBucket>(

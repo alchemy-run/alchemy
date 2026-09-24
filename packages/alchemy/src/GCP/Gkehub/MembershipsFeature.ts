@@ -153,7 +153,6 @@ export type MembershipsFeature = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkehub
  */
 export const MembershipsFeature = Resource<MembershipsFeature>(

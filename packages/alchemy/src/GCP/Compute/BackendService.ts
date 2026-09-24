@@ -238,7 +238,6 @@ export type BackendService = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const BackendService = Resource<BackendService>(

@@ -113,7 +113,6 @@ export type ConnectionsEntityTypesEntity = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Connectors
  */
 export const ConnectionsEntityTypesEntity =

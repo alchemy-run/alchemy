@@ -114,7 +114,6 @@ export type Tensorboard = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Tensorboard = Resource<Tensorboard>("GCP.AIPlatform.Tensorboard");

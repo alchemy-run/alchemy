@@ -164,7 +164,6 @@ export type CatalogsControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Retail
  */
 export const CatalogsControl = Resource<CatalogsControl>(

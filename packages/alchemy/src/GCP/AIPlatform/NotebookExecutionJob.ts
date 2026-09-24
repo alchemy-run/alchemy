@@ -174,7 +174,6 @@ export type NotebookExecutionJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const NotebookExecutionJob = Resource<NotebookExecutionJob>(

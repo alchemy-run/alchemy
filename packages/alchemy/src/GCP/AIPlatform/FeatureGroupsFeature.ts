@@ -119,7 +119,6 @@ export type FeatureGroupsFeature = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const FeatureGroupsFeature = Resource<FeatureGroupsFeature>(

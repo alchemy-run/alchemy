@@ -120,7 +120,6 @@ export type OrganizationsLocationsStoredInfoType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationsLocationsStoredInfoType =

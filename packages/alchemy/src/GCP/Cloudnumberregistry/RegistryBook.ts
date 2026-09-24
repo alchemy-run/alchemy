@@ -132,7 +132,6 @@ export type RegistryBook = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Cloudnumberregistry
  */
 export const RegistryBook = Resource<RegistryBook>(

@@ -135,7 +135,6 @@ export type LocationsStoredInfoType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const LocationsStoredInfoType = Resource<LocationsStoredInfoType>(

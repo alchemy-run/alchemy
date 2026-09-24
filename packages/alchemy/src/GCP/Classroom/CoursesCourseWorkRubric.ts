@@ -119,7 +119,6 @@ export type CoursesCourseWorkRubric = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesCourseWorkRubric = Resource<CoursesCourseWorkRubric>(

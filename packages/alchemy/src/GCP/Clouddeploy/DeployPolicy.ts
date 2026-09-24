@@ -289,7 +289,6 @@ export type DeployPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Clouddeploy
  */
 export const DeployPolicy = Resource<DeployPolicy>(

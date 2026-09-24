@@ -154,7 +154,6 @@ export type EnvironmentsTargetserver = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsTargetserver = Resource<EnvironmentsTargetserver>(

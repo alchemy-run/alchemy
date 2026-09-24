@@ -113,7 +113,6 @@ export type LocationsDeidentifyTemplate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const LocationsDeidentifyTemplate =

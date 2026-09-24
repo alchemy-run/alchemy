@@ -114,7 +114,6 @@ export type Matter = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vault
  */
 export const Matter = Resource<Matter>("GCP.Vault.Matter");

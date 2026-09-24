@@ -152,7 +152,6 @@ export type PublicDelegatedPrefix = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const PublicDelegatedPrefix = Resource<PublicDelegatedPrefix>(

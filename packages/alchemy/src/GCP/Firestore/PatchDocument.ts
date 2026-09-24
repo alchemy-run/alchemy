@@ -34,7 +34,6 @@ export interface PatchDocumentRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firestore
  */
 export interface PatchDocument extends Binding.Service<

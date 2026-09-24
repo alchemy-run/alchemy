@@ -253,7 +253,6 @@ export type ServicesServiceLevelObjective = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Monitoring
  */
 export const ServicesServiceLevelObjective =

@@ -64,7 +64,6 @@ export type UsersSettingsForwardingAddresse = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsForwardingAddresse =

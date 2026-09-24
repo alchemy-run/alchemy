@@ -283,7 +283,6 @@ export type Cluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Container
  */
 export const Cluster = Resource<Cluster>("GCP.Container.Cluster");

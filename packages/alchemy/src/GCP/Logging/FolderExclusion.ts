@@ -120,7 +120,6 @@ export type FolderExclusion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderExclusion = Resource<FolderExclusion>(

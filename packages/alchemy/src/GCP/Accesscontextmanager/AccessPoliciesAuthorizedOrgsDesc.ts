@@ -134,7 +134,6 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Accesscontextmanager
  */
 export const AccessPoliciesAuthorizedOrgsDesc =

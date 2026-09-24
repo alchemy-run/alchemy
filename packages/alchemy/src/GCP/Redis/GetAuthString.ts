@@ -24,7 +24,6 @@ export interface GetAuthStringRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Redis
  */
 export interface GetAuthString extends Binding.Service<

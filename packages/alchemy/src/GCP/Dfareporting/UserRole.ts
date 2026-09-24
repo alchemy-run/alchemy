@@ -127,7 +127,6 @@ export type UserRole = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dfareporting
  */
 export const UserRole = Resource<UserRole>("GCP.Dfareporting.UserRole");

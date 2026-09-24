@@ -108,7 +108,6 @@ export type ServicesBackup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Metastore
  */
 export const ServicesBackup = Resource<ServicesBackup>(

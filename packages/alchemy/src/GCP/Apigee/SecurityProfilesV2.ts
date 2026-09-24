@@ -129,7 +129,6 @@ export type SecurityProfilesV2 = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SecurityProfilesV2 = Resource<SecurityProfilesV2>(

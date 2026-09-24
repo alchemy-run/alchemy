@@ -229,7 +229,6 @@ export type CustomTargetType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Clouddeploy
  */
 export const CustomTargetType = Resource<CustomTargetType>(

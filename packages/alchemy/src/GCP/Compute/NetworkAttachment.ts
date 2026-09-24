@@ -144,7 +144,6 @@ export type NetworkAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const NetworkAttachment = Resource<NetworkAttachment>(

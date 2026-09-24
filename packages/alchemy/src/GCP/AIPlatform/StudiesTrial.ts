@@ -91,7 +91,6 @@ export type StudiesTrial = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const StudiesTrial = Resource<StudiesTrial>(

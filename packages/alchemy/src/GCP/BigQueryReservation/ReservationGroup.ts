@@ -81,7 +81,6 @@ export type ReservationGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryReservation
  */
 export const ReservationGroup = Resource<ReservationGroup>(

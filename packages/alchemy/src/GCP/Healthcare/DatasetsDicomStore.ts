@@ -124,7 +124,6 @@ export type DatasetsDicomStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Healthcare
  */
 export const DatasetsDicomStore = Resource<DatasetsDicomStore>(

@@ -131,7 +131,6 @@ export type DataAttributeBinding = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const DataAttributeBinding = Resource<DataAttributeBinding>(

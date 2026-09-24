@@ -23,7 +23,6 @@ export interface GetReservationRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Pubsublite
  */
 export interface GetReservation extends Binding.Service<

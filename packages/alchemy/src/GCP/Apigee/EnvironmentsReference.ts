@@ -107,7 +107,6 @@ export type EnvironmentsReference = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsReference = Resource<EnvironmentsReference>(

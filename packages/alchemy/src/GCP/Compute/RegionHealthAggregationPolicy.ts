@@ -133,7 +133,6 @@ export type RegionHealthAggregationPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionHealthAggregationPolicy =

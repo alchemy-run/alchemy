@@ -28,7 +28,6 @@ export interface AddSecretVersionRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category SecretManager
  */
 export interface AddSecretVersion extends Binding.Service<

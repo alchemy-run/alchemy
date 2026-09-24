@@ -134,7 +134,6 @@ export type OrganizationStoredInfoType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dlp
  */
 export const OrganizationStoredInfoType = Resource<OrganizationStoredInfoType>(

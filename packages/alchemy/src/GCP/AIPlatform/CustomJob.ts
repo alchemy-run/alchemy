@@ -123,7 +123,6 @@ export type CustomJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const CustomJob = Resource<CustomJob>("GCP.AIPlatform.CustomJob");

@@ -160,7 +160,6 @@ export type Firewallpolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Recaptchaenterprise
  */
 export const Firewallpolicy = Resource<Firewallpolicy>(

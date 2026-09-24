@@ -177,7 +177,6 @@ export type PhraseMatcher = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const PhraseMatcher = Resource<PhraseMatcher>(

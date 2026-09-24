@@ -112,7 +112,6 @@ export type IssueModel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const IssueModel = Resource<IssueModel>(

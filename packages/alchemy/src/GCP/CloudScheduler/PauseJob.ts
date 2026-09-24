@@ -23,7 +23,6 @@ export interface PauseJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudScheduler
  */
 export interface PauseJob extends Binding.Service<

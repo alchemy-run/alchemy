@@ -244,7 +244,6 @@ export type DataExchangesListing = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Analyticshub
  */
 export const DataExchangesListing = Resource<DataExchangesListing>(

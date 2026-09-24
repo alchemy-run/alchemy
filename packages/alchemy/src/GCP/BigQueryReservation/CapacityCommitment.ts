@@ -169,7 +169,6 @@ export type CapacityCommitment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category BigQueryReservation
  */
 export const CapacityCommitment = Resource<CapacityCommitment>(

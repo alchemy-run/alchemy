@@ -109,7 +109,6 @@ export type Account = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Account = Resource<Account>("GCP.Content.Account");

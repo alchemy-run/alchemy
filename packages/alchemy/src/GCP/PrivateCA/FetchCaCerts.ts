@@ -27,7 +27,6 @@ export interface FetchCaCertsRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category PrivateCA
  */
 export interface FetchCaCerts extends Binding.Service<

@@ -130,7 +130,6 @@ export type PhraseSet = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Speech
  */
 export const PhraseSet = Resource<PhraseSet>("GCP.Speech.PhraseSet");

@@ -332,7 +332,6 @@ export type Job = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CloudScheduler
  */
 export const Job = Resource<Job>("GCP.CloudScheduler.Job");

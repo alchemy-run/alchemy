@@ -161,7 +161,6 @@ export type OrganizationSavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationSavedQuery = Resource<OrganizationSavedQuery>(

@@ -144,7 +144,6 @@ export type MetadataFeed = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const MetadataFeed = Resource<MetadataFeed>("GCP.Dataplex.MetadataFeed");

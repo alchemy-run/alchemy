@@ -102,7 +102,6 @@ export type Datacollector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Datacollector = Resource<Datacollector>(

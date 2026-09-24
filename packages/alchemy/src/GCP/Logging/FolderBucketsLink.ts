@@ -87,7 +87,6 @@ export type FolderBucketsLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderBucketsLink = Resource<FolderBucketsLink>(

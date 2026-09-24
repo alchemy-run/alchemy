@@ -134,7 +134,6 @@ export type ImageImport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const ImageImport = Resource<ImageImport>("GCP.Vmmigration.ImageImport");

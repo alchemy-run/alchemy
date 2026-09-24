@@ -160,7 +160,6 @@ export type RepositoriesHook = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securesourcemanager
  */
 export const RepositoriesHook = Resource<RepositoriesHook>(

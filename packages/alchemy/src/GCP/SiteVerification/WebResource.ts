@@ -149,7 +149,6 @@ export type WebResource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category SiteVerification
  */
 export const WebResource = Resource<WebResource>(

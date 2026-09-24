@@ -206,7 +206,6 @@ export type Organization = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Organization = Resource<Organization>("GCP.Apigee.Organization");

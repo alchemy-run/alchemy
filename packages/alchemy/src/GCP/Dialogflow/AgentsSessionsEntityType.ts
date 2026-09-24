@@ -123,7 +123,6 @@ export type AgentsSessionsEntityType = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsSessionsEntityType = Resource<AgentsSessionsEntityType>(

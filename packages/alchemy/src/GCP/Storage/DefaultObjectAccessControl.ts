@@ -92,7 +92,6 @@ export type DefaultObjectAccessControl = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Storage
  */
 export const DefaultObjectAccessControl = Resource<DefaultObjectAccessControl>(

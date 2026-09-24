@@ -147,7 +147,6 @@ export type Endpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ServiceDirectory
  */
 export const Endpoint = Resource<Endpoint>("GCP.ServiceDirectory.Endpoint");

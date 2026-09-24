@@ -104,7 +104,6 @@ export type DatasetsConversationsFeedbackLabel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const DatasetsConversationsFeedbackLabel =

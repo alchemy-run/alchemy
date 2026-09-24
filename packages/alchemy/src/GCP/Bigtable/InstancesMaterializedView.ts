@@ -104,7 +104,6 @@ export type InstancesMaterializedView = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const InstancesMaterializedView = Resource<InstancesMaterializedView>(

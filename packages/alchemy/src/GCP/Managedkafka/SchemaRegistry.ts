@@ -80,7 +80,6 @@ export type SchemaRegistry = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const SchemaRegistry = Resource<SchemaRegistry>(

@@ -153,7 +153,6 @@ export type SitesApidoc = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const SitesApidoc = Resource<SitesApidoc>("GCP.Apigee.SitesApidoc");

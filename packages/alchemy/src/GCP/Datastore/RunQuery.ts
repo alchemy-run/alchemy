@@ -29,7 +29,6 @@ export interface RunQueryRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Datastore
  */
 export interface RunQuery extends Binding.Service<

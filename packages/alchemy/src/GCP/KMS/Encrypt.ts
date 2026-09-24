@@ -26,7 +26,6 @@ export interface EncryptRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category KMS
  */
 export interface Encrypt extends Binding.Service<

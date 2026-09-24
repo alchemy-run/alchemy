@@ -125,7 +125,6 @@ export type WireGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const WireGroup = Resource<WireGroup>("GCP.Compute.WireGroup");

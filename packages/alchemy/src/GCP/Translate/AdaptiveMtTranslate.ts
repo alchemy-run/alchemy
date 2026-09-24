@@ -28,7 +28,6 @@ export interface AdaptiveMtTranslateRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Translate
  */
 export interface AdaptiveMtTranslate extends Binding.Service<

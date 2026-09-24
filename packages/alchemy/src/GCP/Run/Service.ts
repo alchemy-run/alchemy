@@ -406,7 +406,6 @@ export type ServiceShape = Main<ServiceServices>;
  * ```
  *
  * @resource
- * @product GCP
  * @category Run
  */
 export const Service: Platform<

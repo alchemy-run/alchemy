@@ -124,7 +124,6 @@ export type OrganizationLogScope = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const OrganizationLogScope = Resource<OrganizationLogScope>(

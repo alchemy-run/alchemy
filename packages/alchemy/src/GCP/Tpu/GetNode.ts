@@ -23,7 +23,6 @@ export interface GetNodeRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Tpu
  */
 export interface GetNode extends Binding.Service<

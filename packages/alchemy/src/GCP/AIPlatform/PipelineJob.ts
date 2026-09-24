@@ -146,7 +146,6 @@ export type PipelineJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const PipelineJob = Resource<PipelineJob>("GCP.AIPlatform.PipelineJob");

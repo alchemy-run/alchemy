@@ -23,7 +23,6 @@ export interface GetSchemaRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category PubSub
  */
 export interface GetSchema extends Binding.Service<

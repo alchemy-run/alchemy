@@ -120,7 +120,6 @@ export type CoursesAnnouncementsAddOnAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesAnnouncementsAddOnAttachment =

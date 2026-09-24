@@ -145,7 +145,6 @@ export type Po = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Po = Resource<Po>("GCP.Content.Po");

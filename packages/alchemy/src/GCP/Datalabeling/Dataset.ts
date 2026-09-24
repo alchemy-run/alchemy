@@ -102,7 +102,6 @@ export type Dataset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalabeling
  */
 export const Dataset = Resource<Dataset>("GCP.Datalabeling.Dataset");

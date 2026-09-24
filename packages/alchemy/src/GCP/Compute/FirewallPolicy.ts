@@ -148,7 +148,6 @@ export type FirewallPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const FirewallPolicy = Resource<FirewallPolicy>(

@@ -189,7 +189,6 @@ export type PrivateCloudsCluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmwareengine
  */
 export const PrivateCloudsCluster = Resource<PrivateCloudsCluster>(

@@ -166,7 +166,6 @@ export type Environment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const Environment = Resource<Environment>("GCP.Apigee.Environment");

@@ -158,7 +158,6 @@ export type DnsAuthorization = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category CertificateManager
  */
 export const DnsAuthorization = Resource<DnsAuthorization>(

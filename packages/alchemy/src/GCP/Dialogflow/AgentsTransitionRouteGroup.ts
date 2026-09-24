@@ -149,7 +149,6 @@ export type AgentsTransitionRouteGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dialogflow
  */
 export const AgentsTransitionRouteGroup = Resource<AgentsTransitionRouteGroup>(

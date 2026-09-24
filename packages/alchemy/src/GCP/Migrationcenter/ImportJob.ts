@@ -115,7 +115,6 @@ export type ImportJob = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Migrationcenter
  */
 export const ImportJob = Resource<ImportJob>("GCP.Migrationcenter.ImportJob");

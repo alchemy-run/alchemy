@@ -181,7 +181,6 @@ export type Workflow = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workflows
  */
 export const Workflow = Resource<Workflow>("GCP.Workflows.Workflow");

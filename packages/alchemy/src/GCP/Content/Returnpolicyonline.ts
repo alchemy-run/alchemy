@@ -156,7 +156,6 @@ export type Returnpolicyonline = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const Returnpolicyonline = Resource<Returnpolicyonline>(

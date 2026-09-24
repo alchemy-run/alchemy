@@ -212,7 +212,6 @@ export type CatalogsBranchesProduct = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Retail
  */
 export const CatalogsBranchesProduct = Resource<CatalogsBranchesProduct>(

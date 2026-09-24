@@ -23,7 +23,6 @@ import type { TransferJob } from "./TransferJob.ts";
  * ```
  *
  * @binding
- * @product GCP
  * @category Storagetransfer
  */
 export interface GetGoogleServiceAccount extends Binding.Service<

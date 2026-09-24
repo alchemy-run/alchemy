@@ -107,7 +107,6 @@ export type VolumesSnapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Baremetalsolution
  */
 export const VolumesSnapshot = Resource<VolumesSnapshot>(

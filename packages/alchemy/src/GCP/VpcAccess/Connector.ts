@@ -173,7 +173,6 @@ export type Connector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category VpcAccess
  */
 export const Connector = Resource<Connector>("GCP.VpcAccess.Connector");

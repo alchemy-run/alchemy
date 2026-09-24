@@ -195,7 +195,6 @@ export type SecurityHealthAnalyticsSettingsCustomModule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const SecurityHealthAnalyticsSettingsCustomModule =

@@ -23,7 +23,6 @@ export interface GetSchemaVersionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Documentai
  */
 export interface GetSchemaVersion extends Binding.Service<

@@ -230,7 +230,6 @@ export type UnitOperation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Saasservicemgmt
  */
 export const UnitOperation = Resource<UnitOperation>(

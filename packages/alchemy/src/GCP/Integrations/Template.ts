@@ -237,7 +237,6 @@ export const defaultTemplateBundle = (): TemplateBundle => ({
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const Template = Resource<Template>("GCP.Integrations.Template");

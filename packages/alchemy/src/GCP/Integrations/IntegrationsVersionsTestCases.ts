@@ -107,7 +107,6 @@ export type IntegrationsVersionsTestCases = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const IntegrationsVersionsTestCases =

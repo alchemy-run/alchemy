@@ -118,7 +118,6 @@ export type Indexe = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datastore
  */
 export const Indexe = Resource<Indexe>("GCP.Datastore.Indexe");

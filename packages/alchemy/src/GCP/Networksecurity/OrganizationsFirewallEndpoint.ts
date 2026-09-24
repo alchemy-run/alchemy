@@ -157,7 +157,6 @@ export type OrganizationsFirewallEndpoint = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const OrganizationsFirewallEndpoint =

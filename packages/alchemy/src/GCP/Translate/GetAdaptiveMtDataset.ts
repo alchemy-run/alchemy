@@ -23,7 +23,6 @@ export interface GetAdaptiveMtDatasetRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Translate
  */
 export interface GetAdaptiveMtDataset extends Binding.Service<

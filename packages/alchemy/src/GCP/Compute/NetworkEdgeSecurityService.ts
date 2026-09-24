@@ -106,7 +106,6 @@ export type NetworkEdgeSecurityService = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const NetworkEdgeSecurityService = Resource<NetworkEdgeSecurityService>(

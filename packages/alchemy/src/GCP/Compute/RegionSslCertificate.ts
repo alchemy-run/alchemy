@@ -156,7 +156,6 @@ export type RegionSslCertificate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionSslCertificate = Resource<RegionSslCertificate>(

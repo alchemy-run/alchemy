@@ -153,7 +153,6 @@ export type CatalogsModel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Retail
  */
 export const CatalogsModel = Resource<CatalogsModel>(

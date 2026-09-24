@@ -285,7 +285,6 @@ export type BillingBudget = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Billingbudgets
  */
 export const BillingBudget = Resource<BillingBudget>(

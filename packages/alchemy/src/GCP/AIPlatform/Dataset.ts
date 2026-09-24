@@ -176,7 +176,6 @@ export type Dataset = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Dataset = Resource<Dataset>("GCP.AIPlatform.Dataset");

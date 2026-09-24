@@ -168,7 +168,6 @@ export type Attribute = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Attribute = Resource<Attribute>("GCP.Apihub.Attribute");

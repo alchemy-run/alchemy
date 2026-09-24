@@ -157,7 +157,6 @@ export type ApimServiceExtension = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const ApimServiceExtension = Resource<ApimServiceExtension>(

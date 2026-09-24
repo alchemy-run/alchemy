@@ -119,7 +119,6 @@ export type BuyersClientsUser = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Authorizedbuyersmarketplace
  */
 export const BuyersClientsUser = Resource<BuyersClientsUser>(

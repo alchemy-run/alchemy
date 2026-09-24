@@ -303,7 +303,6 @@ export type ClustersNodePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Container
  */
 export const ClustersNodePool = Resource<ClustersNodePool>(

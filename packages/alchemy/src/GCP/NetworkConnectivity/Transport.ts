@@ -220,7 +220,6 @@ export type Transport = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const Transport = Resource<Transport>(

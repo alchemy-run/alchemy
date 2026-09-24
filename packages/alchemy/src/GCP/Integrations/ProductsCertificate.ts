@@ -121,7 +121,6 @@ export type ProductsCertificate = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Integrations
  */
 export const ProductsCertificate = Resource<ProductsCertificate>(

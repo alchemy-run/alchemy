@@ -120,7 +120,6 @@ export type ApisDeploymentsArtifact = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigeeregistry
  */
 export const ApisDeploymentsArtifact = Resource<ApisDeploymentsArtifact>(

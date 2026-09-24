@@ -32,7 +32,6 @@ export interface RecognizeRequest {
  * ```
  *
  * @binding
- * @product GCP
  * @category Speech
  */
 export interface Recognize extends Binding.Service<

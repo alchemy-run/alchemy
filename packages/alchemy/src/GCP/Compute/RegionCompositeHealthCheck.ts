@@ -117,7 +117,6 @@ export type RegionCompositeHealthCheck = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionCompositeHealthCheck = Resource<RegionCompositeHealthCheck>(

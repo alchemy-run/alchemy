@@ -191,7 +191,6 @@ export type CatalogsDatabasesTable = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Biglake
  */
 export const CatalogsDatabasesTable = Resource<CatalogsDatabasesTable>(

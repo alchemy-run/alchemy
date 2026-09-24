@@ -24,7 +24,6 @@ export interface RunTransferJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Storagetransfer
  */
 export interface RunTransferJob extends Binding.Service<

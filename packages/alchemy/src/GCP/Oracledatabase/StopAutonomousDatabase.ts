@@ -20,7 +20,6 @@ export interface StopAutonomousDatabaseRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Oracledatabase
  */
 export interface StopAutonomousDatabase extends Binding.Service<

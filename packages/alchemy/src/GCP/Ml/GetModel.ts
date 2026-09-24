@@ -23,7 +23,6 @@ export interface GetModelRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Ml
  */
 export interface GetModel extends Binding.Service<

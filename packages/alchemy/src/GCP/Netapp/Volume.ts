@@ -362,7 +362,6 @@ export type Volume = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const Volume = Resource<Volume>("GCP.Netapp.Volume");

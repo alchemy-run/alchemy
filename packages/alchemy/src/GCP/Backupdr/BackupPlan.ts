@@ -284,7 +284,6 @@ export type BackupPlan = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Backupdr
  */
 export const BackupPlan = Resource<BackupPlan>("GCP.Backupdr.BackupPlan");

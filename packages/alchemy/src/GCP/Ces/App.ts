@@ -197,7 +197,6 @@ export type App = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Ces
  */
 export const App = Resource<App>("GCP.Ces.App");

@@ -194,7 +194,6 @@ export type CoursesPostsAddOnAttachment = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesPostsAddOnAttachment =

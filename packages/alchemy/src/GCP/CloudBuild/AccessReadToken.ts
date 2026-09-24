@@ -24,7 +24,6 @@ export interface AccessReadTokenRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category CloudBuild
  */
 export interface AccessReadToken extends Binding.Service<

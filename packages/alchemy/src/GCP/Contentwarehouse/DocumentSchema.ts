@@ -121,7 +121,6 @@ export type DocumentSchema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contentwarehouse
  */
 export const DocumentSchema = Resource<DocumentSchema>(

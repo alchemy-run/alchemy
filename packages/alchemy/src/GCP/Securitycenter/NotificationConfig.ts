@@ -109,7 +109,6 @@ export type NotificationConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Securitycenter
  */
 export const NotificationConfig = Resource<NotificationConfig>(

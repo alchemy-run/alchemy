@@ -211,7 +211,6 @@ export type Note = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Containeranalysis
  */
 export const Note = Resource<Note>("GCP.Containeranalysis.Note");

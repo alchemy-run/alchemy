@@ -90,7 +90,6 @@ export type PlatformsSite = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Adsenseplatform
  */
 export const PlatformsSite = Resource<PlatformsSite>(

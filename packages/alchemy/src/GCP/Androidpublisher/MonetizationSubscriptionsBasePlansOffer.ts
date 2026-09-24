@@ -181,7 +181,6 @@ export type MonetizationSubscriptionsBasePlansOffer = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Androidpublisher
  */
 export const MonetizationSubscriptionsBasePlansOffer =

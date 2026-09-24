@@ -154,7 +154,6 @@ export type VolumesQuotaRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Netapp
  */
 export const VolumesQuotaRule = Resource<VolumesQuotaRule>(

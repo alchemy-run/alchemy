@@ -93,7 +93,6 @@ export type EnvironmentsTraceConfigOverride = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const EnvironmentsTraceConfigOverride =

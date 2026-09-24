@@ -122,7 +122,6 @@ export type GlobalVmExtensionPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const GlobalVmExtensionPolicy = Resource<GlobalVmExtensionPolicy>(

@@ -123,7 +123,6 @@ export type SourcesDatacenterConnector = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Vmmigration
  */
 export const SourcesDatacenterConnector = Resource<SourcesDatacenterConnector>(

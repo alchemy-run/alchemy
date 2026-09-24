@@ -103,7 +103,6 @@ export type Release = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebaserules
  */
 export const Release = Resource<Release>("GCP.Firebaserules.Release");

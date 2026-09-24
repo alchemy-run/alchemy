@@ -284,7 +284,6 @@ export type InternalRange = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const InternalRange = Resource<InternalRange>(

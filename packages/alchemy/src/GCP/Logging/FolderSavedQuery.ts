@@ -150,7 +150,6 @@ export type FolderSavedQuery = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderSavedQuery = Resource<FolderSavedQuery>(

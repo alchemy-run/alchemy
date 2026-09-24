@@ -138,7 +138,6 @@ export type ProcessesRun = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Datalineage
  */
 export const ProcessesRun = Resource<ProcessesRun>(

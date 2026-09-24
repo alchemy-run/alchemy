@@ -194,7 +194,6 @@ export type FolderSink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const FolderSink = Resource<FolderSink>("GCP.Logging.FolderSink");

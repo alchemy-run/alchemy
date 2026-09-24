@@ -351,7 +351,6 @@ export type JobShape =
  * ```
  *
  * @resource
- * @product GCP
  * @category Run
  */
 export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =

@@ -129,7 +129,6 @@ export type Calendar = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Calendar
  */
 export const Calendar = Resource<Calendar>("GCP.Calendar.Calendar");

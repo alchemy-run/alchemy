@@ -358,7 +358,6 @@ export type CertificateAuthority = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category PrivateCA
  */
 export const CertificateAuthority = Resource<CertificateAuthority>(

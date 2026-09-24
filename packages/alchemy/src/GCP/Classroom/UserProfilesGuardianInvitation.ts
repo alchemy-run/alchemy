@@ -71,7 +71,6 @@ export type UserProfilesGuardianInvitation = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const UserProfilesGuardianInvitation =

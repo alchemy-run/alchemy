@@ -123,7 +123,6 @@ export type FeaturestoresEntityTypesFeature = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const FeaturestoresEntityTypesFeature =

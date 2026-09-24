@@ -165,7 +165,6 @@ export type Repository = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category ArtifactRegistry
  */
 export const Repository = Resource<Repository>(

@@ -134,7 +134,6 @@ export type EntryGroupsEntryLink = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const EntryGroupsEntryLink = Resource<EntryGroupsEntryLink>(

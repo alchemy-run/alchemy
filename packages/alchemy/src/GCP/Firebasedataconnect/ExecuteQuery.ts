@@ -27,7 +27,6 @@ export interface ExecuteQueryRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Firebasedataconnect
  */
 export interface ExecuteQuery extends Binding.Service<

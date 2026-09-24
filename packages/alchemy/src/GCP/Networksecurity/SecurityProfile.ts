@@ -240,7 +240,6 @@ export type SecurityProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networksecurity
  */
 export const SecurityProfile = Resource<SecurityProfile>(

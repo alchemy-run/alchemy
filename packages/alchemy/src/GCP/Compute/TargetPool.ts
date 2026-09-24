@@ -172,7 +172,6 @@ export type TargetPool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetPool = Resource<TargetPool>("GCP.Compute.TargetPool");

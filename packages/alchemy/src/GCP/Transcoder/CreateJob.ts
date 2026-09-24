@@ -29,7 +29,6 @@ export interface CreateJobRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Transcoder
  */
 export interface CreateJob extends Binding.Service<

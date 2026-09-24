@@ -116,7 +116,6 @@ export type RegionInstantSnapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionInstantSnapshot = Resource<RegionInstantSnapshot>(

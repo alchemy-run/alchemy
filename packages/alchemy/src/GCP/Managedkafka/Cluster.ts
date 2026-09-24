@@ -217,7 +217,6 @@ export type Cluster = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Managedkafka
  */
 export const Cluster = Resource<Cluster>("GCP.Managedkafka.Cluster");

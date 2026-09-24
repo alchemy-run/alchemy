@@ -140,7 +140,6 @@ export type DevelopersAppsKey = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apigee
  */
 export const DevelopersAppsKey = Resource<DevelopersAppsKey>(

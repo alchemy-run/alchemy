@@ -114,7 +114,6 @@ export type TargetGrpcProxy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const TargetGrpcProxy = Resource<TargetGrpcProxy>(

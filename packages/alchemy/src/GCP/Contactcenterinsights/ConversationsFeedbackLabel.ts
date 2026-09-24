@@ -117,7 +117,6 @@ export type ConversationsFeedbackLabel = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const ConversationsFeedbackLabel = Resource<ConversationsFeedbackLabel>(

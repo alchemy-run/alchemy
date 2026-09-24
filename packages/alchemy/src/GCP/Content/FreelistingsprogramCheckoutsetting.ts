@@ -79,7 +79,6 @@ export type FreelistingsprogramCheckoutsetting = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Content
  */
 export const FreelistingsprogramCheckoutsetting =

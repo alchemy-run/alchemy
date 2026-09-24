@@ -150,7 +150,6 @@ export type GlobalNetworkEndpointGroup = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const GlobalNetworkEndpointGroup = Resource<GlobalNetworkEndpointGroup>(

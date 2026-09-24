@@ -233,7 +233,6 @@ export type OrganizationsVpcFlowLogsConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkmanagement
  */
 export const OrganizationsVpcFlowLogsConfig =

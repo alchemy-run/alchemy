@@ -141,7 +141,6 @@ export type Study = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const Study = Resource<Study>("GCP.AIPlatform.Study");

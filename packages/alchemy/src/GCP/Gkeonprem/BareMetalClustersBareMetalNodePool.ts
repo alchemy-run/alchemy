@@ -179,7 +179,6 @@ export type BareMetalClustersBareMetalNodePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gkeonprem
  */
 export const BareMetalClustersBareMetalNodePool =

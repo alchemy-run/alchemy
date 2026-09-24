@@ -126,7 +126,6 @@ export type AclPolicy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Redis
  */
 export const AclPolicy = Resource<AclPolicy>("GCP.Redis.AclPolicy");

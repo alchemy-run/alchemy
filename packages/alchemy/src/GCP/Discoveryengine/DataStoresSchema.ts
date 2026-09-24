@@ -109,7 +109,6 @@ export type DataStoresSchema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStoresSchema = Resource<DataStoresSchema>(

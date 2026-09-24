@@ -104,7 +104,6 @@ export type ObservationSource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apim
  */
 export const ObservationSource = Resource<ObservationSource>(

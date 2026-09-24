@@ -145,7 +145,6 @@ export type InstancesSnapshot = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Filestore
  */
 export const InstancesSnapshot = Resource<InstancesSnapshot>(

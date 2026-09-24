@@ -161,7 +161,6 @@ export type DeploymentResourcePool = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category AIPlatform
  */
 export const DeploymentResourcePool = Resource<DeploymentResourcePool>(

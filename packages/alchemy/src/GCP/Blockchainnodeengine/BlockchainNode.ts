@@ -274,7 +274,6 @@ export type BlockchainNode = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Blockchainnodeengine
  */
 export const BlockchainNode = Resource<BlockchainNode>(

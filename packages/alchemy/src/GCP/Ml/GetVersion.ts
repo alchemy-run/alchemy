@@ -23,7 +23,6 @@ export interface GetVersionRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Ml
  */
 export interface GetVersion extends Binding.Service<

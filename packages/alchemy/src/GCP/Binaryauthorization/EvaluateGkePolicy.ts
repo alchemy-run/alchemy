@@ -31,7 +31,6 @@ export interface EvaluateGkePolicyRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Binaryauthorization
  */
 export interface EvaluateGkePolicy extends Binding.Service<

@@ -219,7 +219,6 @@ export type VpcFlowLogsConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Networkmanagement
  */
 export const VpcFlowLogsConfig = Resource<VpcFlowLogsConfig>(

@@ -127,7 +127,6 @@ export type Dependency = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const Dependency = Resource<Dependency>("GCP.Apihub.Dependency");

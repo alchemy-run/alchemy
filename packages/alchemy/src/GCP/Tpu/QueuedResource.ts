@@ -200,7 +200,6 @@ export type QueuedResource = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Tpu
  */
 export const QueuedResource = Resource<QueuedResource>(

@@ -138,7 +138,6 @@ export type TasksPushNotificationConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Workspaceevents
  */
 export const TasksPushNotificationConfig =

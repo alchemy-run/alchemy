@@ -155,7 +155,6 @@ export type OrganizationsLocationsGlobalPolicyOrchestrator = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Osconfig
  */
 export const OrganizationsLocationsGlobalPolicyOrchestrator =

@@ -120,7 +120,6 @@ export type UsersSettingsSendAsSmimeInfo = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Gmail
  */
 export const UsersSettingsSendAsSmimeInfo =

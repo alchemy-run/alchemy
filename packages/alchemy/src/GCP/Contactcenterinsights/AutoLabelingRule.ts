@@ -139,7 +139,6 @@ export type AutoLabelingRule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Contactcenterinsights
  */
 export const AutoLabelingRule = Resource<AutoLabelingRule>(

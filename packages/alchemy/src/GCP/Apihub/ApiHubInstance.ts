@@ -148,7 +148,6 @@ export type ApiHubInstance = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Apihub
  */
 export const ApiHubInstance = Resource<ApiHubInstance>(

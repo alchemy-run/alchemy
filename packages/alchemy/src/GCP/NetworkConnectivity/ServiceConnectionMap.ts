@@ -181,7 +181,6 @@ export type ServiceConnectionMap = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category NetworkConnectivity
  */
 export const ServiceConnectionMap = Resource<ServiceConnectionMap>(

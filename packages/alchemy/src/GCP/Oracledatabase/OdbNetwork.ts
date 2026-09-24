@@ -117,7 +117,6 @@ export type OdbNetwork = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Oracledatabase
  */
 export const OdbNetwork = Resource<OdbNetwork>("GCP.Oracledatabase.OdbNetwork");

@@ -146,7 +146,6 @@ export type CoursesCourseWorkMaterial = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Classroom
  */
 export const CoursesCourseWorkMaterial = Resource<CoursesCourseWorkMaterial>(

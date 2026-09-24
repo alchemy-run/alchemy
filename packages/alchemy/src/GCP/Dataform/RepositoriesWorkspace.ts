@@ -99,7 +99,6 @@ export type RepositoriesWorkspace = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataform
  */
 export const RepositoriesWorkspace = Resource<RepositoriesWorkspace>(

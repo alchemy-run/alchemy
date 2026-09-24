@@ -179,7 +179,6 @@ export type LocationsBucket = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Logging
  */
 export const LocationsBucket = Resource<LocationsBucket>(

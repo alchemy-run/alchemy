@@ -131,7 +131,6 @@ export type Lake = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Dataplex
  */
 export const Lake = Resource<Lake>("GCP.Dataplex.Lake");

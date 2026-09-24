@@ -109,7 +109,6 @@ export type Schema = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Documentai
  */
 export const Schema = Resource<Schema>("GCP.Documentai.Schema");

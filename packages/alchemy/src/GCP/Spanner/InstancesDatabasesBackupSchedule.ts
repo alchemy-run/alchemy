@@ -161,7 +161,6 @@ export type InstancesDatabasesBackupSchedule = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Spanner
  */
 export const InstancesDatabasesBackupSchedule =

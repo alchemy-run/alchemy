@@ -144,7 +144,6 @@ export type AppProfile = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Bigtable
  */
 export const AppProfile = Resource<AppProfile>("GCP.Bigtable.AppProfile");

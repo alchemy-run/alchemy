@@ -134,7 +134,6 @@ export type Service = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Firebasedataconnect
  */
 export const Service = Resource<Service>("GCP.Firebasedataconnect.Service");

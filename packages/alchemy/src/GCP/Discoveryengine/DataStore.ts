@@ -160,7 +160,6 @@ export type DataStore = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Discoveryengine
  */
 export const DataStore = Resource<DataStore>("GCP.Discoveryengine.DataStore");

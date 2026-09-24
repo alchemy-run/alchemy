@@ -31,7 +31,6 @@ export interface LookupRequest extends Omit<
  * ```
  *
  * @binding
- * @product GCP
  * @category Datastore
  */
 export interface Lookup extends Binding.Service<

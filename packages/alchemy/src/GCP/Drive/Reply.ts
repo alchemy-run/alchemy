@@ -105,7 +105,6 @@ export type Reply = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Drive
  */
 export const Reply = Resource<Reply>("GCP.Drive.Reply");

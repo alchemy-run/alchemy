@@ -147,7 +147,6 @@ export type ParametersVersion = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Parametermanager
  */
 export const ParametersVersion = Resource<ParametersVersion>(

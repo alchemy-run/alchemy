@@ -255,7 +255,6 @@ export type BiddersPretargetingConfig = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Realtimebidding
  */
 export const BiddersPretargetingConfig = Resource<BiddersPretargetingConfig>(

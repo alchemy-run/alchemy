@@ -133,7 +133,6 @@ export type RegionTargetHttpProxy = Resource<
  * ```
  *
  * @resource
- * @product GCP
  * @category Compute
  */
 export const RegionTargetHttpProxy = Resource<RegionTargetHttpProxy>(
