@@ -5,7 +5,7 @@ import { brand } from "../theme.ts";
 import { TONE } from "./draw.tsx";
 
 /** Vertical space per requirement. */
-export const REQ_ROW = 92;
+export const REQ_ROW = 74;
 
 const STYLE = {
   open: { color: TONE.neutral, icon: "○", border: "rgba(201, 193, 174, 0.45)" },
@@ -22,12 +22,12 @@ const Row = ({ item }: { item: ReqItem }) => {
           display: "flex",
           alignItems: "center",
           gap: 12,
-          padding: "8px 16px",
+          padding: "7px 14px",
           border: `2px solid ${s.border}`,
           borderRadius: 10,
           background: "rgba(0, 0, 0, 0.25)",
           fontFamily: mono,
-          fontSize: 26,
+          fontSize: 22,
           color: brand.fg,
           whiteSpace: "nowrap",
         }}
@@ -36,7 +36,7 @@ const Row = ({ item }: { item: ReqItem }) => {
         {item.name}
       </div>
       {item.note ? (
-        <div style={{ fontFamily: sans, fontSize: 20, lineHeight: 1.35, color: brand.fgMuted, whiteSpace: "pre" }}>{item.note}</div>
+        <div style={{ fontFamily: sans, fontSize: 18, lineHeight: 1.35, color: brand.fgMuted, whiteSpace: "pre" }}>{item.note}</div>
       ) : null}
     </div>
   );
@@ -88,7 +88,7 @@ export const ReqView = ({
             left: x,
             top,
             fontFamily: mono,
-            fontSize: 26,
+            fontSize: 22,
             fontStyle: "italic",
             color: brand.fgMuted,
             opacity: prev && prev.items.length === 0 ? 1 : p,

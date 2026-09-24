@@ -356,13 +356,15 @@ const deleter = (type: string) => `function deleter(remove: (id: string) => ${ty
 
 /** The Worker's requirements, listed beside its code. */
 const REQ_LABEL = "Req · what it needs";
-const PROVIDERS = (note: string): ReqItem => ({ name: "Providers", note });
-const READ: ReqItem = { name: "ReadBucket", note: "to read it at runtime" };
-const WRITE: ReqItem = { name: "WriteQueue", note: "to send at runtime" };
+const BUCKET: ReqItem = { name: "R2.BucketProvider", note: "to create the bucket" };
+const READ: ReqItem = { name: "R2.ReadBucket(Uploads)", note: "to read it at runtime" };
+const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
+const WRITE: ReqItem = { name: "Queues.WriteQueue(Jobs)", note: "to send at runtime" };
 const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
 const PROVIDED_HTTP: ReqItem[] = [
-  PROVIDERS("to create the bucket and queue"),
+  BUCKET,
   met(READ, "ReadBucketHttp\nmints a read-only API token"),
+  QUEUE,
   met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
 ];
 
@@ -609,33 +611,33 @@ export const steps: StepSpec[] = [
   api({
     title: "Declaring a bucket adds a requirement",
     snippet: "api-02-bucket.ts",
-    req: [PROVIDERS("to create the bucket")],
+    req: [BUCKET],
     notes:
-      "Declare a bucket with yield*, and Req gains Providers: something that knows how to create a bucket. The program can't create it itself.",
+      "Declare a bucket with yield*, and Req gains R2.BucketProvider: something that knows how to create a bucket. The program can't create it itself.",
   }),
   api({
     title: "Reading from it adds another",
     snippet: "api-03-read.ts",
-    req: [PROVIDERS("to create the bucket"), READ],
-    notes: "Ask to read from the bucket, and the program now also needs a ReadBucket: something that can actually read it at runtime.",
+    req: [BUCKET, READ],
+    notes: "Ask to read from the bucket, and the program now also needs R2.ReadBucket for the Uploads bucket: something that can actually read it at runtime.",
   }),
   api({
     title: "The runtime code just calls it",
     snippet: "api-04-get.ts",
-    req: [PROVIDERS("to create the bucket"), READ],
+    req: [BUCKET, READ],
     notes:
       "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction. Reading can fail, so for now orDie turns a failure into a crash.",
   }),
   api({
     title: "Sending to a queue works the same way",
     snippet: "api-05-queue.ts",
-    req: [PROVIDERS("to create the bucket and queue"), READ, WRITE],
-    notes: "A queue is the same: declare it, ask to write to it, send at runtime. Req now lists everything this program needs.",
+    req: [BUCKET, READ, QUEUE, WRITE],
+    notes: "A queue is the same: declare it and Req gains Queues.QueueProvider, ask to write to it and it gains Queues.WriteQueue for Jobs. Req now lists everything this program needs.",
   }),
   api({
     title: "Each requirement needs an implementation",
     snippet: "api-06-provide.ts",
-    req: [PROVIDERS("to create the bucket and queue"), met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding")],
+    req: [BUCKET, met(READ, "ReadBucketBinding"), QUEUE, met(WRITE, "WriteQueueBinding")],
     notes:
       "Effect.provide satisfies each one with a Layer: an implementation of the requirement. ReadBucketBinding uses Cloudflare's native R2 binding.",
   }),
@@ -643,8 +645,9 @@ export const steps: StepSpec[] = [
     title: "The implementation grants the permission too",
     snippet: "api-06-provide.ts",
     req: [
-      PROVIDERS("to create the bucket and queue"),
+      BUCKET,
       met(READ, "ReadBucketBinding\nadds a native R2 binding"),
+      QUEUE,
       met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
     ],
     notes:
@@ -697,13 +700,15 @@ export const steps: StepSpec[] = [
     req: {
       label: REQ_LABEL,
       items: [
-        { name: "Providers", state: "met", note: "the Stack, at deploy time" },
-        ...PROVIDED_HTTP.slice(1),
+        met(BUCKET, "the Stack, at deploy time"),
+        PROVIDED_HTTP[1]!,
+        met(QUEUE, "the Stack, at deploy time"),
+        PROVIDED_HTTP[3]!,
         { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" },
       ],
     },
     notes:
-      "What's left is Providers, and only the Stack provides it. The Stack runs during alchemy deploy, and it's never part of the Worker.",
+      "What's left are the providers, and only the Stack provides them. The Stack runs during alchemy deploy, and it's never part of the Worker.",
   },
   {
     kind: "code",
