@@ -767,19 +767,7 @@ test.provider(
           : yield* zeroTrust
               .syncAccessAiControlMcpServer({ accountId, id: initial.serverId })
               .pipe(
-                Effect.catchTag("UnknownCloudflareError", (error) =>
-                  Schema.is(
-                    Schema.Struct({
-                      success: Schema.Literal(false),
-                      result: Schema.Struct({
-                        status: Schema.Literal("error"),
-                        error: Schema.String,
-                      }),
-                    }),
-                  )(error.body)
-                    ? Effect.void
-                    : Effect.fail(error),
-                ),
+                Effect.catchTag("McpServerSyncFailure", () => Effect.void),
                 Effect.andThen(
                   zeroTrust.readAccessAiControlMcpServer({
                     accountId,
@@ -809,7 +797,7 @@ test.provider(
           id: initial.serverId,
         })
         .pipe(
-          Effect.catchTag("UnknownCloudflareError", (error) =>
+          Effect.catchTag("McpServerSyncFailure", (error) =>
             Effect.succeed(error.body),
           ),
         );
