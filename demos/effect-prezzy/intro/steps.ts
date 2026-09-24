@@ -378,22 +378,56 @@ const firstLine = (prefix: string) => (lines: string[]) => lines.filter((line) =
 /** One version of the Api Worker, `snippets/api-*.ts`, with its Req beside it. */
 const api = (s: {
   title: string;
-  snippet: string;
+  /** A type-checked `snippets/api-*.ts`, or inline code for an idea that was never shipped. */
+  snippet?: string;
+  code?: string;
   notes: string;
   req: ReqItem[];
+  /** Req of the runtime function, when it has its own. */
+  fetchReq?: ReqItem[];
   tints?: CodeSpec["tints"];
+  marks?: CodeSpec["marks"];
   error?: CodeSpec["error"];
 }): CodeSpec => ({
   kind: "code",
   group: "api",
   file: "src/Api.ts",
   title: s.title,
-  src: { snippet: s.snippet, regions: ["show"] },
+  src: s.snippet ? { snippet: s.snippet, regions: ["show"] } : { code: s.code! },
   tints: s.tints,
+  marks: s.marks,
   error: s.error,
-  req: { label: REQ_LABEL, items: s.req },
+  req: {
+    label: REQ_LABEL,
+    items: s.req,
+    parts: s.fetchReq ? [{ label: "fetch's Req", items: s.fetchReq }] : undefined,
+  },
   notes: s.notes,
 });
+
+// My first attempt: infer the binding from how the bucket is used, the way
+// the imaginary language did. Never shipped, so it isn't type-checked.
+const INFERRED = `const api = Effect.gen(function* () {
+  const bucket = yield* R2.Bucket("Uploads");
+  return {
+    fetch: Effect.gen(function* () {
+      const file = yield* bucket.get("hello.txt");
+      return HttpServerResponse.text("ok");
+    }),
+  };
+});`;
+const INFERRED_DEV = `const api = Effect.gen(function* () {
+  const bucket = yield* R2.Bucket("Uploads");
+  const logs = dev ? yield* R2.Bucket("Logs") : undefined;
+  return {
+    fetch: Effect.gen(function* () {
+      const file = yield* bucket.get("hello.txt");
+      if (logs) yield* logs.put("last-read", file);
+      return HttpServerResponse.text("ok");
+    }),
+  };
+});`;
+const GET_OBJECT: ReqItem = { name: "R2.GetObject<Uploads>", note: "inferred from bucket.get" };
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -623,17 +657,53 @@ export const steps: StepSpec[] = [
       "Declare a bucket with yield*, and Req gains R2.BucketProvider: something that knows how to create a bucket. The program can't create it itself.",
   }),
   api({
-    title: "Reading from it adds another",
-    snippet: "api-03-read.ts",
-    req: [BUCKET, READ],
-    notes: "Ask to read from the bucket, and the program now also needs R2.ReadBucket: something that can actually read it at runtime.",
+    title: "My first try inferred the binding from how it's used",
+    code: INFERRED,
+    req: [BUCKET],
+    fetchReq: [GET_OBJECT],
+    notes:
+      "My first attempt looked exactly like the imaginary language. Just call bucket.get, and the type of that call carries the requirement: R2.GetObject for the Uploads bucket. No declaration needed.",
   }),
   api({
-    title: "The runtime code just calls it",
-    snippet: "api-04-get.ts",
-    req: [BUCKET, READ],
+    title: "But that puts the requirement on fetch",
+    code: INFERRED,
+    req: [BUCKET],
+    fetchReq: [{ ...GET_OBJECT, note: "provide it here, per request,\nor hoist it out with type tricks" }],
     notes:
-      "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction.",
+      "The problem: the requirement lands on fetch, the runtime function, and the program as a whole doesn't have it. To satisfy it, you either provide a layer to fetch itself, on every request, or use type-level trickery to pluck it out of fetch and move it up to the program.",
+  }),
+  {
+    kind: "code",
+    group: "leak",
+    file: "src/Storage.ts",
+    title: "So it leaks into every interface built on top of it",
+    src: {
+      code: `interface Storage {
+  get(key: string): Effect<File, NotFound, R2.GetObject<Uploads>>;
+}`,
+    },
+    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
+    notes:
+      "Worse, it pollutes the function's type. Wrap the storage in an interface and the requirement comes along: the interface now says R2 and which bucket. So you can't hide infrastructure behind a service and swap its implementation with a Layer, because the implementation bleeds into the type.",
+  },
+  api({
+    title: "And a type can't tell which paths actually run",
+    code: INFERRED_DEV,
+    marks: [
+      { kind: "highlight", find: 'dev ? yield* R2.Bucket("Logs") : undefined', tone: "good" },
+      { kind: "highlight", find: 'if (logs) yield* logs.put("last-read", file)', tone: "good" },
+    ],
+    req: [BUCKET],
+    fetchReq: [GET_OBJECT, { name: "R2.PutObject<Logs>", state: "bad", note: "required even when\nthere's no Logs bucket" }],
+    notes:
+      "And the last problem: the type is the union of every path through the function. Here the Logs bucket only exists in dev, but the type can't know that, so it demands PutObject for Logs in production too. Types see all possible paths, never the one that actually runs.",
+  }),
+  api({
+    title: "So the binding is declared in construction instead",
+    snippet: "api-04-get.ts",
+    req: [BUCKET, { ...READ, note: "declared in construction" }],
+    notes:
+      "So the binding moved to construction. R2.ReadBucket(bucket) is a declaration that runs when the program is built, which means it can be conditional: only declare the Logs binding in dev. It puts the requirement on the program, where it belongs, and fetch just calls the client it returned. That's the one difference from the imaginary language: you say what you'll do with a resource, up front.",
   }),
   api({
     title: "Sending to a queue works the same way",

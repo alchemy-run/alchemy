@@ -55,6 +55,8 @@ export interface ReqItem {
 export interface ReqPanel {
   label: string;
   items: ReqItem[];
+  /** Other Effects' Req, each under its own small heading below `items`. */
+  parts?: { label: string; items: ReqItem[] }[];
 }
 
 /** A value threaded down a call chain, drawn beside the code. */

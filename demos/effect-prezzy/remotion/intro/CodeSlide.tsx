@@ -3,7 +3,7 @@ import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
 import { DrillView } from "./Drill.tsx";
-import { REQ_ROW, ReqView } from "./Req.tsx";
+import { ReqView, reqHeight } from "./Req.tsx";
 import { MiniGraphView } from "./MiniGraph.tsx";
 import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
@@ -390,7 +390,7 @@ export const CodeSlide = ({
           g={g}
           local={local}
           delay={marksStart}
-          minTop={step.req ? g.top + Math.max(1, step.req.items.length) * REQ_ROW + 20 : AREA.y}
+          minTop={step.req ? g.top + reqHeight(step.req) + 20 : AREA.y}
         />
       ) : null}
       {step.req ? (
