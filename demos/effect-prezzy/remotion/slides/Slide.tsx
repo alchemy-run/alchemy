@@ -106,7 +106,7 @@ const SectionLayout = ({ props }: SlideProps) => (
       </Enter>
     ) : null}
     <Enter delay={5}>
-      <h1 style={{ margin: "28px 0 0", fontFamily: serif, fontWeight: 600, fontSize: 120, color: brand.fg }}>
+      <h1 style={{ margin: "28px 0 0", fontFamily: serif, fontWeight: 600, fontSize: 104, color: brand.fg, maxWidth: 1600, textWrap: "balance" }}>
         {props.heading}
       </h1>
     </Enter>

@@ -332,6 +332,27 @@ const program = (): StepSpec[] => [
   }),
 ];
 
+const PUNCHCARD = `const topic = new SNS.Topic(stack, 'Topic', {
+  shape: NotificationRecord
+});
+
+new Lambda.Function(stack, 'MyFunction', {
+  depends: topic,
+}, async (event, topic) => {
+  await topic.publish(new NotificationRecord({
+    key: 'some key',
+    count: 1,
+    timestamp: new Date()
+  }));
+});`;
+
+/** Functionless, simplified: no dependency list, the body is read instead. */
+const FUNCTIONLESS = `const table = new Table(stack, "Todos");
+
+new Function(stack, "Delete", async (id: string) => {
+  await table.delete({ id });
+});`;
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -359,21 +380,7 @@ export const steps: StepSpec[] = [
     group: "punchcard",
     file: "punchcard · stack.ts",
     title: "First, Punchcard: two phases on top of the AWS CDK",
-    src: {
-      code: `const topic = new SNS.Topic(stack, 'Topic', {
-  shape: NotificationRecord
-});
-
-new Lambda.Function(stack, 'MyFunction', {
-  depends: topic,
-}, async (event, topic) => {
-  await topic.publish(new NotificationRecord({
-    key: 'some key',
-    count: 1,
-    timestamp: new Date()
-  }));
-});`,
-    },
+    src: { code: PUNCHCARD },
     tints: [
       { from: "const topic", to: "depends: topic", tone: "construct" },
       { from: "async (event", to: "}));", tone: "runtime" },
@@ -386,21 +393,7 @@ new Lambda.Function(stack, 'MyFunction', {
     group: "punchcard",
     file: "punchcard · stack.ts",
     title: "But its runtime code shipped with all of the infrastructure code",
-    src: {
-      code: `const topic = new SNS.Topic(stack, 'Topic', {
-  shape: NotificationRecord
-});
-
-new Lambda.Function(stack, 'MyFunction', {
-  depends: topic,
-}, async (event, topic) => {
-  await topic.publish(new NotificationRecord({
-    key: 'some key',
-    count: 1,
-    timestamp: new Date()
-  }));
-});`,
-    },
+    src: { code: PUNCHCARD },
     tints: [
       { from: "const topic", to: "depends: topic", tone: "construct" },
       { from: "async (event", to: "}));", tone: "runtime" },
@@ -419,48 +412,96 @@ new Lambda.Function(stack, 'MyFunction', {
   },
   {
     kind: "code",
+    group: "punchcard",
+    file: "punchcard · stack.ts",
+    title: "And every dependency had to be declared up front",
+    src: { code: PUNCHCARD },
+    tints: [
+      { from: "const topic", to: "depends: topic", tone: "construct" },
+      { from: "async (event", to: "}));", tone: "runtime" },
+    ],
+    marks: [
+      { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
+      { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
+    ],
+    notes:
+      "And every dependency had to be listed up front, in depends, and then prop-drilled into the handler as an argument. The code that uses the topic can't just reach for it.",
+  },
+  {
+    kind: "code",
     group: "functionless",
-    file: "functionless · workflow.ts",
-    title: "Then Functionless: reading the code's own AST",
-    src: {
-      code: `export default StepFunction(async (input: { todoId: string }) => {
-  await StepFunction.waitSeconds(10);
-
-  await MyDatabase.attributes.delete({
-    Key: {
-      pk: { S: "todo" },
-      sk: { S: input.todoId },
-    },
-  });
-});`,
-    },
-    marks: [{ kind: "circle", find: "MyDatabase", label: "found by walking the AST", side: "right", tone: "bad" }],
+    file: "functionless · app.ts",
+    title: "So Functionless read the function's code instead",
+    src: { code: FUNCTIONLESS },
+    notes:
+      "So the next attempt, Functionless, dropped the declarations. Just use the table inside the function, and let static analysis work out what it touches.",
+  },
+  {
+    kind: "code",
+    group: "functionless",
+    file: "functionless · app.ts",
+    title: "It peeks inside to see which resources the function uses",
+    src: { code: FUNCTIONLESS },
+    marks: [{ kind: "circle", find: "table.delete", label: "found by reading the body", side: "right", tone: "construct" }],
     panel: {
-      title: "What it took",
-      items: [
-        { title: "A compiler plugin", body: "to capture every function's AST" },
-        { title: "Bundling hacks", body: "to keep the AST around at runtime" },
-        { title: "Walking lexical scope", body: "to find the resources a function touches" },
-      ],
+      title: "Inferred",
+      items: [{ title: "IAM policy", mono: `Allow dynamodb:DeleteItem\non table Todos` }],
     },
     notes:
-      "Then Functionless: more bundling hacks, this time to make the AST available at runtime so code could walk it, including variables captured from the lexical scope, to infer bindings and permissions.",
+      "It walks the function's syntax tree, follows variables into the scope they came from, sees table.delete, and infers the DynamoDB permission. That looks like it works.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "But you can't always see inside: a function passed in",
+    src: {
+      code: `function deleter(remove: (id: string) => Promise<void>) {
+  return new Function(stack, "Delete", async (id: string) => {
+    await remove(id);
+  });
+}`,
+    },
+    marks: [{ kind: "circle", find: "remove(id)", label: "which function? could be anything", side: "right", tone: "bad" }],
+    notes:
+      "But peeking inside breaks down fast. Here the function calls remove, which was passed in. Which function is it? It depends on the caller, so reading this body tells you nothing.",
+  },
+  {
+    kind: "code",
+    group: "hidden",
+    file: "functionless · app.ts",
+    title: "Or a class that can be built with different things",
+    src: {
+      code: `class Todos {
+  constructor(private store: Store) {}
+
+  handler() {
+    return new Function(stack, "Delete", async (id: string) => {
+      await this.store.delete(id);
+    });
+  }
+}`,
+    },
+    marks: [{ kind: "circle", find: "this.store.delete", label: "a table? a bucket? depends who built it", side: "right", tone: "bad" }],
+    notes:
+      "Or a class member: this.store could be a DynamoDB table, a bucket, anything, depending on who constructed the class. The implementation isn't there to read.",
   },
   {
     kind: "slide",
     layout: "section",
-    title: "Both forced the language to do something it wasn't built for",
-    eyebrow: "The lesson",
-    heading: "A square peg in a round hole",
-    subtitle: "Don't fight your language.",
-    notes: "Both bent a language into doing something it was never designed to do.",
+    title: "Inferring permissions is really type checking",
+    eyebrow: "The realization",
+    heading: "Policy inference is type checking",
+    subtitle: "Read the signature, not the implementation.",
+    notes:
+      "That's when it clicked: inferring permissions is exactly like type checking. A type checker doesn't read the body of every function you call; it uses signatures. We need the dependencies in the signature.",
   },
 
   // Act 4: Effect is the missing piece
   {
     kind: "code",
     group: "effect",
-    title: "Then Effect came along",
+    title: "Effect already has that signature",
     src: { code: "Effect<A, Err, Req>" },
     fontSize: 96,
     marks: [
@@ -468,12 +509,12 @@ new Lambda.Function(stack, 'MyFunction', {
       { kind: "underline", find: "Err", label: "how it fails", side: "below", tone: "neutral" },
       { kind: "circle", find: "Req", label: "what it needs", side: "above", tone: "construct" },
     ],
-    notes: "Effect is what unlocked the path forward. Look at Effect's type: success, errors, and the requirements channel.",
+    notes: "And Effect already has it. Look at Effect's type: success, errors, and the requirements channel.",
   },
   {
     kind: "code",
     group: "effect",
-    title: "Its Req type says what a function needs from the outside world",
+    title: "Req is what a function needs from the outside world",
     src: {
       code: `// what goes in, and what comes out
 function get(key: string): Promise<Buffer>
@@ -483,33 +524,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     },
     marks: [{ kind: "circle", find: { text: "GetObject", nth: 1 }, label: "Req", side: "below", tone: "construct" }],
     notes:
-      "A function signature usually captures its input and output. The Req channel captures something else: the function's external dependencies.",
-  },
-  {
-    kind: "code",
-    group: "peek",
-    title: "Without it, a tool would have to look inside every function",
-    src: {
-      code: `function get(key: string): Promise<Buffer> {
-  return s3.getObject({ Bucket: BUCKET_NAME, Key: key })
-}`,
-    },
-    marks: [{ kind: "box", find: "return s3.getObject({ Bucket: BUCKET_NAME, Key: key })", label: "hidden in the body", side: "below", tone: "bad" }],
-    notes:
-      "When you build static analysis to infer bindings, the first wall is that you have to peek inside a function to see what it accesses. That breaks encapsulation.",
-  },
-  {
-    kind: "code",
-    group: "peek",
-    title: "With it, the dependency is right there in the type",
-    src: {
-      code: `function get(key: string): Effect<Buffer, NoSuchKey, GetObject> {
-  return getObject({ Key: key })
-}`,
-    },
-    marks: [{ kind: "circle", find: "GetObject", label: "now it's in the signature", side: "below", tone: "good" }],
-    notes:
-      "Type systems have the answer: instead of peeking inside, lift the property into the type signature. That's exactly what the Req channel does.",
+      "A function signature usually captures its input and output. The Req channel captures something else: the function's external dependencies. No peeking inside required: it's in the type, and the type checker carries it through higher-order functions and classes for us.",
   },
   {
     kind: "board",
