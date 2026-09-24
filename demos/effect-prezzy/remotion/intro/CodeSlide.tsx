@@ -464,18 +464,24 @@ export const CodeSlide = ({
         <div
           style={{
             position: "absolute",
-            right: 1920 - (AREA.x + AREA.width),
-            bottom: 1080 - (AREA.y + AREA.height) + 10,
+            right: 1920 - (AREA.x + AREA.width) + 10,
+            bottom: 1080 - (AREA.y + AREA.height) + 40,
             fontFamily: hand,
             fontWeight: 700,
-            fontSize: 44,
-            color: TONE[step.aside.tone ?? "neutral"],
-            transform: `rotate(-3deg) translateY(${(1 - asideIn) * 8}px)`,
+            fontSize: 84,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+            color: TONE[step.aside.tone ?? "construct"],
+            textShadow: "0 0 24px rgba(0, 0, 0, 0.6)",
+            transform: `rotate(-5deg) scale(${0.85 + asideIn * 0.15})`,
             transformOrigin: "right bottom",
             opacity: asideIn,
           }}
         >
           {step.aside.text}
+          <svg width="100%" height={24} viewBox="0 0 600 24" preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
+            {stroke(underlinePath(0, 10, 600, 11), TONE[step.aside.tone ?? "construct"], drawProgress(local, 10, 8), 5)}
+          </svg>
         </div>
       ) : null}
       {step.drill ? (

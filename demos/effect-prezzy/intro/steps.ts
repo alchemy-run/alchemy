@@ -1167,7 +1167,7 @@ export const steps: StepSpec[] = [
       met(WRITE_LOGS, "WriteBucketBinding\nno permission in prod"),
       WORKER,
     ],
-    aside: { text: "usually, pragmatism beats purity", tone: "neutral" },
+    aside: { text: "usually, pragmatism beats purity" },
     notes:
       "A small trade-off: a few bytes of unused client code in production, in exchange for a program that stays plain code. Usually, pragmatism beats purity.",
   }),
