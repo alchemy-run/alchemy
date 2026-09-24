@@ -452,10 +452,21 @@ const api = Effect.gen(function* () {
     }),
   };
 }).pipe(Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)]));`;
+const HOIST_TYPE = `type Hoisted<A> =
+  A extends { fetch: Effect<any, any, infer R> } ? R : never;`;
+const INFERRED_DEV_1 = INFERRED_DEV.replace('\n      if (logs) yield* logs.put("last-read", file);', "").replace(
+  "Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)])",
+  "Effect.provide(R2.ReadBucket(Uploads))",
+);
+const INFERRED_DEV_2 = INFERRED_DEV.replace(
+  "Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)])",
+  "Effect.provide(R2.ReadBucket(Uploads))",
+);
+const PUT_LOGS: ReqItem = { name: "R2.PutObject<Logs>", note: "hoisted out of fetch's type" };
 const GET_OBJECT: ReqItem = { name: "R2.GetObject<Uploads>", note: "inferred from bucket.get" };
 const GET_OBJECT_HOISTED = met(
   { name: "R2.GetObject<Uploads>" },
-  "R2.ReadBucket(Uploads)\nhoisted out of fetch",
+  "R2.ReadBucket(Uploads)\nhoisted out of fetch's type",
 );
 
 // The last problem: a service's interface can't hide which implementation it has.
@@ -720,10 +731,38 @@ export const steps: StepSpec[] = [
     code: INFERRED_HOISTED,
     req: [BUCKET, GET_OBJECT_HOISTED],
     notes:
-      "Where we actually want it is on the outer Effect, the construction phase. To get there, the bucket moves out to module scope so the layer can name it, and type-level trickery plucks the requirement out of fetch and onto the outer Effect, where Effect.provide(R2.ReadBucket(Uploads)) satisfies it.",
+      "Where we actually want it is on the outer Effect, the construction phase. So the bucket moves out to module scope, where the layer can name it, and Effect.provide(R2.ReadBucket(Uploads)) goes on the outer Effect.",
   }),
   api({
-    title: "But a Layer has to cover every path the code might take",
+    title: "But it's only found by digging into fetch's type",
+    code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
+    marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
+    req: [BUCKET, GET_OBJECT_HOISTED],
+    notes:
+      "But the outer Effect doesn't need R2.GetObject. Only fetch does. The only way construction learns about it is type magic: dig into the return type of the Effect, find fetch, infer its requirements, and hoist them up. The requirement is discovered by analyzing the runtime function, not declared.",
+  }),
+  api({
+    title: "Now say we only want a Logs bucket in dev",
+    code: INFERRED_DEV_1,
+    req: [BUCKET, GET_OBJECT_HOISTED],
+    notes: "Now a small, realistic change. In dev only, we also want a Logs bucket. Construction is ordinary code, so that's just a conditional.",
+  }),
+  api({
+    title: "…and fetch writes to it when it's there",
+    code: INFERRED_DEV_2,
+    req: [BUCKET, GET_OBJECT_HOISTED, PUT_LOGS],
+    notes: "And fetch writes the last read to it, if it exists. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
+  }),
+  api({
+    title: "But a type can't tell that only happens in dev",
+    code: INFERRED_DEV_2,
+    marks: [{ kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" }],
+    req: [BUCKET, GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
+    notes:
+      "But the if only runs in dev, and a type can't know that. fetch's type is the union of every path through it, so R2.PutObject for Logs is required everywhere, production included. Types see every possible path, never the one that actually runs.",
+  }),
+  api({
+    title: "So the Layer has to cover every path the code might take",
     code: INFERRED_DEV,
     req: [
       BUCKET,
@@ -731,7 +770,7 @@ export const steps: StepSpec[] = [
       { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
     ],
     notes:
-      "And now the layers carry the policies, so we have to provide every policy for every path the code could take. The Logs bucket only exists in dev, but the type is the union of all paths, so it demands PutObject for Logs everywhere. Production gets the Logs bucket and its policy whether it runs that code or not.",
+      "So to compile, we provide R2.WriteBucket for Logs, in every stage. And the layers are what carry the policies, so every policy for every path gets granted, whether that path runs or not.",
   }),
   api({
     title: "…even the ones it never takes",
