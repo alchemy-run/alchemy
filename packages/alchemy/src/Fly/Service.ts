@@ -13,7 +13,12 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
-import { Platform, type Main, type PlatformProps } from "../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type MainRpc,
+  type PlatformProps,
+} from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { Input } from "../Input.ts";
 import type { Resource } from "../Resource.ts";
@@ -32,14 +37,36 @@ import type {
   MachineImageRef,
   MachineService,
 } from "./Machine.ts";
-import { hasPublicAddress, syncOwnedAppAddresses } from "./IpAssignment.ts";
 import {
+  ensureFlycastAddress,
+  hasPublicAddress,
+  syncOwnedAppAddresses,
+} from "./IpAssignment.ts";
+import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Redacted from "effect/Redacted";
+import { makeRandom } from "../Random.ts";
+import { resolveOrgSlug } from "./Environment.ts";
+import { bindingPortOf, findPortConflict, portsOfFly } from "./ports.ts";
+import { packEnvValue } from "../RuntimeContext.ts";
+import { boundTargetEnvKeys } from "./BindService.ts";
+import {
+  BINDING_PORT_ENV,
+  DEFAULT_BINDING_PORT,
+  RPC_ORG_ENV,
+  RPC_TOKEN_ENV,
+} from "./rpc.ts";
+import {
+  alchemyMetadataKeys,
   createFlyAppName,
   createFlyResourceName,
   diffMachineMetadata,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
-import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
+import type {
+  BoundTarget,
+  MountedDisk,
+  ServiceBinding,
+} from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 import {
   collectBindingState,
@@ -121,6 +148,24 @@ export interface ServiceProps extends PlatformProps {
    * @default the organization's default network, shared by every App
    */
   network?: string;
+  /**
+   * Plain-HTTP port Alchemy publishes for callers that bind this Service
+   * with {@link bindService}, when the Service publishes no plain-HTTP port
+   * of its own (a public Service's defaults are an HTTPS redirect on 80 and
+   * HTTPS on 443). Fly issues no certificate for `.flycast`, so bound
+   * callers use plain HTTP inside Fly's WireGuard-encrypted private network.
+   * Requests on this port must come from Fly's private network. Change it
+   * when the port collides with another Service in the same App.
+   *
+   * @default 7780
+   */
+  bindingPort?: number;
+  /**
+   * Caller token for bound callers. Set automatically from an
+   * `Alchemy.Random` child resource; do not pass it.
+   * @internal
+   */
+  rpcToken?: Redacted.Redacted<string>;
   /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
@@ -256,8 +301,13 @@ export type Service = Resource<
     appName: string;
     /** Whether the Service created and manages {@link appName}. */
     ownsApp?: boolean;
-    /** Private network the Service's App is on. `undefined` for the default. */
+    /**
+     * Private network the Service's Machines are on: `network`, or the
+     * shared App's network. `undefined` for the organization's default.
+     */
     network?: string;
+    /** Token bound callers send with RPC calls. */
+    rpcToken?: Redacted.Redacted<string>;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
@@ -287,11 +337,11 @@ export type Service = Resource<
      */
     endpoints: ServiceEndpoint[];
     /**
-     * Endpoint for other Apps in the organization over Fly's private
-     * network: `http://{appName}.flycast`, routed by Fly's proxy. Set when
-     * the Service owns its App and publishes a plain-HTTP port (every
-     * private Service does; a public one only when its `services` publish
-     * HTTP without `forceHttps`). `undefined` when `app` is set.
+     * Address bound callers use over Fly's private network:
+     * `http://{appName}.flycast`, with the port when it is not 80. It is
+     * the Service's first plain-HTTP port, or {@link ServiceProps.bindingPort}
+     * when it has none. Reachable only from Apps on the Service's network.
+     * `undefined` when nothing is published.
      */
     privateUrl: string | undefined;
     /** Parsed image reference from Fly. */
@@ -318,7 +368,14 @@ export const isService = (value: unknown): value is Service =>
 
 export type ServiceServices = ServerHost;
 
-export type ServiceShape = Main<ServiceServices>;
+/**
+ * What a Service's program returns: `fetch` for HTTP, `run` for a
+ * background loop, and any other methods, which bound callers invoke
+ * with {@link bindService}.
+ */
+export type ServiceShape =
+  | Main<ServiceServices>
+  | (Exclude<Main<ServiceServices>, void> & MainRpc<ServiceServices>);
 
 export type ServiceRuntimeContext = FlyHostRuntimeContext;
 
@@ -471,62 +528,73 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Private Services
  * `public: false` keeps a Service off the internet. It gets only a
- * Flycast address, publishes plain HTTP on port 80 (Fly issues no
- * certificate for `.flycast`), and `privateUrl` is
- * `http://{appName}.flycast`. Every App in the organization can reach
- * it there through Fly's proxy, so service checks, `autostart`, and
- * blue/green cutover still apply.
+ * Flycast address and publishes plain HTTP on port 80 (Fly issues no
+ * certificate for `.flycast`). `url` is `undefined`, and `privateUrl` is
+ * `http://{appName}.flycast`. Calls go through Fly's proxy, so service
+ * checks, `autostart`, and blue/green cutover still apply.
  *
- * **Example:** An internal service called by the public API
+ * Turning `public` on or off updates the Service in place. Its App and
+ * hostname stay the same.
+ *
+ * ### Call another Service
+ * A Service can return methods next to `fetch`. Another Service calls
+ * them by binding it with {@link bindService}, which returns a typed
+ * client. Binding makes the caller deploy after the Service, and only
+ * callers that bind a Service receive its caller token, so only they
+ * can call its methods.
+ *
+ * **Example:** A private Service with methods
  * ```typescript
  * export default class Users extends Fly.Service<Users>()(
  *   "Users",
  *   { main: import.meta.url, public: false },
  *   Effect.gen(function* () {
  *     return {
- *       fetch: Effect.succeed(HttpServerResponse.json([{ id: 1 }])),
+ *       list: () => Effect.succeed(USERS),
+ *       get: (id: string) =>
+ *         Effect.succeed(USERS.find((user) => user.id === id)),
  *     };
  *   }),
  * ) {}
  * ```
  *
- * Pass `privateUrl` to a caller through `env`. Declaring props as an
- * Effect that yields `Users` also makes the caller deploy after it.
- *
- * **Example:** Call a private Service
+ * **Example:** Bind it from another Service
  * ```typescript
- * export default class Api extends Fly.Service<Api>()(
- *   "Api",
+ * export default class Gateway extends Fly.Service<Gateway>()(
+ *   "Gateway",
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const users = yield* Users;
- *     return {
- *       main: import.meta.url,
- *       env: { USERS_URL: users.privateUrl },
- *     };
- *   }),
- *   Effect.gen(function* () {
+ *     const users = yield* Fly.bindService(Users);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const usersUrl = yield* Config.String("USERS_URL");
- *         const response = yield* HttpClient.get(usersUrl);
- *         return HttpServerResponse.text(yield* response.text);
+ *         return yield* HttpServerResponse.json(yield* users.list());
  *       }).pipe(Effect.orDie),
  *     };
  *   }),
  * ) {}
  * ```
  *
- * Turning `public` on or off updates the Service in place. Its App and
- * hostname stay the same.
+ * Calls use plain HTTP to `privateUrl` inside Fly's WireGuard-encrypted
+ * private network. The Service accepts a method call only with its
+ * caller token and a `Fly-Src` signature from Fly's proxy for the same
+ * organization, so the public internet can never call it. A public
+ * Service publishes an extra plain-HTTP port for bound callers,
+ * `bindingPort` (default 7780), since its own ports are an HTTPS
+ * redirect and HTTPS. `client.fetch` sends a request to the Service's
+ * `fetch` routes, and {@link bindEndpoint} targets one published port.
+ * Two Services can bind each other; declare them as tag classes and
+ * provide their `.make` layers (see the
+ * [Connect Services guide](/fly/compute/connecting-services)).
  *
  * ### Isolate Services on a private network
  * Fly's default private network spans the whole organization, so any
- * App in it can call a private Service. Put a stack's Services on their
- * own network with `network`. {@link stackNetwork} names one per stack
- * and stage. Services on the network reach each other at `privateUrl`;
- * Apps on other networks, including the default one, cannot resolve
- * them. A public Service on the network still serves `url`, which makes
- * it the stack's single entry point.
+ * App in it can reach a private Service's address. Put a stack's
+ * Services on their own network with `network`. {@link stackNetwork}
+ * names one per stack and stage. Apps on other networks, including the
+ * default one, cannot resolve them, and binding a Service on another
+ * network fails the caller's deploy with `Fly.ServiceUnreachable`
+ * before anything is created. A public Service on the network still
+ * serves `url`, which makes it the stack's single entry point.
  *
  * **Example:** Private backend behind a public gateway
  * ```typescript
@@ -540,26 +608,20 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *     };
  *   }),
  *   Effect.gen(function* () {
- *     return { fetch: Effect.succeed(HttpServerResponse.json([])) };
+ *     return { list: () => Effect.succeed(USERS) };
  *   }),
  * ) {}
  *
  * export class Gateway extends Fly.Service<Gateway>()(
  *   "Gateway",
  *   Effect.gen(function* () {
- *     const users = yield* Users;
- *     return {
- *       main: import.meta.url,
- *       network: yield* Fly.stackNetwork,
- *       env: { USERS_URL: users.privateUrl },
- *     };
+ *     return { main: import.meta.url, network: yield* Fly.stackNetwork };
  *   }),
  *   Effect.gen(function* () {
+ *     const users = yield* Fly.bindService(Users);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const usersUrl = yield* Config.String("USERS_URL");
- *         const response = yield* HttpClient.get(usersUrl);
- *         return HttpServerResponse.text(yield* response.text);
+ *         return yield* HttpServerResponse.json(yield* users.list());
  *       }).pipe(Effect.orDie),
  *     };
  *   }),
@@ -667,8 +729,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Config
  * Yield `Config` in init. Alchemy reads the value from the env of
  * whoever deploys and writes it onto the Machine, so there is no need
- * to copy it into `env`. Use `env` for values from other resources,
- * such as another Service's `privateUrl`.
+ * to copy it into `env`.
  *
  * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
@@ -926,10 +987,13 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * :::caution[One public HTTP Service per App]
- * Fly's proxy routes an App's traffic by port only. Two Services that
- * publish 443 in the same App receive each other's requests.
- * :::
+ * Fly's proxy routes an App's traffic by port only, so each Service in
+ * the App needs its own ports, including its own `bindingPort` when
+ * Alchemy adds one. Two Services on the same port and protocol fail with
+ * `Fly.ServicePortConflict` before any Machine is created: at plan time
+ * when the App already exists, otherwise when the App deploys. Grouped
+ * Services can be bound like any other; they cannot bind each other in
+ * a cycle.
  *
  * ### Blue/green deployments
  * Opt into healthy replacement Machines instead of in-place updates.
@@ -983,13 +1047,24 @@ export const Service: Platform<
   // `{ app: Site }` at module scope is an Effect. Yield it here so the
   // App is registered and `news.app` is resolved attributes at
   // reconcile (same DX as `yield* App(...)` inside Effect.gen).
-  transformProps: (_id, props) =>
+  transformProps: (id, props) =>
     Effect.gen(function* () {
       if (globalThis.__ALCHEMY_RUNTIME__) return props;
       const app = Effect.isEffect(props.app)
         ? yield* props.app as Effect.Effect<App, never, Providers>
         : props.app;
-      return { ...props, app };
+      // Only callers that bind this Service receive the token.
+      const rpcToken = yield* makeRandom(`${id}RpcToken`);
+      if (app !== undefined) {
+        // Report the ports this Service publishes so the App can reject
+        // two Services on the same port before either one is deployed.
+        yield* app.bind(id, {
+          service: id,
+          services: props.services,
+          bindingPort: props.bindingPort,
+        });
+      }
+      return { ...props, app, rpcToken } as typeof props;
     }),
 });
 
@@ -1250,23 +1325,6 @@ const mainUrlOf = (endpoints: ServiceEndpoint[]) =>
   endpoints.find((endpoint) => endpoint.url?.startsWith("https://"))?.url ??
   endpoints.find((endpoint) => endpoint.url !== undefined)?.url;
 
-/** Fly issues no certificate for `.flycast`: only plain HTTP qualifies. */
-const privateUrlOf = (
-  appName: string,
-  services: FlyMachineService[] | undefined,
-) => {
-  const http = portsOf(services).find(
-    (entry) =>
-      entry.port !== undefined &&
-      entry.handlers?.includes("http") &&
-      !entry.handlers.includes("tls") &&
-      entry.force_https !== true,
-  );
-  return http?.port === undefined
-    ? undefined
-    : withPort(`http://${appName}.flycast`, http.port, 80);
-};
-
 /** `public` and `network` configure the Service's own App. */
 const validateOwnership = (
   props: Partial<Pick<ServiceProps, "app" | "public" | "network">>,
@@ -1301,34 +1359,228 @@ export const stackNetwork = Effect.gen(function* () {
   return /^[a-z]/.test(name) ? name : `n-${name}`.slice(0, 63);
 });
 
-const endpointsOf = (
-  set: ReplicaSet,
-  access: { ownsApp: boolean; isPublic: boolean },
-) => {
+interface Access {
+  ownsApp: boolean;
+  isPublic: boolean;
+  network: string | undefined;
+  bindingPort: number;
+  rpcToken: Redacted.Redacted<string> | undefined;
+}
+
+/** Drop the port Alchemy added for bindings from a services list. */
+const withoutBindingPort = (
+  services: FlyMachineService[] | undefined,
+  bindingPort: number,
+) =>
+  (services ?? []).flatMap((service) => {
+    const ports = (service.ports ?? []).filter(
+      (entry) =>
+        !(
+          entry.port === bindingPort &&
+          (entry.handlers ?? []).includes("http") &&
+          !(entry.handlers ?? []).includes("tls")
+        ),
+    );
+    return ports.length === 0 ? [] : [{ ...service, ports }];
+  });
+
+const endpointsOf = (set: ReplicaSet, access: Access) => {
   if (!hasPublishedService(set.services))
     return { url: undefined, privateUrl: undefined, endpoints: [] };
   const isPublic = !access.ownsApp || access.isPublic;
+  const binding = bindingPortOf(portsOfFly(set.services), access.bindingPort);
+  const visible = binding?.added
+    ? withoutBindingPort(set.services, binding.port)
+    : set.services;
   const endpoints = endpointListOf(
     `${set.appName}.${isPublic ? "fly.dev" : "flycast"}`,
-    set.services,
+    visible,
   );
   return {
     url: isPublic ? mainUrlOf(endpoints) : undefined,
-    privateUrl: access.ownsApp
-      ? privateUrlOf(set.appName, set.services)
-      : undefined,
+    privateUrl:
+      binding === undefined
+        ? undefined
+        : withPort(`http://${set.appName}.flycast`, binding.port, 80),
     endpoints,
   };
 };
 
+/**
+ * The Service's Fly services plus the plain-HTTP port for bound callers,
+ * when none of its published ports serves plain HTTP.
+ */
+const withBindingService = (
+  services: FlyMachineService[],
+  internalPort: number,
+  bindingPort: number,
+): { services: FlyMachineService[]; added: boolean } => {
+  const binding = bindingPortOf(portsOfFly(services), bindingPort);
+  if (binding?.added !== true) return { services, added: false };
+  if (portsOfFly(services).some((entry) => entry.start === bindingPort))
+    return { services, added: true };
+  // Add the port to the first TCP service so it shares that service's
+  // internal port and health checks (blue/green requires checks on every
+  // published service).
+  const index = services.findIndex(
+    (service) => (service.protocol ?? "tcp") === "tcp",
+  );
+  if (index === -1) {
+    return {
+      added: true,
+      services: [
+        ...services,
+        {
+          protocol: "tcp",
+          internal_port: internalPort,
+          ports: [{ port: bindingPort, handlers: ["http"] }],
+        },
+      ],
+    };
+  }
+  return {
+    added: true,
+    services: services.map((service, i) =>
+      i === index
+        ? {
+            ...service,
+            ports: [
+              ...(service.ports ?? []),
+              { port: bindingPort, handlers: ["http"] },
+            ],
+          }
+        : service,
+    ),
+  };
+};
+
+/** Fly reports the organization's default network as `default`. */
+const normalizeNetwork = (network: string | undefined | null) =>
+  network === undefined ||
+  network === null ||
+  network === "" ||
+  network === "default"
+    ? undefined
+    : network;
+
+export class ServiceUnreachable extends Data.TaggedError(
+  "Fly.ServiceUnreachable",
+)<{
+  service: string;
+  target: string;
+  network: string | undefined;
+  targetNetwork: string | undefined;
+}> {
+  get message() {
+    return `Fly Service ${this.service} binds ${this.target}, but ${this.service} is on the ${this.network ?? "default"} network and ${this.target} is on the ${this.targetNetwork ?? "default"} network. Put both on the same \`network\`.`;
+  }
+}
+
+export class ServiceNotBindable extends Data.TaggedError(
+  "Fly.ServiceNotBindable",
+)<{
+  service: string;
+  target: string;
+}> {
+  get message() {
+    return `Fly Service ${this.service} binds ${this.target}, which publishes no ports (\`services: []\`), so it has no private address.`;
+  }
+}
+
+export class EndpointNotPublished extends Data.TaggedError(
+  "Fly.EndpointNotPublished",
+)<{
+  service: string;
+  target: string;
+  port: number;
+}> {
+  get message() {
+    return `Fly Service ${this.service} binds port ${this.port} of ${this.target}, which does not publish it.`;
+  }
+}
+
+/** Check every Service this one binds is reachable from its network. */
+const validateTargets = (
+  service: string,
+  network: string | undefined,
+  targets: readonly BoundTarget[],
+) =>
+  Effect.gen(function* () {
+    for (const target of targets) {
+      const targetNetwork = normalizeNetwork(target.network);
+      if (targetNetwork !== normalizeNetwork(network)) {
+        return yield* new ServiceUnreachable({
+          service,
+          target: target.service,
+          network: normalizeNetwork(network),
+          targetNetwork,
+        });
+      }
+      if (target.privateUrl === undefined) {
+        return yield* new ServiceNotBindable({
+          service,
+          target: target.service,
+        });
+      }
+      if (
+        target.port !== undefined &&
+        !(target.endpoints ?? []).some((entry) => entry.port === target.port)
+      ) {
+        return yield* new EndpointNotPublished({
+          service,
+          target: target.service,
+          port: target.port,
+        });
+      }
+    }
+  });
+
+/**
+ * Fail when a Machine outside this Service already publishes one of its
+ * ports in a shared App. Catches Machines the App's bindings do not list:
+ * other stacks, the `fly` CLI, or plain `Fly.Machine`s.
+ */
+const validateObservedPorts = (
+  appName: string,
+  fqn: string,
+  id: string,
+  services: FlyMachineService[],
+) =>
+  Effect.gen(function* () {
+    const listed = yield* machines
+      .listMachines({ app_name: appName })
+      .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed([])));
+    const others = new Map<string, FlyMachineService[] | undefined>();
+    for (const machine of listed) {
+      if (machine.state === "destroyed") continue;
+      const owner =
+        machine.config?.metadata?.[alchemyMetadataKeys.fqn] ?? machine.id ?? "";
+      if (owner === fqn || others.has(owner)) continue;
+      others.set(owner, machine.config?.services);
+    }
+    const mine = portsOfFly(services);
+    for (const [owner, theirs] of others) {
+      const conflict = findPortConflict(appName, [
+        { id, ports: mine },
+        { id: owner, ports: portsOfFly(theirs) },
+      ]);
+      if (
+        conflict !== undefined &&
+        conflict.publishers[0] !== conflict.publishers[1]
+      )
+        return yield* conflict;
+    }
+  });
+
 const toAttrs = (
   set: ReplicaSet,
   codeHash: string,
-  access: { ownsApp: boolean; isPublic: boolean; network?: string },
+  access: Access,
 ): Service["Attributes"] => ({
   appName: set.appName,
   ownsApp: access.ownsApp,
-  network: access.network,
+  network: normalizeNetwork(access.network),
+  rpcToken: access.rpcToken,
   ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
   machineId: set.machineId,
@@ -1349,6 +1601,54 @@ const machineIdsOf = (output: Service["Attributes"] | undefined) =>
   (output?.machineId !== undefined && output.machineId.length > 0
     ? [output.machineId]
     : []);
+
+/** The private network the Service's Machines join. */
+const networkOf = (props: ServiceProps) =>
+  normalizeNetwork(
+    props.app === undefined
+      ? props.network
+      : (props.app as { network?: string }).network,
+  );
+
+/**
+ * Resolve the App the Service runs in. A Service that owns its App creates
+ * it with its addresses; one placed in an App gets a Flycast address on it
+ * so bound callers can reach it.
+ */
+const ensureServiceApp = Effect.fn(function* (
+  id: string,
+  props: ServiceProps,
+  output: Service["Attributes"] | undefined,
+) {
+  yield* validateOwnership(props);
+  const ownsApp = props.app === undefined;
+  const isPublic = !ownsApp || props.public !== false;
+  if (ownsApp) {
+    const desired =
+      props.name !== undefined
+        ? sanitizeFlyAppName(props.name)
+        : output?.ownsApp === true
+          ? output.appName
+          : yield* createFlyAppName(id);
+    const app = yield* ensureApp({
+      name: desired,
+      network: props.network,
+      previousName: output?.ownsApp === true ? output.appName : undefined,
+    });
+    const appName = app.name ?? desired;
+    yield* syncOwnedAppAddresses(appName, isPublic, props.network);
+    return { appName, ownsApp, isPublic, network: props.network };
+  }
+  const appName = appNameOf(props.app) ?? output?.appName;
+  if (appName === undefined) {
+    return yield* new ServiceAppNotResolved({
+      message: "Fly.Service requires a resolved App with appName.",
+    });
+  }
+  const network = networkOf(props);
+  yield* ensureFlycastAddress(appName, network);
+  return { appName, ownsApp, isPublic, network };
+});
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -1446,7 +1746,9 @@ export const ServiceProvider = () =>
             const regionChanged =
               (news.region ?? DEFAULT_REGION) !== output.region;
             // Fly cannot move an App to another network.
-            const networkChanged = news.network !== output.network;
+            const networkChanged =
+              normalizeNetwork(news.network) !==
+              normalizeNetwork(output.network);
             if (nameChanged || regionChanged || networkChanged) {
               return {
                 action: "replace" as const,
@@ -1535,7 +1837,9 @@ export const ServiceProvider = () =>
           return toAttrs(found, output?.code.hash ?? "", {
             ownsApp,
             isPublic: ownsApp && (yield* hasPublicAddress(found.appName)),
-            network: ownsApp ? (output?.network ?? olds?.network) : undefined,
+            network: output?.network ?? (ownsApp ? olds?.network : undefined),
+            bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
+            rpcToken: output?.rpcToken,
           });
         }),
 
@@ -1543,7 +1847,13 @@ export const ServiceProvider = () =>
           const sets = yield* listReplicaSets("Fly.Service");
           // Owned Apps are also listed (and nuked) as Fly.App rows.
           return sets.map((set) =>
-            toAttrs(set, "", { ownsApp: false, isPublic: true }),
+            toAttrs(set, "", {
+              ownsApp: false,
+              isPublic: true,
+              network: undefined,
+              bindingPort: DEFAULT_BINDING_PORT,
+              rpcToken: undefined,
+            }),
           );
         }),
 
@@ -1563,32 +1873,11 @@ export const ServiceProvider = () =>
             !props.isExternal,
           );
           yield* validateOwnership(props);
-          const ownsApp = props.app === undefined;
-          const isPublic = !ownsApp || props.public !== false;
-          let appName: string | undefined;
-          if (ownsApp) {
-            const desired =
-              props.name !== undefined
-                ? sanitizeFlyAppName(props.name)
-                : output?.ownsApp === true
-                  ? output.appName
-                  : yield* createFlyAppName(id);
-            const app = yield* ensureApp({
-              name: desired,
-              network: props.network,
-              previousName:
-                output?.ownsApp === true ? output.appName : undefined,
-            });
-            appName = app.name ?? desired;
-            yield* syncOwnedAppAddresses(appName, isPublic, props.network);
-          } else {
-            appName = appNameOf(props.app) ?? output?.appName;
-          }
-          if (appName === undefined) {
-            return yield* new ServiceAppNotResolved({
-              message: "Fly.Service requires a resolved App with appName.",
-            });
-          }
+          const bound = collectBindingState(bindings ?? []);
+          // Before creating anything: every bound Service must be reachable.
+          yield* validateTargets(id, networkOf(props), bound.targets);
+          const { appName, ownsApp, isPublic, network } =
+            yield* ensureServiceApp(id, props, output);
           const name = yield* resolveMachineName(
             id,
             ownsApp ? undefined : props.name,
@@ -1597,7 +1886,7 @@ export const ServiceProvider = () =>
           const region = props.region ?? output?.region ?? DEFAULT_REGION;
           const count = resolveCount(props.count);
           const port = props.port ?? DEFAULT_PORT;
-          const bound = collectBindingState(bindings ?? []);
+          const bindingPort = props.bindingPort ?? DEFAULT_BINDING_PORT;
           const secretVersions: number[] = [];
           const redisVersion = yield* attachRedisSecrets(appName, bound.redis);
           if (redisVersion !== undefined) secretVersions.push(redisVersion);
@@ -1627,10 +1916,28 @@ export const ServiceProvider = () =>
             );
           }
           const guest = toFlyGuest(props.guest);
-          const services =
+          const published = withBindingService(
             props.services !== undefined
               ? props.services.map(toFlyService)
-              : defaultHttpServices(port, count, isPublic);
+              : defaultHttpServices(port, count, isPublic),
+            port,
+            bindingPort,
+          );
+          const services = published.services;
+          if (!ownsApp)
+            yield* validateObservedPorts(appName, fqn, id, services);
+          if (props.rpcToken !== undefined)
+            env[RPC_TOKEN_ENV] = Redacted.value(props.rpcToken);
+          for (const target of bound.targets) {
+            const keys = boundTargetEnvKeys(target.service);
+            env[keys.appName] = packEnvValue(target.appName);
+            if (target.privateUrl !== undefined)
+              env[keys.url] = packEnvValue(target.privateUrl);
+            if (target.rpcToken !== undefined)
+              env[keys.token] = packEnvValue(target.rpcToken);
+          }
+          env[RPC_ORG_ENV] = yield* resolveOrgSlug();
+          if (published.added) env[BINDING_PORT_ENV] = String(bindingPort);
           const statics = toFlyStatics(props.statics);
 
           const { imageRef, codeHash } = yield* hosted.resolveImage({
@@ -1691,7 +1998,68 @@ export const ServiceProvider = () =>
           return toAttrs(set, codeHash, {
             ownsApp,
             isPublic,
-            network: ownsApp ? props.network : undefined,
+            network,
+            bindingPort,
+            rpcToken: props.rpcToken,
+          });
+        }),
+
+        // Create the App, its addresses, and the caller token before any
+        // Machine, so two Services that bind each other can both resolve
+        // the other's private address and token.
+        precreate: Effect.fn(function* ({ id, news }) {
+          const props = news;
+          // Precreate runs before dependencies resolve. A Service placed in
+          // an App cannot see the App yet, so it has no stub to offer;
+          // cycles are supported between Services that own their App.
+          const inert =
+            props.app !== undefined ||
+            !isResolved(props.name) ||
+            !isResolved(props.network) ||
+            !isResolved(props.services) ||
+            !isResolved(props.bindingPort);
+          // No stub: a failed create then recovers through `read`, which
+          // finds the App from the persisted props.
+          if (inert) return undefined as unknown as Service["Attributes"];
+          const { appName, ownsApp, isPublic, network } =
+            yield* ensureServiceApp(id, props, undefined);
+          const port = props.port ?? DEFAULT_PORT;
+          const count = resolveCount(props.count);
+          const bindingPort = props.bindingPort ?? DEFAULT_BINDING_PORT;
+          const { services } = withBindingService(
+            props.services !== undefined
+              ? props.services.map(toFlyService)
+              : defaultHttpServices(port, count, isPublic),
+            port,
+            bindingPort,
+          );
+          const name = yield* resolveMachineName(
+            id,
+            ownsApp ? undefined : props.name,
+          );
+          const stub: ReplicaSet = {
+            appName,
+            machineId: "",
+            machineIds: [],
+            name,
+            baseName: name,
+            region: props.region ?? DEFAULT_REGION,
+            state: "created",
+            instanceId: undefined,
+            privateIp: undefined,
+            imageRef: undefined,
+            guest: undefined,
+            services,
+            count: 0,
+            mounts: [],
+            replicas: [],
+          };
+          return toAttrs(stub, "", {
+            ownsApp,
+            isPublic,
+            network,
+            bindingPort,
+            rpcToken: isResolved(props.rpcToken) ? props.rpcToken : undefined,
           });
         }),
 
@@ -1703,8 +2071,9 @@ export const ServiceProvider = () =>
           output,
           force,
         }) {
-          const appName = output.appName ?? appNameOf(olds.app);
-          if (appName === undefined) return;
+          const appName = output.appName || appNameOf(olds.app);
+          // A precreate stub that never reached its App has nothing to delete.
+          if (appName === undefined || appName.length === 0) return;
           yield* deleteReplicaSet({
             appName,
             id,

@@ -36,11 +36,41 @@ import {
   type ExtraFile,
 } from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
+import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
+import { safeHttpEffect } from "../Http.ts";
+import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
 
 export type FlyHostRuntimeContext = HostRuntimeContext;
 
-export const createFlyHostRuntimeContext = createContainerRuntimeContext;
+/**
+ * Container runtime context for Fly hosts. It also serves the program's RPC
+ * methods to bound callers (see {@link serveFlyRpc}) and boots the HTTP
+ * server for a program that exposes methods but no `fetch`.
+ */
+export const createFlyHostRuntimeContext =
+  (type: string) =>
+  (id: string): HostRuntimeContext => {
+    const base = createContainerRuntimeContext(type)(id);
+    const serveBase = base.serve;
+    const serve: HostRuntimeContext["serve"] = (handler, options) => {
+      const shape = options?.shape;
+      const methods = rpcMethodsOf(shape);
+      // `safeHttpEffect` also resolves a `fetch` given as an Effect that
+      // builds the handler.
+      const wrapped = serveFlyRpc(methods, safeHttpEffect(handler));
+      const boots =
+        shape === undefined ||
+        shape.fetch !== undefined ||
+        Object.keys(methods).length > 0;
+      return serveBase(
+        wrapped,
+        boots
+          ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } }
+          : options,
+      ) as Effect.Effect<void, never, any>;
+    };
+    return Object.assign(base, { serve });
+  };
 
 export const FLY_REGISTRY = "registry.fly.io";
 export const DEFAULT_BASE_IMAGE = "node:26-slim";
@@ -177,7 +207,10 @@ export const collectBindingState = (
   const redis: { name: string; id?: string }[] = [];
   const buckets: { name: string; id?: string }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
+  const targets: BoundTarget[] = [];
   for (const binding of active) {
+    const target = binding?.data?.target;
+    if (target !== undefined) targets.push(target);
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
@@ -220,7 +253,7 @@ export const collectBindingState = (
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres };
+  return { env, mounts, redis, buckets, postgres, targets };
 };
 
 /**

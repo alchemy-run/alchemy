@@ -431,6 +431,27 @@ export const syncOwnedAppAddresses = Effect.fn(function* (
   }
 });
 
+/**
+ * Add a Flycast address on `network` to an App a {@link Service} shares,
+ * so bound callers can reach it. Only ever adds; the address is removed
+ * with the App.
+ */
+export const ensureFlycastAddress = Effect.fn(function* (
+  appName: string,
+  network?: string,
+) {
+  const observed = yield* listAssignments(appName);
+  if (
+    observed.some(
+      (item) => inferType(item) === "private_v6" && networkOf(item) === network,
+    )
+  )
+    return;
+  yield* machines
+    .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
+    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+});
+
 export const IpAssignmentProvider = () =>
   Provider.succeed(IpAssignment, {
     stables: ["ip", "appName", "type", "region"],

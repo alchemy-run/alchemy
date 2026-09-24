@@ -27,12 +27,13 @@ the same TypeScript program.
   services, env, and mounts are all props.
 - **[Services](/fly/compute/services)** — an Effect program running
   in Machines in its own App. Public by default at `api.url`, or
-  private at `privateUrl` with `public: false`. Alchemy bundles
+  private with `public: false`. Alchemy bundles
   `main`, builds the image, and updates in place when the hash
   changes. Set `count` to scale.
-- **[Connect Services](/fly/compute/connecting-services)** — several
-  Services calling each other at `privateUrl` on a stack-scoped
-  private network (`Fly.stackNetwork`), behind one public gateway.
+- **[Connect Services](/fly/compute/connecting-services)** — Services
+  calling each other's methods with `Fly.bindService` on a
+  stack-scoped private network (`Fly.stackNetwork`), behind one public
+  gateway.
 - **[Sprites](/fly/compute/sprites)** — an Effect program in a Fly
   Sprite. Org-scoped, no parent App. Hibernates when idle. Alchemy
   writes the bundle onto the Sprite. No Docker image.
@@ -91,7 +92,7 @@ the same TypeScript program.
 | ---------------------------- | ------------------------------------------------------------------------- |
 | An HTTP API on Fly           | [Service](/fly/compute/services)                                          |
 | An internal API              | [Service](/fly/compute/services#private-services) with `public: false`   |
-| Several Services talking privately | [Connect Services](/fly/compute/connecting-services) with `Fly.stackNetwork` |
+| Several Services talking privately | [Connect Services](/fly/compute/connecting-services): `Fly.bindService` + `Fly.stackNetwork` |
 | A Vite SPA                   | [`Website.Vite`](/fly/frontend/vite)                                      |
 | An SSR site (Astro, Next, Nuxt, …) | [`Website`](/fly/frontend/websites)                                 |
 | A sandbox that can sleep     | [Sprite](/fly/compute/sprites)                                            |

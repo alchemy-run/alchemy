@@ -40,7 +40,7 @@ test(
     expect(out.ordersPrivateUrl).toMatch(/^http:\/\/.+\.flycast$/);
     expect(out.network).toBeString();
 
-    expect(yield* getJson(`${out.url}/users`)).toEqual(USERS);
+    expect((yield* getJson(`${out.url}/users`)) as unknown).toEqual(USERS);
     const orders = (yield* getJson(`${out.url}/orders`)) as Array<{
       user: { name: string };
     }>;

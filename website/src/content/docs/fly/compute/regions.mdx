@@ -61,58 +61,36 @@ on the mount.
 
 ## Several regions, one App
 
-A Service runs in one region. To serve the same program from several
-regions behind one hostname,
-[group Services in one App](/fly/compute/services#group-services-in-one-app):
-declare a `Fly.App` with a
-[`shared_v4` address](/fly/networking#addresses-for-a-shared-app) and
-give each Service `app: Site` and its own `region`. Fly's Anycast
-proxy sends a request to a nearby Machine that published the
-service. They share `{app}.fly.dev`.
+A Service runs in one region. Two Services in one App cannot publish
+the same port: the App fails with `Fly.ServicePortConflict` before any
+Machine is created (see
+[Ports in a shared App](/fly/compute/services#ports-in-a-shared-app)).
+So one hostname cannot be spread across regions with several Services.
+
+To serve one image from several regions behind one hostname, declare
+a [Machine](/fly/compute/machines) per region in the same App, with a
+[`shared_v4` address](/fly/networking#addresses-for-a-shared-app).
+Fly's Anycast proxy sends each request to a nearby Machine that
+published the service.
 
 ```typescript
-// src/app.ts
-export const Site = Fly.App("Site");
+const site = yield* Fly.App("Site");
+yield* Fly.IpAssignment("Shared", { app: site, type: "shared_v4" });
 
-export const PublicIp = Fly.IpAssignment("Shared", {
-  app: Site,
-  type: "shared_v4",
-});
+const services = [
+  {
+    protocol: "tcp",
+    internalPort: 80,
+    ports: [
+      { port: 80, handlers: ["http"], forceHttps: true },
+      { port: 443, handlers: ["tls", "http"] },
+    ],
+  },
+];
+
+yield* Fly.Machine("WebIad", { app: site, region: "iad", image: "nginx:alpine", services });
+yield* Fly.Machine("WebLhr", { app: site, region: "lhr", image: "nginx:alpine", services });
 ```
-
-Each Service is its own file:
-
-```typescript
-// src/api-iad.ts
-export default class ApiIad extends Fly.Service<ApiIad>()(
-  "ApiIad",
-  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
-    };
-  }),
-) {}
-```
-
-Same program, London:
-
-```typescript
-// src/api-lhr.ts
-export default class ApiLhr extends Fly.Service<ApiLhr>()(
-  "ApiLhr",
-  { app: Site, main: import.meta.url, region: "lhr", port: 3000 },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
-    };
-  }),
-) {}
-```
-
-Yield `PublicIp` and both Services in the Stack. Both Services
-publish the same ports on one App, so they must serve the same
-program.
 
 ## Which region is this?
 

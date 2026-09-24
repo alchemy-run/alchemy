@@ -1,13 +1,15 @@
 /**
  * Three Services connected over a private Fly network:
  *
- * - `Users` — private, answers `/` and `/{id}` (`src/users.ts`)
- * - `Orders` — private, calls Users (`src/orders.ts`)
- * - `Gateway` — the only public Service, calls both (`src/gateway.ts`)
+ * - `Users` — private, serves `list` and `get` methods (`src/users.ts`)
+ * - `Orders` — private, binds Users (`src/orders.ts`)
+ * - `Gateway` — the only public Service, binds both (`src/gateway.ts`)
  *
  * Each Service is its own Fly App. All three join `Fly.stackNetwork`, a
  * private network unique to this stack and stage, so Users and Orders are
  * unreachable from the internet and from every other App in the org.
+ * `Fly.bindService` connects them: only a Service that binds another
+ * receives its caller token, so it can call its methods.
  */
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";

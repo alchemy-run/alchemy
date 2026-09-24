@@ -11,7 +11,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
 import { resolveOrgSlug } from "./Environment.ts";
 import {
   createFlyAppName,
@@ -19,6 +19,9 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
+import type { MachineService } from "./Machine.ts";
+import { findPortConflict, portsOfProps, withBindingPort } from "./ports.ts";
+import { DEFAULT_BINDING_PORT } from "./rpc.ts";
 import type { Providers } from "./Providers.ts";
 
 export class AppDeletionAmbiguous extends Data.TaggedError(
@@ -80,9 +83,23 @@ export type App = Resource<
     /** Public `https://{appName}.fly.dev` URL. */
     url: string;
   },
-  never,
+  AppBinding,
   Providers
 >;
+
+/**
+ * Binding contract accepted by {@link App}. Each {@link Service} placed in
+ * the App (`app` prop) reports the ports it publishes, so the App can
+ * reject two Services on the same port before either one is deployed.
+ */
+export interface AppBinding {
+  /** Logical id of the Service. */
+  service: string;
+  /** The Service's `services` prop; `undefined` for the default ports. */
+  services: MachineService[] | undefined;
+  /** The Service's `bindingPort` prop. */
+  bindingPort: number | undefined;
+}
 
 /**
  * A Fly.App is a global namespace in your account. It contains Machines,
@@ -324,8 +341,10 @@ export const ensureApp = Effect.fn(function* (input: {
   if (current === undefined) {
     const orgSlug = input.orgSlug ?? (yield* resolveOrgSlug());
     // A name race surfaces as Conflict or UnprocessableEntity; the lookup
-    // below decides whether the App now exists.
-    const created = yield* machines
+    // decides whether the App now exists. Apps created at the same time on
+    // a network that does not exist yet race to create it, and the losers
+    // are rejected with "uniqueness constraint violated", so retry them.
+    const create = machines
       .createApp({
         name: input.name,
         org_slug: orgSlug,
@@ -339,18 +358,21 @@ export const ensureApp = Effect.fn(function* (input: {
         ),
       );
     // A new App can take a moment to become readable.
-    current = yield* getByName(input.name).pipe(
+    const observe = getByName(input.name).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (app) => app !== undefined,
-        times: 10,
+        times: 5,
       }),
     );
+    let rejection: string | undefined;
+    for (let attempt = 0; attempt < 5 && current === undefined; attempt++) {
+      if (attempt > 0) yield* Effect.sleep(`${attempt * 2} seconds`);
+      rejection = (yield* create)?.message;
+      current = yield* observe;
+    }
     if (current === undefined) {
-      return yield* new AppNotCreated({
-        name: input.name,
-        reason: created?.message,
-      });
+      return yield* new AppNotCreated({ name: input.name, reason: rejection });
     }
   }
   if (current === undefined) {
@@ -446,11 +468,39 @@ export const deleteApp = Effect.fn(function* (appName: string) {
     });
 });
 
+/** Fail when two Services placed in the App publish the same port. */
+const validateServicePorts = (
+  appName: string,
+  bindings: ReadonlyArray<ResourceBinding<AppBinding> & { action?: string }>,
+) => {
+  const conflict = findPortConflict(
+    appName,
+    bindings
+      .filter((binding) => binding.action !== "delete")
+      .map((binding) => ({
+        id: binding.data.service,
+        // A Service in a shared App is public: default ports are 80 and 443.
+        ports: withBindingPort(
+          portsOfProps(binding.data.services, true),
+          binding.data.bindingPort ?? DEFAULT_BINDING_PORT,
+        ),
+      })),
+  );
+  return conflict === undefined ? Effect.void : Effect.fail(conflict);
+};
+
 export const AppProvider = () =>
   Provider.succeed(App, {
     stables: ["appId", "appName", "orgSlug", "network", "internalNumericId"],
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ id, news, output, newBindings }) {
+      // At plan time, including for an App created in the same deploy.
+      if (isResolved(newBindings)) {
+        yield* validateServicePorts(
+          output?.appName ?? (isResolved(news) ? news?.name : undefined) ?? id,
+          newBindings,
+        );
+      }
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const desiredName =
@@ -486,9 +536,11 @@ export const AppProvider = () =>
 
     list: listOwnedApps,
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const props = news ?? {};
       const name = yield* resolveAppName(id, props.name, output?.appName);
+      // Before creating anything, so a conflict leaves the App untouched.
+      yield* validateServicePorts(name, bindings);
       const current = yield* ensureApp({
         name,
         orgSlug: props.orgSlug,

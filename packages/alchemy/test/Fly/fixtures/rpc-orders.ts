@@ -1,32 +1,31 @@
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
-import Users from "./users.ts";
+import RpcUsers from "./rpc-users.ts";
 
-const ORDERS = [
+export const ORDERS = [
   { id: "o1", userId: "u1", item: "keyboard" },
   { id: "o2", userId: "u2", item: "monitor" },
 ];
 
-/**
- * Private Service that calls {@link Users} through a binding. Binding
- * `Users` makes Orders deploy after it and hands Orders a typed client.
- */
-export default class Orders extends Fly.Service<Orders>()(
-  "Orders",
+/** Private Service that calls {@link RpcUsers} through a binding. */
+export default class RpcOrders extends Fly.Service<RpcOrders>()(
+  "RpcOrders",
   Effect.gen(function* () {
     return {
       main: import.meta.url,
+      region: "iad",
       public: false,
       network: yield* Fly.stackNetwork,
+      guest: { cpuKind: "shared" as const, cpus: 1, memoryMb: 256 },
     };
   }),
   Effect.gen(function* () {
-    const users = yield* Fly.bindService(Users);
+    const users = yield* Fly.bindService(RpcUsers);
     return {
-      list: () =>
+      listOrders: () =>
         Effect.forEach(ORDERS, (order) =>
           users
-            .get(order.userId)
+            .getUser(order.userId)
             .pipe(Effect.map((user) => ({ ...order, user }))),
         ),
     };

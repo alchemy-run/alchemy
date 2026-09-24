@@ -163,8 +163,7 @@ App.
 `public: false` keeps a Service off the internet. It gets only a
 free [Flycast](/fly/networking#private-services-with-flycast) address
 and publishes plain HTTP on port 80, because Fly issues no
-certificate for `.flycast`. `url` is `undefined` and `privateUrl` is
-`http://{appName}.flycast`.
+certificate for `.flycast`. `url` is `undefined`.
 
 ```typescript
 // src/users.ts
@@ -173,20 +172,48 @@ export default class Users extends Fly.Service<Users>()(
   { main: import.meta.url, public: false },
   Effect.gen(function* () {
     return {
-      fetch: Effect.succeed(HttpServerResponse.json([{ id: 1 }])),
+      list: () => Effect.succeed([{ id: "u1", name: "Ada" }]),
     };
   }),
 ) {}
 ```
 
-Fly's default private network spans the organization, so any App in
-the org reaches `Users` at `privateUrl`. Turning `public` on or off
-updates the Service in place; its App and hostname stay the same.
+Other Services call it by [binding it](#call-one-service-from-another).
+Turning `public` on or off updates the Service in place; its App and
+hostname stay the same.
+
+## The private URL
+
+`privateUrl` is where bound callers reach a Service over Fly's private
+network:
+
+- A private Service: `http://{appName}.flycast` (plain HTTP on 80).
+- A public Service: `http://{appName}.flycast:7780`. Its default ports
+  are an HTTPS redirect (80) and HTTPS (443), so Alchemy publishes an
+  extra plain-HTTP port for bound callers, `bindingPort`.
+
+`bindingPort` defaults to `7780`. It answers only requests that arrive
+over Fly's private network. Change it when it collides with another
+port, for example another Service's `bindingPort` in a
+[shared App](#group-services-in-one-app):
+
+```diff lang="typescript"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+-  { main: import.meta.url, port: 3000 },
++  { main: import.meta.url, port: 3000, bindingPort: 7781 },
+```
+
+A Service that already publishes a plain-HTTP port uses that port
+instead. `privateUrl` is `undefined` when the Service publishes
+nothing (`services: []`).
 
 ## Restrict a Service to the stack's network
 
-`network` puts the Service's App on its own private network. Only
-Apps on the same network can resolve its `privateUrl`.
+Fly's default private network spans the organization, so every App
+in the org can resolve a private Service. `network` puts the Service's
+App on its own private network instead. Only Apps on the same network
+can resolve its `privateUrl`.
 `Fly.stackNetwork` yields a network name unique to the stack and
 stage; yield it inside Effect-valued props:
 
@@ -211,51 +238,42 @@ private backend behind a public gateway.
 
 ## Call one Service from another
 
-Pass the props as an Effect to reference another Service. Yield
-`Users` inside it and put `users.privateUrl` in `env`:
+Bind a Service with `Fly.bindService` in the caller's program. The
+client has the methods the target returns (everything besides `fetch`
+and `run`), typed from its program:
 
 ```typescript
 // src/gateway.ts
-import * as Config from "effect/Config";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import Users from "./users.ts";
 
 export default class Gateway extends Fly.Service<Gateway>()(
   "Gateway",
+  { main: import.meta.url },
   Effect.gen(function* () {
-    const users = yield* Users;
-    return {
-      main: import.meta.url,
-      env: { USERS_URL: users.privateUrl },
-    };
-  }),
-  Effect.gen(function* () {
+    const users = yield* Fly.bindService(Users);
     return {
       fetch: Effect.gen(function* () {
-        const usersUrl = yield* Config.String("USERS_URL");
-        const body = yield* HttpClient.get(usersUrl).pipe(
-          Effect.flatMap((response) => response.text),
-          Effect.provide(FetchHttpClient.layer),
-        );
-        return HttpServerResponse.text(body);
+        return yield* HttpServerResponse.json(yield* users.list());
       }).pipe(Effect.orDie),
     };
   }),
 ) {}
 ```
 
-Yielding `Users` makes `Gateway` depend on it, so Alchemy deploys
-`Users` first and writes its `privateUrl` into `USERS_URL` on the
-`Gateway` Machines. At runtime `Config.String("USERS_URL")` reads it
-back.
+Binding makes `Gateway` deploy after `Users` and hands it the address
+and caller token of `Users`. Only Services that bind `Users` receive
+its token, so only they can call its methods. The caller must be on
+the same network as the target; otherwise its deploy fails with
+`Fly.ServiceUnreachable`.
 
-Requests to `privateUrl` go through Fly's proxy, so service checks,
-`autostart`, and [blue/green](/fly/compute/deployments) cutover still
-apply. A caller on a [stack network](#restrict-a-service-to-the-stacks-network)
-must join the same network. See
-[Connect Services](/fly/compute/connecting-services) for a full
-example.
+`users.fetch(HttpClientRequest.get("/path"))` sends a request to the
+target's `fetch` routes. `Fly.bindEndpoint(Users, { port: 9000 })`
+binds one other published port and returns its `host`, `port`, `url`,
+and an HTTP `client`.
+
+[Connect Services](/fly/compute/connecting-services) walks through
+several Services on a stack network, the security model, streaming
+methods, `bindEndpoint`, and two Services that bind each other.
 
 ## Fly's proxy is the load balancer
 
@@ -330,9 +348,7 @@ can be unavailable during deployment; this is not blue/green deployment.
 ## Config
 
 Yield `Config` in the constructor. Alchemy reads the value from the env of
-whoever deploys and writes it onto the Machine. Do not copy those
-values into `env`; reserve `env` for values from other resources, like
-[another Service's `privateUrl`](#call-one-service-from-another).
+whoever deploys and writes it onto the Machine.
 
 ```typescript
 import * as Config from "effect/Config";
@@ -435,24 +451,61 @@ Group Services when they need something that attaches to a `Fly.App`:
 - a [`Fly.Secret`](/fly/data/secrets) or `SecretKey` shared by several
   Services
 - a custom domain via [`Fly.Certificate`](/fly/networking#use-your-own-hostname)
-- the same program in [several regions](/fly/compute/regions#several-regions-one-app)
-  behind one hostname
 - Fly-native control of the App (`fly` CLI, dashboard settings)
 
-Alchemy manages no addresses for a Service in a shared App. Allocate
-an [`IpAssignment`](/fly/networking#addresses-for-a-shared-app) on the
-App. `url` and `endpoints` follow each Service's own ports, so
+Alchemy manages no public addresses for a Service in a shared App.
+Allocate an [`IpAssignment`](/fly/networking#addresses-for-a-shared-app)
+on the App. `url` and `endpoints` follow each Service's own ports, so
 Services in one App tell themselves apart by port: an API on 443 has
 `url` `https://{appName}.fly.dev`, and an admin UI on 8443 has
-`https://{appName}.fly.dev:8443`. `privateUrl` is `undefined`, and
-`public` and `network` do not apply (combining them with `app` fails
-with `Fly.InvalidServiceProps`).
+`https://{appName}.fly.dev:8443`. `public` and `network` do not apply
+(combining them with `app` fails with `Fly.InvalidServiceProps`).
 
-:::caution[One public HTTP Service per App]
-Fly's proxy routes an App's traffic by port only. Two Services that
-publish 443 in the same App receive each other's requests. Give
-other Services in the App `services: []`.
-:::
+### Ports in a shared App
+
+Fly's proxy routes an App's traffic by port only, so each Service in
+the App needs its own ports. When two Services publish the same port
+and protocol, the App fails with `Fly.ServicePortConflict` before any
+Machine is created: at plan time when the App already exists,
+otherwise when the App is reconciled. Each Service's deploy also checks
+the Machines already running in the App, including ones created
+outside the stack.
+
+```typescript
+class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, port: 3000 },
+  /* HTTPS on 443 */
+) {}
+
+class Admin extends Fly.Service<Admin>()(
+  "Admin",
+  {
+    app: Site,
+    main: import.meta.url,
+    port: 3000,
+    bindingPort: 7781,
+    services: [
+      { protocol: "tcp", internalPort: 3000, ports: [{ port: 8443, handlers: ["tls", "http"] }] },
+    ],
+  },
+  /* HTTPS on 8443 */
+) {}
+```
+
+The count includes `bindingPort`: two Services in one App need
+distinct `bindingPort`s. A background Service with `services: []`
+publishes nothing and never conflicts.
+
+### Bind a Service in a shared App
+
+A Service in a shared App is bindable too. Its deploy adds a Flycast
+address to the App, and its `privateUrl` is
+`http://{appName}.flycast` on its own plain-HTTP port or its
+`bindingPort`. Callers must be on the App's network. A Service in a
+shared App cannot be part of a
+[binding cycle](/fly/compute/connecting-services#two-services-that-bind-each-other);
+only Services that own their App can bind each other.
 
 ## Logs
 
@@ -462,8 +515,8 @@ Machine logs live in the Fly dashboard and `fly logs -a {appName}`.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-1) builds a Service step by step.
-[Connect Services](/fly/compute/connecting-services) connects several
-Services on a private network.
+[Connect Services](/fly/compute/connecting-services) binds several
+Services to each other on a private network.
 [Networking](/fly/networking) covers public and private Services.
 [Sprites](/fly/compute/sprites) are org-scoped sandboxes that
 hibernate — no App, no Docker image.

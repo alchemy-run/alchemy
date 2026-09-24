@@ -4,6 +4,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
@@ -14,8 +15,13 @@ import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
 import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
-import GatewayApi from "./fixtures/gateway-api.ts";
-import UsersApi, { USERS_BODY } from "./fixtures/users-api.ts";
+import { Ping, Pong } from "./fixtures/rpc-cycle.ts";
+import PingLive from "./fixtures/rpc-ping.ts";
+import PongLive from "./fixtures/rpc-pong.ts";
+import RpcGateway from "./fixtures/rpc-gateway.ts";
+import RpcOrders, { ORDERS } from "./fixtures/rpc-orders.ts";
+import RpcStranger from "./fixtures/rpc-stranger.ts";
+import RpcUsers, { USERS } from "./fixtures/rpc-users.ts";
 import SecureGateway from "./fixtures/secure-gateway.ts";
 import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
 
@@ -354,7 +360,11 @@ const getText = (url: string) =>
     Effect.flatMap((res) =>
       res.status === 200
         ? res.text
-        : Effect.fail(new Error(`${url} returned ${res.status}`)),
+        : res.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(new Error(`${url} returned ${res.status}: ${body}`)),
+            ),
+          ),
     ),
     Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 15 }),
   );
@@ -368,7 +378,8 @@ test.provider(
       const owned = yield* stack.deploy(Echo());
       expect(owned.ownsApp).toBe(true);
       expect(owned.url).toEqual(`https://${owned.appName}.fly.dev`);
-      expect(owned.privateUrl).toBeUndefined();
+      // Public Services get a plain-HTTP binding port for bound callers.
+      expect(owned.privateUrl).toEqual(`http://${owned.appName}.flycast:7780`);
       // Port 80 only redirects to HTTPS, so it is not an endpoint.
       expect(owned.endpoints).toEqual([
         {
@@ -397,7 +408,7 @@ test.provider(
       expect(moved.ownsApp).toBe(false);
       expect(moved.appName).not.toEqual(owned.appName);
       expect(moved.url).toEqual(`https://${moved.appName}.fly.dev`);
-      expect(moved.privateUrl).toBeUndefined();
+      expect(moved.privateUrl).toEqual(`http://${moved.appName}.flycast:7780`);
       expect(yield* appGone(owned.appName)).toBe(true);
 
       yield* stack.destroy();
@@ -496,32 +507,6 @@ test.provider(
 );
 
 test.provider(
-  "a public Service calls a private Service at its privateUrl",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const users = yield* UsersApi;
-          const gateway = yield* GatewayApi;
-          return { users, gateway };
-        }),
-      );
-      expect(deployed.users.url).toBeUndefined();
-      expect(deployed.users.privateUrl).toEqual(
-        `http://${deployed.users.appName}.flycast`,
-      );
-      expect(deployed.gateway.appName).not.toEqual(deployed.users.appName);
-      expect(yield* getText(deployed.gateway.url!)).toEqual(USERS_BODY);
-
-      yield* stack.destroy();
-      expect(yield* appGone(deployed.users.appName)).toBe(true);
-      expect(yield* appGone(deployed.gateway.appName)).toBe(true);
-    }).pipe(logLevel),
-  { tags: ownedTags, timeout: 400_000 },
-);
-
-test.provider(
   "Services on the stack network reach each other and nothing else reaches them",
   (stack) =>
     Effect.gen(function* () {
@@ -608,6 +593,8 @@ test.provider(
             {
               app: site,
               env: { ECHO_BODY: "admin" },
+              // The API already uses the default binding port.
+              bindingPort: 7781,
               services: [
                 {
                   protocol: "tcp",
@@ -633,7 +620,8 @@ test.provider(
       expect(admin.appName).toEqual(api.appName);
       expect(api.url).toEqual(`https://${host}`);
       expect(admin.url).toEqual(`https://${host}:8443`);
-      expect(admin.privateUrl).toBeUndefined();
+      expect(api.privateUrl).toEqual(`http://${api.appName}.flycast:7780`);
+      expect(admin.privateUrl).toEqual(`http://${api.appName}.flycast:7781`);
       expect(admin.endpoints).toEqual([
         {
           host,
@@ -660,4 +648,197 @@ test.provider(
       expect(yield* appGone(api.appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 400_000 },
+);
+
+/** POST to an RPC path from inside a Machine, printing the status line. */
+const postRpc = (caller: { appName: string; machineId: string }, url: string) =>
+  machines
+    .execMachine({
+      app_name: caller.appName,
+      machine_id: caller.machineId,
+      command: [
+        "sh",
+        "-c",
+        `wget -S -qO- -T 5 --post-data='[]' ${url}/__rpc__/listUsers 2>&1 || true`,
+      ],
+      timeout: 15,
+    })
+    .pipe(Effect.map((result) => result.stdout ?? ""));
+
+test.provider(
+  "bound Services call methods, stream, fetch, and a published endpoint",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const users = yield* RpcUsers;
+          const orders = yield* RpcOrders;
+          const gateway = yield* RpcGateway;
+          const network = yield* Fly.stackNetwork;
+          // On the stack network, but binds nothing.
+          const snoopApp = yield* Fly.App("SnoopSite", { network });
+          const snoop = yield* Fly.Machine("Snoop", {
+            app: snoopApp,
+            ...nginx,
+          });
+          return { users, orders, gateway, snoop };
+        }),
+      );
+      const { users, orders, gateway, snoop } = deployed;
+      const base = gateway.url!;
+      expect(users.url).toBeUndefined();
+      expect(users.privateUrl).toEqual(`http://${users.appName}.flycast`);
+      expect(orders.privateUrl).toEqual(`http://${orders.appName}.flycast`);
+      expect(gateway.privateUrl).toEqual(
+        `http://${gateway.appName}.flycast:7780`,
+      );
+
+      // A method call returns a typed result.
+      expect(JSON.parse(yield* getText(`${base}/users`))).toEqual(USERS);
+      // A private Service calls another through its own binding.
+      expect(JSON.parse(yield* getText(`${base}/orders`))).toEqual(
+        ORDERS.map((order) => ({
+          ...order,
+          user: USERS.find((user) => user.id === order.userId),
+        })),
+      );
+      // A streamed method delivers every element.
+      expect(JSON.parse(yield* getText(`${base}/stream`))).toEqual(USERS);
+      // `fetch` reaches the Service's HTTP routes on its private address.
+      expect(yield* getText(`${base}/http`)).toEqual("users-http 80 /hello");
+      // `bindEndpoint` reaches the admin port.
+      expect(yield* getText(`${base}/admin`)).toEqual(
+        `${users.appName}.flycast:9000 users-http 9000 /stats`,
+      );
+
+      // Same network, no binding, no token: the method is refused.
+      const snooped = yield* postRpc(snoop, users.privateUrl!);
+      expect(snooped).toContain("401");
+      expect(snooped).not.toContain("Ada");
+
+      // A public request never passes the Fly-Src check.
+      const publicCall = yield* HttpClient.post(
+        `${base}/__rpc__/listUsers`,
+      ).pipe(Effect.map((response) => response.status));
+      expect(publicCall).toEqual(401);
+
+      yield* stack.destroy();
+      for (const appName of [
+        users.appName,
+        orders.appName,
+        gateway.appName,
+        snoop.appName,
+      ])
+        expect(yield* appGone(appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 600_000 },
+);
+
+test.provider(
+  "binding a Service on another network fails before the caller is created",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const users = yield* stack.deploy(RpcUsers);
+      const failed = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* RpcUsers;
+            return yield* RpcStranger;
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failed).toMatchObject({
+        _tag: "Fly.ServiceUnreachable",
+        target: "RpcUsers",
+        network: undefined,
+        targetNetwork: users.network,
+      });
+      yield* stack.destroy();
+      expect(yield* appGone(users.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
+);
+
+test.provider(
+  "two Services that bind each other deploy and call each other",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const ping = yield* Ping;
+          const pong = yield* Pong;
+          return { ping, pong };
+        }).pipe(Effect.provide(Layer.mergeAll(PingLive, PongLive))),
+      );
+      expect(yield* getText(deployed.ping.url!)).toEqual("ping hears pong");
+      expect(yield* getText(deployed.pong.url!)).toEqual("pong hears ping");
+      yield* stack.destroy();
+      expect(yield* appGone(deployed.ping.appName)).toBe(true);
+      expect(yield* appGone(deployed.pong.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 600_000 },
+);
+
+test.provider(
+  "Services on the same port in one App are rejected before any Machine exists",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = (second: Partial<Parameters<typeof Echo>[0]>) =>
+        Effect.gen(function* () {
+          const site = yield* Fly.App("ConflictSite");
+          const first = yield* Echo({ app: site }, "ConflictFirst");
+          const other = yield* Echo({ app: site, ...second }, "ConflictSecond");
+          return { site, first, other };
+        });
+      const machinesIn = (appName: string) =>
+        machines
+          .listMachines({ app_name: appName })
+          .pipe(
+            Effect.map((listed) =>
+              listed.filter((machine) => machine.state !== "destroyed"),
+            ),
+          );
+
+      // Two new Services on the same default ports in one deploy.
+      const both = yield* stack.deploy(program({})).pipe(Effect.flip);
+      expect(both).toMatchObject({
+        _tag: "Fly.ServicePortConflict",
+        port: 80,
+      });
+
+      // One deployed Service, then a second one on its ports.
+      const first = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Fly.App("ConflictSite");
+          return yield* Echo({ app: site }, "ConflictFirst");
+        }),
+      );
+      expect(yield* machinesIn(first.appName)).toHaveLength(1);
+      const added = yield* stack.deploy(program({})).pipe(Effect.flip);
+      expect(added).toMatchObject({ _tag: "Fly.ServicePortConflict" });
+      expect(yield* machinesIn(first.appName)).toHaveLength(1);
+
+      // Distinct ports deploy.
+      const fixed = yield* stack.deploy(
+        program({
+          services: [
+            {
+              protocol: "tcp",
+              internalPort: 3000,
+              autostop: "off",
+              ports: [{ port: 8443, handlers: ["tls", "http"] }],
+            },
+          ],
+          bindingPort: 7781,
+        }),
+      );
+      expect(yield* machinesIn(fixed.site.appName)).toHaveLength(2);
+      yield* stack.destroy();
+      expect(yield* appGone(fixed.site.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 600_000 },
 );

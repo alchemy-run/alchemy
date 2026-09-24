@@ -64,14 +64,16 @@ Fly issues no TLS certificate for `.flycast`, so a private Service
 publishes plain HTTP on port 80. `url` is `undefined` and
 `privateUrl` is `http://{appName}.flycast`.
 
-Every App in the organization reaches the Service at `privateUrl`,
-including other Services in their own Apps. Pass `users.privateUrl`
-into a caller's `env` — see
+Other Services call it by binding it with `Fly.bindService`, which
+returns a typed client for its methods — see
 [Call one Service from another](/fly/compute/services#call-one-service-from-another).
-Prefer it over `{appName}.internal`: `.internal` resolves straight to
-Machines and bypasses the proxy, so it ignores service checks,
+Bound calls go to `privateUrl` through Fly's proxy, so service checks,
 `autostart`, and the traffic switch of a
-[blue/green deployment](/fly/compute/deployments).
+[blue/green deployment](/fly/compute/deployments) apply. Only Services
+that bind the target receive its caller token, and the target checks
+Fly's `Fly-Src` signature, so a method answers only bound callers on
+Fly's private network. The traffic is plain HTTP inside Fly's
+WireGuard-encrypted network.
 
 Turning `public` on or off updates the Service in place. Its App and
 hostname stay the same.
@@ -81,9 +83,10 @@ hostname stay the same.
 Fly's default private network spans the organization, so every App in
 the org can call a private Service. Set `network: yield* Fly.stackNetwork`
 on each Service to put them on a network unique to the stack and
-stage. Services on it reach each other at `privateUrl`; Apps on any
-other network, including the default one, get `bad address` for the
-`.flycast` and `.internal` names. A public Service on the network
+stage. Services on it bind each other; Apps on any other network,
+including the default one, get `bad address` for the `.flycast` and
+`.internal` names, and binding across networks fails the caller's
+deploy with `Fly.ServiceUnreachable`. A public Service on the network
 still serves `url`, so it becomes the stack's single entry point.
 [Connect Services](/fly/compute/connecting-services) walks through it.
 
@@ -151,9 +154,9 @@ export default class Worker extends Fly.Service<Worker>()(
 ) {}
 ```
 
-Other Apps in the organization call it at `http://{appName}.flycast`.
-A Service in a shared App has no `privateUrl`; build the hostname
-from the App's `appName`.
+Other Apps on the App's network reach it at `http://{appName}.flycast`.
+A Service in the App is also [bindable](/fly/compute/services#bind-a-service-in-a-shared-app):
+its deploy adds the Flycast address itself.
 
 `network` places the address on a named private network instead of the
 organization default. The network must already exist: an App created with
@@ -267,8 +270,8 @@ binding methods.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-1) deploys a public Service.
-[Connect Services](/fly/compute/connecting-services) connects private
-Services on a stack network.
+[Connect Services](/fly/compute/connecting-services) binds private
+Services to each other on a stack network.
 [Services](/fly/compute/services) covers private Services and grouping
 Services in one [App](/fly/compute/apps). See the
 [`IpAssignment`](/providers/fly/ipassignment) and

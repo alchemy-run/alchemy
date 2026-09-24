@@ -1,8 +1,5 @@
 import * as Fly from "alchemy/Fly";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Orders from "./orders.ts";
@@ -10,38 +7,31 @@ import Users from "./users.ts";
 
 /**
  * The only public Service. It joins the same network as {@link Users} and
- * {@link Orders} and forwards `/users` and `/orders` to them.
+ * {@link Orders}, binds both, and serves `/users` and `/orders`.
  */
 export default class Gateway extends Fly.Service<Gateway>()(
   "Gateway",
   Effect.gen(function* () {
-    const users = yield* Users;
-    const orders = yield* Orders;
     return {
       main: import.meta.url,
       network: yield* Fly.stackNetwork,
-      env: { USERS_URL: users.privateUrl, ORDERS_URL: orders.privateUrl },
     };
   }),
   Effect.gen(function* () {
+    const users = yield* Fly.bindService(Users);
+    const orders = yield* Fly.bindService(Orders);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://gateway").pathname;
-        const upstream =
-          path === "/users"
-            ? yield* Config.String("USERS_URL")
-            : path === "/orders"
-              ? yield* Config.String("ORDERS_URL")
-              : undefined;
-        if (upstream === undefined) {
-          return HttpServerResponse.text("try /users or /orders");
+        if (path === "/users") {
+          return yield* HttpServerResponse.json(yield* users.list());
         }
-        const body = yield* HttpClient.get(upstream).pipe(
-          Effect.flatMap((response) => response.json),
-        );
-        return yield* HttpServerResponse.json(body);
-      }).pipe(Effect.provide(FetchHttpClient.layer), Effect.orDie),
+        if (path === "/orders") {
+          return yield* HttpServerResponse.json(yield* orders.list());
+        }
+        return HttpServerResponse.text("try /users or /orders");
+      }).pipe(Effect.orDie),
     };
   }),
 ) {}
