@@ -27,8 +27,9 @@ const layout = (step: CodeStep) => {
   const longest = Math.max(...step.lines.map((l) => lineText(l).length), 1);
   const blockW = longest * cw;
   const blockH = step.lines.length * lh;
-  // With a drawing, code stays left-aligned so it grows in place.
-  const left = step.diagram ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
+  // Code sits at the same left edge on every step, so it never shifts sideways
+  // when a panel comes or goes. Only a one-line hero snippet is centred.
+  const left = step.lines.length > 1 ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
   // With a drawing the program grows over several steps: pin its first line
   // so new lines extend downward instead of pushing the code up.
   // Code starts just under the file label; short snippets sit centred in the space.
