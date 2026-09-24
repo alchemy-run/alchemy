@@ -817,10 +817,10 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "Take a Storage service that hides where files live",
+    title: "To illustrate this, let's try to implement an Effect service",
     src: { code: SERVICE },
     notes:
-      "To see it clearly, take Effect's tool for encapsulation: a service. An interface, with implementations provided as Layers. Storage gets a file by key, and says nothing about where files live. That's the whole point.",
+      "To illustrate this, let's try to implement an Effect service, Effect's tool for encapsulation. An interface, with implementations provided as Layers. Storage gets a file by key, and says nothing about where files live. That's the whole point.",
   },
   {
     kind: "code",
