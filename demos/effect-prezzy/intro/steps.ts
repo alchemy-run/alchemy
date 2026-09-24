@@ -277,7 +277,7 @@ const program = (): StepSpec[] => [
       "So far every resource was declared at the top. What if the function itself declared one? The function runs on every request, maybe thousands of times a second. Would each request get a new bucket? Who would delete them? Who would give the function permission to create them?",
   }),
   lang({
-    title: "Uh-oh. Resources would need to be known ahead of time",
+    title: "Uh-oh. Resources need to be known ahead of time",
     src: { code: SCRATCH },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
