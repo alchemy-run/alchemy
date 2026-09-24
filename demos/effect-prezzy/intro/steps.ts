@@ -906,7 +906,7 @@ export const steps: StepSpec[] = [
     notes: "Run it again and create-bucket fails, because the bucket already exists.",
   }),
   iac({
-    title: "So you check what already exists first…",
+    title: "You have to check what already exists first…",
     lang: "shellscript",
     file: "setup.sh",
     code: SCRIPT_IF,
@@ -971,7 +971,7 @@ export const steps: StepSpec[] = [
     group: "cfn",
     file: "template.yaml",
     lang: "yaml",
-    title: "That's how I started, writing templates like this",
+    title: "I started out writing CloudFormation templates like this",
     src: { code: CFN },
     notes:
       "That's how I started: writing CloudFormation templates for real apps, a bucket, a role, a Lambda function, all in YAML.",
@@ -1311,7 +1311,7 @@ export const steps: StepSpec[] = [
     notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
   }),
   api({
-    title: "Declare a bucket in construction, with yield*",
+    title: "Resources are declared in construction, with yield*",
     snippet: "api-02-bucket.ts",
     req: [],
     notes:
@@ -1335,7 +1335,7 @@ export const steps: StepSpec[] = [
       "Here's what I was after: least privilege, guaranteed by the type checker. The type lists exactly what the code touches, and the layer you provide for each requirement grants exactly that permission. If it compiles, the function can do what it uses, and nothing more.",
   }),
   api({
-    title: "Providing its layer grants exactly that permission",
+    title: "Providing a layer for it grants exactly that permission",
     code: INFERRED_ON_FETCH,
     quiet: true,
     marks: [{ kind: "underline", find: "Effect.provide(R2.ReadBucket(bucket))", label: "grants s3:GetObject", side: "right", tone: "good" }],
@@ -1363,14 +1363,14 @@ export const steps: StepSpec[] = [
       "It's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
-    title: "Moving the bucket out puts the layer on construction",
+    title: "Moving the bucket out lets the layer go on construction",
     code: INFERRED_HOISTED,
     req: [GET_OBJECT_HOISTED],
     notes:
       "Where we actually want it is on the outer Effect, the construction phase. So the bucket moves out to module scope, where the layer can name it, and Effect.provide(R2.ReadBucket(Uploads)) goes on the outer Effect. Now its policy is granted at deploy time, where it belongs.",
   }),
   api({
-    title: "But it's only found by digging into fetch's type",
+    title: "But construction only finds it by digging into fetch's type",
     code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
     marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
     req: [GET_OBJECT_HOISTED],
@@ -1393,7 +1393,7 @@ export const steps: StepSpec[] = [
       "And that becomes really clear the moment your infrastructure is conditional. Say we only want a Logs bucket in dev, and fetch writes the last read to it when it's there. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
   }),
   api({
-    title: "But we can't tell that logs.put is only required during dev",
+    title: "The types can't tell that logs.put only runs in dev",
     code: INFERRED_DEV_2,
     marks: [{ kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" }],
     req: [GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
@@ -1431,7 +1431,7 @@ export const steps: StepSpec[] = [
       "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. The very goal of this design, least privilege, is broken by the type system itself.",
   }),
   api({
-    title: "What we learned is that we've broken encapsulation",
+    title: "Worst of all, we've broken encapsulation",
     code: INFERRED_DEV,
     marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "its type now says R2, and which buckets", side: "right", tone: "bad" }],
     req: [
@@ -1454,7 +1454,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "Implementing it with R2 needs R2.GetObject<Uploads>",
+    title: "Its R2 implementation needs R2.GetObject<Uploads>",
     src: { code: `${SERVICE}\n\n${STORAGE_R2}` },
     marks: [{ kind: "underline", find: "bucket.get(key)", label: "requires R2.GetObject<Uploads>", side: "right", tone: "bad" }],
     notes:
@@ -1487,11 +1487,11 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "But Effect already has a pattern for this",
+    title: "In Effect, a Layer yields its dependencies in the body…",
     src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
     marks: [{ kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" }],
     notes:
-      "But Effect already has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
+      "Effect already has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
   },
   {
     kind: "code",
@@ -1546,7 +1546,7 @@ export const steps: StepSpec[] = [
       "A binding is just another dependency of the constructor. Yield R2.ReadBucket(bucket) in the body, exactly like the Storage layer yields Database, and fetch closes over the client it got back. The requirement lands on the program, where a Layer can satisfy it, and fetch's type stays clean, so a service built on it can have any implementation. It's still infrastructure as code, and I should embrace that.",
   }),
   api({
-    title: "Conditional infrastructure is then just an if statement",
+    title: "Conditional infrastructure becomes just an if statement",
     snippet: "api-04b-dev.ts",
     req: [{ ...READ, note: "declared in construction" }, WRITE_LOGS],
     notes:
@@ -1586,7 +1586,7 @@ export const steps: StepSpec[] = [
     notes: "And fetch is the runtime phase. It runs for every request, using the clients that construction handed it.",
   }),
   api({
-    title: "Sending to a queue works the same way",
+    title: "A queue works the same way",
     snippet: "api-05-queue.ts",
     req: [READ, WRITE],
     notes: "A queue is the same: declare it, ask to write to it, and Req gains Queues.WriteQueue.",
@@ -1642,7 +1642,7 @@ export const steps: StepSpec[] = [
       "The second face is what R2.ReadBucket(bucket) returns: code that runs at runtime and implements the interface. When fetch calls uploads.get, that's the layer's get, talking to the native R2 binding.",
   }),
   api({
-    title: "Bring back the dev-only Logs bucket, and provide its layer",
+    title: "Let's bring back the dev-only Logs bucket and its layer",
     snippet: "api-06b-dev.ts",
     req: [
       met(READ, "ReadBucketBinding"),
@@ -1754,7 +1754,7 @@ export const steps: StepSpec[] = [
       "That's why there's no R2.AllBindings or Queues.AllBindings. A catch-all would be convenient, but it would pull every client for every operation into every bundle, whether you call it or not.",
   }),
   api({
-    title: "So you provide only the bindings you actually use",
+    title: "That's why you provide only the bindings you use",
     snippet: "api-07-worker.ts",
     quiet: true,
     marks: [
@@ -1780,7 +1780,7 @@ export const steps: StepSpec[] = [
     notes: "Which bindings are right also depends on where the program runs. The program itself doesn't care, so let's swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
-    title: "It won't compile, because our Layers use Cloudflare bindings",
+    title: "On Lambda, our Cloudflare binding layers won't compile",
     snippet: "api-10-lambda.error.ts",
     error: { pick: firstLine("Type 'WorkerEnvironment'") },
     req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "not a Worker" }],
@@ -1885,7 +1885,7 @@ export const steps: StepSpec[] = [
       "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error. It's there for emergencies. Don't do this.",
   }),
   api({
-    title: "But what actually creates the bucket?",
+    title: "What actually creates the bucket, though?",
     snippet: "api-07-worker.ts",
     marks: [{ kind: "circle", find: 'R2.Bucket("Uploads")', tone: "construct" }],
     req: PROVIDED,
@@ -1950,7 +1950,7 @@ export const steps: StepSpec[] = [
       "And every deploy targets a stage. Each stage is a separate, isolated instance of the same Stack, with its own resources and its own state. Your dev copy and production never share a resource.",
   }),
   stack({
-    title: "We give it the providers that create the resources",
+    title: "We give the Stack the providers that create resources",
     code: STACK_2,
     notes: "Next, the providers: the code that actually creates, updates and deletes resources. Cloudflare.providers() is every Cloudflare provider there is.",
   }),
@@ -1962,7 +1962,7 @@ export const steps: StepSpec[] = [
       "Unlike the bindings, we don't have to be precise here. This code is never bundled into the Worker and never runs at runtime. It only runs on your machine, or in CI, during deploy, so none of it needs to be tree-shaken.",
   }),
   stack({
-    title: "…and a place to remember what it deployed",
+    title: "It also needs somewhere to remember what it deployed",
     code: STACK_3,
     notes:
       "Then state: where Alchemy records what it deployed for each stage, so the next deploy knows what to create, update or delete. Here it's stored in your Cloudflare account, so your laptop and CI share it.",
