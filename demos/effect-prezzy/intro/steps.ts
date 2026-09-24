@@ -361,12 +361,19 @@ const READ: ReqItem = { name: "R2.ReadBucket", note: "to read it at runtime" };
 const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
 const WRITE: ReqItem = { name: "Queues.WriteQueue", note: "to send at runtime" };
 const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
-const PROVIDED_HTTP: ReqItem[] = [
+const WORKER: ReqItem = { name: "Cloudflare.Worker", note: "native bindings run inside a Worker" };
+const PHANTOM: ReqItem = { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" };
+/** Everything the Worker version of the program needs, with the bindings provided. */
+const PROVIDED: ReqItem[] = [
   BUCKET,
-  met(READ, "ReadBucketHttp\nmints a read-only API token"),
+  met(READ, "ReadBucketBinding\nadds a native R2 binding"),
   QUEUE,
   met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
+  met(WORKER, "Api is a Worker"),
 ];
+
+/** The first line of the compiler's message that starts with `prefix`. */
+const firstLine = (prefix: string) => (lines: string[]) => lines.filter((line) => line.startsWith(prefix)).slice(0, 1);
 
 /** One version of the Api Worker, `snippets/api-*.ts`, with its Req beside it. */
 const api = (s: {
@@ -637,9 +644,9 @@ export const steps: StepSpec[] = [
   api({
     title: "Each requirement needs an implementation",
     snippet: "api-06-provide.ts",
-    req: [BUCKET, met(READ, "ReadBucketBinding"), QUEUE, met(WRITE, "WriteQueueBinding")],
+    req: [BUCKET, met(READ, "ReadBucketBinding"), QUEUE, met(WRITE, "WriteQueueBinding"), WORKER],
     notes:
-      "Effect.provide satisfies each one with a Layer: an implementation of the requirement. ReadBucketBinding uses Cloudflare's native R2 binding.",
+      "Effect.provide satisfies each one with a Layer: an implementation of the requirement. These use Cloudflare's native bindings, and that adds a requirement of its own: they only work inside a Cloudflare Worker.",
   }),
   api({
     title: "The implementation grants the permission too",
@@ -649,46 +656,55 @@ export const steps: StepSpec[] = [
       met(READ, "ReadBucketBinding\nadds a native R2 binding"),
       QUEUE,
       met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
+      WORKER,
     ],
     notes:
       "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding, and nothing else: the program can only do what the code declared.",
   }),
   api({
-    title: "Swap it, and the permission changes with it",
-    snippet: "api-07-http.ts",
-    req: PROVIDED_HTTP,
+    title: "Finally, we hand it to a Worker to run it in the cloud",
+    snippet: "api-07-worker.ts",
+    req: PROVIDED,
     notes:
-      "Swap ReadBucketBinding for ReadBucketHttp and the same code talks to R2 over HTTP instead. Now the layer mints an API token that can only read R2. The business logic doesn't change.",
+      "To run the program in the cloud, hand it to a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide, and it can provide itself.",
   }),
   api({
     title: "But what if we read during construction?",
-    snippet: "api-08-construct.ts",
-    req: [...PROVIDED_HTTP, { name: "RuntimeContext", note: "only exists during a request" }],
+    snippet: "api-08-construct.error.ts",
+    error: { hide: true },
+    req: [...PROVIDED, { name: "RuntimeContext", note: "only exists during a request" }],
     notes:
       "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet. Req picks up RuntimeContext.",
   }),
   api({
-    title: "Finally, we hand it to a Worker to run it in the cloud",
-    snippet: "api-09-worker.error.ts",
-    error: { hide: true },
-    req: [...PROVIDED_HTTP, { name: "RuntimeContext", note: "only exists during a request" }],
+    title: "A Worker can't provide RuntimeContext, so it won't compile",
+    snippet: "api-08-construct.error.ts",
+    error: { pick: firstLine("Type 'RuntimeContext'") },
+    req: [...PROVIDED, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
     notes:
-      "To run the program in the cloud, hand it to a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide.",
-  }),
-  api({
-    title: "It can't provide RuntimeContext, so it won't compile",
-    snippet: "api-09-worker.error.ts",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'RuntimeContext'")).slice(0, 1) },
-    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
-    notes:
-      "A Worker's constructor runs at deploy time and cold start, with no request, so it can't provide RuntimeContext. Reading the bucket there is a type error, just like in our imaginary language. Leave out ReadBucketHttp and you'd get the same error for ReadBucket.",
+      "A Worker's constructor runs at deploy time and cold start, with no request, so it can't provide RuntimeContext. Reading the bucket there is a type error, just like in our imaginary language.",
   }),
   api({
     title: "Unless you opt out explicitly",
-    snippet: "api-10-phantom.ts",
-    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" }],
+    snippet: "api-09-phantom.ts",
+    req: [...PROVIDED, PHANTOM],
     notes:
       "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error.",
+  }),
+  api({
+    title: "Now let's run it on AWS Lambda instead",
+    snippet: "api-10-lambda.error.ts",
+    error: { hide: true },
+    req: [...PROVIDED.slice(0, 4), WORKER, PHANTOM],
+    notes: "The program doesn't care where it runs. Swap Cloudflare.Worker for AWS.Lambda.Function.",
+  }),
+  api({
+    title: "The native bindings need a Worker, so it won't compile",
+    snippet: "api-10-lambda.error.ts",
+    error: { pick: firstLine("Type 'WorkerEnvironment'") },
+    req: [...PROVIDED.slice(0, 4), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }, PHANTOM],
+    notes:
+      "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
   }),
   {
     kind: "code",
@@ -701,10 +717,11 @@ export const steps: StepSpec[] = [
       label: REQ_LABEL,
       items: [
         met(BUCKET, "the Stack, at deploy time"),
-        PROVIDED_HTTP[1]!,
+        PROVIDED[1]!,
         met(QUEUE, "the Stack, at deploy time"),
-        PROVIDED_HTTP[3]!,
-        { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" },
+        PROVIDED[3]!,
+        PROVIDED[4]!,
+        PHANTOM,
       ],
     },
     notes:

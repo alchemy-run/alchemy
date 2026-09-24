@@ -1,4 +1,5 @@
 import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Queues, R2 } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -19,7 +20,8 @@ const api = Effect.gen(function* () {
     })/*hide*/.pipe(Effect.orDie)/*end*/,
   };
 }).pipe(
-  Effect.provide([R2.ReadBucketHttp, Queues.WriteQueueBinding]),
+  Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding]),
+  Effect.provide(Alchemy.RuntimeContext.phantom),
 );
 
 export default class Api extends Cloudflare.Worker<Api>()(
