@@ -646,7 +646,11 @@ async function loadPage(slug: string): Promise<Page> {
   for (const rel of candidates) {
     const full = path.join(docsDir, rel);
     try {
-      const source = await readFile(full, "utf8");
+      // Dev-generated reference pages carry copy-editor markers.
+      const source = (await readFile(full, "utf8")).replace(
+        /<!--copy:[^>]*?-->|^<div data-copy=[^\n]*>\n|^<\/div><!--\/copy-->\n/gm,
+        "",
+      );
       const fm = parseFrontmatter(source);
       const title = fm.title;
       const description = fm.description ?? fm.excerpt ?? "";

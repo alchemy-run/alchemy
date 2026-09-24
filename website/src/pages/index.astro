@@ -5,26 +5,64 @@ import Button from "../components/marketing/Button.astro";
 import ProviderMark from "../components/marketing/ProviderMark.astro";
 import HeroBgGraph from "../components/marketing/HeroBgGraph.astro";
 import Yantra from "../brand/Yantra.astro";
-import { icons as simpleIcons } from "@iconify-json/simple-icons";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
+import HeroDeployTerminal from "../components/marketing-islands/HeroDeployTerminal.tsx";
+import Sentiment from "../components/marketing/Sentiment.astro";
+import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
+import HeroCodeBlock from "../components/marketing/HeroCodeBlock.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 
-const STACK_SRC = `export default Alchemy.Stack(
-  "MyApp",
-  { providers: Cloudflare.providers() },
+// Hero: the smallest complete-looking Worker (KV only; `Sessions` and
+// `Bindings` are declared elsewhere in the file).
+const HERO_SRC = `export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
   Effect.gen(function* () {
-    const Photos = yield* Cloudflare.R2.Bucket("Photos");
-    const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
-    const api = yield* Cloudflare.Worker("Api", {
-      main: "./src/worker.ts",
-      env: { Photos, Sessions },
-    });
-    return { url: api.url };
-  }),
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
+    return {
+      fetch: Effect.gen(function* () {
+        const user = yield* kv.get("user");
+        return yield* HttpServerResponse.json({ user });
+      }),
+    };
+  }).pipe(Effect.provide(Bindings)),
 );`;
+
+// Deploy section: the whole Worker file, minus imports.
+const STACK_SRC = `export const Photos = Cloudflare.R2.Bucket("Photos");
+export const Sessions = Cloudflare.KV.Namespace("Sessions");
+
+const Bindings = Layer.mergeAll(
+  Cloudflare.R2.ReadWriteBucketBinding,
+  Cloudflare.KV.ReadWriteNamespaceBinding,
+);
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const photos = yield* Cloudflare.R2.ReadWriteBucket(Photos);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
+    return {
+      fetch: Effect.gen(function* () {
+        const { objects } = yield* photos.list();
+        const user = yield* kv.get("user");
+        return yield* HttpServerResponse.json({ user, objects });
+      }),
+    };
+  }).pipe(Effect.provide(Bindings)),
+);`;
+
+// The hero terminal covers the code card's empty bottom-right corner: it
+// starts below the last line that reaches TERM_COL, so no code is hidden.
+const TERM_COL = 38;
+const STACK_LINES = HERO_SRC.split("\n");
+const TERM_LINE =
+  STACK_LINES.findLastIndex((l) => l.trimEnd().length > TERM_COL - 2) + 1;
+const STACK_WIDTH = Math.max(...STACK_LINES.map((l) => l.length));
 
 const TEST_SRC = `// each suite deploys its own isolated stack
 const stack = beforeAll(deploy(Stack));   // real R2, real DynamoDB
@@ -36,20 +74,24 @@ test("PUT + GET round-trips through R2", Effect.gen(function* () {
   expect(yield* res.text).toBe("hi!");
 }));`;
 
-const OTEL_SRC = `// Effect emits OpenTelemetry. The exporter is a Layer.
-const requestsTotal = Metric.counter("requests_total");
+const OTEL_SRC = `const requestsTotal = Metric.counter("requests_total");
+
+// any OTLP endpoint: Axiom, Datadog, Honeycomb, a collector…
+const Otel = Alchemy.Telemetry.layerOtlp({
+  url: "https://otlp.example.com",
+});
 
 export default Cloudflare.Worker(
   "Api",
+  { main: import.meta.url },
   Effect.gen(function* () {
     yield* Effect.logInfo("request received");
     yield* Metric.increment(requestsTotal);
     return { fetch: handler };
-  }).pipe(Effect.provide(Otel)),     // ← Axiom, Datadog, OTLP …
+  }).pipe(Effect.provide(Otel)),
 );`;
 
-const DASH_SRC = `// dashboards and alarms, next to the workers they watch
-export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
+const DASH_SRC = `export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
   widgets: [
     Widget.line({ title: "p99 latency", metric: api.metrics.p99 }),
     Widget.line({ title: "requests/s", metric: api.metrics.rps }),
@@ -63,18 +105,19 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   alarmActions: [pagerDuty, slackWebhook],
 });`;
 
-// Coding-agent brand marks for the hero pill.
-const AGENT_ICONS = ["claude", "openai", "cursor", "googlegemini"]
-  .map((n) => simpleIcons.icons[n]?.body)
-  .filter((b): b is string => !!b);
+const VITE_SRC = `import Api from "./src/api.ts";
 
-const VITE_SRC = `// add Alchemy to an existing Vite app
 export default Alchemy.Stack(
   "my-app",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Vite("Website");
-    return { url: site.url };
+    // backend: a Cloudflare Worker, run locally in workerd
+    const api = yield* Api;
+    // frontend: a Vite app that calls it
+    const web = yield* Cloudflare.Website.Vite("Web", {
+      env: { VITE_API_URL: api.url },
+    });
+    return { web: web.url, api: api.url };
   }),
 );`;
 
@@ -96,165 +139,65 @@ const PROVIDERS = [
   { label: "Axiom", icon: "Axiom", href: "/axiom" },
 ];
 
-const STAGES = [
-  { n: "01", label: "Dev" },
-  { n: "02", label: "Test" },
-  { n: "03", label: "Review" },
-  { n: "04", label: "Deploy" },
-  { n: "05", label: "Observe" },
-];
 ---
 
 <Marketing
   title="Alchemy — reach for the better primitives."
   description="Snap together cloud resources in TypeScript and let Alchemy take care of the wiring — permissions, config, and bindings — so you can focus on your product."
 >
+  <!-- Hero + marquee fill the first screen so the marquee lands just above the fold. -->
+  <div class="v2-fold">
   <!-- ───────────────── HERO ───────────────── -->
-  <section class="alc-hero" style="padding:64px 32px 48px;">
+  <section class="alc-hero v2-hero" style="padding:20px 32px 16px;">
     <HeroBgGraph />
-    <div style="position:relative;z-index:1;text-align:center;margin-bottom:28px;">
-      <a class="v2-agent-pill" href="#agent-prompt">
-        <span class="v2-agent-pill__logos" aria-hidden="true">
-          {
-            AGENT_ICONS.map((body) => (
-              <svg width="15" height="15" viewBox="0 0 24 24" set:html={body} />
-            ))
-          }
-        </span>
-        Ship with your favorite agent
-        <span aria-hidden="true">&rarr;</span>
-      </a>
-    </div>
-    <div class="alc-hero__inner">
-      <Yantra class="alc-hero__mark" size={42} />
-      <h1
-        class="alc-hero__title"
-        id="hero-h1"
-        style="font-size:clamp(38px,6.4vw,60px);"
+    <button type="button" class="v2-motion-toggle" id="motion-toggle" aria-pressed="false">
+      <span class="v2-motion-toggle__label">Pause motion</span>
+    </button>
+    <div class="v2-hero__grid">
+      <div class="v2-hero__copy">
+        <div class="alc-hero__inner">
+          <Yantra class="alc-hero__mark v2-hero__mark" size={42} />
+          <h1
+            data-copy
+            class="alc-hero__title"
+            id="hero-h1"
+            style="font-size:clamp(38px,6.4vw,60px);"
+          >
+            Reach for the better primitives
+          </h1>
+          <p
+            data-copy
+            class="alc-hero__subtitle"
+            id="hero-sub"
+            style="font-size:clamp(17px,2.2vw,22px);max-width:560px;"
+          >
+            Snap together cloud resources and let Alchemy do the wiring so you can focus on your product.
+          </p>
+          <div class="alc-hero__cta">
+            <Button variant="primary" icon="arrow" href="/getting-started">
+              <span data-copy>Start your project</span>
+            </Button>
+            <Button variant="secondary" href="#agent-prompt">
+              <span data-copy>Build it with your agent</span>
+              <span class="v2-hero__cta-arrow" aria-hidden="true">&darr;</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="v2-hero__visual"
+        aria-hidden="true"
+        style={`--term-line:${TERM_LINE};--term-col:${TERM_COL}ch;--code-cols:${STACK_WIDTH + 1}ch`}
       >
-        Reach for the better primitives.
-      </h1>
-      <h2
-        class="alc-hero__subtitle"
-        id="hero-sub"
-        style="font-size:clamp(17px,2.6vw,22px);max-width:640px;margin-inline:auto;"
-      >
-        Snap together cloud resources and let Alchemy take care of the wiring
-        so you can focus on your product.
-      </h2>
-      <div class="alc-hero__cta">
-        <Button variant="primary" icon="arrow" href="/getting-started">
-          Get started
-        </Button>
+        <div class="v2-hero__code">
+          <HeroCodeBlock filename="src/api.ts" code={HERO_SRC} compact />
+        </div>
+        <div class="v2-hero__term">
+          <HeroDeployTerminal client:load />
+        </div>
       </div>
     </div>
   </section>
-
-  <!-- TEMP: hero-copy variant switcher for internal iteration. Remove once
-       a headline is chosen. Cycles the h1/subtitle pair and persists the
-       selection in localStorage so the variant survives reloads. -->
-  <div class="v2-copy-toggle" data-nosnippet="">
-    <button type="button" data-dir="-1" aria-label="Previous headline">‹</button>
-    <span class="v2-copy-toggle__label" id="copy-toggle-label"></span>
-    <button type="button" data-dir="1" aria-label="Next headline">›</button>
-  </div>
-
-  <script>
-    // TEMP hero-copy variants (see the switcher above). Line breaks come
-    // from `text-wrap: balance`, so the strings carry no manual <br>s.
-    const EFFECT = `<a href="https://effect.website" style="color:inherit;">Effect</a>`;
-    const VARIANTS: { name: string; h1: string; sub: string }[] = [
-      // ── the chosen direction ──
-      {
-        name: "better primitives",
-        h1: `Reach for the better primitives.`,
-        sub: `Snap together cloud resources and let Alchemy take care of the wiring so you can focus on your product.`,
-      },
-      // ── same headline, subtitles that name the wiring ──
-      {
-        name: "wiring, named",
-        h1: `Reach for the better primitives.`,
-        sub: `Snap together buckets, queues, databases, and workers in TypeScript. Alchemy wires the permissions, config, and bindings so you can focus on your product.`,
-      },
-      {
-        name: "use it → wired",
-        h1: `Reach for the better primitives.`,
-        sub: `Every cloud resource is a typed value. Use one in your code and Alchemy wires up the permissions, config, and bindings for you.`,
-      },
-      {
-        name: "agents + compiler",
-        h1: `Reach for the better primitives.`,
-        sub: `Typed cloud resources you and your agent snap together. Alchemy handles the wiring, and the compiler checks the result.`,
-      },
-      {
-        name: "any cloud + Effect",
-        h1: `Reach for the better primitives.`,
-        sub: `Snap together resources on any cloud and let Alchemy take care of the wiring so you can focus on your product. Built on ${EFFECT}.`,
-      },
-      // ── headline variations on the primitives angle ──
-      {
-        name: "better primitives for the cloud",
-        h1: `Better primitives for the cloud.`,
-        sub: `Snap together cloud resources and let Alchemy take care of the wiring so you can focus on your product.`,
-      },
-      {
-        name: "primitives that snap",
-        h1: `Cloud primitives that snap together.`,
-        sub: `Declare a bucket, bind it to a worker, and ship. Alchemy takes care of the permissions, config, and bindings in between.`,
-      },
-      {
-        name: "less wiring",
-        h1: `Better primitives. Less wiring.`,
-        sub: `Snap together cloud resources in TypeScript. Alchemy derives the permissions, config, and bindings so you can focus on your product.`,
-      },
-      {
-        name: "agent reaches for",
-        h1: `The primitives your agent reaches for.`,
-        sub: `Typed cloud resources that snap together. Alchemy takes care of the wiring, so your agent works on the product and gets the infrastructure right.`,
-      },
-      {
-        name: "skip the wiring",
-        h1: `Reach for better primitives. Skip the wiring.`,
-        sub: `Buckets, queues, and workers snap together in one TypeScript program. Alchemy connects them on any cloud so you can focus on your product.`,
-      },
-    ];
-
-    const KEY = "alc-hero-copy-variant-v3";
-    const h1 = document.getElementById("hero-h1")!;
-    const sub = document.getElementById("hero-sub")!;
-    const label = document.getElementById("copy-toggle-label")!;
-    let index = Number(localStorage.getItem(KEY) ?? "0") % VARIANTS.length;
-    if (Number.isNaN(index) || index < 0) index = 0;
-
-    const apply = () => {
-      const v = VARIANTS[index]!;
-      h1.innerHTML = v.h1;
-      sub.innerHTML = v.sub;
-      label.textContent = `${index + 1}/${VARIANTS.length} · ${v.name}`;
-      localStorage.setItem(KEY, String(index));
-    };
-    for (const btn of document.querySelectorAll<HTMLButtonElement>(
-      ".v2-copy-toggle button",
-    )) {
-      btn.addEventListener("click", () => {
-        index =
-          (index + Number(btn.dataset.dir) + VARIANTS.length) %
-          VARIANTS.length;
-        apply();
-      });
-    }
-    apply();
-
-    // TEMP: the whole page is editable while we iterate on copy — click any
-    // text and type. The switcher opts out so its buttons stay clickable.
-    document.body.setAttribute("contenteditable", "plaintext-only");
-    if (!document.body.isContentEditable)
-      document.body.setAttribute("contenteditable", "true");
-    document.body.spellcheck = false;
-    document
-      .querySelector(".v2-copy-toggle")
-      ?.setAttribute("contenteditable", "false");
-  </script>
 
   <!-- ───────────────── PROVIDER MARQUEE ───────────────── -->
   <div class="v2-marquee" aria-label="Supported cloud providers">
@@ -295,179 +238,169 @@ const STAGES = [
       }
     </div>
   </div>
+  </div>
 
-  <!-- ───────────────── THE WORKFLOW ───────────────── -->
-  <section class="v2-section v2-workflow-intro">
+  <script>
+    // WCAG 2.2.2: the hero rings and the provider marquee move on their
+    // own, so offer a way to stop them. Remembered across visits.
+    const KEY = "alc-motion-paused";
+    const btn = document.getElementById("motion-toggle")!;
+    const label = btn.querySelector(".v2-motion-toggle__label")!;
+    const apply = (paused: boolean) => {
+      document.documentElement.classList.toggle("alc-motion-paused", paused);
+      btn.setAttribute("aria-pressed", String(paused));
+      label.textContent = paused ? "Play motion" : "Pause motion";
+      window.dispatchEvent(new Event("alc-motion-change"));
+    };
+    apply(localStorage.getItem(KEY) === "1");
+    btn.addEventListener("click", () => {
+      const paused = !document.documentElement.classList.contains("alc-motion-paused");
+      localStorage.setItem(KEY, paused ? "1" : "0");
+      apply(paused);
+    });
+  </script>
+
+  <div class="v2-scroll-hint" id="scroll-hint" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+  </div>
+  <script>
+    // Only while scrolled to the top, and only when the hero + marquee fit
+    // on screen (the chevron sits in the gap below the marquee).
+    const hint = document.getElementById("scroll-hint")!;
+    const fold = document.querySelector<HTMLElement>(".v2-fold")!;
+    const sync = () =>
+      hint.classList.toggle(
+        "is-hidden",
+        scrollY > 4 || fold.getBoundingClientRect().bottom > innerHeight + 1,
+      );
+    addEventListener("scroll", sync, { passive: true });
+    addEventListener("resize", sync);
+    sync();
+  </script>
+
+  <!-- ───────────────── THE FULL PICTURE ───────────────── -->
+  <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
-      <h2 class="v2-h2">One program. The whole workflow.</h2>
-      <p class="v2-lede">
-        Zero &rarr; production is one program and five commands. Everything —
-        resources, tests, CI, dashboards — is TypeScript in your repo: you can
-        read it, your agent can run it, and the type-checker keeps both of you
-        honest. There is no console in the loop.
+      <h2 class="v2-h2" data-copy>The full picture</h2>
+      <p class="v2-lede" data-copy>
+          Alchemy can deploy, test, and destroy your app. That's everything you need to have a full CI experience with branch previews and live test on real infratructure. Oh and the graphic below is how long it actually takes; Alchemy does all of that in ~25 seconds.
       </p>
-      <div class="v2-stagenav" aria-hidden="true">
-        {
-          STAGES.map((s, i) => (
-            <>
-              <span class="v2-stagenav__item">
-                <span class="v2-stagenav__n">{s.n}</span> {s.label}
-              </span>
-              {i < STAGES.length - 1 && (
-                <span class="v2-stagenav__sep">&rarr;</span>
-              )}
-            </>
-          ))
-        }
+      <p class="v2-overview__source">
+        <a
+          href="https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-preview-benchmark"
+          target="_blank"
+          rel="noopener"
+        >
+          <span data-copy>See the example app and benchmark on GitHub</span>
+          <span aria-hidden="true">&rarr;</span>
+        </a>
+      </p>
+      <PRLifecycle client:visible />
+    </div>
+  </section>
+
+  <!-- ───────────────── DEV ───────────────── -->
+  <AlchemicalDivider variant="triangle" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature">
+    <div class="v2-container">
+      <h2 class="v2-h2" data-copy>Run your entire stack locally</h2>
+      <p class="v2-lede" data-copy>
+        As apps grow you have more and more services; each backend service needs to be started in a local emulator or proxy a live service, each client needs its own dev server, and you have to set up HMR. <code class="alc-code-inline">alchemy dev</code> manages all of that for you, 1 command, no extra configuration, and all your services just start.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
+        <DevTuiTerminal client:visible />
       </div>
     </div>
   </section>
 
-  <!-- 01 · BUILD -->
-  <section class="v2-stage">
-    <div class="v2-container v2-stage__grid">
-      <div class="v2-stage__rail">
-        <span class="v2-stage__badge">01</span>
-        <span class="v2-stage__line"></span>
-      </div>
-      <div class="v2-stage__body">
-        <span class="v2-stage__kicker">Dev</span>
-        <h3 class="v2-h3">Infrastructure appears as you type.</h3>
-        <p class="v2-lede">
-          Already have a Vite app? One resource in{" "}
-          <code class="alc-code-inline">alchemy.run.ts</code> is the whole
-          integration. <code class="alc-code-inline">alchemy dev</code> runs
-          Vite and your infrastructure in one watcher — edit code or declare a
-          bucket, and both hot-reload in milliseconds.
-        </p>
-        <div class="v2-split">
-          <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
-          <DevTuiTerminal client:visible />
-        </div>
+  <!-- ───────────────── TESTING ───────────────── -->
+  <AlchemicalDivider variant="square" class="v2-divider" />
+  <section class="v2-section v2-pat-3 v2-feature">
+    <div class="v2-container">
+      <h2 class="v2-h2" data-copy>Run tests against real infrastructre</h2>
+      <p class="v2-lede" data-copy>
+        <code class="alc-code-inline">alchemy test</code> deploys a temporary stack, runs your tests against it, then tears it down. This way tests hit a real environment instead of mocks or local emulation, and agent loops stay accurate. In CI, tests can inherit the preview deployment stack so deploy doesn't run twice.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+        <TestTerminal client:visible />
       </div>
     </div>
   </section>
 
-  <!-- 02 · TEST -->
-  <section class="v2-stage">
-    <div class="v2-container v2-stage__grid">
-      <div class="v2-stage__rail">
-        <span class="v2-stage__badge">02</span>
-        <span class="v2-stage__line"></span>
-      </div>
-      <div class="v2-stage__body">
-        <span class="v2-stage__kicker">Test</span>
-        <h3 class="v2-h3">Prove it works — against real infrastructure.</h3>
-        <p class="v2-lede">
-          <code class="alc-code-inline">alchemy test</code> deploys an
-          ephemeral stack, runs assertions through the front door, and destroys
-          it. No mocks to drift out of sync — and the loop an agent uses to
-          verify its own work instead of declaring victory.
-        </p>
-        <div class="v2-split">
-          <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-          <TestTerminal client:visible />
-        </div>
+  <!-- ───────────────── PLAN & DEPLOY ───────────────── -->
+  <AlchemicalDivider variant="pentagon" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature">
+    <div class="v2-container">
+      <h2 class="v2-h2" data-copy>Dry run before you deploy</h2>
+      <p class="v2-lede" data-copy>
+        <code class="alc-code-inline">plan</code> does a dry-run and show what will change.<code class="alc-code-inline">deploy</code> updates your infrastructure to match the desired state. <code class="alc-code-inline">destroy</code> tears it all down (with safe guards to prevent accidental data deletion). Simple enough for agents, easy enough you'll choose to use it too
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="src/api.ts" code={STACK_SRC} compact />
+        <DeployTerminal client:visible />
       </div>
     </div>
   </section>
 
-  <!-- 03 · REVIEW -->
-  <section class="v2-stage">
-    <div class="v2-container v2-stage__grid">
-      <div class="v2-stage__rail">
-        <span class="v2-stage__badge">03</span>
-        <span class="v2-stage__line"></span>
-      </div>
-      <div class="v2-stage__body">
-        <span class="v2-stage__kicker">Review</span>
-        <h3 class="v2-h3">Preview every PR with an ephemeral stack.</h3>
-        <p class="v2-lede">
-          An Alchemy program is just TypeScript, so CI runs it too: each pull
-          request deploys a full preview stack for review, and merge or close
-          tears it down.
-        </p>
-        <PRLifecycle client:visible />
+  <!-- ───────────────── OBSERVABILITY ───────────────── -->
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5 v2-feature">
+    <div class="v2-container">
+      <h2 class="v2-h2" data-copy>Wired for observability</h2>
+      <p class="v2-lede" data-copy>
+        Alchemy has logs, spans, and metrics set up by default. The exporter is an Effect Layer so changing providers is a 1 line swap, whether its Axiom, Datadog, or any other OTLP endpoint.<br>Dashboards and alarms are resources themselve so you can define them right next to the resources they are responsible for.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
+        <CodeBlock filename="alchemy.run.ts" code={DASH_SRC} compact />
       </div>
     </div>
   </section>
 
-  <!-- 04 · SHIP -->
-  <section class="v2-stage">
-    <div class="v2-container v2-stage__grid">
-      <div class="v2-stage__rail">
-        <span class="v2-stage__badge">04</span>
-        <span class="v2-stage__line"></span>
-      </div>
-      <div class="v2-stage__body">
-        <span class="v2-stage__kicker">Deploy</span>
-        <h3 class="v2-h3">Deploy is a diff you can read.</h3>
-        <p class="v2-lede">
-          <code class="alc-code-inline">plan</code> prints exactly what will
-          change. <code class="alc-code-inline">deploy</code> converges the
-          cloud to the program. <code class="alc-code-inline">destroy</code>
-          unwinds it. Predictable enough to let an agent run it — reviewable
-          enough that you will.
-        </p>
-        <div class="v2-split">
-          <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} compact />
-          <DeployTerminal client:visible />
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 05 · OPERATE -->
-  <section class="v2-stage v2-stage--last">
-    <div class="v2-container v2-stage__grid">
-      <div class="v2-stage__rail">
-        <span class="v2-stage__badge">05</span>
-      </div>
-      <div class="v2-stage__body">
-        <span class="v2-stage__kicker">Observe</span>
-        <h3 class="v2-h3">Observability ships with the resources.</h3>
-        <p class="v2-lede">
-          Effect emits logs, spans, and metrics by default — the exporter is a
-          Layer, so Axiom, Datadog, or any OTLP endpoint is a one-line swap.
-          Dashboards and alarms are declared next to the workers they watch,
-          and deploy and destroy with them.
-        </p>
-        <div class="v2-split">
-          <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
-          <CodeBlock filename="alchemy.run.ts" code={DASH_SRC} compact />
-        </div>
-      </div>
+  <!-- ───────────────── SENTIMENT ───────────────── -->
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1" aria-labelledby="sentiment-h">
+    <div class="v2-container">
+      <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
+      <p class="v2-lede" data-copy>
+        What builders say after putting Alchemy in front of their agents,
+        their Cloudflare apps, and their production infrastructure.
+      </p>
+      <Sentiment />
     </div>
   </section>
 
   <!-- ───────────────── GET STARTED ───────────────── -->
-  <section class="v2-section v2-section--last">
+  <AlchemicalDivider variant="circle" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-section--last">
     <div class="v2-container">
-      <h2 class="v2-h2">Get started.</h2>
+      <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
-        <li>
-          <span class="v2-steps__label">Install</span>
-          <code class="v2-steps__code">bun add alchemy@latest effect</code>
+        <li class="v2-steps__inline">
+          <span class="v2-steps__label" data-copy>Install</span>
+          <code class="v2-steps__code">pnpm add alchemy@latest effect</code>
         </li>
         <li id="agent-prompt">
-          <span class="v2-steps__label">Paste this into your coding agent</span>
+          <span class="v2-steps__label" data-copy>Paste this into your coding agent</span>
           <CopyForAgent client:load />
         </li>
-        <li>
-          <span class="v2-steps__label">Ship</span>
-          <code class="v2-steps__code">bun alchemy deploy</code>
+        <li class="v2-steps__inline">
+          <span class="v2-steps__label" data-copy>Ship</span>
+          <code class="v2-steps__code">pnpm alchemy deploy</code>
         </li>
       </ol>
       <div class="v2-cta-buttons">
         <Button variant="secondary" icon="arrow" href="/getting-started">
-          Read the tutorial
+          <span data-copy>Read the tutorial</span>
         </Button>
         <Button
           variant="ghost"
           icon="github"
           href="https://github.com/alchemy-run/alchemy"
         >
-          GitHub
+          <span data-copy>GitHub</span>
         </Button>
       </div>
     </div>
@@ -475,91 +408,225 @@ const STAGES = [
 </Marketing>
 
 <style>
+  /* ---------- first screen: hero + marquee, fold just below the marquee ---------- */
+  .v2-fold {
+    display: flex;
+    flex-direction: column;
+    /* 64px sticky header, ~32px of the next section peeking below the marquee. */
+    min-height: max(620px, calc(100svh - 64px - 32px));
+  }
+  .v2-fold > .v2-hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .v2-fold > .v2-hero > .v2-hero__grid {
+    width: 100%;
+  }
+  .v2-motion-toggle {
+    position: absolute;
+    right: 20px;
+    top: 12px;
+    z-index: 3;
+    padding: 4px 10px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--alc-bg) 70%, transparent);
+    color: var(--alc-fg-3);
+    font: 500 12px var(--alc-font-sans);
+    cursor: pointer;
+    min-height: 24px;
+  }
+  .v2-motion-toggle:hover {
+    color: var(--alc-fg-1);
+    border-color: var(--alc-hairline-3);
+  }
+  .v2-motion-toggle:focus-visible {
+    outline: 2px solid var(--alc-accent);
+    outline-offset: 2px;
+  }
+  /* Nothing moves under reduced motion, so the control isn't needed. */
+  @media (prefers-reduced-motion: reduce) {
+    .v2-motion-toggle {
+      display: none;
+    }
+  }
+  .v2-scroll-hint {
+    position: fixed;
+    left: 50%;
+    bottom: 6px;
+    z-index: 5;
+    translate: -50% 0;
+    color: var(--alc-fg-2);
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 300ms ease;
+    animation: v2-scroll-hint-pulse 2.2s ease-in-out infinite;
+  }
+  .v2-scroll-hint svg {
+    display: block;
+  }
+  .v2-scroll-hint.is-hidden {
+    opacity: 0;
+    animation: none;
+  }
+  @keyframes v2-scroll-hint-pulse {
+    0%,
+    100% {
+      opacity: 0.15;
+      transform: translateY(-3px);
+    }
+    50% {
+      opacity: 0.45;
+      transform: translateY(2px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .v2-scroll-hint {
+      animation: none;
+    }
+  }
+
+  /* ---------- hero: copy left, deploy visual right ---------- */
+  .v2-hero__grid {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr);
+    gap: 48px;
+    align-items: center;
+  }
+  .v2-hero__copy :global(.alc-hero__inner) {
+    text-align: left;
+    margin: 0;
+  }
+  /* Shrink-wrap the mark so its box center is the glyph center: the
+     background graph measures this element to place its vanishing point. */
+  .v2-hero__copy :global(.alc-hero__mark) {
+    width: fit-content;
+    margin: 0 0 22px;
+  }
+  .v2-hero__copy :global(.alc-hero__subtitle) {
+    margin-inline: 0;
+  }
+  .v2-hero__copy :global(.alc-hero__cta) {
+    justify-content: flex-start;
+  }
+  /* Hero CTAs use the logo's colors: the leaf-green mark for the main
+     action, and the terracotta dot as the secondary action's accent. */
+  .v2-hero__copy :global(.alc-btn--primary) {
+    background: var(--alc-accent-deep);
+    color: var(--alc-bg);
+  }
+  .v2-hero__copy :global(.alc-btn--primary:hover) {
+    background: var(--alc-accent-bright);
+  }
+  .v2-hero__copy :global(.alc-btn--secondary) {
+    padding: 10px 18px;
+    background: color-mix(in srgb, var(--alc-bg) 60%, transparent);
+    border-color: var(--alc-hairline-3);
+  }
+  .v2-hero__copy :global(.alc-btn--secondary:hover) {
+    border-color: var(--alc-terracotta);
+  }
+  .v2-hero__cta-arrow {
+    color: var(--alc-terracotta);
+  }
+  /* The terminal sits over the code card's empty bottom-right corner.
+     --term-line / --term-col come from HERO_SRC (see TERM_LINE) and are
+     in the code font's units (11px mono, 1.65 line-height). */
+  .v2-hero__visual {
+    --code-lh: 18.15px;
+    --code-header: 36px;
+    /* Code and terminal share one grid cell, so the box grows to fit the
+       terminal's overhang below the code card. */
+    display: grid;
+    align-items: start;
+    justify-items: start;
+    text-align: left;
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+  }
+  .v2-hero__code :global(.alc-code-block__pre) {
+    font-size: 11px;
+    line-height: 1.65;
+  }
+  .v2-hero__code,
+  .v2-hero__term {
+    grid-area: 1 / 1;
+  }
+  .v2-hero__code {
+    width: calc(34px + var(--code-cols));
+    max-width: 100%;
+  }
+  .v2-hero__term {
+    position: relative;
+    margin-top: calc(var(--code-header) + 12px + var(--term-line) * var(--code-lh) + 8px);
+    margin-left: calc(16px + var(--term-col));
+    z-index: 1;
+    /* Roomier than the longest deploy line (47 chars at 12.5px), capped so
+       it never overhangs the column by more than 24px. */
+    width: min(470px, calc(100% - 16px - var(--term-col) + 24px));
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+    border-radius: 10px;
+  }
+  /* The section-wide halo assumed centered copy; the copy column carries
+     its own below. */
+  .v2-hero::after {
+    background: none;
+  }
+  .v2-hero__copy {
+    position: relative;
+  }
+  /* Fades the rings behind the headline and subtitle so they stay
+     readable; the mark sits near the edge so the rings still read as
+     emanating from it. */
+  .v2-hero__copy::before {
+    content: "";
+    position: absolute;
+    inset: -60px -160px -90px -160px;
+    z-index: -1;
+    pointer-events: none;
+    /* Same stops as the original centered hero's halo (.alc-hero::after),
+       centered on the headline + subtitle. */
+    background: radial-gradient(
+      closest-side at 50% 62%,
+      color-mix(in srgb, var(--alc-bg) 98%, transparent) 0%,
+      color-mix(in srgb, var(--alc-bg) 94%, transparent) 50%,
+      color-mix(in srgb, var(--alc-bg) 68%, transparent) 78%,
+      transparent 100%
+    );
+  }
+  @media (max-width: 1100px) {
+    .v2-hero__grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 40px;
+    }
+    .v2-hero__visual {
+      max-width: 700px;
+    }
+  }
+  @media (max-width: 760px) {
+    .v2-hero__visual {
+      justify-items: stretch;
+    }
+    .v2-hero__code {
+      display: none;
+    }
+    .v2-hero__term {
+      margin: 0;
+      width: auto;
+    }
+  }
+
   .v2-container {
     max-width: 1080px;
     margin: 0 auto;
   }
 
-  /* TEMP: hero-copy variant switcher (remove with the widget). */
-  .v2-copy-toggle {
-    position: fixed;
-    bottom: 16px;
-    right: 16px;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border: 1px solid var(--alc-hairline-3);
-    border-radius: 999px;
-    background: var(--alc-bg-elev-1);
-    box-shadow: var(--alc-shadow-sm);
-    font-family: var(--alc-font-mono);
-    font-size: 11.5px;
-    color: var(--alc-fg-2);
-  }
-  .v2-copy-toggle button {
-    all: unset;
-    cursor: pointer;
-    padding: 0 6px;
-    font-size: 15px;
-    color: var(--alc-fg-1);
-  }
-  .v2-copy-toggle button:hover {
-    color: var(--alc-accent-deep);
-  }
-  .v2-copy-toggle__label {
-    min-width: 150px;
-    text-align: center;
-  }
-
-  .v2-agent-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 16px;
-    border: 1px solid var(--alc-hairline-3);
-    border-radius: 999px;
-    background: var(--alc-bg-elev-1);
-    font-size: 13.5px;
-    font-weight: 500;
-    color: var(--alc-fg-2);
-    text-decoration: none;
-    transition:
-      color 120ms ease,
-      border-color 120ms ease;
-  }
-  .v2-agent-pill:hover {
-    color: var(--alc-fg-1);
-    border-color: var(--alc-accent);
-  }
-  .v2-agent-pill__logos {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding-right: 10px;
-    border-right: 1px solid var(--alc-hairline-3);
-    color: var(--alc-fg-2);
-  }
-  .v2-agent-pill__logos svg {
-    display: block;
-    fill: currentColor;
-    opacity: 0.85;
-  }
-  @media (max-width: 480px) {
-    .v2-agent-pill {
-      font-size: 12.5px;
-      padding: 7px 13px;
-      gap: 8px;
-      white-space: nowrap;
-    }
-    .v2-agent-pill__logos {
-      display: none;
-    }
-  }
-  :global(html) {
-    scroll-behavior: smooth;
-  }
   #agent-prompt {
     scroll-margin-top: 96px;
   }
@@ -589,7 +656,9 @@ const STAGES = [
     width: max-content;
     animation: v2-marquee-scroll 72s linear infinite;
   }
-  .v2-marquee:hover .v2-marquee__track {
+  .v2-marquee:hover .v2-marquee__track,
+  .v2-marquee:focus-within .v2-marquee__track,
+  :global(html.alc-motion-paused) .v2-marquee__track {
     animation-play-state: paused;
   }
   .v2-marquee__group {
@@ -662,7 +731,46 @@ const STAGES = [
   /* ---------- sections ---------- */
   .v2-section {
     padding: 80px 32px;
-    border-top: 1px solid var(--alc-hairline);
+  }
+  /* Sections are separated by the original site's geometric dividers:
+     triangle → square → pentagon → hexagon → circle, down the page. */
+  :global(.v2-divider) {
+    margin: 0 auto;
+  }
+  /* A very faint, static echo of the hero's ring geometry behind each
+     section, alternating sides. Masked so it takes the theme's text color. */
+  .v2-section {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .v2-section::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -380px;
+    z-index: -1;
+    width: 1000px;
+    height: 1000px;
+    translate: 0 -50%;
+    pointer-events: none;
+    background: var(--alc-fg-1);
+    opacity: 0.045;
+    mask: var(--pattern) center / contain no-repeat;
+    -webkit-mask: var(--pattern) center / contain no-repeat;
+  }
+  /* A different Sri Yantra motif per section. */
+  .v2-pat-1 { --pattern: url("/patterns/yantra-1.svg"); }
+  .v2-pat-2 { --pattern: url("/patterns/yantra-2.svg"); }
+  .v2-pat-3 { --pattern: url("/patterns/yantra-3.svg"); }
+  .v2-pat-4 { --pattern: url("/patterns/yantra-4.svg"); }
+  .v2-pat-5 { --pattern: url("/patterns/yantra-5.svg"); }
+  .v2-pat-6 { --pattern: url("/patterns/yantra-6.svg"); }
+  .v2-pat-2::before,
+  .v2-pat-4::before,
+  .v2-pat-6::before {
+    right: auto;
+    left: -380px;
   }
   .v2-section--last {
     padding-bottom: 96px;
@@ -706,115 +814,66 @@ const STAGES = [
   .v2-split > :global(*) {
     min-width: 0;
   }
+  /* Side-by-side cards always match heights: every row item stretches, the
+     island wrappers pass that height down, and the shorter card's body
+     grows (a terminal keeps its designed minimum). Stacked on narrow
+     screens, each card keeps its own height. */
+  @media (min-width: 901px) {
+    .v2-split {
+      align-items: stretch;
+    }
+    .v2-split > :global(*),
+    .v2-split :global(astro-island),
+    .v2-split :global(astro-island > div) {
+      display: flex;
+      flex-direction: column;
+    }
+    .v2-split :global(astro-island > div),
+    .v2-split :global(.alc-code-block),
+    .v2-split :global(.alc-term) {
+      flex: 1;
+    }
+    .v2-split :global(.alc-code-block__pre),
+    .v2-split :global(.alc-term__body) {
+      flex: 1;
+    }
+    .v2-split :global(.alc-term__body) {
+      height: auto !important;
+    }
+  }
   @media (max-width: 900px) {
     .v2-split {
       grid-template-columns: 1fr;
     }
   }
 
-  /* ---------- workflow intro + stage nav ---------- */
-  .v2-workflow-intro {
-    padding-bottom: 40px;
+  /* ---------- the full picture (PR lifecycle overview) ---------- */
+  .v2-overview {
+    border-top: none;
+    padding-top: 72px;
   }
-  .v2-stagenav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 14px;
-    font-family: var(--alc-font-mono);
-    font-size: 13px;
-    letter-spacing: 0.04em;
+  .v2-overview__source {
+    margin: -14px 0 24px;
+    font-size: 14px;
+  }
+  .v2-overview__source a {
+    display: inline-flex;
+    gap: 6px;
+    color: var(--alc-fg-2);
+    text-decoration: underline;
+    text-decoration-color: var(--alc-hairline-3);
+    text-underline-offset: 3px;
+  }
+  .v2-overview__source a:hover {
     color: var(--alc-fg-1);
-  }
-  .v2-stagenav__n {
-    color: var(--alc-accent-deep);
-    margin-right: 2px;
-  }
-  .v2-stagenav__sep {
-    color: var(--alc-fg-4);
+    text-decoration-color: currentColor;
   }
 
-  /* ---------- stages ---------- */
-  .v2-stage {
-    padding: 0 32px;
+  /* ---------- feature sections ---------- */
+  .v2-feature .v2-h2 {
+    margin-bottom: 12px;
   }
-  .v2-stage__grid {
-    display: grid;
-    grid-template-columns: 64px 1fr;
-    gap: 0 28px;
-  }
-  .v2-stage__rail {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    padding-top: 6px;
-  }
-  .v2-stage__badge {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--alc-font-mono);
-    font-size: 14px;
-    color: var(--alc-accent-deep);
-    border: 1px solid var(--alc-accent-40);
-    background: var(--alc-bg-elev-1);
-    flex: none;
-  }
-  .v2-stage__line {
-    width: 1px;
-    flex: 1;
-    background: linear-gradient(
-      to bottom,
-      var(--alc-accent-40),
-      var(--alc-hairline-2)
-    );
-  }
-  .v2-stage__body {
-    padding-bottom: 72px;
-    min-width: 0;
-  }
-  .v2-stage--last .v2-stage__body {
-    padding-bottom: 80px;
-  }
-  .v2-stage__kicker {
-    font-family: var(--alc-font-mono);
-    font-size: 12.5px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--alc-accent-deep);
-  }
-  @media (max-width: 700px) {
-    .v2-stage {
-      padding: 0 20px;
-    }
-    .v2-stage__grid {
-      grid-template-columns: 1fr;
-    }
-    .v2-stage__rail {
-      flex-direction: row;
-      padding-top: 0;
-      margin-bottom: 14px;
-    }
-    .v2-stage__badge {
-      width: 36px;
-      height: 36px;
-      font-size: 13px;
-    }
-    .v2-stage__line {
-      width: auto;
-      height: 1px;
-      flex: 1;
-      background: linear-gradient(
-        to right,
-        var(--alc-accent-40),
-        var(--alc-hairline-2)
-      );
-    }
-  }
+
   @media (max-width: 640px) {
     .v2-section {
       padding-left: 20px;
@@ -868,6 +927,22 @@ const STAGES = [
     color: var(--alc-fg-invert);
     padding: 10px 16px;
     border-radius: var(--alc-radius);
+  }
+  /* One-command steps: label and command share the number's row. */
+  .v2-steps__inline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    min-height: 28px;
+  }
+  .v2-steps__inline .v2-steps__label {
+    margin-bottom: 0;
+  }
+  .v2-steps__inline .v2-steps__code {
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 6px;
   }
   .v2-cta-buttons {
     display: flex;
