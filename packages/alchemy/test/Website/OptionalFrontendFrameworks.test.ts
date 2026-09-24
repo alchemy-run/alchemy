@@ -11,7 +11,7 @@ describe(
   { tags: ["unit", "local"] },
   () => {
     it.effect(
-      "imports providers without the peer and propagates website import errors",
+      "imports providers without the peer and reports missing website dependencies as defects",
       () =>
         Effect.gen(function* () {
           const fixture = fileURLToPath(
@@ -32,6 +32,7 @@ describe(
             providers: ["Prisma", "Neon", "Fly", "Hetzner", "Railway"],
             providerImportAttempts: 0,
             loaderImportAttempts: 1,
+            defect: true,
             error: {
               _tag: "FrameworkServerError",
               framework: "@alchemy.run/frontend-frameworks/core",

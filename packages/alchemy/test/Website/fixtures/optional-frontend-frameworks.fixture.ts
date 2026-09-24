@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import { FrameworkServerError } from "alchemy/Website/Server";
 import { registerHooks } from "node:module";
 
 // Simulate an absent optional peer without changing the workspace install.
@@ -23,24 +25,26 @@ for (const provider of ["Prisma", "Neon", "Fly", "Hetzner", "Railway"]) {
   if (module.Website) providers.push(provider);
 }
 const providerImportAttempts = attempts;
-const { loadFrontendCore } =
-  await import("../../../src/Website/FrontendCore.ts");
-const result = await Effect.runPromise(Effect.result(loadFrontendCore));
+const { loadFrontendCore } = await import("alchemy/Website/FrontendCore");
+const exit = await Effect.runPromiseExit(loadFrontendCore);
+const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 console.log(
   JSON.stringify({
     providers,
     providerImportAttempts,
     loaderImportAttempts: attempts - providerImportAttempts,
-    error: Result.isFailure(result)
-      ? {
-          _tag: result.failure._tag,
-          framework: result.failure.framework,
-          message: result.failure.message,
-          cause:
-            result.failure.cause instanceof Error
-              ? result.failure.cause.message
-              : result.failure.cause,
-        }
-      : null,
+    defect:
+      Exit.isFailure(exit) &&
+      exit.cause.reasons.some((reason) => reason._tag === "Die"),
+    error:
+      error instanceof FrameworkServerError
+        ? {
+            _tag: error._tag,
+            framework: error.framework,
+            message: error.message,
+            cause:
+              error.cause instanceof Error ? error.cause.message : error.cause,
+          }
+        : null,
   }),
 );

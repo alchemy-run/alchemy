@@ -18,4 +18,4 @@ export const loadFrontendCore = Effect.tryPromise({
         "Install @alchemy.run/frontend-frameworks in your project to deploy a website.",
       cause,
     }),
-});
+}).pipe(Effect.orDie);
