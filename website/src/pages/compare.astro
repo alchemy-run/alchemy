@@ -1393,7 +1393,7 @@ const LOOP = (() => {
             <h2 class="cmp-h2" id="more" data-copy>
                 And a few more things
             </h2>
-            <ul class="cmp-cards cmp-cards--2">
+            <ul class="cmp-cards cmp-cards--3">
                 <li class="cmp-card">
                     <h3 data-copy>Providers built from the spec</h3>
                     <p data-copy>
@@ -1404,6 +1404,15 @@ const LOOP = (() => {
                     <h3 data-copy>Runs anywhere TypeScript runs</h3>
                     <p data-copy>
                         Alchemy is just typescript, it can run on your machine, inside a cloudflare worker, or even in a browser.
+                    </p>
+                </li>
+                <li class="cmp-card">
+                    <h3 data-copy>Bring your own provider</h3>
+                    <p data-copy>
+                        A provider is just TypeScript: declare the resource's
+                        props, then write its create, update, and delete as
+                        plain functions. No Go plugin or bridge to build.{" "}
+                        <a href="/infrastructure-as-code/custom-provider">Write one</a>.
                     </p>
                 </li>
             </ul>
@@ -2465,14 +2474,10 @@ const LOOP = (() => {
         .cmp-split,
         .cmp-cards--2,
         .cmp-cards--3,
-        .dg-perm,
         .dg-brow,
         .dg-trace,
         .dg-broken {
             grid-template-columns: minmax(0, 1fr);
-        }
-        .dg-engine {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
     @media (max-width: 640px) {
@@ -2480,8 +2485,67 @@ const LOOP = (() => {
         .cmp-section {
             padding: 56px 20px;
         }
+        /* Keep the comparisons side by side on phones, just smaller:
+           seeing them together is the point. */
         .dg-engine {
-            grid-template-columns: minmax(0, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 24px 12px;
+        }
+        .dg-engine__tool figcaption {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .dg-engine .dg-pill {
+            padding: 3px 7px;
+            font-size: 10px;
+        }
+        .dg-engine .dg-down {
+            height: 14px;
+        }
+        .dg-nest :global(.dg-layer) {
+            padding: 7px 5px 8px;
+            border-radius: 10px;
+        }
+        .dg-nest :global(.dg-layer .dg-layer) {
+            margin-top: 7px;
+        }
+        .dg-nest :global(.dg-layer__name) {
+            font-size: 11px;
+        }
+        .dg-nest :global(.dg-layer__name small) {
+            font-size: 9.5px;
+        }
+        .is-ours .dg-nest :global(.dg-layer) {
+            padding: 14px 5px;
+        }
+        .dg-engine .dg-note {
+            font-size: 11px;
+        }
+        .dg-perm {
+            gap: 8px;
+        }
+        /* Two-line headers so all three rings line up. */
+        .dg-perm__tool figcaption {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            min-height: 2.6em;
+            font-size: 14px;
+            line-height: 1.3;
+        }
+        .dg-perm__rings {
+            margin: 4px 0 6px;
+        }
+        .dg-perm .dg-perm__code {
+            font-size: 10.5px;
+            overflow-wrap: anywhere;
+        }
+        .dg-perm .dg-perm__grant {
+            font-size: 10px;
+            overflow-wrap: anywhere;
+        }
+        .dg-perm .dg-verdict {
+            font-size: 12px;
         }
         .dg-fan {
             grid-template-columns: minmax(0, 1fr);
