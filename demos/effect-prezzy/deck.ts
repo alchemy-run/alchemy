@@ -25,18 +25,15 @@ const chapter = (
 ];
 
 export const deck: DeckItem[] = [
+  { kind: "intro", id: "intro" },
   {
     kind: "slide",
-    id: "title",
-    title: "Title",
-    notes: "Intro: who I am, and what we're building: a link shortener, from an empty folder to production.",
-    layout: "title",
-    props: {
-      eyebrow: "Alchemy",
-      heading: "From zero to production with Effect",
-      subtitle: "Infrastructure as Effects on Cloudflare, Neon and Axiom",
-    },
-    seconds: 2.5,
+    id: "build",
+    title: "Let's build something",
+    notes: "Enough theory: let's build a service from an empty folder to production, and watch the architecture grow as we go.",
+    layout: "section",
+    props: { eyebrow: "Demo", heading: "Let's build something", subtitle: "From an empty folder to production" },
+    seconds: 2,
   },
   ...chapter(0, "00-website", "A Stack and a website", "Declare the Stack, run it with alchemy dev"),
   ...chapter(1, "01-api", "An Effectful Worker", "An HttpApi served by a Worker, called by a typed client"),

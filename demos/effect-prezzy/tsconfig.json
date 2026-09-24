@@ -11,6 +11,8 @@
     "shared",
     "deck.ts",
     "render.ts",
+    "intro/build.ts",
+    "intro/steps.ts",
     "remotion.config.ts"
   ],
   "compilerOptions": {

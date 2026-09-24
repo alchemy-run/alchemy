@@ -164,4 +164,10 @@ export interface SceneItem {
   id: string;
 }
 
-export type DeckItem = SlideItem | SceneItem;
+/** The story-telling intro (`intro/steps.ts`), one presenter step per intro step. */
+export interface IntroItem {
+  kind: "intro";
+  id: "intro";
+}
+
+export type DeckItem = SlideItem | SceneItem | IntroItem;

@@ -1,3 +1,4 @@
+import { loadFont as loadCaveat } from "@remotion/google-fonts/Caveat";
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
 import { loadFont as loadJetBrainsMono } from "@remotion/google-fonts/JetBrainsMono";
 import { loadFont as loadSourceSerif } from "@remotion/google-fonts/SourceSerif4";
@@ -15,3 +16,6 @@ export const serif = loadSourceSerif("normal", {
   weights: ["400", "600"],
   subsets: ["latin"],
 }).fontFamily;
+
+/** Hand-drawn annotations on code. */
+export const hand = loadCaveat("normal", { weights: ["600", "700"], subsets: ["latin"] }).fontFamily;

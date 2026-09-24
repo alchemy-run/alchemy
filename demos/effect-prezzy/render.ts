@@ -24,6 +24,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { deck } from "./deck.ts";
 import { schedule } from "./remotion/scene/schedule.ts";
+import { introTimeline, type IntroJson } from "./shared/intro.ts";
 import { VIDEO, type SceneCapture } from "./shared/types.ts";
 
 const root = import.meta.dirname;
@@ -55,6 +56,16 @@ interface Part {
 /** The presenter steps of one deck item. */
 const partsOf = async (item: (typeof deck)[number], durationInFrames: number): Promise<Part[]> => {
   const file = (k: number, ext: string) => path.join(clipsDir, `${item.id}.${k}.${ext}`);
+  if (item.kind === "intro") {
+    const intro = JSON.parse(await readFile(path.join(captureDir, "intro", "intro.json"), "utf8")) as IntroJson;
+    return introTimeline(intro.steps).map((range, k) => ({
+      title: intro.steps[k]!.title,
+      notes: intro.steps[k]!.notes,
+      ...range,
+      clip: file(k, "mp4"),
+      poster: file(k, "jpg"),
+    }));
+  }
   if (item.kind === "slide") {
     return [{ title: item.title, notes: item.notes, from: 0, to: durationInFrames, clip: file(0, "mp4"), poster: file(0, "jpg") }];
   }

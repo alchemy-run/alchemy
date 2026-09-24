@@ -53,7 +53,7 @@ const captionAt = (plan: SceneSchedule, frame: number) => {
   return caption;
 };
 
-const Caption = ({ text, since }: { text: string; since: number }) => {
+export const Caption = ({ text, since }: { text: string; since: number }) => {
   const t = interpolate(since, [0, 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <div

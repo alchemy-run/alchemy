@@ -1,0 +1,61 @@
+import { AbsoluteFill, staticFile, useCurrentFrame, type CalculateMetadataFunction } from "remotion";
+import { introTimeline, type IntroJson, type IntroStep } from "../../shared/intro.ts";
+import { VIDEO } from "../../shared/types.ts";
+import { Caption } from "../scene/Scene.tsx";
+import { Slide } from "../slides/Slide.tsx";
+import { brand } from "../theme.ts";
+import { Board } from "./boards.tsx";
+import { CodeSlide } from "./CodeSlide.tsx";
+
+export interface IntroProps extends Record<string, unknown> {
+  intro?: IntroJson;
+}
+
+export const calculateIntroMetadata: CalculateMetadataFunction<IntroProps> = async ({ props }) => {
+  const response = await fetch(staticFile("intro/intro.json"));
+  if (!response.ok) throw new Error("No intro build. Run `pnpm intro:build` first.");
+  const intro = (await response.json()) as IntroJson;
+  const total = intro.steps.reduce((sum, step) => sum + step.frames, 0);
+  return { durationInFrames: Math.max(1, total), fps: VIDEO.fps, props: { ...props, intro } };
+};
+
+/** Same dark stage as the slides, without their headline layout. */
+const Stage = () => (
+  <AbsoluteFill
+    style={{
+      background: [
+        `radial-gradient(900px 700px at 12% 18%, ${brand.moss}1c, transparent 65%)`,
+        `radial-gradient(900px 700px at 88% 90%, ${brand.ember}18, transparent 65%)`,
+        brand.bg,
+      ].join(","),
+    }}
+  />
+);
+
+export const Intro = ({ intro }: IntroProps) => {
+  const frame = useCurrentFrame();
+  if (!intro) return null;
+  const ranges = introTimeline(intro.steps);
+  const index = Math.max(0, ranges.findIndex((r) => frame >= r.from && frame < r.to));
+  const at = index < 0 ? intro.steps.length - 1 : index;
+  const step = intro.steps[at]!;
+  const local = frame - ranges[at]!.from;
+  const prev: IntroStep | undefined = intro.steps[at - 1];
+
+  if (step.kind === "slide") {
+    return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle }} />;
+  }
+  // The caption stays put across steps that share it.
+  const captionSince = prev && prev.title === step.title ? local + 100 : local;
+  return (
+    <AbsoluteFill>
+      <Stage />
+      {step.kind === "code" ? (
+        <CodeSlide step={step} prev={prev?.kind === "code" ? prev : undefined} local={local} />
+      ) : (
+        <Board board={step.board} stage={step.stage} local={local} />
+      )}
+      <Caption text={step.title} since={captionSince} />
+    </AbsoluteFill>
+  );
+};
