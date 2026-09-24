@@ -1345,22 +1345,22 @@ export const steps: StepSpec[] = [
       "And here's how it gets granted. To satisfy R2.GetObject, you provide a layer for it, R2.ReadBucket for this bucket. And providing that layer is what grants the policy: s3:GetObject on Uploads, and nothing more.",
   }),
   api({
-    title: "It looked just like the imaginary language…",
+    title: "This approach doesn't work…",
     code: INFERRED_ON_FETCH,
     quiet: true,
     cross: true,
     req: [],
     fetchReq: [met(GET_OBJECT, "R2.ReadBucket(bucket)\ngrants s3:GetObject")],
     notes:
-      "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
+      "It looked just like the imaginary language, and I was pretty pleased with it. But this approach doesn't work, and the problems got worse the further I took it.",
   }),
   api({
-    title: "But it's in the wrong spot",
+    title: "…it's in the wrong spot",
     code: INFERRED_ON_FETCH,
     req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
-      "But it's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
+      "It's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
     title: "Moving the bucket out puts the layer on construction",
