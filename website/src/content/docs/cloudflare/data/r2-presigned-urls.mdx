@@ -163,7 +163,8 @@ gives you the same values for your own S3 client.
 ## Browser uploads to a deployed bucket
 
 A browser calling the URL from another origin needs a CORS rule on
-the bucket. The local endpoint allows any origin.
+the bucket. The local endpoint allows any origin and ignores these
+rules, so a missing origin or header only shows up once deployed.
 
 ```typescript
 // src/uploads.ts
@@ -186,6 +187,10 @@ The local endpoint rejects expired and tampered URLs like R2 does,
 and objects uploaded through it are visible to the Worker's own R2
 bindings. S3 clients such as the AWS SDK work against it too. A
 bucket piped through `Alchemy.remote()` uses real R2 in dev.
+
+Mint presigned URLs on demand and store object keys, not URLs. URLs
+expire, and a local URL points at the Worker's dev port, which can
+change between `alchemy dev` runs.
 
 R2 doesn't support presigned POST (HTML form) uploads, locally or
 deployed. Use presigned `PUT` URLs.
