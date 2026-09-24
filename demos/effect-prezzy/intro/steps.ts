@@ -568,6 +568,26 @@ export const handler = async (event) => {
     Body: event.body,
   }));
 };`;
+/** Roughly what `cdk synth` emits for the Api construct (logical IDs get hashes). */
+const CDK_SYNTH = `Resources:
+  Uploads1E2F3A4B:
+    Type: AWS::S3::Bucket
+  FnServiceRoleB9001A96:
+    Type: AWS::IAM::Role
+  FnServiceRoleDefaultPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: [s3:GetObject*, s3:PutObject*]
+            Resource: !Sub "\${Uploads1E2F3A4B.Arn}/*"
+  Fn9270CBC0:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref Uploads1E2F3A4B`;
 const CDK_LINKS: NonNullable<CodeSpec["links"]> = [
   { from: '"index.handler"', to: "export const handler" },
   { from: "BUCKET_NAME", to: "process.env.BUCKET_NAME" },
@@ -823,6 +843,43 @@ export const steps: StepSpec[] = [
     marks: [{ kind: "underline", find: "uploads.grantReadWrite(fn);", label: "the whole IAM policy", side: "right", tone: "good" }],
     notes:
       "Finally, real code: variables, functions, types, and abstractions like grantReadWrite that write the IAM policy for you.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "Under the hood, the CDK just generates CloudFormation",
+    src: { code: CDK },
+    beside: { file: "cdk synth → template.yaml", lang: "yaml", src: { code: CDK_SYNTH } },
+    links: [
+      { from: 'new s3.Bucket(this, "Uploads")', to: "Uploads1E2F3A4B:" },
+      { from: "uploads.grantReadWrite(fn);", to: "FnServiceRoleDefaultPolicy:" },
+      { from: '"index.handler"', to: "Handler: index.handler" },
+    ],
+    frames: 45,
+    notes:
+      "But it's worth being clear about what the CDK actually is. Run cdk synth and your TypeScript executes once, on your machine, and spits out a CloudFormation template. Every construct becomes a block of YAML. That template is what actually gets deployed.",
+  },
+  {
+    kind: "code",
+    group: "cdk",
+    file: "infra/api.ts",
+    title: "It's a template generator, not programmable infrastructure",
+    src: { code: CDK },
+    marks: [{ kind: "underline", find: "class Api extends Construct", label: "runs once, at synth", side: "right", tone: "neutral" }],
+    beside: {
+      file: "cdk synth → template.yaml",
+      lang: "yaml",
+      src: { code: CDK_SYNTH },
+      marks: [{ kind: "underline", find: "Resources:", label: "what's actually deployed", side: "right", tone: "construct" }],
+    },
+    links: [
+      { from: 'new s3.Bucket(this, "Uploads")', to: "Uploads1E2F3A4B:" },
+      { from: "uploads.grantReadWrite(fn);", to: "FnServiceRoleDefaultPolicy:" },
+      { from: '"index.handler"', to: "Handler: index.handler" },
+    ],
+    notes:
+      "So it's a much nicer way to write the template, but it's still a template generator. The code is gone by the time anything deploys. Anything that depends on the real cloud at deploy time is back to CloudFormation intrinsics. It's not really programmable infrastructure.",
   },
   {
     kind: "code",
