@@ -1039,28 +1039,6 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "cdk",
     file: "infra/api.ts",
-    title: "It's a template generator, not programmable infrastructure",
-    src: { code: CDK },
-    marks: [{ kind: "underline", find: "class Api extends Construct", label: "runs once, at synth", side: "right", tone: "neutral" }],
-    beside: {
-      file: "cdk synth → template.yaml",
-      lang: "yaml",
-      src: { code: CDK_SYNTH },
-      marks: [{ kind: "underline", find: "Resources:", label: "what's actually deployed", side: "right", tone: "construct" }],
-    },
-    links: [
-      { from: 'new s3.Bucket(this, "Uploads")', to: "Uploads1E2F3A4B:" },
-      { from: "uploads.grantReadWrite(fn);", to: "FnServiceRoleDefaultPolicy:" },
-      { from: '"index.handler"', to: "Handler: index.handler" },
-    ],
-    aside: { text: "…and it was\nCloudFormation\nall along!", image: "scooby-unmasked.png", at: "left" },
-    notes:
-      "Pull the mask off the CDK, and it was CloudFormation all along. So it's a much nicer way to write the template, but it's still a template generator. The code is gone by the time anything deploys. Anything that depends on the real cloud at deploy time is back to CloudFormation intrinsics. It's not really programmable infrastructure.",
-  },
-  {
-    kind: "code",
-    group: "cdk",
-    file: "infra/api.ts",
     title: "It also bothered me that the runtime code lived elsewhere",
     src: { code: CDK },
     beside: { file: "src/handler.ts", src: { code: HANDLER } },
