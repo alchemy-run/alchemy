@@ -113,9 +113,12 @@ const queryStyle =
   });
 
 const bodyStyle =
-  (get: BodyGet, set: Set) =>
+  (get: BodyGet, set: Set, policyVersion = 3) =>
   (resource: string): IamPolicyTarget => ({
-    get: get({ resource, body: { options: { requestedPolicyVersion: 3 } } }),
+    get: get({
+      resource,
+      body: { options: { requestedPolicyVersion: policyVersion } },
+    }),
     set: (policy) => set({ resource, body: { policy } }),
   });
 
@@ -164,9 +167,11 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
     artifactregistry.getIamPolicyProjectsLocationsRepositories,
     artifactregistry.setIamPolicyProjectsLocationsRepositories,
   ),
+  // BigQuery table policies reject requestedPolicyVersion 3.
   "bigquery.table": bodyStyle(
     bigquery.getIamPolicyTables,
     bigquery.setIamPolicyTables,
+    1,
   ),
   "bigqueryconnection.connection": bodyStyle(
     bigqueryconnection.getIamPolicyProjectsLocationsConnections,
@@ -289,7 +294,9 @@ export interface IamMembership {
 }
 
 const principal = (member: string) =>
-  /^(serviceAccount|user|group|domain|principal|principalSet):/.test(member)
+  /^(serviceAccount|user|group|domain|principal|principalSet):/.test(member) ||
+  member === "allUsers" ||
+  member === "allAuthenticatedUsers"
     ? member
     : `serviceAccount:${member}`;
 
@@ -339,10 +346,11 @@ const rewrite = (
     }
   }
   if (!dirty) return undefined;
+  // Keep the version the policy was read at: conditional bindings only
+  // come back (and must be written) at v3, and some resources (BigQuery
+  // tables) accept nothing above v1.
   return {
     ...policy,
-    // Conditional bindings require v3 on write; v3 is a superset of v1.
-    version: 3,
     bindings: bindings.filter((binding) => binding.members.length > 0),
   };
 };
@@ -417,4 +425,26 @@ export const projectRolesOf = (project: string, member: string) =>
         )
         .flatMap((binding) => (binding.role ? [binding.role] : []));
     }),
+  );
+
+/** True when `member` holds `role` unconditionally on the resource. */
+export const hasIamMembership = (options: {
+  kind: GcpIamResourceKind;
+  name: string;
+  member: string;
+  role: string;
+}) =>
+  TARGETS[options.kind](targetName(options.kind, options.name)).get.pipe(
+    Effect.map((policy) =>
+      (policy.bindings ?? []).some(
+        (binding) =>
+          binding.role === options.role &&
+          binding.condition === undefined &&
+          (binding.members ?? []).includes(principal(options.member)),
+      ),
+    ),
+    Effect.catchIf(
+      (error) => error._tag === "NotFound",
+      () => Effect.succeed(false),
+    ),
   );

@@ -135,13 +135,43 @@ you `Effect.orDie` it.
   or Cloud Scheduler.
 - **`GCP.Run.WorkerPool`** — a long-running pool with no request path,
   for pulling from a queue continuously.
-- **`GCP.CloudFunctions.Function`** — the zip-source gen2 API. It does
-  not take `main`; use it when you have an archive rather than a
-  bundle. Bindings yielded in its Effect still grant IAM and inject env
-  for the archive's code, but the Effect itself does not run there.
+- **`GCP.CloudFunctions.Function`** — a gen2 function. With `main`,
+  Alchemy bundles the program for Node.js, uploads the archive, and
+  serves `fetch` through the Functions Framework, so the Effect runs
+  exactly as on a Service. Without `main` it deploys your own archive.
 
-The first three build a container image locally, which means Docker
-has to be running to deploy them.
+The Run hosts build a container image locally, which means Docker has
+to be running to deploy them. Cloud Functions build in the cloud.
+
+## Event sources
+
+Bindings are calls your code makes. Event sources are the reverse:
+Google calls your code. Each one is a contract in the source service
+plus an implementation layer for the kind of host, the same split AWS
+uses for `SQS.consumeQueueMessages` with Lambda or a server host:
+
+| Consume with | Contract | Push hosts (Service, Function) | Pull hosts (Job, WorkerPool) |
+| --- | --- | --- | --- |
+| `GCP.PubSub.consumeTopicMessages` | `PubSub.TopicEventSource` | `GCP.Run.TopicEventSource` | `GCP.Run.TopicPullEventSource` |
+| `GCP.Storage.consumeBucketEvents` | `Storage.BucketEventSource` | `Storage.BucketEventSourceLive` + a topic layer | same |
+| `GCP.CloudScheduler.consumeSchedule` | `CloudScheduler.ScheduleEventSource` | `GCP.Run.ScheduleEventSource` | — |
+
+```typescript
+yield* GCP.PubSub.consumeTopicMessages(orders, (messages) =>
+  messages.pipe(Stream.runForEach(({ message }) => handle(message))),
+);
+// …provided with Effect.provide(GCP.Run.TopicEventSource)
+```
+
+A push source provisions the delivery (a push subscription, a Storage
+notification, a scheduler job) at the host's URL on a path under
+`/__alchemy/`, signed with an OIDC token for the host's runtime service
+account, and grants that account `roles/run.invoker` on the host. At
+runtime the host claims those paths before your `fetch` and verifies
+every token's signature, audience, and email, so the service can stay
+private. A 2xx acks; a failed handler answers 500 and Pub/Sub
+redelivers. A pull source creates a subscription the host owns and runs
+a pull loop that acks each batch after the handler succeeds.
 
 ## Next
 

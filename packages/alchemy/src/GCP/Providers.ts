@@ -3762,6 +3762,10 @@ import {
   HostServiceAccountProvider,
 } from "./IAM/HostServiceAccount.ts";
 import {
+  Member as IamMember,
+  MemberProvider as IamMemberProvider,
+} from "./IAM/Member.ts";
+import {
   Policy as IamPolicy,
   PolicyProvider as IamPolicyProvider,
 } from "./IAM/Policy.ts";
@@ -4981,6 +4985,7 @@ export const providers = () =>
           UserProfilesGuardianInvitation,
           IamPolicy,
           HostServiceAccount,
+          IamMember,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
           never,
@@ -6315,6 +6320,7 @@ export const providers = () =>
                 UserProfilesGuardianInvitationProvider(),
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
+                IamMemberProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
                 DoubleclickbidmanagerQueryProvider(),

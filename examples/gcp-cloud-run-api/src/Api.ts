@@ -14,6 +14,13 @@ const newCode = () =>
     (byte) => ALPHABET[byte % ALPHABET.length],
   ).join("");
 
+/**
+ * Cloud Run terminates TLS at its front end and forwards plain HTTP, so
+ * the public origin comes from the forwarded headers.
+ */
+const publicOrigin = (request: HttpServerRequest) =>
+  `${request.headers["x-forwarded-proto"] ?? "https"}://${request.headers.host}`;
+
 /** Constant-time comparison so response timing does not leak the key. */
 const sameKey = (expected: string, given: string | undefined) => {
   if (given === undefined || given.length !== expected.length) return false;
@@ -159,7 +166,7 @@ export default class Api extends GCP.Function<Api>()(
           });
 
           return yield* HttpServerResponse.json(
-            { code, shortUrl: `${url.origin}/l/${code}` },
+            { code, shortUrl: `${publicOrigin(request)}/l/${code}` },
             { status: 201 },
           );
         }

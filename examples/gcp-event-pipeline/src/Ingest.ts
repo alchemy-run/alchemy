@@ -36,7 +36,8 @@ export default class Ingest extends GCP.Function<Ingest>()(
     // how one host triggers another.
     const runDrain = yield* GCP.Run.RunJob(drain);
 
-    // Resolved once, at deploy time, and baked into the revision.
+    // An accessor: the table id is bound at deploy time and read back
+    // inside the handler.
     const tableId = yield* table.tableId;
 
     return {
@@ -98,12 +99,13 @@ export default class Ingest extends GCP.Function<Ingest>()(
 
         if (request.method === "GET" && url.pathname === "/events/count") {
           const type = url.searchParams.get("type");
+          const events = yield* tableId;
           // The dataset is implied by the binding, so the table name
           // alone qualifies it.
           const rows = yield* query({
             query: type
-              ? `SELECT COUNT(*) AS n FROM \`${tableId}\` WHERE type = @type`
-              : `SELECT COUNT(*) AS n FROM \`${tableId}\``,
+              ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
+              : `SELECT COUNT(*) AS n FROM \`${events}\``,
             parameterMode: type ? "NAMED" : undefined,
             queryParameters: type
               ? [

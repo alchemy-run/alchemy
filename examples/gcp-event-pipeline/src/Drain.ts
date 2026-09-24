@@ -1,5 +1,6 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { Analytics, EventsTable, Inbox, type EventRow } from "./resources.ts";
 
 /** One pull returns at most this many messages. */
@@ -35,14 +36,19 @@ export default class Drain extends GCP.Run.Job<Drain>()(
     yield* dataset.datasetId;
 
     return {
+      // A pull may return fewer messages than are waiting, so drain
+      // batch by batch until one comes back empty.
       run: Effect.gen(function* () {
-        const received = yield* pull({
-          body: { maxMessages: BATCH, returnImmediately: false },
-        });
-        const messages = received.receivedMessages ?? [];
+        // A pull waits for messages; an empty subscription answers
+        // nothing, so a quiet 10 seconds means the backlog is drained.
+        const received = yield* pull({ body: { maxMessages: BATCH } }).pipe(
+          Effect.timeoutOption("10 seconds"),
+        );
+        const messages =
+          Option.getOrUndefined(received)?.receivedMessages ?? [];
         if (messages.length === 0) {
-          yield* Effect.log("drain: nothing to do");
-          return;
+          yield* Effect.log("drain: nothing left");
+          return 0;
         }
 
         const rows = messages.flatMap((message) => {
@@ -65,7 +71,12 @@ export default class Drain extends GCP.Run.Job<Drain>()(
         });
 
         yield* Effect.log(`drain: wrote ${rows.length} row(s)`);
-      }).pipe(Effect.orDie),
+        return messages.length;
+      }).pipe(
+        Effect.repeat({ until: (count) => count === 0 }),
+        Effect.asVoid,
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide([

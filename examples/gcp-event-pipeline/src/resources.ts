@@ -33,8 +33,9 @@ export const Inbox = Effect.gen(function* () {
  */
 export const EventsTable = Effect.gen(function* () {
   const dataset = yield* Analytics;
-  return yield* GCP.BigQuery.Table("Events", {
+  return yield* GCP.BigQuery.Table("EventsTable", {
     datasetId: dataset.datasetId,
+    tableId: "events",
     schema: [
       { name: "id", type: "STRING", mode: "REQUIRED" },
       { name: "type", type: "STRING", mode: "REQUIRED" },

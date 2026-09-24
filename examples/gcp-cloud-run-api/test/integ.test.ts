@@ -6,6 +6,7 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -121,7 +122,16 @@ test.skipIf(skip)(
     yield* getWhenReady(`${baseUrl}/`);
 
     const target = "https://alchemy.run/gcp";
-    const created = yield* createLink(baseUrl, target);
+    // A fresh deploy's project-level Firestore grants can take several
+    // minutes to propagate; until then the service answers 500
+    // (Forbidden from Firestore).
+    const created = yield* createLink(baseUrl, target).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("10 seconds"),
+        until: (response) => response.status !== 500,
+        times: 42,
+      }),
+    );
     expect(created.status).toBe(201);
     const { code, shortUrl } = (yield* created.json) as {
       code: string;
@@ -147,8 +157,13 @@ test.skipIf(skip)(
       clicks: 0,
     });
 
+    // Inspect the redirect itself instead of following it to the target.
     const redirect = yield* HttpClient.execute(
       HttpClientRequest.get(`${baseUrl}/l/${code}`),
+    ).pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, {
+        redirect: "manual",
+      }),
     );
     expect(redirect.status).toBe(302);
     expect(redirect.headers.location).toEqual(target);

@@ -11,14 +11,14 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-  type ServerHost,
-} from "../../Server/Process.ts";
+import { type ServerHost } from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  createGcpHostRuntimeContext,
+  type GcpHostRuntimeContext,
+} from "../HostContext.ts";
 import {
   retryActAs,
   type AppliedIamGrant,
@@ -311,7 +311,7 @@ export type Service = Resource<
   Providers
 >;
 
-export type ServiceRuntimeContext = HostRuntimeContext;
+export type ServiceRuntimeContext = GcpHostRuntimeContext;
 export type ServiceServices = Credentials | GcpEnvironment | ServerHost;
 export type ServiceShape = Main<ServiceServices>;
 
@@ -414,7 +414,7 @@ export const Service: Platform<
   ServiceShape,
   ServiceRuntimeContext
 > = Platform("GCP.Run.Service", {
-  createRuntimeContext: createHostRuntimeContext("GCP.Run.Service") as (
+  createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service") as (
     id: string,
   ) => ServiceRuntimeContext,
 });
@@ -878,7 +878,8 @@ const waitForOperation = (
       }),
       Effect.retry({
         while: (error) => error._tag === "GCP.Run.ServiceOperationPending",
-        times: 10,
+        // A first revision can take over a minute to become ready.
+        times: 24,
         schedule: Schedule.spaced("5 seconds"),
       }),
     );

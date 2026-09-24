@@ -45,8 +45,9 @@ export const Inbox = Effect.gen(function* () {
 
 export const EventsTable = Effect.gen(function* () {
   const dataset = yield* Analytics;
-  return yield* GCP.BigQuery.Table("Events", {
+  return yield* GCP.BigQuery.Table("EventsTable", {
     datasetId: dataset.datasetId,
+    tableId: "events",
     schema: [
       { name: "id", type: "STRING", mode: "REQUIRED" },
       { name: "type", type: "STRING", mode: "REQUIRED" },
@@ -80,7 +81,8 @@ export default class Ingest extends GCP.Function<Ingest>()(
     const query = yield* GCP.BigQuery.Query(dataset);
     const runDrain = yield* GCP.Run.RunJob(drain);
 
-    // Resolved once, at deploy time, and baked into the revision.
+    // An accessor: the table id is bound at deploy time and read back
+    // inside the handler.
     const tableId = yield* table.tableId;
 ```
 
@@ -140,10 +142,11 @@ on a cron; the route exists so you can force a batch by hand.
 ### `GET /events/count`
 
 ```typescript
+          const events = yield* tableId;
           const rows = yield* query({
             query: type
-              ? `SELECT COUNT(*) AS n FROM \`${tableId}\` WHERE type = @type`
-              : `SELECT COUNT(*) AS n FROM \`${tableId}\``,
+              ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
+              : `SELECT COUNT(*) AS n FROM \`${events}\``,
             parameterMode: type ? "NAMED" : undefined,
             queryParameters: type
               ? [
@@ -184,15 +187,17 @@ export default class Drain extends GCP.Run.Job<Drain>()(
     yield* dataset.datasetId;
 
     return {
+      // A pull may return fewer messages than are waiting, so drain
+      // batch by batch until one comes back empty.
       run: Effect.gen(function* () {
-        const received = yield* pull({
-          body: { maxMessages: BATCH, returnImmediately: false },
-        });
-        const messages = received.receivedMessages ?? [];
-        if (messages.length === 0) {
-          yield* Effect.log("drain: nothing to do");
-          return;
-        }
+        // A pull waits for messages; an empty subscription answers
+        // nothing, so a quiet 10 seconds means the backlog is drained.
+        const received = yield* pull({ body: { maxMessages: BATCH } }).pipe(
+          Effect.timeoutOption("10 seconds"),
+        );
+        const messages =
+          Option.getOrUndefined(received)?.receivedMessages ?? [];
+        if (messages.length === 0) return 0;
 
         const rows = messages.flatMap((message) => {
           const data = message.message?.data;
@@ -210,7 +215,12 @@ export default class Drain extends GCP.Run.Job<Drain>()(
             ),
           },
         });
-      }).pipe(Effect.orDie),
+        return messages.length;
+      }).pipe(
+        Effect.repeat({ until: (count) => count === 0 }),
+        Effect.asVoid,
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide([

@@ -12,3 +12,5 @@ export * from "./GetObject.ts";
 export * from "./GetObjectHttp.ts";
 export * from "./PutObject.ts";
 export * from "./PutObjectHttp.ts";
+export * from "./BucketEventSource.ts";
+export * from "./BucketEventSourceLive.ts";

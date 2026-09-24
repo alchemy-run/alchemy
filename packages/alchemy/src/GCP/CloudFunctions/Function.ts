@@ -9,21 +9,28 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-  type ServerHost,
-} from "../../Server/Process.ts";
+import { type ServerHost } from "../../Server/Process.ts";
 import { packEnvValue } from "../../RuntimeContext.ts";
 import { tagRecord } from "../../Tags.ts";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import type * as Bundle from "../../Bundle/Bundle.ts";
+import {
+  DEFAULT_NODE_RUNTIME,
+  FUNCTION_ENTRY_POINT,
+  makeFunctionSource,
+} from "./FunctionSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  createGcpHostRuntimeContext,
+  type GcpHostRuntimeContext,
+} from "../HostContext.ts";
 import {
   retryActAs,
   type AppliedIamGrant,
   type GcpHostBinding,
 } from "../Host.ts";
 import {
+  alchemyRuntimeEnv,
   isManagedServiceAccount,
   releaseHostIdentity,
   resolveHostIdentity,
@@ -279,6 +286,27 @@ export type FunctionProps = PlatformProps & {
   serviceConfig?: ServiceConfig;
   /** Eventarc trigger. Omit for an HTTPS function. */
   eventTrigger?: EventTrigger;
+  /**
+   * Entry module of an Effect-native function. Alchemy bundles it for
+   * Node.js, uploads the archive, and serves the impl's `fetch` (and any
+   * event-source listeners) through the Functions Framework. Bindings
+   * attach env + IAM onto the runtime service account. Replaces
+   * `buildConfig.source` / `entryPoint`; `buildConfig.runtime` defaults to
+   * `nodejs22`.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Additional environment variables for the Effect-native function.
+   * Merged after binding-injected `env`.
+   */
+  env?: Record<string, any>;
+  /** Bundler configuration for `main`. */
+  build?: Bundle.BundleConfig;
 };
 
 export type Function = Resource<
@@ -333,12 +361,14 @@ export type Function = Resource<
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
     iamGrants: AppliedIamGrant[];
+    /** Hash of the bundled `main` program (Effect-native only). */
+    codeHash: string | undefined;
   },
   GcpHostBinding,
   Providers
 >;
 
-export type FunctionRuntimeContext = HostRuntimeContext;
+export type FunctionRuntimeContext = GcpHostRuntimeContext;
 export type FunctionServices = Credentials | GcpEnvironment | ServerHost;
 export type FunctionShape = Main<FunctionServices>;
 
@@ -421,10 +451,38 @@ export type FunctionShape = Main<FunctionServices>;
  * const { downloadUrl } = yield* download();
  * ```
  *
- * This resource has no `main` / bundle path. An Effect impl passed as
- * the third argument is ignored. Effect-native HTTP functions with
- * bindings use `GCP.Run.Service` (also exported as `GCP.Function`) —
- * Cloud Run is the gen2 runtime.
+ * ### Effect-native Functions
+ * **Example:** HTTP function with a Pub/Sub binding
+ * ```typescript
+ * export class Hello extends GCP.CloudFunctions.Function<Hello>()(
+ *   "Hello",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const publish = yield* GCP.PubSub.Publish(yield* Events);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({ body: { messages: [{ data: btoa("hi") }] } }).pipe(
+ *           Effect.orDie,
+ *         );
+ *         return HttpServerResponse.text("sent");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(GCP.PubSub.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Consume a topic
+ * ```typescript
+ * yield* GCP.PubSub.consumeTopicMessages(orders, (messages) =>
+ *   messages.pipe(Stream.runForEach(({ message }) => Effect.log(message))),
+ * );
+ * // …provided with Effect.provide(GCP.CloudFunctions.TopicEventSource)
+ * ```
+ *
+ * With `main`, Alchemy bundles the program for Node.js (`nodejs22` by
+ * default), uploads it, and serves it through the Functions Framework;
+ * `buildConfig.source` and `entryPoint` are managed for you. The runtime
+ * authenticates to GCP as the function's service account.
  *
  * @resource
  * @category CloudFunctions
@@ -435,7 +493,7 @@ export const Function: Platform<
   FunctionShape,
   FunctionRuntimeContext
 > = Platform("GCP.CloudFunctions.Function", {
-  createRuntimeContext: createHostRuntimeContext(
+  createRuntimeContext: createGcpHostRuntimeContext(
     "GCP.CloudFunctions.Function",
   ) as (id: string) => FunctionRuntimeContext,
 });
@@ -580,7 +638,7 @@ const HOST_TYPE = "GCP.CloudFunctions.Function";
 const toAttrs = (
   fn: cloudfunctions.Cloudfunctions_Function,
   project: string,
-  extras: { iamGrants?: AppliedIamGrant[] } = {},
+  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";
   const parsed = parseName(name);
@@ -614,6 +672,7 @@ const toAttrs = (
       serviceAccount: fn.serviceConfig?.serviceAccountEmail,
     }),
     iamGrants: extras.iamGrants ?? [],
+    codeHash: extras.codeHash,
   };
 };
 
@@ -713,8 +772,10 @@ const waitForOperation = (
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.CloudFunctions.FunctionOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        // A gen2 create/update builds the source and rolls out a Cloud Run
+        // revision; 2–4 minutes is normal.
+        times: 36,
+        schedule: Schedule.spaced("10 seconds"),
       }),
     );
   });
@@ -860,11 +921,27 @@ export const FunctionProvider = () =>
         previousLocation !== nextLocation ||
         previousEnvironment !== nextEnvironment;
 
-      if (!replace) return undefined;
-      return {
-        action: "replace" as const,
-        deleteFirst: previousId !== undefined && nextId === previousId,
-      };
+      if (replace) {
+        return {
+          action: "replace" as const,
+          deleteFirst: previousId !== undefined && nextId === previousId,
+        };
+      }
+      // A code-only change leaves the props untouched; hash the bundle so
+      // it still surfaces as an update.
+      if (output !== undefined && news.main !== undefined) {
+        const source = yield* makeFunctionSource;
+        const { codeHash } = yield* source.bundle({
+          main: news.main,
+          handler: news.handler,
+          build: news.build,
+          isExternal: news.isExternal,
+        });
+        if (codeHash !== output.codeHash) {
+          return { action: "update" as const };
+        }
+      }
+      return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -877,6 +954,7 @@ export const FunctionProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, {
         iamGrants: output?.iamGrants,
+        codeHash: output?.codeHash,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
@@ -921,7 +999,7 @@ export const FunctionProvider = () =>
         hostType: HOST_TYPE,
         resourceName: name,
         userServiceAccount: news.serviceConfig?.serviceAccountEmail,
-        effectNative: false,
+        effectNative: news.main !== undefined,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
         output: output && {
           ...output,
@@ -930,17 +1008,22 @@ export const FunctionProvider = () =>
       });
       const serviceAccount = identity.serviceAccount;
       const collected = identity;
+      const runtimeEnv: Record<string, unknown> = {
+        ...(news.main !== undefined ? yield* alchemyRuntimeEnv : {}),
+        ...collected.env,
+        ...news.env,
+      };
       const serviceConfig = {
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
-          ...news.serviceConfig?.environmentVariables,
           ...Object.fromEntries(
-            Object.entries(collected.env).map(([key, value]) => [
+            Object.entries(runtimeEnv).map(([key, value]) => [
               key,
               packEnvValue(value),
             ]),
           ),
+          ...news.serviceConfig?.environmentVariables,
         },
       };
 
@@ -948,6 +1031,42 @@ export const FunctionProvider = () =>
       if (current?.state === "DELETING") {
         yield* waitUntilGone(name);
         current = undefined;
+      }
+
+      // Effect-native: bundle `main`, and upload a new archive only when
+      // the bundle changed (reusing the deployed source otherwise).
+      let codeHash: string | undefined;
+      let buildConfig = news.buildConfig;
+      if (news.main !== undefined) {
+        const source = yield* makeFunctionSource;
+        const bundled = yield* source
+          .bundle({
+            main: news.main,
+            handler: news.handler,
+            build: news.build,
+            isExternal: news.isExternal,
+          })
+          .pipe(Effect.tapError(() => identity.cleanup));
+        codeHash = bundled.codeHash;
+        const deployed = current?.buildConfig?.source?.storageSource;
+        const storageSource =
+          current !== undefined &&
+          output?.codeHash === codeHash &&
+          deployed !== undefined
+            ? deployed
+            : yield* source
+                .upload({
+                  parent: `projects/${env.project}/locations/${location}`,
+                  files: bundled.files,
+                  kmsKeyName: news.kmsKeyName,
+                })
+                .pipe(Effect.tapError(() => identity.cleanup));
+        buildConfig = {
+          ...news.buildConfig,
+          runtime: news.buildConfig?.runtime ?? DEFAULT_NODE_RUNTIME,
+          entryPoint: FUNCTION_ENTRY_POINT,
+          source: { storageSource },
+        };
       }
 
       if (current === undefined) {
@@ -961,7 +1080,7 @@ export const FunctionProvider = () =>
               labels: desiredLabels,
               kmsKeyName: news.kmsKeyName,
               environment,
-              buildConfig: mergeBuildConfig(news.buildConfig, undefined),
+              buildConfig: mergeBuildConfig(buildConfig, undefined),
               serviceConfig,
               eventTrigger: news.eventTrigger,
             },
@@ -990,8 +1109,8 @@ export const FunctionProvider = () =>
         (current.kmsKeyName ?? "") !== news.kmsKeyName;
 
       const desiredBuild =
-        news.buildConfig !== undefined
-          ? mergeBuildConfig(news.buildConfig, current.buildConfig)
+        buildConfig !== undefined
+          ? mergeBuildConfig(buildConfig, current.buildConfig)
           : undefined;
       const buildConfigChanged =
         desiredBuild !== undefined &&
@@ -1102,7 +1221,10 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, { iamGrants: identity.grants });
+      return toAttrs(current, env.project, {
+        iamGrants: identity.grants,
+        codeHash,
+      });
     }),
 
     delete: Effect.fn(function* ({ output }) {

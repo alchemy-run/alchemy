@@ -12,3 +12,4 @@ export * from "./Subscription.ts";
 export * from "./Topic.ts";
 export * from "./ValidateMessage.ts";
 export * from "./ValidateMessageHttp.ts";
+export * from "./TopicEventSource.ts";
