@@ -373,9 +373,7 @@ const WORKER: ReqItem = { name: "Cloudflare.Worker", note: "native bindings run 
 const PHANTOM: ReqItem = { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" };
 /** Everything the Worker version of the program needs, with the bindings provided. */
 const PROVIDED: ReqItem[] = [
-  BUCKET,
   met(READ, "ReadBucketBinding\nadds a native R2 binding"),
-  QUEUE,
   met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
   met(WORKER, "it runs in a Worker"),
 ];
@@ -826,16 +824,16 @@ export const steps: StepSpec[] = [
     notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
   }),
   api({
-    title: "Declaring a bucket adds a requirement",
+    title: "Declare a bucket in construction, with yield*",
     snippet: "api-02-bucket.ts",
-    req: [BUCKET],
+    req: [],
     notes:
-      "Declare a bucket with yield*, and Req gains R2.BucketProvider: something that knows how to create a bucket. The program can't create it itself.",
+      "Declare a bucket in the construction phase with yield*. Creating it is the deploy's job, which we'll come back to with the Stack. For now, Req stays empty.",
   }),
   api({
     title: "My first try inferred the binding from how it's used",
     code: INFERRED,
-    req: [BUCKET],
+    req: [],
     fetchReq: [GET_OBJECT],
     notes:
       "My first attempt looked exactly like the imaginary language. Just call bucket.get, and the type of that call carries the requirement: R2.GetObject for the Uploads bucket. No declaration needed.",
@@ -843,7 +841,7 @@ export const steps: StepSpec[] = [
   api({
     title: "But then the layer goes on fetch, which runs at runtime",
     code: INFERRED_ON_FETCH,
-    req: [BUCKET],
+    req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
       "The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
@@ -851,7 +849,7 @@ export const steps: StepSpec[] = [
   api({
     title: "Moving the bucket out puts the layer on construction",
     code: INFERRED_HOISTED,
-    req: [BUCKET, GET_OBJECT_HOISTED],
+    req: [GET_OBJECT_HOISTED],
     notes:
       "Where we actually want it is on the outer Effect, the construction phase. So the bucket moves out to module scope, where the layer can name it, and Effect.provide(R2.ReadBucket(Uploads)) goes on the outer Effect.",
   }),
@@ -859,7 +857,7 @@ export const steps: StepSpec[] = [
     title: "But it's only found by digging into fetch's type",
     code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
     marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
-    req: [BUCKET, GET_OBJECT_HOISTED],
+    req: [GET_OBJECT_HOISTED],
     notes:
       "But the outer Effect doesn't need R2.GetObject. Only fetch does. The only way construction learns about it is type magic: dig into the return type of the Effect, find fetch, infer its requirements, and hoist them up. The requirement is discovered by analyzing the runtime function, not declared.",
   }),
@@ -867,14 +865,14 @@ export const steps: StepSpec[] = [
     title: "This is starting to feel like peeking inside again…",
     code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
     marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
-    req: [BUCKET, GET_OBJECT_HOISTED],
+    req: [GET_OBJECT_HOISTED],
     notes:
       "Hang on. Reaching into fetch to find out what it uses… that's Functionless all over again. Peeking inside, just with types instead of the compiler. Let's keep going anyway and see where it breaks.",
   }),
   api({
     title: "…which becomes really clear when your infrastructure is conditional",
     code: INFERRED_DEV_2,
-    req: [BUCKET, GET_OBJECT_HOISTED, PUT_LOGS],
+    req: [GET_OBJECT_HOISTED, PUT_LOGS],
     notes:
       "And that becomes really clear the moment your infrastructure is conditional. Say we only want a Logs bucket in dev, and fetch writes the last read to it when it's there. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
   }),
@@ -882,7 +880,7 @@ export const steps: StepSpec[] = [
     title: "But we can't tell that logs.put is only required during dev",
     code: INFERRED_DEV_2,
     marks: [{ kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" }],
-    req: [BUCKET, GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
+    req: [GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
     notes:
       "But the if only runs in dev, and a type can't know that. fetch's type is the union of every path through it, so R2.PutObject for Logs is required everywhere, production included. Types see every possible path, never the one that actually runs.",
   }),
@@ -890,7 +888,6 @@ export const steps: StepSpec[] = [
     title: "Now the Layer has to cover every path the code might take",
     code: INFERRED_DEV,
     req: [
-      BUCKET,
       GET_OBJECT_HOISTED,
       { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
     ],
@@ -911,7 +908,6 @@ export const steps: StepSpec[] = [
       },
     ],
     req: [
-      BUCKET,
       GET_OBJECT_HOISTED,
       { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
     ],
@@ -923,7 +919,6 @@ export const steps: StepSpec[] = [
     code: INFERRED_DEV,
     marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "its type now says R2, and which buckets", side: "right", tone: "bad" }],
     req: [
-      BUCKET,
       GET_OBJECT_HOISTED,
       { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
     ],
@@ -975,21 +970,21 @@ export const steps: StepSpec[] = [
   api({
     title: "So what I actually ended up realizing…",
     snippet: "api-02-bucket.ts",
-    req: [BUCKET],
+    req: [],
     notes:
       "So let's go back to where we branched off: a bucket, declared in construction. What I actually ended up realizing is that I'd been trying to be too clever.",
   }),
   api({
     title: "…is that a binding should be declared, just like a resource",
     snippet: "api-04-get.ts",
-    req: [BUCKET, { ...READ, note: "declared in construction" }],
+    req: [{ ...READ, note: "declared in construction" }],
     notes:
       "It's still infrastructure as code, and I should embrace that. You declare a resource with yield*, so declare the binding the same way: R2.ReadBucket(bucket). The requirement lands on the program, where a Layer can satisfy it, and fetch just calls the client it got back. Its type stays clean, so a service built on it can have any implementation.",
   }),
   api({
     title: "Conditional infrastructure is then just an if statement",
     snippet: "api-04b-dev.ts",
-    req: [BUCKET, { ...READ, note: "declared in construction" }, WRITE_LOGS],
+    req: [{ ...READ, note: "declared in construction" }, WRITE_LOGS],
     notes:
       "And conditional infrastructure is just ordinary code. Only in dev do we create a Logs bucket and bind it for writing. No new syntax, no analysis: an if statement, or here a ternary.",
   }),
@@ -997,7 +992,7 @@ export const steps: StepSpec[] = [
     title: "Running the code discovers the bindings, not analyzing it",
     snippet: "api-04b-dev.ts",
     marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
-    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes:
       "Here's the key. Alchemy doesn't read your code to find the bindings. It runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
   }),
@@ -1006,7 +1001,7 @@ export const steps: StepSpec[] = [
     snippet: "api-04b-dev.ts",
     tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
     marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "attach binding + policy", side: "right", tone: "construct" }],
-    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes:
       "Which is why Alchemy is two-phase. The construction phase runs at deploy time: running it is how Alchemy discovers every resource and binding, and attaches the policies.",
   }),
@@ -1015,7 +1010,7 @@ export const steps: StepSpec[] = [
     snippet: "api-04b-dev.ts",
     tints: [{ from: "const api = Effect.gen", to: "const writeLogs", tone: "construct" }],
     marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "return an R2 client", side: "right", tone: "construct" }],
-    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes:
       "And it runs again inside the deployed function, at cold start. The same line now returns a real client. The same code does both jobs, so the infrastructure and the runtime can never disagree, which is exactly the problem I had with the CDK and a separate handler.",
   }),
@@ -1023,19 +1018,19 @@ export const steps: StepSpec[] = [
     title: "…while fetch runs on every request",
     snippet: "api-04b-dev.ts",
     tints: [{ from: "fetch: Effect.gen", to: "})", tone: "runtime" }],
-    req: [BUCKET, { ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
+    req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes: "And fetch is the runtime phase. It runs for every request, using the clients that construction handed it.",
   }),
   api({
     title: "Sending to a queue works the same way",
     snippet: "api-05-queue.ts",
-    req: [BUCKET, READ, QUEUE, WRITE],
-    notes: "A queue is the same: declare it and Req gains Queues.QueueProvider, ask to write to it and it gains Queues.WriteQueue. Req now lists everything this program needs.",
+    req: [READ, WRITE],
+    notes: "A queue is the same: declare it, ask to write to it, and Req gains Queues.WriteQueue.",
   }),
   api({
     title: "Each requirement needs an implementation",
     snippet: "api-06-provide.ts",
-    req: [BUCKET, met(READ, "ReadBucketBinding"), QUEUE, met(WRITE, "WriteQueueBinding"), WORKER],
+    req: [met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding"), WORKER],
     notes:
       "Effect.provide satisfies each one with a Layer: an implementation of the requirement. These use Cloudflare's native bindings, and that adds a requirement of its own: they only work inside a Cloudflare Worker.",
   }),
@@ -1043,9 +1038,7 @@ export const steps: StepSpec[] = [
     title: "The implementation grants the permission too",
     snippet: "api-06-provide.ts",
     req: [
-      BUCKET,
       met(READ, "ReadBucketBinding\nadds a native R2 binding"),
-      QUEUE,
       met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
       WORKER,
     ],
@@ -1086,14 +1079,14 @@ export const steps: StepSpec[] = [
     title: "Now let's run it on AWS Lambda instead",
     snippet: "api-10-lambda.error.ts",
     error: { hide: true },
-    req: [...PROVIDED.slice(0, 4), WORKER],
+    req: [...PROVIDED.slice(0, 2), WORKER],
     notes: "Drop the construction-time read and the opt-out: that was a detour. The program doesn't care where it runs, so swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
     title: "It won't compile, because the native bindings need a Worker",
     snippet: "api-10-lambda.error.ts",
     error: { pick: firstLine("Type 'WorkerEnvironment'") },
-    req: [...PROVIDED.slice(0, 4), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
+    req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
     notes:
       "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
   }),
@@ -1104,9 +1097,7 @@ export const steps: StepSpec[] = [
     // which AWS.Lambda.Function doesn't provide yet.
     error: { hide: true },
     req: [
-      BUCKET,
       met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
-      QUEUE,
       met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
     ],
     notes:
@@ -1123,10 +1114,10 @@ export const steps: StepSpec[] = [
       label: REQ_LABEL,
       items: [
         met(BUCKET, "the Stack, at deploy time"),
-        PROVIDED[1]!,
+        PROVIDED[0]!,
         met(QUEUE, "the Stack, at deploy time"),
-        PROVIDED[3]!,
-        PROVIDED[4]!,
+        PROVIDED[1]!,
+        PROVIDED[2]!,
       ],
     },
     notes:
