@@ -16,11 +16,7 @@ export default defineScene({
       ],
     });
 
-    s.slide("Design the API", {
-      eyebrow: "Shorty",
-      subtitle: "A data model and a typed contract, in plain Effect",
-      notes: "Before any infrastructure: what is a link, and what can you do with it?",
-    });
+    s.step("Design the API");
 
     // src/Link.ts: the domain.
     const link = await s.chapterLines("src/Link.ts");
@@ -70,11 +66,7 @@ export default defineScene({
       "ShortyApi is a plain value. The Worker implements it, the dashboard derives a client from it, and the tests will use that same client.",
     );
 
-    s.slide("Build the backend", {
-      eyebrow: "Cloudflare Worker",
-      subtitle: "An Effectful Worker that serves the API",
-      notes: "Now we implement that contract in a Cloudflare Worker, written as an Effect.",
-    });
+    s.step("Build the backend");
 
     // src/Api.ts: the Worker.
     const worker = await s.chapterLines("src/Api.ts");
@@ -156,10 +148,7 @@ export default defineScene({
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Api", "Web"], edges: ["Web->Api"] });
     s.pause(0.5);
 
-    s.slide("Wire up the dashboard", {
-      eyebrow: "Frontend",
-      subtitle: "Call the Worker with a client derived from the same API",
-    });
+    s.step("Wire up the dashboard");
 
     // The dashboard.
     await s.editor.show("src/client.ts", "Derive a typed client from the same API");

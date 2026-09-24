@@ -10,8 +10,6 @@ import {
 import { CAPTION_BAND, VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
 import { MenuBar, Wallpaper } from "./Desktop.tsx";
-import { Slide } from "../slides/Slide.tsx";
-import { Sequence } from "remotion";
 import { Browser } from "./Browser.tsx";
 import { Diagram } from "./Diagram.tsx";
 import { Editor } from "./Editor.tsx";
@@ -99,15 +97,6 @@ export const Scene = ({ capture, plan }: SceneProps) => {
 
   const segment = segmentAt(plan.segments, frame);
   const focused = (segment?.app === "slide" || !segment ? "editor" : segment.app) as Exclude<AppId, "slide">;
-  if (segment?.beat.kind === "slide") {
-    const beat = segment.beat;
-    return (
-      <Sequence from={segment.from} layout="none">
-        <Slide layout={beat.layout} props={beat.props} />
-      </Sequence>
-    );
-  }
-
   const windows: Record<Exclude<AppId, "slide">, ReactNode> = {
     editor: <Editor capture={capture} plan={plan} frame={frame} />,
     terminal: <Terminal capture={capture} plan={plan} frame={frame} fps={fps} />,

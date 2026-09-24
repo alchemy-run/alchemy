@@ -17,8 +17,8 @@ export const TIMING = {
   diagramPerAdded: 10,
   diagramMax: 240,
   browserUpdate: 30,
-  /** A transition slide animates in over this long, then holds on its step. */
-  slide: 45,
+  /** A section heading holds as a caption over the current window this long. */
+  slide: 30,
   /** Pointer glides to the element, clicks (or the text lands), the page updates, then a short hold. */
   browserAction: { move: 16, act: 8, hold: 14 },
   /** Click the address bar, paste, press Enter. */
@@ -71,8 +71,9 @@ const appOf = (beat: Beat, current: AppId): AppId => {
       return current;
     case "diagram":
       return "diagram";
+    // Section headings stay on the current window; the step's title is the caption.
     case "slide":
-      return "slide";
+      return current;
     case "browser.update":
     case "browser.action":
       return "browser";
@@ -92,7 +93,9 @@ export const schedule = async (
   const segments: Segment[] = [];
   let frame = 0;
   // The scene opens on the first beat's window, without a switch.
-  const firstBeat = capture.beats.find((b) => b.kind !== "pause" && b.kind !== "step" && b.kind !== "caption");
+  const firstBeat = capture.beats.find(
+    (b) => b.kind !== "pause" && b.kind !== "step" && b.kind !== "caption" && b.kind !== "slide",
+  );
   let app: AppId = firstBeat ? appOf(firstBeat, "editor") : "editor";
   for (const beat of capture.beats) {
     const next = appOf(beat, app);

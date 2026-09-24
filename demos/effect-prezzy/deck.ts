@@ -6,23 +6,8 @@ import type { DeckItem } from "./shared/types.ts";
  * `scenes/<id>.ts`, each ending at `chapters/<id>`. Each item becomes one
  * scene in the presenter.
  */
-const chapter = (
-  n: number,
-  id: string,
-  heading: string,
-  subtitle: string,
-): DeckItem[] => [
-  {
-    kind: "slide",
-    id: `${id}-intro`,
-    title: `${n}. ${heading}`,
-    notes: subtitle,
-    layout: "section",
-    props: { eyebrow: `Chapter ${n}`, heading, subtitle },
-    seconds: 2,
-  },
-  { kind: "scene", id },
-];
+/** A recorded chapter. Each step's title is shown over the code as it plays. */
+const chapter = (id: string): DeckItem => ({ kind: "scene", id });
 
 export const deck: DeckItem[] = [
   { kind: "intro", id: "intro" },
@@ -35,16 +20,16 @@ export const deck: DeckItem[] = [
     props: { eyebrow: "Demo", heading: "Let's build something", subtitle: "From an empty folder to production" },
     seconds: 2,
   },
-  ...chapter(0, "00-website", "A Stack and a website", "Declare the Stack, run it with alchemy dev"),
-  ...chapter(1, "01-api", "An Effectful Worker", "An HttpApi served by a Worker, called by a typed client"),
-  ...chapter(2, "02-d1", "Store links in D1", "A database, its migrations, and a binding"),
-  ...chapter(3, "03-tests", "Test against the real cloud", "Deploy a copy, assert, destroy"),
-  ...chapter(4, "04-durable-objects", "Durable Objects", "Per-link state and hibernatable WebSockets"),
-  ...chapter(5, "05-queues", "Queues", "Count clicks off the hot path, as an Effect Stream"),
-  ...chapter(6, "06-layers-neon", "Storage as a Layer", "Swap D1 for Neon Postgres behind Hyperdrive"),
-  ...chapter(7, "07-telemetry", "OpenTelemetry", "Spans and logs to Axiom"),
-  ...chapter(8, "08-dashboard", "Dashboards as code", "An Axiom dashboard next to the code it observes"),
-  ...chapter(9, "09-deploy", "Ship it", "Built with alchemy dev, proven by tests, deployed once"),
+  chapter("00-website"),
+  chapter("01-api"),
+  chapter("02-d1"),
+  chapter("03-tests"),
+  chapter("04-durable-objects"),
+  chapter("05-queues"),
+  chapter("06-layers-neon"),
+  chapter("07-telemetry"),
+  chapter("08-dashboard"),
+  chapter("09-deploy"),
   {
     kind: "slide",
     id: "recap",
