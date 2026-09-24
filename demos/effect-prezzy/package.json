@@ -19,6 +19,7 @@
     "@remotion/bundler": "catalog:",
     "@remotion/cli": "catalog:",
     "@remotion/google-fonts": "catalog:",
+    "@remotion/player": "catalog:",
     "@remotion/renderer": "catalog:",
     "diff": "catalog:",
     "pg": "catalog:",

@@ -14,11 +14,13 @@
     "intro/build.ts",
     "intro/watch.ts",
     "dev.ts",
+    "live",
     "intro/steps.ts",
     "remotion.config.ts"
   ],
   "compilerOptions": {
     "noEmit": true,
+    "types": ["bun", "vite/client"],
     "rootDir": "../..",
     "paths": {
       "tcut": ["../../submodules/tcut/packages/tcut/src/index.ts"]

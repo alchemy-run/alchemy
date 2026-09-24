@@ -90,6 +90,7 @@ catalog:
   "@remotion/bundler": "4.0.526"
   "@remotion/cli": "4.0.526"
   "@remotion/google-fonts": "4.0.526"
+  "@remotion/player": "4.0.526"
   "@remotion/renderer": "4.0.526"
   "@smithy/shared-ini-file-loader": "^4.7.0"
   "@smithy/types": "^4.17.2"
