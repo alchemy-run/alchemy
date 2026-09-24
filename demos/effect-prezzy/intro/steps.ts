@@ -1965,6 +1965,25 @@ export const steps: StepSpec[] = [
     notes:
       "And the providers we gave the Stack satisfy them. That's why it can be every Cloudflare provider: this code runs during deploy, and none of it ships in the Worker.",
   },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "Give it no providers, and it won't compile",
+    src: { snippet: "stack-empty.error.ts", regions: ["show"] },
+    quiet: true,
+    error: { pick: (lines) => lines.slice(0, 2) },
+    req: {
+      label: REQ_LABEL,
+      items: [
+        { ...BUCKET, state: "bad", note: "" },
+        { ...WORKER_PROVIDER, state: "bad", note: "" },
+        { ...QUEUE, state: "bad", note: "" },
+      ],
+    },
+    notes:
+      "And it's checked. Swap Cloudflare.providers() for Layer.empty and the Stack no longer compiles: the Worker still needs its providers, and nothing is providing them.",
+  },
 
 
   {
