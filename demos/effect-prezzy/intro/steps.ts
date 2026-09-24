@@ -1673,9 +1673,9 @@ export const steps: StepSpec[] = [
       met(WRITE_LOGS, "WriteBucketBinding\nno permission in prod"),
       WORKER,
     ],
-    aside: { text: "usually, pragmatism beats purity", image: "michael-pointing.jpg" },
+    aside: { text: "pragmatism beats purity", image: "michael-pointing.jpg" },
     notes:
-      "So that's where my original goal ended up. Least privilege is no longer guaranteed by the type checker; it comes from running the code. The types still guarantee every binding has an implementation, and the cost is a few bytes of unused client code in production. Usually, pragmatism beats purity. Sorry, Michael.",
+      "So that's where my original goal ended up. Least privilege is no longer guaranteed by the type checker; it comes from running the code. The types still guarantee every binding has an implementation, and the cost is a few bytes of unused client code in production. Pragmatism beats purity. Sorry, Michael.",
   }),
   api({
     title: "So far, though, it's just a program that nothing runs",
