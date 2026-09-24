@@ -1006,6 +1006,31 @@ export const shouldObserveWorkerRoutes = (
   output: Pick<Worker["Attributes"], "routes"> | undefined,
 ): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
 
+const routeKey = (route: { pattern: string; zoneId: string }) =>
+  `${route.zoneId}:${route.pattern}`;
+
+/**
+ * Order observed zone routes the way state records them. `listRoutes`
+ * returns routes in Cloudflare's order while `reconcile` records them in
+ * declared order, and drift compares attributes positionally, so the same
+ * routes in another order would read as drift. Routes missing from state
+ * keep their listing order after the known ones.
+ *
+ * @internal exported for unit testing.
+ */
+export const orderObservedWorkerRoutes = <
+  Route extends { pattern: string; zoneId: string },
+>(
+  observed: readonly Route[],
+  known: readonly { pattern: string; zoneId: string }[] | undefined,
+): Route[] => {
+  const position = new Map(
+    (known ?? []).map((route, index) => [routeKey(route), index]),
+  );
+  const rank = (route: Route) => position.get(routeKey(route)) ?? position.size;
+  return [...observed].sort((a, b) => rank(a) - rank(b));
+};
+
 /**
  * Cron triggers Alchemy is responsible for on this Worker. Used by `read` to
  * skip `getScriptSchedule` when the surface is unmanaged (#926). Effect-native
@@ -1890,9 +1915,6 @@ export const LiveWorkerProvider = () =>
         zoneId: string;
       };
 
-      const routeKey = (route: { pattern: string; zoneId: string }) =>
-        `${route.zoneId}:${route.pattern}`;
-
       // Derive a concrete hostname inside the zone from a route pattern so
       // zone inference can walk the DNS label hierarchy. A wildcard label
       // (`*.example.com/*`) is replaced with a stand-in label — only the
@@ -1996,6 +2018,10 @@ export const LiveWorkerProvider = () =>
         listWorkerRoutesInZones(
           scriptName,
           (knownRoutes ?? []).map((route) => route.zoneId),
+        ).pipe(
+          Effect.map((routes) =>
+            orderObservedWorkerRoutes(routes, knownRoutes),
+          ),
         );
 
       // Converge the zone routes attached to `scriptName` to `desired`.

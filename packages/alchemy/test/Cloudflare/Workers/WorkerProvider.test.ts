@@ -1,7 +1,9 @@
+import { deepEqual } from "@/Diff";
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  orderObservedWorkerRoutes,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -533,6 +535,35 @@ describe(
             },
           ),
         ).toBe(true);
+      });
+    });
+
+    describe("orderObservedWorkerRoutes", () => {
+      const auth = { id: "r1", pattern: "example.com/auth/*", zoneId: "z1" };
+      const api = { id: "r2", pattern: "example.com/api/*", zoneId: "z1" };
+      const docs = { id: "r3", pattern: "docs.example.com/*", zoneId: "z2" };
+
+      test("matches state order when Cloudflare lists routes in another order", () => {
+        const persisted = [auth, api, docs];
+        const listed = [docs, api, auth];
+        expect(deepEqual(listed, persisted)).toBe(false);
+        expect(
+          deepEqual(orderObservedWorkerRoutes(listed, persisted), persisted),
+        ).toBe(true);
+      });
+
+      test("appends routes missing from state in listing order", () => {
+        const extra = { id: "r4", pattern: "example.com/x/*", zoneId: "z1" };
+        expect(
+          orderObservedWorkerRoutes([extra, docs, auth], [auth, api]),
+        ).toEqual([auth, extra, docs]);
+      });
+
+      test("keys routes by zone and pattern", () => {
+        const sameInZ2 = { id: "r5", pattern: auth.pattern, zoneId: "z2" };
+        expect(
+          orderObservedWorkerRoutes([sameInZ2, auth], [auth, sameInZ2]),
+        ).toEqual([auth, sameInZ2]);
       });
     });
 
