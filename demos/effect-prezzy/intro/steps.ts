@@ -22,7 +22,7 @@ export interface CodeSpec {
   file?: string;
   pseudo?: boolean;
   src: Source;
-  lang?: "typescript" | "yaml";
+  lang?: "typescript" | "yaml" | "ansi";
   fontSize?: number;
   /** Tint lines by phase: a snippet region, or the lines from one match to another. */
   tints?: (({ region: string } | { from: Find; to?: Find }) & { tone: Tone })[];
@@ -573,6 +573,38 @@ const CDK_LINKS: NonNullable<CodeSpec["links"]> = [
   { from: "BUCKET_NAME", to: "process.env.BUCKET_NAME" },
   { from: "grantReadWrite", to: "PutObjectCommand" },
 ];
+
+// ── terminal output, in the CLI's own colors ─────────────────────────────
+const T = { ok: "\x1b[38;5;113m", soft: "\x1b[38;5;150m", accent: "\x1b[38;5;173m", grey: "\x1b[38;5;102m", dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m" };
+const RULE = `${T.grey}${T.dim}${"─".repeat(46)}${T.reset}`;
+const DEPLOY_PLAN = [
+  `${T.dim}$${T.reset} alchemy deploy`,
+  `${T.ok}✓${T.reset} Plan ready ${T.dim}(0.8s)${T.reset}`,
+  RULE,
+  `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}3 to create${T.reset}${T.dim} · ${T.reset}${T.soft}2 bindings${T.reset}`,
+  ``,
+  `${T.ok}+${T.reset} ${T.ok}${T.bold}Uploads${T.reset} ${T.dim}(Cloudflare.R2.Bucket)${T.reset}`,
+  `${T.ok}+${T.reset} ${T.ok}${T.bold}Jobs${T.reset} ${T.dim}(Cloudflare.Queues.Queue)${T.reset}`,
+  `${T.ok}+${T.reset} ${T.ok}${T.bold}Api${T.reset} ${T.dim}(Cloudflare.Worker)${T.reset}`,
+  `  ${T.ok}+${T.reset} ${T.soft}Uploads${T.reset}`,
+  `  ${T.ok}+${T.reset} ${T.soft}Jobs${T.reset}`,
+  RULE,
+  `${T.bold}Deploy?${T.reset}  ${T.accent}${T.bold}› Deploy${T.reset}  ${T.dim}Cancel${T.reset}`,
+].join("\n");
+const DEPLOY_APPLIED = [
+  `${T.dim}$${T.reset} alchemy deploy`,
+  `${T.ok}✓${T.reset} Plan ready ${T.dim}(0.8s)${T.reset}`,
+  RULE,
+  `${T.accent}${T.bold}Plan${T.reset}${T.dim} · ${T.reset}${T.ok}3 created${T.reset}`,
+  ``,
+  `${T.ok}✓${T.reset} ${T.bold}Uploads${T.reset} ${T.dim}(Cloudflare.R2.Bucket)${T.reset} created ${T.dim}(1.2s)${T.reset}`,
+  `${T.ok}✓${T.reset} ${T.bold}Jobs${T.reset} ${T.dim}(Cloudflare.Queues.Queue)${T.reset} created ${T.dim}(1.9s)${T.reset}`,
+  `${T.ok}✓${T.reset} ${T.bold}Api${T.reset} ${T.dim}(Cloudflare.Worker)${T.reset} created ${T.dim}(6.4s)${T.reset}`,
+  `  ${T.ok}✓${T.reset} ${T.soft}Uploads${T.reset} created`,
+  `  ${T.ok}✓${T.reset} ${T.soft}Jobs${T.reset} created`,
+  RULE,
+  `${T.ok}Stack deployed (3/3)${T.reset} ${T.dim}{ url: "https://api.workers.dev" }${T.reset}`,
+].join("\n");
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -1309,43 +1341,108 @@ export const steps: StepSpec[] = [
     notes:
       "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error. It's there for emergencies. Don't do this.",
   }),
+  api({
+    title: "But what actually creates the bucket?",
+    snippet: "api-07-worker.ts",
+    marks: [{ kind: "circle", find: 'R2.Bucket("Uploads")', tone: "construct" }],
+    req: PROVIDED,
+    notes:
+      "Drop the opt-out, we're done with that. We've seen exactly what ends up in the Worker's bundle. But nothing in it creates the bucket. So what does declaring one actually do?",
+  }),
+  api({
+    title: "Declaring a resource just yields a plain piece of data",
+    snippet: "api-07-worker.ts",
+    marks: [{ kind: "circle", find: 'R2.Bucket("Uploads")', label: "a type, a name, and props", side: "right", tone: "construct" }],
+    req: PROVIDED,
+    notes:
+      "A resource in Alchemy is just data: its type, its name, and its props. Yielding it doesn't call any cloud API.",
+  }),
+  api({
+    title: "…that asks for a provider to create it",
+    snippet: "api-07-worker.ts",
+    marks: [
+      { kind: "underline", find: 'R2.Bucket("Uploads")', label: "needs R2.BucketProvider", side: "right", tone: "construct" },
+      { kind: "underline", find: 'Queues.Queue("Jobs")', label: "needs Queues.QueueProvider", side: "right", tone: "construct" },
+    ],
+    req: [BUCKET, ...PROVIDED.slice(0, 1), QUEUE, ...PROVIDED.slice(1)],
+    notes:
+      "And it expresses a requirement: a provider that knows how to create, update and delete that kind of resource. R2.BucketProvider, Queues.QueueProvider. They show up in Req like any other requirement.",
+  }),
+  api({
+    title: "Unlike a CDK construct, none of the provisioning code is in here",
+    snippet: "api-07-worker.ts",
+    marks: [
+      {
+        kind: "box",
+        find: 'const bucket = yield* R2.Bucket("Uploads");',
+        to: "const jobs = yield* Queues.WriteQueue(queue);",
+        label: "no create, update, or delete",
+        side: "right",
+        tone: "good",
+      },
+    ],
+    req: [BUCKET, ...PROVIDED.slice(0, 1), QUEUE, ...PROVIDED.slice(1)],
+    notes:
+      "Compare that with where I started. A CDK construct carries all of its provisioning code with it. Here the resource is a description plus a requirement, and the code that actually provisions it lives somewhere else.",
+  }),
   {
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "The Stack provides the rest, at deploy time",
+    title: "The requirement bubbles up to the Stack",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "box", find: "providers: Cloudflare.providers()", tone: "construct" }],
-    req: {
-      label: REQ_LABEL,
-      items: [
-        met(BUCKET, "the Stack, at deploy time"),
-        PROVIDED[0]!,
-        met(QUEUE, "the Stack, at deploy time"),
-        PROVIDED[1]!,
-        PROVIDED[2]!,
-      ],
-    },
+    marks: [{ kind: "underline", find: "yield* Api", label: "brings its providers along", side: "right", tone: "construct" }],
+    req: { label: REQ_LABEL, items: [BUCKET, QUEUE] },
     notes:
-      "What's left are the providers, and only the Stack provides them. The Stack runs during alchemy deploy, and it's never part of the Worker.",
+      "The Stack is the root of the program. It yields the Worker, and the Worker's remaining requirements, the providers, bubble up to it.",
   },
   {
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "Provisioning code never ships with the Worker",
+    title: "…and the Stack provides every provider at once",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "box", find: "providers: Cloudflare.providers()", tone: "construct" }],
+    marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" }],
+    req: {
+      label: REQ_LABEL,
+      items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
+    },
+    notes: "And the Stack satisfies them. Cloudflare.providers() is every Cloudflare provider there is.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "It doesn't need to be precise, because this only runs locally",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [
+      { kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" },
+      { kind: "underline", find: "state: Alchemy.localState(),", label: "on your machine, during deploy", side: "right", tone: "good" },
+    ],
+    req: {
+      label: REQ_LABEL,
+      items: [met(BUCKET, "Cloudflare.providers()"), met(QUEUE, "Cloudflare.providers()")],
+    },
+    notes:
+      "Unlike the bindings, we don't have to be careful here. The Stack only runs on your machine, or in CI, during deploy. Every provider, the state store, the SDKs: none of it has to be tree-shaken, because none of it ships.",
+  },
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "The Worker is bundled on its own, with only its runtime code",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [{ kind: "underline", find: "yield* Api", label: "bundled from its own import.meta.url", side: "right", tone: "runtime" }],
     panel: {
       title: "What the Worker bundle contains",
       items: [
-        { title: "Your handler", bar: 0.05, tone: "runtime" },
-        { title: "Binding clients", bar: 0.12, tone: "construct" },
-        { title: "Resource providers", body: "not included: they only run in alchemy deploy", tone: "good" },
+        { title: "src/Api.ts", body: "from its import.meta.url", tone: "runtime" },
+        { title: "ReadBucketBinding, WriteQueueBinding", body: "just their runtime clients", tone: "construct" },
+        { title: "Providers, state, the Stack", body: "not included: they only run in alchemy deploy", tone: "good" },
       ],
     },
     notes:
-      "Remember Punchcard shipping the whole CDK? Providers are requirements of the Stack, so the Worker bundle only contains your code and the clients it calls. (Sizes illustrative.)",
+      "The Worker is bundled separately, starting from its own import.meta.url. So it never pulls in the Stack, the providers, or the state store. Only the runtime code it needs. Remember Punchcard shipping the whole CDK? This is the fix.",
   },
 
   // Act 6: the compiler
@@ -1356,6 +1453,28 @@ export const steps: StepSpec[] = [
     title: "TypeScript checks it, and alchemy deploy compiles it",
     notes:
       "alchemy deploy acts as the compiler of your application. TypeScript does the static analysis with Effect and Layer types; running the program just builds the graph of resources and bindings, which is diffed into a plan you review.",
+  },
+
+  {
+    kind: "code",
+    group: "deploy",
+    file: "terminal",
+    lang: "ansi",
+    title: "alchemy deploy runs the Stack and shows you a plan",
+    src: { code: DEPLOY_PLAN },
+    marks: [{ kind: "box", find: "+ Api (Cloudflare.Worker)", to: "  + Jobs", label: "the bindings, too", side: "right", tone: "construct" }],
+    notes:
+      "Now deploy. alchemy deploy runs the Stack's construction phase on your machine. That run discovers every resource and binding, and diffs them against the state into a plan: three resources to create, and the Worker's two bindings.",
+  },
+  {
+    kind: "code",
+    group: "deploy",
+    file: "terminal",
+    lang: "ansi",
+    title: "Approve it, and everything is created and wired together",
+    src: { code: DEPLOY_APPLIED },
+    notes:
+      "Approve it, and the providers do the work: the bucket, the queue, then the Worker with its bindings attached. One program, deployed.",
   },
 
   // Act 7: components

@@ -127,10 +127,12 @@ const cut = (text: string, keep?: string[]): Cut => {
 // ── highlighting ─────────────────────────────────────────────────────────
 const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml"] });
 const PSEUDO_KEYWORDS: Record<string, string> = { construct: "#a3c473", runtime: "#e0a86b" };
-const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" = "typescript"): Token[][] =>
+const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" | "ansi" = "typescript"): Token[][] =>
   highlighter.codeToTokens(code, { lang, theme: "dark-plus" }).tokens.map((line) =>
     line.flatMap((token) => {
-      if (!pseudo) return [{ text: token.content, color: token.color ?? "#d4d4d4" }];
+      // Shiki's FontStyle.Bold is bit 2 (terminal output uses it).
+      const bold = ((token.fontStyle ?? 0) & 2) !== 0 || undefined;
+      if (!pseudo) return [{ text: token.content, color: token.color ?? "#d4d4d4", ...(bold ? { bold } : {}) }];
       // The imagined language's own keywords.
       return token.content.split(/\b(construct|runtime)\b/).flatMap((text, i) =>
         text ? [{ text, color: i % 2 ? PSEUDO_KEYWORDS[text]! : (token.color ?? "#d4d4d4") }] : [],
@@ -154,6 +156,7 @@ const locate = (code: string, find: Find, title: string) => {
 /** `split`: shown as one of two side-by-side panes, so it gets half the width. */
 const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => {
   let code: string;
+  let raw: string | undefined;
   let regions = new Map<string, [number, number]>();
   let error: CodeError | undefined;
   if ("snippet" in spec.src) {
@@ -178,6 +181,11 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   } else {
     code = spec.src.code;
   }
+  // Terminal output: marks and sizing work on the text as shown, without escapes.
+  if (spec.lang === "ansi") {
+    raw = code;
+    code = code.replace(/\x1b\[[0-9;]*m/g, "");
+  }
   const lineOf = (find: Find) => locate(code, find, spec.title).line;
   const tints = (spec.tints ?? []).map((tint) => {
     if ("region" in tint) {
@@ -200,7 +208,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
       arrow: mark.arrow,
     };
   });
-  const lines = tokenize(code, !!spec.pseudo, spec.lang);
+  const lines = tokenize(raw ?? code, !!spec.pseudo, spec.lang);
   const beside = spec.beside
     ? await resolveCode({ kind: "code", title: spec.title, group: spec.group, ...spec.beside }, true)
     : undefined;

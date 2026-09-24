@@ -424,7 +424,7 @@ export const CodeSlide = ({
             }}
           >
             {parts.map(({ token, inside }, k) => (
-              <span key={k} style={{ color: token.color, opacity: inside ? newIn : 1 }}>
+              <span key={k} style={{ color: token.color, opacity: inside ? newIn : 1, fontWeight: token.bold ? 700 : undefined }}>
                 {token.text}
               </span>
             ))}

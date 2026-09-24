@@ -8,6 +8,7 @@
 export interface Token {
   text: string;
   color: string;
+  bold?: boolean;
 }
 
 export type Tone = "construct" | "runtime" | "good" | "bad" | "neutral";
