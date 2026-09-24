@@ -7,15 +7,10 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 // #region show
 const api = Effect.gen(function* () {
   const bucket = yield* R2.Bucket("Uploads");
-  const uploads = yield* R2.ReadBucket(bucket);
   return {
     fetch: Effect.gen(function* () {
       return HttpServerResponse.text("ok");
     }),
   };
 });
-
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api", { main: import.meta.url }, api,
-) {}
 // #endregion show

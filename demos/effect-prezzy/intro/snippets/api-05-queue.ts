@@ -17,11 +17,5 @@ const api = Effect.gen(function* () {
       return HttpServerResponse.text("ok");
     }).pipe(Effect.orDie),
   };
-}).pipe(
-  Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding]),
-);
-
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api", { main: import.meta.url }, api,
-) {}
+});
 // #endregion show

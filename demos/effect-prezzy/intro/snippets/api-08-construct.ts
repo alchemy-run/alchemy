@@ -10,6 +10,7 @@ const api = Effect.gen(function* () {
   const uploads = yield* R2.ReadBucket(bucket);
   const queue = yield* Queues.Queue("Jobs");
   const jobs = yield* Queues.WriteQueue(queue);
+  yield* uploads.get("hello.txt").pipe(Effect.orDie);
   return {
     fetch: Effect.gen(function* () {
       const file = yield* uploads.get("hello.txt");
@@ -20,8 +21,4 @@ const api = Effect.gen(function* () {
 }).pipe(
   Effect.provide([R2.ReadBucketHttp, Queues.WriteQueueBinding]),
 );
-
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api", { main: import.meta.url }, api,
-) {}
 // #endregion show

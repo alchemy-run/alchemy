@@ -370,7 +370,7 @@ const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", 
 const PROVIDED_HTTP: ReqItem[] = [
   PROVIDERS("to create the bucket and queue"),
   met(READ, "ReadBucketHttp\nmints a read-only API token"),
-  met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
+  met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
 ];
 
 /** One version of the Api Worker, `snippets/api-*.ts`, with its Req beside it. */
@@ -631,93 +631,78 @@ export const steps: StepSpec[] = [
     notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
   }),
   api({
-    title: "Hand it to a Worker, and it runs in the cloud",
-    snippet: "api-02-worker.ts",
-    req: [],
-    notes:
-      "To run it in the cloud, hand it to a Cloudflare Worker. The Worker is the function resource from our imaginary language, and api is its implementation.",
-  }),
-  api({
     title: "Declaring a bucket adds a requirement",
-    snippet: "api-03-bucket.ts",
+    snippet: "api-02-bucket.ts",
     req: [PROVIDERS("to create the bucket")],
     notes:
-      "Declare a bucket with yield*, and Req gains Providers: something that knows how to create a bucket. The Worker can't create it itself.",
+      "Declare a bucket with yield*, and Req gains Providers: something that knows how to create a bucket. The program can't create it itself.",
   }),
   api({
     title: "Reading from it adds another",
-    snippet: "api-04-read.error.ts",
-    error: { hide: true },
+    snippet: "api-03-read.ts",
     req: [PROVIDERS("to create the bucket"), READ],
-    notes: "Ask to read from the bucket, and the Worker now also needs a ReadBucket: something that can actually read it at runtime.",
+    notes: "Ask to read from the bucket, and the program now also needs a ReadBucket: something that can actually read it at runtime.",
   }),
   api({
     title: "The runtime code just calls it",
-    snippet: "api-05-get.error.ts",
-    error: { hide: true },
+    snippet: "api-04-get.ts",
     req: [PROVIDERS("to create the bucket"), READ],
     notes:
       "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction. Reading can fail, so for now orDie turns a failure into a crash.",
   }),
   api({
     title: "Sending to a queue works the same way",
-    snippet: "api-06-queue.error.ts",
-    error: { hide: true },
+    snippet: "api-05-queue.ts",
     req: [PROVIDERS("to create the bucket and queue"), READ, WRITE],
-    notes: "A queue is the same: declare it, ask to write to it, send at runtime. Req now lists everything this Worker needs.",
+    notes: "A queue is the same: declare it, ask to write to it, send at runtime. Req now lists everything this program needs.",
   }),
   api({
-    title: "Leave a requirement unmet, and it won't compile",
-    snippet: "api-06-queue.error.ts",
-    error: { pick: requirementLines("Type 'ReadBucket'") },
-    req: [PROVIDERS("to create the bucket and queue"), { ...READ, state: "bad", note: "not provided" }, { ...WRITE, state: "bad", note: "not provided" }],
-    notes:
-      "And that list is checked. Nobody has provided ReadBucket or WriteQueue yet, so this is a compile error. That's the permission check from our imaginary language, done by TypeScript.",
-  }),
-  api({
-    title: "So provide an implementation for each one",
-    snippet: "api-07-provide.ts",
+    title: "Each requirement needs an implementation",
+    snippet: "api-06-provide.ts",
     req: [PROVIDERS("to create the bucket and queue"), met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding")],
     notes:
-      "Effect.provide satisfies each one with a Layer: an implementation of the requirement. ReadBucketBinding uses the Worker's native R2 binding.",
+      "Effect.provide satisfies each one with a Layer: an implementation of the requirement. ReadBucketBinding uses Cloudflare's native R2 binding.",
   }),
   api({
     title: "The implementation grants the permission too",
-    snippet: "api-07-provide.ts",
+    snippet: "api-06-provide.ts",
     req: [
       PROVIDERS("to create the bucket and queue"),
-      met(READ, "ReadBucketBinding\nadds an R2 binding to the Worker"),
-      met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
+      met(READ, "ReadBucketBinding\nadds a native R2 binding"),
+      met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
     ],
     notes:
-      "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding to the Worker, and nothing else: the Worker can only do what the code declared.",
+      "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding, and nothing else: the program can only do what the code declared.",
   }),
   api({
     title: "Swap it, and the permission changes with it",
-    snippet: "api-08-http.ts",
-    req: [
-      PROVIDERS("to create the bucket and queue"),
-      met(READ, "ReadBucketHttp\nmints a read-only API token"),
-      met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
-    ],
+    snippet: "api-07-http.ts",
+    req: PROVIDED_HTTP,
     notes:
       "Swap ReadBucketBinding for ReadBucketHttp and the same code talks to R2 over HTTP instead. Now the layer mints an API token that can only read R2. The business logic doesn't change.",
   }),
   api({
     title: "But what if we read during construction?",
-    snippet: "api-09-construct.error.ts",
-    error: { hide: true },
-    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
+    snippet: "api-08-construct.ts",
+    req: [...PROVIDED_HTTP, { name: "RuntimeContext", note: "only exists during a request" }],
     notes:
-      "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet.",
+      "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet. Req picks up RuntimeContext.",
   }),
   api({
-    title: "It's a type error, just like in our imaginary language",
-    snippet: "api-09-construct.error.ts",
+    title: "Finally, we hand it to a Worker to run it in the cloud",
+    snippet: "api-09-worker.error.ts",
+    error: { hide: true },
+    req: [...PROVIDED_HTTP, { name: "RuntimeContext", note: "only exists during a request" }],
+    notes:
+      "To run the program in the cloud, hand it to a Cloudflare Worker: the function resource from our imaginary language. The Worker checks the program's Req against what it can provide.",
+  }),
+  api({
+    title: "It can't provide RuntimeContext, so it won't compile",
+    snippet: "api-09-worker.error.ts",
     error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'RuntimeContext'")).slice(0, 1) },
     req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
     notes:
-      "Runtime methods require RuntimeContext, and the constructor doesn't have one. So calling a binding there is a type error. Req gives us colored functions.",
+      "A Worker's constructor runs at deploy time and cold start, with no request, so it can't provide RuntimeContext. Reading the bucket there is a type error, just like in our imaginary language. Leave out ReadBucketHttp and you'd get the same error for ReadBucket.",
   }),
   api({
     title: "Unless you opt out explicitly",
