@@ -589,6 +589,10 @@ export default defineConfig({
                 { label: "D1", link: "/cloudflare/data/d1" },
                 { label: "KV", link: "/cloudflare/data/kv" },
                 { label: "R2", link: "/cloudflare/data/r2" },
+                {
+                  label: "R2 presigned URLs",
+                  link: "/cloudflare/data/r2-presigned-urls",
+                },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },

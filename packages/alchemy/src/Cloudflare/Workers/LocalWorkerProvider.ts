@@ -1539,8 +1539,9 @@ export const LocalWorkerProvider = () =>
           // / `runVite` attach to below), so the URL is known before workerd
           // starts. Trailing slash stripped to match the cloud value's shape.
           const needsSelfUrl =
-            config.bindingDescriptors.some((b) => b.type === "self_url") ||
-            Object.values(config.env ?? {}).some(isSelfUrl);
+            config.bindingDescriptors.some(
+              (b) => b.type === "self_url" || b.type === "r2_s3_credentials",
+            ) || Object.values(config.env ?? {}).some(isSelfUrl);
           const selfUrl = needsSelfUrl
             ? (yield* maybeStartProxy(fqn, config.dev)).url
                 .toString()
