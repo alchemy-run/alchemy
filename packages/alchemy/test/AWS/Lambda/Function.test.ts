@@ -7,6 +7,7 @@ import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -23,9 +24,6 @@ const timeoutHandlerPath = fileURLToPath(
 );
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
-);
-const sourceChangeFunctionPath = fileURLToPath(
-  new URL("./fixtures/function-source-change.ts", import.meta.url),
 );
 const lockfilePinnedHandlerPath = (format: "npm" | "bun" | "pnpm" | "yarn") =>
   fileURLToPath(
@@ -117,8 +115,12 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       yield* stack.destroy();
 
+      const sourceChangeFunctionPath = yield* path.fromFileUrl(
+        new URL("./fixtures/function-source-change.ts", import.meta.url),
+      );
       const source = yield* fs.readFileString(sourceChangeFunctionPath);
       const declaration = SourceChangeFunction.pipe(
         Effect.provide(SourceChangeFunctionLive),
@@ -165,7 +167,7 @@ test.provider(
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
-    timeout: 360_000,
+    timeout: 120_000,
   },
 );
 
