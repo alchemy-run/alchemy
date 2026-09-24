@@ -7,7 +7,7 @@
  *   Space          pause / resume (replays a finished step)
  *   R              replay this step
  *   Home / End     first / last step
- *   N              show or hide speaker notes
+ *   F              presentation mode: fullscreen, video only (F or Esc to leave)
  *
  * The current step lives in the URL hash, so a reload lands on the same step.
  */
@@ -32,7 +32,7 @@ const stepFromHash = () => Math.max(0, Number(location.hash.slice(1)) - 1 || 0);
 function App() {
   const [deck, setDeck] = useState<Deck>();
   const [index, setIndex] = useState(stepFromHash);
-  const [notes, setNotes] = useState(true);
+  const [presenting, setPresenting] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [ended, setEnded] = useState(false);
   const player = useRef<PlayerRef>(null);
@@ -111,9 +111,20 @@ function App() {
   );
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    // Esc leaves fullscreen, and with it presentation mode.
+    const onChange = () => {
+      if (!document.fullscreenElement) setPresenting(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const state = playing ? "playing" : ended ? "end · → next" : "paused";
+
+  const handleKey = useCallback(
+    (key: string) => {
       const p = player.current;
-      switch (event.key) {
+      switch (key) {
         case "ArrowRight":
         case "PageDown":
           go(index + 1);
@@ -136,21 +147,35 @@ function App() {
         case "End":
           go(Number.MAX_SAFE_INTEGER, false);
           break;
-        case "n":
-          setNotes((v) => !v);
+        case "f":
+          // Presentation mode works even where fullscreen is refused (or the browser's own fullscreen is used).
+          if (presenting) {
+            setPresenting(false);
+            if (document.fullscreenElement) document.exitFullscreen();
+          } else {
+            setPresenting(true);
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
           break;
         default:
-          return;
+          return false;
       }
-      event.preventDefault();
+      return true;
+    },
+    [go, index, ended, presenting],
+  );
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (handleKey(event.key.length === 1 ? event.key.toLowerCase() : event.key)) event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, index, ended]);
+  }, [handleKey]);
 
   if (!deck || !step || !item) return <div className="loading">Loading the deck…</div>;
   return (
-    <div className={notes ? "stage with-notes" : "stage"}>
+    <div className={presenting ? "stage presenting" : "stage"}>
       <div className="player">
         <Player
           ref={player}
@@ -176,9 +201,9 @@ function App() {
           {index + 1} / {deck.steps.length}
         </span>
         <span className="title">{step.title}</span>
-        <span className="state">{playing ? "playing" : ended ? "end · → next" : "paused"}</span>
+        <span className="state">{state}</span>
+        <span className="hint">F to present</span>
       </div>
-      {notes ? <div className="notes">{step.notes || <em>No notes</em>}</div> : null}
     </div>
   );
 }
