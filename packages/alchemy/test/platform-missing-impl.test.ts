@@ -148,6 +148,25 @@ const DoubleBareStack = Alchemy.Stack(
   }),
 );
 
+/** The same bare tag on a platform that installs a `transformProps` hook. */
+const TransformedWidget: any = Platform<Widget>("Test.PlatformWidget", {
+  createRuntimeContext: () => ({}) as any,
+  transformProps: (_id, props) => Effect.succeed(props),
+});
+
+class BareTransformedWidget extends TransformedWidget()(
+  "BareTransformedWidget",
+) {}
+
+const TransformedMissingImplStack = Alchemy.Stack(
+  "PlatformTransformedMissingImplStack",
+  { providers, state },
+  Effect.gen(function* () {
+    const widget = yield* yieldWidget(BareTransformedWidget);
+    return { name: widget.name };
+  }),
+);
+
 describe(
   "tagged platform resource yielded without its impl layer",
   { tags: ["local"] },
@@ -219,6 +238,18 @@ describe(
         expect(Exit.isFailure(exit)).toBe(true);
         const message = String(Exit.isFailure(exit) ? exit.cause : "");
         expect(message).toContain("Test.PlatformWidget<DoubleBareWidget>");
+        expect(observed.ran).toBe(false);
+      }),
+      { timeout: 60_000 },
+    );
+
+    test(
+      "fails fast when the platform transforms props",
+      Effect.gen(function* () {
+        const exit = yield* runDeploy(TransformedMissingImplStack);
+        expect(Exit.isFailure(exit)).toBe(true);
+        const message = String(Exit.isFailure(exit) ? exit.cause : "");
+        expect(message).toContain("Test.PlatformWidget<BareTransformedWidget>");
         expect(observed.ran).toBe(false);
       }),
       { timeout: 60_000 },
