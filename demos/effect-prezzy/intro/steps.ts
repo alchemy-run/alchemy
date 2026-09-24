@@ -1114,7 +1114,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "hidden",
     file: "functionless · app.ts",
-    title: "It could say how it fails, too",
+    title: "It could say how it fails too, that seems like a good idea 😏",
     src: { code: deleter("Promise<void, NotFound, DeleteItem>") },
     notes: "And while we're at it, the type could say how the function fails, too.",
   },
