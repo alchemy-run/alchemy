@@ -160,7 +160,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
     code = c.code;
     regions = c.regions;
     const list = diagnostics.get(spec.src.snippet) ?? [];
-    if (spec.src.snippet.endsWith(".error.ts")) {
+    if (spec.src.snippet.endsWith(".error.ts") && !spec.error?.hide) {
       const d = list[0]!;
       const line = c.origin.indexOf(d.line);
       if (line < 0) throw new Error(`step "${spec.title}": the error is outside the shown regions`);
@@ -199,7 +199,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
   const lines = tokenize(code, !!spec.pseudo);
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
-  const available = spec.panel || spec.drill ? 1060 : 1560;
+  const available = spec.panel || spec.drill || spec.req ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
@@ -218,6 +218,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
     panel: spec.panel,
     diagram: spec.diagram,
     drill: spec.drill,
+    req: spec.req,
     quiet: spec.quiet,
     frames: spec.frames ?? 30,
   };

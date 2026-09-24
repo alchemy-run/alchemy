@@ -3,6 +3,7 @@ import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
 import { DrillView } from "./Drill.tsx";
+import { REQ_ROW, ReqView } from "./Req.tsx";
 import { MiniGraphView } from "./MiniGraph.tsx";
 import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
@@ -21,7 +22,8 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 /** Pixel geometry for the code block, centred in whatever space it gets. */
 const layout = (step: CodeStep) => {
-  const width = AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.error ? PANEL_WIDTH + 60 : 0);
+  const width =
+    AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.error ? PANEL_WIDTH + 60 : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
@@ -381,7 +383,24 @@ export const CodeSlide = ({
         );
       })}
       {step.error ? (
-        <ErrorView step={step} g={g} local={local} delay={marksStart} />
+        <ErrorView
+          step={step}
+          g={g}
+          local={local}
+          delay={marksStart}
+          minTop={step.req ? g.top + Math.max(1, step.req.items.length) * REQ_ROW + 20 : AREA.y}
+        />
+      ) : null}
+      {step.req ? (
+        <ReqView
+          req={step.req}
+          prev={prev?.req}
+          x={AREA.x + AREA.width - PANEL_WIDTH}
+          labelY={AREA.y}
+          top={g.top}
+          local={local}
+          delay={marksStart}
+        />
       ) : null}
       <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
         {step.marks.map((mark, i) => (
@@ -414,7 +433,19 @@ export const CodeSlide = ({
   );
 };
 
-const ErrorView = ({ step, g, local, delay }: { step: CodeStep; g: ReturnType<typeof layout>; local: number; delay: number }) => {
+const ErrorView = ({
+  step,
+  g,
+  local,
+  delay,
+  minTop,
+}: {
+  step: CodeStep;
+  g: ReturnType<typeof layout>;
+  local: number;
+  delay: number;
+  minTop: number;
+}) => {
   const error = step.error!;
   const r = rect(step, g, error);
   const p = drawProgress(local, delay, 8);
@@ -423,7 +454,7 @@ const ErrorView = ({ step, g, local, delay }: { step: CodeStep; g: ReturnType<ty
   const wave: string[] = [];
   for (let x = 0; x <= r.w * p; x += 6) wave.push(`${r.x + x},${r.y + r.h - 4 + (Math.floor(x / 6) % 2 ? 4 : 0)}`);
   const boxX = AREA.x + AREA.width - PANEL_WIDTH;
-  const boxY = Math.min(Math.max(AREA.y, r.y - 40), AREA.y + AREA.height - 320);
+  const boxY = Math.min(Math.max(minTop, r.y - 40), AREA.y + AREA.height - 320);
   return (
     <>
       <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>

@@ -1,22 +1,16 @@
-import * as AWS from "alchemy/AWS";
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import { Queues, R2 } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 // #region show
 export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  { main: import.meta.url },
+  "Api", { main: import.meta.url },
   Effect.gen(function* () {
-    // #region construct
-    const bucket = yield* AWS.S3.Bucket("Uploads");
-    const getObject = yield* AWS.S3.GetObject(bucket);
-    // #endregion construct
-
     return {
       fetch: Effect.gen(function* () {
-        const object = yield* getObject({ Key: "hello.txt" });
-        return HttpServerResponse.text(`${object.ContentLength} bytes`);
+        return HttpServerResponse.text("ok");
       }).pipe(Effect.orDie),
     };
   }),

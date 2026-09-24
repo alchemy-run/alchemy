@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { Drill, MiniGraph, PanelItem, Tone } from "../shared/intro.ts";
+import type { Drill, MiniGraph, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
 
 /** Where in the code: the first match of `text` (or the `nth`, 1-based). */
 export type Find = string | { text: string; nth?: number };
@@ -35,13 +35,18 @@ export interface CodeSpec {
     side?: "right" | "left" | "above" | "below";
     tone?: Tone;
   }[];
-  /** For `*.error.ts` snippets: which lines of the compiler's message to show. */
-  error?: { pick?: (lines: string[]) => string[] };
+  /**
+   * For `*.error.ts` snippets: which lines of the compiler's message to show,
+   * or `hide` to show the (still failing) code before the error is revealed.
+   */
+  error?: { pick?: (lines: string[]) => string[]; hide?: boolean };
   panel?: { title: string; items: PanelItem[] };
   /** A drawing beside the code that evolves with it. */
   diagram?: MiniGraph;
   /** A value passed down a call chain, drawn beside the code. */
   drill?: Drill;
+  /** The code's requirements (Effect's Req), listed beside it. */
+  req?: ReqPanel;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -68,12 +73,6 @@ export interface BoardSpec {
 }
 
 export type StepSpec = CodeSpec | SlideSpec | BoardSpec;
-
-const policy = (action: string) => `{
-  "Effect": "Allow",
-  "Action": "${action}",
-  "Resource": "arn:aws:s3:::uploads-7f3a/*"
-}`;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {
@@ -362,6 +361,38 @@ const deleter = (type: string) => `function deleter(remove: (id: string) => ${ty
   });
 }`;
 
+/** The Worker's requirements, listed beside its code. */
+const REQ_LABEL = "Req · what the Worker needs";
+const PROVIDERS = (note: string): ReqItem => ({ name: "Providers", note });
+const READ: ReqItem = { name: "ReadBucket", note: "to read it at runtime" };
+const WRITE: ReqItem = { name: "WriteQueue", note: "to send at runtime" };
+const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
+const PROVIDED_HTTP: ReqItem[] = [
+  PROVIDERS("to create the bucket and queue"),
+  met(READ, "ReadBucketHttp\nmints a read-only API token"),
+  met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
+];
+
+/** One version of the Api Worker, `snippets/api-*.ts`, with its Req beside it. */
+const api = (s: {
+  title: string;
+  snippet: string;
+  notes: string;
+  req: ReqItem[];
+  tints?: CodeSpec["tints"];
+  error?: CodeSpec["error"];
+}): CodeSpec => ({
+  kind: "code",
+  group: "api",
+  file: "src/Api.ts",
+  title: s.title,
+  src: { snippet: s.snippet, regions: ["show"] },
+  tints: s.tints,
+  error: s.error,
+  req: { label: REQ_LABEL, items: s.req },
+  notes: s.notes,
+});
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -572,115 +603,159 @@ export const steps: StepSpec[] = [
     ],
     notes: "That's Effect. Success, errors, and the requirements channel: the signature we were missing.",
   },
-  {
-    kind: "code",
-    group: "effect",
-    title: "Req is what a function needs from the outside world",
-    src: {
-      code: `// what goes in, and what comes out
-function get(key: string): Promise<Buffer>
 
-// …and what it needs from the outside world
-function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
-    },
-    marks: [{ kind: "circle", find: { text: "GetObject", nth: 1 }, label: "Req", side: "below", tone: "construct" }],
+  // Act 5: the same program, in Alchemy. The code grows one idea at a time;
+  // beside it, the Worker's Req: what it still needs from the outside world.
+  api({
+    title: "So let's write the program again with Effect",
+    snippet: "api-1-empty.ts",
+    req: [],
     notes:
-      "A function signature usually captures its input and output. The Req channel captures something else: the function's external dependencies. No peeking inside required: it's in the type, and the type checker carries it through higher-order functions and classes for us.",
-  },
-  {
-    kind: "board",
-    board: "layers",
-    stage: 0,
-    title: "And Layers keep the interface apart from its implementation",
+      "Let's write the program from before for real. A Cloudflare Worker is our function: a class with an Effect inside. On the right is its Req, what it needs from the outside world. Right now: nothing.",
+  }),
+  api({
+    title: "Its constructor is the construction phase",
+    snippet: "api-1-empty.ts",
+    tints: [{ from: "Effect.gen(function* () {", to: "return {", tone: "construct" }],
+    req: [],
+    notes: "The outer Effect is the constructor. It runs at deploy time and at cold start: that's the construction phase.",
+  }),
+  api({
+    title: "…and fetch is the runtime phase",
+    snippet: "api-1-empty.ts",
+    tints: [
+      { from: "Effect.gen(function* () {", to: "return {", tone: "construct" },
+      { from: "fetch: Effect.gen", to: "}).pipe(Effect.orDie),", tone: "runtime" },
+    ],
+    req: [],
+    notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
+  }),
+  api({
+    title: "Declaring a bucket adds a requirement",
+    snippet: "api-2-bucket.ts",
+    req: [PROVIDERS("to create the bucket")],
     notes:
-      "The next piece: Context.Service and Layer solve the coupling problem Punchcard had. Code depends on a service's interface; a Layer implements it; they only meet where you provide it.",
-  },
-  {
-    kind: "code",
-    group: "worker",
-    file: "src/Api.ts",
-    title: "In Alchemy, declaring a resource requires its provider",
-    src: { snippet: "worker.ts", regions: ["show"] },
-    tints: [{ region: "construct", tone: "construct" }],
-    marks: [
-      { kind: "circle", find: 'AWS.S3.Bucket("Uploads")', label: "requires the S3 Bucket provider", side: "right", tone: "construct" },
+      "Declare a bucket with yield*, and the Worker's Req gains Providers: something that knows how to create a bucket. The Worker can't create it itself.",
+  }),
+  api({
+    title: "Reading from it adds another",
+    snippet: "api-3-read.error.ts",
+    error: { hide: true },
+    req: [PROVIDERS("to create the bucket"), READ],
+    notes: "Ask to read from the bucket, and the Worker now also needs a ReadBucket: something that can actually read it at runtime.",
+  }),
+  api({
+    title: "The runtime code just calls it",
+    snippet: "api-4-get.error.ts",
+    error: { hide: true },
+    req: [PROVIDERS("to create the bucket"), READ],
+    notes: "At runtime we just call uploads.get. Nothing new is needed: the requirement was declared once, up front, in construction.",
+  }),
+  api({
+    title: "Sending to a queue works the same way",
+    snippet: "api-5-queue.error.ts",
+    error: { hide: true },
+    req: [PROVIDERS("to create the bucket and queue"), READ, WRITE],
+    notes: "A queue is the same: declare it, ask to write to it, send at runtime. Req now lists everything this Worker needs.",
+  }),
+  api({
+    title: "Leave a requirement unmet, and it won't compile",
+    snippet: "api-5-queue.error.ts",
+    error: { pick: requirementLines("Type 'ReadBucket'") },
+    req: [PROVIDERS("to create the bucket and queue"), { ...READ, state: "bad", note: "not provided" }, { ...WRITE, state: "bad", note: "not provided" }],
+    notes:
+      "And that list is checked. Nobody has provided ReadBucket or WriteQueue yet, so this is a compile error. That's the permission check from our imaginary language, done by TypeScript.",
+  }),
+  api({
+    title: "So provide an implementation for each one",
+    snippet: "api-6-provide.ts",
+    req: [PROVIDERS("to create the bucket and queue"), met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding")],
+    notes:
+      "Effect.provide satisfies each one with a Layer: an implementation of the requirement. ReadBucketBinding uses the Worker's native R2 binding.",
+  }),
+  api({
+    title: "The implementation grants the permission too",
+    snippet: "api-6-provide.ts",
+    req: [
+      PROVIDERS("to create the bucket and queue"),
+      met(READ, "ReadBucketBinding\nadds an R2 binding to the Worker"),
+      met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
     ],
     notes:
-      "Alchemy uses this for resource providers. yield* a Bucket and you take on a requirement for its provider…",
+      "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding to the Worker, and nothing else: the Worker can only do what the code declared.",
+  }),
+  api({
+    title: "Swap it, and the permission changes with it",
+    snippet: "api-7-http.ts",
+    req: [
+      PROVIDERS("to create the bucket and queue"),
+      met(READ, "ReadBucketHttp\nmints a read-only API token"),
+      met(WRITE, "WriteQueueBinding\nadds a Queue binding to the Worker"),
+    ],
+    notes:
+      "Swap ReadBucketBinding for ReadBucketHttp and the same code talks to R2 over HTTP instead. Now the layer mints an API token that can only read R2. The business logic doesn't change.",
+  }),
+  api({
+    title: "But what if we read during construction?",
+    snippet: "api-8-construct.error.ts",
+    error: { hide: true },
+    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
+    notes:
+      "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet.",
+  }),
+  api({
+    title: "It's a type error, just like in our imaginary language",
+    snippet: "api-8-construct.error.ts",
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'RuntimeContext'")).slice(0, 1) },
+    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
+    notes:
+      "Runtime methods require RuntimeContext, and the constructor doesn't have one. So calling a binding there is a type error. Req gives us colored functions.",
+  }),
+  api({
+    title: "Unless you opt out explicitly",
+    snippet: "api-9-phantom.ts",
+    req: [...PROVIDED_HTTP, { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" }],
+    notes:
+      "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error.",
+  }),
+  {
+    kind: "code",
+    group: "stack",
+    file: "alchemy.run.ts",
+    title: "The Stack provides the rest, at deploy time",
+    src: { snippet: "stack.ts", regions: ["show"] },
+    marks: [{ kind: "box", find: "providers: Cloudflare.providers()", tone: "construct" }],
+    req: {
+      label: REQ_LABEL,
+      items: [
+        { name: "Providers", state: "met", note: "the Stack, at deploy time" },
+        ...PROVIDED_HTTP.slice(1),
+        { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" },
+      ],
+    },
+    notes:
+      "What's left is Providers, and only the Stack provides it. The Stack runs during alchemy deploy, and it's never part of the Worker.",
   },
   {
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "The Stack provides it, so it never ships with the Worker",
+    title: "So provisioning code never ships with the Worker",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [
-      { kind: "box", find: "providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers())", label: "satisfied here, at deploy time only", side: "above", tone: "construct" },
-    ],
-    notes:
-      "…but that requirement only has to be satisfied on the Stack, not on the Worker. The Stack isn't part of the runtime bundle, so provisioning stays type-safe without coupling the Worker to it.",
-  },
-  {
-    kind: "code",
-    group: "binding",
-    file: "src/Api.ts",
-    title: "A binding just declares what the Worker may do",
-    src: { snippet: "worker.ts", regions: ["show"] },
-    tints: [{ region: "construct", tone: "construct" }],
-    marks: [
-      { kind: "circle", find: "AWS.S3.GetObject(bucket)", label: "what the Worker may do, not how", side: "right", tone: "construct" },
-    ],
-    notes: "Bindings work the same way. AWS.S3.GetObject(bucket) is a declaration. It says nothing about how it's implemented.",
-  },
-  {
-    kind: "code",
-    group: "binding",
-    file: "src/Api.ts",
-    title: "Leave out the implementation, and it won't compile",
-    src: { snippet: "missing-provide.error.ts", regions: ["show"] },
-    tints: [{ region: "construct", tone: "construct" }],
-    error: { pick: requirementLines("Type 'GetObject'") },
-    notes: "Leave out the implementation and it doesn't compile: GetObject is an unsatisfied requirement.",
-  },
-  {
-    kind: "code",
-    group: "binding",
-    file: "src/Api.ts",
-    title: "Provide one, like GetObjectHttp",
-    src: { snippet: "worker.ts", regions: ["show"] },
-    tints: [{ region: "construct", tone: "construct" }],
-    marks: [{ kind: "underline", find: "AWS.S3.GetObjectHttp", label: "the implementation", side: "above", tone: "good" }],
-    notes:
-      "Effect.provide(AWS.S3.GetObjectHttp): the Http suffix names the implementation, here Alchemy's Distilled SDK over HTTP.",
-  },
-  {
-    kind: "board",
-    board: "fork",
-    stage: 0,
-    title: "The implementation sets up the permissions too",
-    notes:
-      "The layer also wires up permissions. On Lambda it adds a least-privilege statement to the Function's role. On a Cloudflare Worker, or anywhere outside AWS, it creates an IAM user that can only assume a role, and gives the Worker the keys to fetch short-lived credentials at runtime.",
-  },
-  {
-    kind: "code",
-    group: "binding",
-    file: "src/Api.ts",
-    title: "So every permission is one the code declared",
-    src: { snippet: "put-object.ts", regions: ["show"] },
-    tints: [{ region: "construct", tone: "construct" }],
-    marks: [{ kind: "highlight", find: "AWS.S3.PutObject(bucket)", label: "one new line…", side: "right", tone: "good" }],
+    marks: [{ kind: "box", find: "providers: Cloudflare.providers()", tone: "construct" }],
     panel: {
-      title: "…one new statement",
+      title: "What the Worker bundle contains",
       items: [
-        { title: "s3:GetObject", mono: policy("s3:GetObject") },
-        { title: "s3:PutObject", mono: policy("s3:PutObject"), tone: "good" },
+        { title: "Your handler", bar: 0.05, tone: "runtime" },
+        { title: "Binding clients", bar: 0.12, tone: "construct" },
+        { title: "Resource providers", body: "not included: they only run in alchemy deploy", tone: "good" },
       ],
     },
     notes:
-      "Because bindings are granular, you can't call a cloud API without declaring it. Need to write objects? Declare PutObject. Permissions grow with the application, never ahead of it.",
+      "Remember Punchcard shipping the whole CDK? Providers are requirements of the Stack, so the Worker bundle only contains your code and the clients it calls. (Sizes illustrative.)",
   },
 
-  // Act 5: the compiler
+  // Act 6: the compiler
   {
     kind: "board",
     board: "pipeline",
@@ -690,7 +765,7 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
       "alchemy deploy acts as the compiler of your application. TypeScript does the static analysis with Effect and Layer types; running the program just builds the graph of resources and bindings, which is diffed into a plan you review.",
   },
 
-  // Act 6: components
+  // Act 7: components
   {
     kind: "board",
     board: "components",
@@ -710,23 +785,33 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     kind: "code",
     group: "links",
     file: "src/Links.ts",
-    title: "In Alchemy, a component is just a Layer",
-    src: { snippet: "links.ts", regions: ["service", "layer"] },
+    title: "In Alchemy, you can declare your own requirement",
+    src: { snippet: "links.ts", regions: ["service"] },
+    notes:
+      "ReadBucket and WriteQueue are just requirements, and you can declare your own. Links is an interface: get a link by its code. It says nothing about where links are stored.",
+  },
+  {
+    kind: "code",
+    group: "links",
+    file: "src/Links.ts",
+    title: "…and a Layer that builds its infrastructure",
+    src: { snippet: "links.ts", regions: ["layer"] },
     tints: [
       { from: "const db = yield*", to: "const sql = yield*", tone: "construct" },
       { from: "return linksOver", tone: "runtime" },
     ],
     notes:
-      "In Alchemy a component is a Layer: a Context.Service interface, and a Layer.effect that declares its resources and bindings in the construction phase and returns the runtime interface.",
+      "A Layer implements it, with the same two phases: construction declares a D1 database and a binding to it, and the runtime part is the interface the application calls. That Layer is a component: infrastructure and the code that uses it, together.",
   },
   {
     kind: "code",
     group: "app",
     file: "src/Shorty.ts",
-    title: "The application depends only on its interface",
+    title: "The Worker only asks for the interface",
     src: { snippet: "app-d1.ts", regions: ["show"] },
-    marks: [{ kind: "circle", find: "yield* Links", label: "just the interface", side: "right", tone: "construct" }],
-    notes: "Business logic is written against the Links interface.",
+    marks: [{ kind: "circle", find: "yield* Links", tone: "construct" }],
+    req: { label: REQ_LABEL, items: [{ name: "Links", state: "met", note: "LinksD1\na D1 database" }] },
+    notes: "The Worker just needs Links. LinksD1 provides it, bringing its database along.",
   },
   {
     kind: "code",
@@ -734,52 +819,8 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     file: "src/Shorty.ts",
     title: "So you can swap the infrastructure and keep the logic",
     src: { snippet: "app-neon.ts", regions: ["show"] },
-    marks: [{ kind: "underline", find: "LinksNeon", label: "D1 → Neon Postgres", side: "above", tone: "good" }],
+    req: { label: REQ_LABEL, items: [{ name: "Links", state: "met", note: "LinksNeon\nNeon Postgres over Hyperdrive" }] },
     notes: "Swap the Layer and the infrastructure changes underneath: D1, Neon, DynamoDB. The business logic doesn't change. We'll do this for real in the demo.",
-  },
-
-  // Act 7: the colors, in the type system
-  {
-    kind: "code",
-    group: "real-colors",
-    file: "src/Api.ts",
-    title: "Here are the two phases in real code",
-    src: { snippet: "runtime.ts", regions: ["show"] },
-    tints: [
-      { from: "Effect.gen(function* () {", to: "Cloudflare.R2.ReadBucket(bucket)", tone: "construct" },
-      { from: "fetch: Effect.gen", to: "}).pipe(Effect.orDie),", tone: "runtime" },
-    ],
-    notes:
-      "Back to colored functions. In Alchemy the two phases are a convention: the Worker's constructor is construction, fetch is runtime. And TypeScript can check it.",
-  },
-  {
-    kind: "code",
-    group: "real-colors",
-    file: "src/Api.ts",
-    title: "Calling a binding during construction is a type error",
-    src: { snippet: "call-in-constructor.error.ts", regions: ["show"] },
-    tints: [
-      { from: "Effect.gen(function* () {", to: 'uploads.get("README.md").pipe', tone: "construct" },
-      { from: "fetch: Effect.gen", to: "}).pipe(Effect.orDie),", tone: "runtime" },
-    ],
-    marks: [{ kind: "strike", find: 'uploads.get("README.md").pipe', tone: "bad" }],
-    error: { pick: requirementLines("Type 'RuntimeContext'") },
-    notes:
-      "Runtime methods require Alchemy.RuntimeContext, and Workers don't allow it in their constructor, which runs at deploy time and at cold start. Call a binding there and it's a type error. It's Req, emulating colored functions.",
-  },
-  {
-    kind: "code",
-    group: "real-colors",
-    file: "src/Api.ts",
-    title: "Unless you opt out explicitly, like with ts-expect-error",
-    src: { snippet: "phantom.ts", regions: ["show"] },
-    tints: [
-      { from: "Effect.gen(function* () {", to: 'uploads.get("README.md").pipe', tone: "construct" },
-      { from: "fetch: Effect.gen", to: "}).pipe(Effect.orDie),", tone: "runtime" },
-    ],
-    marks: [{ kind: "box", find: "Alchemy.RuntimeContext.phantom", label: "opt in, visibly", side: "right", tone: "neutral" }],
-    notes:
-      "You can still make the call, but only by reaching for the escape hatch, RuntimeContext.phantom: an explicit opt-in that squashes the error, like ts-expect-error.",
   },
   {
     kind: "code",

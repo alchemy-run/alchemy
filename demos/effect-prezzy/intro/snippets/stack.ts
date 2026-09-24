@@ -1,15 +1,13 @@
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import Api from "./worker.ts";
+import Api from "./api-9-phantom.ts";
 
 // #region show
 export default Alchemy.Stack(
   "App",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
+    providers: Cloudflare.providers(),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

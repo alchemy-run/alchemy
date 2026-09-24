@@ -6,11 +6,9 @@ import { Links, LinksD1 } from "./links.ts";
 
 // #region show
 export default class Shorty extends Cloudflare.Worker<Shorty>()(
-  "Shorty",
-  { main: import.meta.url },
+  "Shorty", { main: import.meta.url },
   Effect.gen(function* () {
     const links = yield* Links;
-
     return {
       fetch: Effect.gen(function* () {
         const { url } = yield* HttpServerRequest;

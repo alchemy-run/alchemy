@@ -42,6 +42,21 @@ export interface PanelItem {
   bar?: number;
 }
 
+/** One entry of an Effect's `Req`: open until something provides it. */
+export interface ReqItem {
+  /** The requirement's type name, as the compiler prints it. */
+  name: string;
+  state?: "open" | "met" | "bad";
+  /** Short text beside it: what it's for, or what satisfies it. `\n` breaks lines. */
+  note?: string;
+}
+
+/** The requirements of the code on screen, listed beside it. */
+export interface ReqPanel {
+  label: string;
+  items: ReqItem[];
+}
+
 /** A value threaded down a call chain, drawn beside the code. */
 export interface Drill {
   /** Small heading above the chain. */
@@ -109,6 +124,7 @@ export interface CodeStep {
   panel?: { title: string; items: PanelItem[] };
   diagram?: MiniGraph;
   drill?: Drill;
+  req?: ReqPanel;
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;
   frames: number;
