@@ -416,9 +416,32 @@ const INFERRED = `const api = Effect.gen(function* () {
     }),
   };
 });`;
-const INFERRED_DEV = `const api = Effect.gen(function* () {
+const INFERRED_ON_FETCH = `const api = Effect.gen(function* () {
   const bucket = yield* R2.Bucket("Uploads");
-  const logs = dev ? yield* R2.Bucket("Logs") : undefined;
+  return {
+    fetch: Effect.gen(function* () {
+      const file = yield* bucket.get("hello.txt");
+      return HttpServerResponse.text("ok");
+    }).pipe(Effect.provide(R2.ReadBucket(bucket))),
+  };
+});`;
+const INFERRED_HOISTED = `const Uploads = R2.Bucket("Uploads");
+
+const api = Effect.gen(function* () {
+  const bucket = yield* Uploads;
+  return {
+    fetch: Effect.gen(function* () {
+      const file = yield* bucket.get("hello.txt");
+      return HttpServerResponse.text("ok");
+    }),
+  };
+}).pipe(Effect.provide(R2.ReadBucket(Uploads)));`;
+const INFERRED_DEV = `const Uploads = R2.Bucket("Uploads");
+const Logs = R2.Bucket("Logs");
+
+const api = Effect.gen(function* () {
+  const bucket = yield* Uploads;
+  const logs = dev ? yield* Logs : undefined;
   return {
     fetch: Effect.gen(function* () {
       const file = yield* bucket.get("hello.txt");
@@ -426,9 +449,12 @@ const INFERRED_DEV = `const api = Effect.gen(function* () {
       return HttpServerResponse.text("ok");
     }),
   };
-});`;
+}).pipe(Effect.provide([R2.ReadBucket(Uploads), R2.WriteBucket(Logs)]));`;
 const GET_OBJECT: ReqItem = { name: "R2.GetObject<Uploads>", note: "inferred from bucket.get" };
-const GET_OBJECT_ON_FETCH: ReqItem = { ...GET_OBJECT, note: "provide it here, per request,\nor hoist it out with type tricks" };
+const GET_OBJECT_HOISTED = met(
+  { name: "R2.GetObject<Uploads>" },
+  "R2.ReadBucket(Uploads)\nhoisted out of fetch",
+);
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -666,33 +692,46 @@ export const steps: StepSpec[] = [
       "My first attempt looked exactly like the imaginary language. Just call bucket.get, and the type of that call carries the requirement: R2.GetObject for the Uploads bucket. No declaration needed.",
   }),
   api({
-    title: "But that puts the requirement on fetch",
-    code: INFERRED,
+    title: "But then the layer goes on fetch, which runs at runtime",
+    code: INFERRED_ON_FETCH,
     req: [BUCKET],
-    fetchReq: [GET_OBJECT_ON_FETCH],
+    fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
-      "The problem: the requirement lands on fetch, the runtime function, and the program as a whole doesn't have it. To satisfy it, you either provide a layer to fetch itself, on every request, or use type-level trickery to pluck it out of fetch and move it up to the program.",
+      "The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
-    title: "So it leaks into every interface built on top of it",
-    code: `${INFERRED}
+    title: "So the bucket moves out, and the layer goes on construction",
+    code: INFERRED_HOISTED,
+    req: [BUCKET, GET_OBJECT_HOISTED],
+    notes:
+      "Where we actually want it is on the outer Effect, the construction phase. To get there, the bucket moves out to module scope so the layer can name it, and type-level trickery plucks the requirement out of fetch and onto the outer Effect, where Effect.provide(R2.ReadBucket(Uploads)) satisfies it.",
+  }),
+  api({
+    title: "But a Layer has to cover every path the code might take",
+    code: INFERRED_DEV,
+    req: [
+      BUCKET,
+      GET_OBJECT_HOISTED,
+      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+    ],
+    notes:
+      "And now the layers carry the policies, so we have to provide every policy for every path the code could take. The Logs bucket only exists in dev, but the type is the union of all paths, so it demands PutObject for Logs everywhere. Production gets the Logs bucket and its policy whether it runs that code or not.",
+  }),
+  api({
+    title: "And it leaks into every interface built on top of it",
+    code: `${INFERRED_DEV}
 
 interface Storage {
   get(key: string): Effect<File, NotFound, R2.GetObject<Uploads>>;
 }`,
-    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
-    req: [BUCKET],
-    fetchReq: [GET_OBJECT_ON_FETCH],
+    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
+    req: [
+      BUCKET,
+      GET_OBJECT_HOISTED,
+      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+    ],
     notes:
-      "Worse, it pollutes the function's type. Wrap the storage in an interface and the requirement comes along: the interface now says R2 and which bucket. So you can't hide infrastructure behind a service and swap its implementation with a Layer, because the implementation bleeds into the type.",
-  }),
-  api({
-    title: "And a type can't tell which paths actually run",
-    code: INFERRED_DEV,
-    req: [BUCKET],
-    fetchReq: [GET_OBJECT_ON_FETCH, { name: "R2.PutObject<Logs>", state: "bad", note: "required even when\nthere's no Logs bucket" }],
-    notes:
-      "And the last problem: the type is the union of every path through the function. Here the Logs bucket only exists in dev, but the type can't know that, so it demands PutObject for Logs in production too. Types see all possible paths, never the one that actually runs.",
+      "And it pollutes the function's type. Wrap the storage in an interface and the requirement comes along: the interface now says R2 and which bucket. So you can't hide infrastructure behind a service and swap its implementation with a Layer, because the implementation bleeds into the type.",
   }),
   api({
     title: "So the binding is declared in construction instead",

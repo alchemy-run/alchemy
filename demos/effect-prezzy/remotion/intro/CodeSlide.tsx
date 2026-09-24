@@ -94,7 +94,10 @@ const modifiedLines = (prev: CodeStep, step: CodeStep, matched: Map<number, numb
       const score = pre + suf;
       // Mostly the same line, or the old line with something inserted into it.
       const insertion = score >= old.length && old.trim().length >= 2;
-      if ((!insertion && score < Math.max(old.length, text.length) * 0.5) || text.length - suf <= pre) return;
+      // The old line with something taken out: nothing new to highlight.
+      const deletion = score >= text.length && text.trim().length >= 2;
+      if (!insertion && !deletion && score < Math.max(old.length, text.length) * 0.5) return;
+      if (!deletion && text.length - suf <= pre) return;
       if (!best || score > best.score || (score === best.score && Math.abs(j - i) < Math.abs(best.from - i)))
         best = { from: j, start: pre, end: text.length - suf, score };
     });
@@ -283,6 +286,7 @@ export const CodeSlide = ({
         ? step.lines.map((tokens, i) => {
             if (matched.has(i) || !lineText(tokens).trim()) return null;
             const span = modified.get(i);
+            if (span && span.end <= span.start) return null;
             if (span) {
               // An edit within the line: mark the line, highlight just the new part.
               return (
