@@ -14,13 +14,14 @@
         color: #e8e2d4;
         font-family: Inter, ui-sans-serif, system-ui, sans-serif;
       }
+      /* Fixed rows: the video's area never changes size when notes change length. */
       .stage {
         height: 100%;
         display: grid;
-        grid-template-rows: 1fr auto;
+        grid-template-rows: minmax(0, 1fr) 48px;
       }
       .stage.with-notes {
-        grid-template-rows: 1fr auto auto;
+        grid-template-rows: minmax(0, 1fr) 48px 22vh;
       }
       .player {
         min-height: 0;
@@ -34,7 +35,9 @@
       .bar {
         display: flex;
         gap: 18px;
-        align-items: baseline;
+        align-items: center;
+        overflow: hidden;
+        white-space: nowrap;
         padding: 10px 18px;
         border-top: 1px solid #25221d;
         font-size: 15px;
@@ -45,13 +48,15 @@
       }
       .title {
         flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
         font-weight: 600;
       }
       .state {
         color: #8a826f;
       }
       .notes {
-        max-height: 22vh;
         overflow: auto;
         padding: 12px 18px 16px;
         border-top: 1px solid #25221d;
