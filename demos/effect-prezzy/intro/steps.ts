@@ -1609,10 +1609,10 @@ export const steps: StepSpec[] = [
     notes: "Which bindings are right also depends on where the program runs. The program itself doesn't care, so let's swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
-    title: "It won't compile, because the native bindings need a Worker",
+    title: "It won't compile, because our Layers use Cloudflare bindings",
     snippet: "api-10-lambda.error.ts",
     error: { pick: firstLine("Type 'WorkerEnvironment'") },
-    req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
+    req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "not a Worker" }],
     notes:
       "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
   }),
