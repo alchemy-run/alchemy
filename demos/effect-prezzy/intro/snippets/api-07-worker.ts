@@ -22,7 +22,10 @@ export default Cloudflare.Worker(
       })/*hide*/.pipe(Effect.orDie)/*end*/,
     };
   }).pipe(
-    Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding]),
+    Effect.provide([
+      R2.ReadBucketBinding,
+      Queues.WriteQueueBinding,
+    ]),
   ),
 );
 // #endregion show

@@ -903,11 +903,11 @@ export const steps: StepSpec[] = [
       "A Worker's constructor runs at deploy time and cold start, with no request, so it can't provide RuntimeContext. Reading the bucket there is a type error, just like in our imaginary language.",
   }),
   api({
-    title: "Unless you opt out explicitly",
+    title: "Unless you opt out explicitly (don't do this)",
     snippet: "api-09-phantom.ts",
     req: [...PROVIDED, PHANTOM],
     notes:
-      "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error.",
+      "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error. It's there for emergencies. Don't do this.",
   }),
   api({
     title: "Now let's run it on AWS Lambda instead",

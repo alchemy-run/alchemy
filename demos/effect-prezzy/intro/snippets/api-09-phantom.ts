@@ -23,8 +23,11 @@ export default Cloudflare.Worker(
       })/*hide*/.pipe(Effect.orDie)/*end*/,
     };
   }).pipe(
-    Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding]),
-    Effect.provide(Alchemy.RuntimeContext.phantom),
+    Effect.provide([
+      R2.ReadBucketBinding,
+      Queues.WriteQueueBinding,
+      Alchemy.RuntimeContext.phantom,
+    ]),
   ),
 );
 // #endregion show
