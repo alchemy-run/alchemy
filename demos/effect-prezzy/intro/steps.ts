@@ -381,7 +381,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "punchcard",
     file: "punchcard · stack.ts",
-    title: "First came Punchcard, which added two phases to the AWS CDK",
+    title: "First came Punchcard, which added runtime code to the AWS CDK",
     src: { code: PUNCHCARD },
     tints: [
       { from: "const topic", to: "depends: topic", tone: "construct" },
