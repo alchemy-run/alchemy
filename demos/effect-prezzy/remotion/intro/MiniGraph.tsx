@@ -139,7 +139,7 @@ export const MiniGraphView = ({
                 y1={s.y}
                 x2={t.x}
                 y2={t.y}
-                color={changed ? "#7ee787" : e.tone ? TONE[e.tone] : brand.fgMuted}
+                color={e.tone === "bad" ? TONE.bad : changed ? "#7ee787" : e.tone ? TONE[e.tone] : brand.fgMuted}
                 progress={progress}
                 bend={0}
               />
@@ -228,7 +228,8 @@ export const MiniGraphView = ({
         const changed = now.ownNode(n.id);
         // Grow in only when new; dimming changes opacity, never size.
         const grow = isNew ? fade(local, delay + newNodes.indexOf(n) * 2) : 1;
-        const opacity = grow * brightness(now.node(n.id), then.node(n.id));
+        // A hypothetical node is the point of its step: never dim it.
+        const opacity = grow * (n.ghost ? 1 : brightness(now.node(n.id), then.node(n.id)));
         // A glow for the box that changed; last step's glow fades out instead of popping.
         const glowing = changed ? glow : then.ownNode(n.id) ? 1 - t : 0;
         const oldNotes = new Set(before.get(n.id)?.notes);
@@ -246,11 +247,11 @@ export const MiniGraphView = ({
                 justifyContent: "center",
                 gap: 12,
                 borderRadius: 18,
-                background: "#1c1a17",
-                border: `3px solid ${n.color}`,
+                border: `3px ${n.ghost ? "dashed" : "solid"} ${n.color}`,
+                background: n.ghost ? "transparent" : "#1c1a17",
                 boxShadow:
                   glowing > 0
-                    ? `0 0 0 ${5 * glowing}px rgba(126,231,135,0.45), 0 0 ${36 * glowing}px rgba(126,231,135,0.4), 0 12px 34px rgba(0,0,0,0.45)`
+                    ? `0 0 0 ${5 * glowing}px ${n.ghost ? "rgba(255,123,114,0.45)" : "rgba(126,231,135,0.45)"}, 0 0 ${36 * glowing}px ${n.ghost ? "rgba(255,123,114,0.4)" : "rgba(126,231,135,0.4)"}, 0 12px 34px rgba(0,0,0,0.45)`
                     : "0 12px 34px rgba(0,0,0,0.45)",
                 opacity,
                 transform: `scale(${0.9 + 0.1 * grow})`,

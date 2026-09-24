@@ -52,6 +52,8 @@ export interface MiniNode {
   y: number;
   /** Config lines under the node; lines new in this step appear in green. */
   notes?: string[];
+  /** A hypothetical node: dashed outline, e.g. "what would this even be?" */
+  ghost?: boolean;
 }
 
 export interface MiniGraph {

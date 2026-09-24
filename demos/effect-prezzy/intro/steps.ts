@@ -105,9 +105,15 @@ const COLORED_APP = `construct app() {
     queue.send(file)
   }
 }`;
+/** The question: what would a bucket created inside the function even mean? */
+const SCRATCH = VERSIONED.replace(
+  "  const file = bucket.get(req.key)",
+  "  const scratch = Bucket()\n  const file = bucket.get(req.key)",
+);
+const SCRATCH_NODE = { id: "scratch", title: "Bucket?", color: "#ff7b72", x: 360, y: 610, ghost: true };
 const COLORED_BAD = COLORED_APP.replace(
   "    const file = bucket.get(req.key)",
-  "    const other = Bucket()\n    const file = bucket.get(req.key)",
+  "    const scratch = Bucket()\n    const file = bucket.get(req.key)",
 );
 
 const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]) => ({
@@ -218,7 +224,31 @@ const program = (): StepSpec[] => [
       "A cloud language derives all of this by static analysis. Nobody writes policies or environment variables by hand: the program is a graph of resources, and the code is the source of truth for how they connect.",
   }),
   lang({
-    title: "The program runs in two phases",
+    title: "What if the function creates a bucket?",
+    src: { code: SCRATCH },
+    diagram: {
+      nodes: [...GRAPH(["versioning: on"], ENV), SCRATCH_NODE],
+      edges: BINDINGS,
+      labels: [{ text: "one per request?", x: 590, y: 622, tone: "bad" }],
+    },
+    notes:
+      "So far every resource was declared at the top. What if the function itself declares one? The function runs on every request, maybe thousands of times a second. Does each request get a new bucket? Who deletes them? Who gave the function permission to create them?",
+  }),
+  lang({
+    title: "It can't be: a request can't create infrastructure",
+    src: { code: SCRATCH },
+    marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
+    diagram: {
+      nodes: [...GRAPH(["versioning: on"], ENV), SCRATCH_NODE],
+      edges: BINDINGS,
+      labels: [{ text: "one per request?", x: 590, y: 622, tone: "bad" }],
+      cards: [{ text: "✗ a request can't create a bucket", tone: "bad" }],
+    },
+    notes:
+      "It doesn't make sense. Infrastructure is created once, ahead of time, by the deploy. The function only uses it. So there are really two different kinds of code in this program.",
+  }),
+  lang({
+    title: "So a cloud program runs in two phases",
     src: { code: VERSIONED },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
@@ -231,19 +261,19 @@ const program = (): StepSpec[] => [
       incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
     },
     notes:
-      "So the program doesn't run once from top to bottom. Construction is declarative: it builds the architecture, the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
+      "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
   }),
   lang({
-    title: "Imagine the phases as colored functions",
+    title: "Make the phases part of the language",
     src: { code: COLORED_APP },
     // The construct/runtime keywords carry the colors; nothing else to highlight.
     quiet: true,
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
-      "In a real language we could make that explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
+      "In a real language we could make the phases explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
   }),
   lang({
-    title: "The colors are boundaries the compiler enforces",
+    title: "Now the compiler catches that mistake",
     src: { code: COLORED_BAD },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -251,7 +281,7 @@ const program = (): StepSpec[] => [
       edges: BINDINGS,
       cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
     },
-    notes: "Construct and runtime can't call each other the wrong way: creating a bucket inside a request is a compile error.",
+    notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
   }),
   lang({
     title: "Inferring bindings is a kind of type checking",
