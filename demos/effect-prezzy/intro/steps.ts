@@ -1035,15 +1035,47 @@ export const steps: StepSpec[] = [
       "Effect.provide satisfies each one with a Layer: an implementation of the requirement. These use Cloudflare's native bindings, and that adds a requirement of its own: they only work inside a Cloudflare Worker.",
   }),
   api({
-    title: "The implementation grants the permission too",
+    title: "But they don't grant the policy, they define how it's made",
     snippet: "api-06-provide.ts",
+    marks: [
+      {
+        kind: "box",
+        find: "R2.ReadBucketBinding,",
+        to: "Queues.WriteQueueBinding,",
+        label: "binding layers",
+        side: "right",
+        tone: "construct",
+      },
+    ],
+    req: [met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding"), WORKER],
+    notes:
+      "But careful: these layers aren't the policy. They define how the policy gets made. They're binding layers, and a binding layer has two faces.",
+  }),
+  api({
+    title: "Its first face runs at construction and wires up the binding",
+    snippet: "api-06-provide.ts",
+    tints: [{ from: "const api = Effect.gen", to: "const jobs", tone: "construct" }],
+    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "binding, policy, env vars", side: "right", tone: "construct" }],
     req: [
-      met(READ, "ReadBucketBinding\nadds a native R2 binding"),
-      met(WRITE, "WriteQueueBinding\nadds a native Queue binding"),
+      met(READ, "ReadBucketBinding\nattaches the R2 binding"),
+      met(WRITE, "WriteQueueBinding\nattaches the Queue binding"),
       WORKER,
     ],
     notes:
-      "The implementation also sets up access at deploy time. The binding layers attach an R2 binding and a Queue binding, and nothing else: the program can only do what the code declared.",
+      "The first face runs during construction. When R2.ReadBucket(bucket) runs at deploy time, ReadBucketBinding wires up the binding: the native R2 binding on the Worker, plus whatever policy and environment variables it needs. Only for what the code actually declared.",
+  }),
+  api({
+    title: "Its second face runs at runtime and implements the interface",
+    snippet: "api-06-provide.ts",
+    tints: [{ from: "fetch: Effect.gen", to: "}),", tone: "runtime" }],
+    marks: [{ kind: "underline", find: 'uploads.get("hello.txt")', label: "the layer's get", side: "right", tone: "runtime" }],
+    req: [
+      met(READ, "ReadBucketBinding\nimplements get"),
+      met(WRITE, "WriteQueueBinding\nimplements send"),
+      WORKER,
+    ],
+    notes:
+      "The second face is what R2.ReadBucket(bucket) returns: code that runs at runtime and implements the interface. When fetch calls uploads.get, that's the layer's get, talking to the native R2 binding.",
   }),
   api({
     title: "Finally, we wrap it in a Worker to run it in the cloud",
