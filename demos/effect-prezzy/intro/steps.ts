@@ -1185,6 +1185,15 @@ export const steps: StepSpec[] = [
       "My first attempt looked exactly like the imaginary language. Just call bucket.get, and the type of that call carries the requirement: R2.GetObject for the Uploads bucket. No declaration needed.",
   }),
   api({
+    title: "The goal was least privilege, guaranteed by the type checker",
+    code: INFERRED,
+    marks: [{ kind: "underline", find: 'bucket.get("hello.txt")', label: "grant this, and nothing more", side: "right", tone: "good" }],
+    req: [],
+    fetchReq: [GET_OBJECT],
+    notes:
+      "Here's what I was after: least privilege, guaranteed by the type checker. The type lists exactly what the code touches, and the layer you provide for each requirement grants exactly that permission. If it compiles, the function can do what it uses, and nothing more.",
+  }),
+  api({
     title: "It looked just like the imaginary language…",
     code: INFERRED,
     quiet: true,
@@ -1268,7 +1277,7 @@ export const steps: StepSpec[] = [
       { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
     ],
     notes:
-      "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. That's a least-privilege violation, baked in by the type system.",
+      "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. The very goal of this design, least privilege, is broken by the type system itself.",
   }),
   api({
     title: "What we learned is that we've broken encapsulation",
@@ -1391,7 +1400,7 @@ export const steps: StepSpec[] = [
       "Effect.provide satisfies each one with a Layer: an implementation of the requirement. These use Cloudflare's native bindings, and that adds a requirement of its own: they only work inside a Cloudflare Worker.",
   }),
   api({
-    title: "But they don't grant the policy, they define how it's made",
+    title: "Each one is a binding layer, and it has two faces",
     snippet: "api-06-provide.ts",
     marks: [
       {
@@ -1405,7 +1414,7 @@ export const steps: StepSpec[] = [
     ],
     req: [met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding"), WORKER],
     notes:
-      "But careful: these layers aren't the policy. They define how the policy gets made. They're binding layers, and a binding layer has two faces.",
+      "Each of these is a binding layer, and a binding layer has two faces: one that runs at construction, and one that runs at runtime.",
   }),
   api({
     title: "Its first face runs at construction and wires up the binding",
@@ -1475,7 +1484,7 @@ export const steps: StepSpec[] = [
       "So the WriteBucketBinding code is still in the production bundle, but it never grants anything there. Providing a layer isn't granting a permission; running the code is. That's the difference from my first attempt, where the type demanded the permission in every stage.",
   }),
   api({
-    title: "The layer ships in the bundle, but least privilege holds",
+    title: "The types no longer guarantee it, running the code does",
     snippet: "api-06b-dev.ts",
     marks: [
       { kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" },
@@ -1489,7 +1498,7 @@ export const steps: StepSpec[] = [
     ],
     aside: { text: "usually, pragmatism beats purity", image: "michael-pointing.jpg" },
     notes:
-      "A small trade-off: a few bytes of unused client code in production, in exchange for a program that stays plain code. Usually, pragmatism beats purity. Sorry, Michael.",
+      "So that's where my original goal ended up. Least privilege is no longer guaranteed by the type checker; it comes from running the code. The types still guarantee every binding has an implementation, and the cost is a few bytes of unused client code in production. Usually, pragmatism beats purity. Sorry, Michael.",
   }),
   api({
     title: "So far, though, it's just a program that nothing runs",
