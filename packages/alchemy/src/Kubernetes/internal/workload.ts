@@ -13,6 +13,7 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type {
+  AdapterLifecycleServices,
   ClusterAdapterService,
   IdentityState,
   RegistryState,
@@ -220,6 +221,8 @@ export interface ResolveWorkloadImageOptions {
   adapter: ClusterAdapterService;
   id: string;
   source: WorkloadImageSource;
+  /** Deployment-only delivery strategy for a pre-built image. */
+  imageStrategy?: "mirror" | "direct";
   platform: string;
   port?: number | undefined;
   isExternal?: boolean | undefined;
@@ -230,6 +233,14 @@ export interface ResolveWorkloadImageOptions {
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
+export interface ResolvedWorkloadImage {
+  imageUri: string;
+  codeHash: string;
+  state: RegistryState | undefined;
+  /** Previous managed-registry state to delete after the new image is live. */
+  cleanupState: Record<string, unknown> | undefined;
+}
+
 /**
  * Resolve the container image for a workload: through the cluster
  * adapter's managed registry when it has one (build/mirror + push), or —
@@ -238,10 +249,28 @@ export interface ResolveWorkloadImageOptions {
  */
 export const resolveWorkloadImage = Effect.fn(function* (
   options: ResolveWorkloadImageOptions,
-) {
+): Effect.fn.Return<
+  ResolvedWorkloadImage,
+  any,
+  AdapterLifecycleServices | FileSystem.FileSystem | Path.Path
+> {
   const { adapter, source } = options;
+  const kind = imageSourceKind(source);
+  if (kind === "image" && options.imageStrategy === "direct") {
+    const codeHash = (yield* computeStaticWorkloadImageHash(
+      source,
+      options.platform,
+    ))!;
+    return {
+      imageUri: source.image!,
+      codeHash,
+      state: undefined,
+      cleanupState: adapter.registry === undefined ? undefined : options.state,
+    };
+  }
+
   if (adapter.registry !== undefined) {
-    return yield* adapter.registry.resolve({
+    const resolved = yield* adapter.registry.resolve({
       id: options.id,
       source,
       platform: options.platform,
@@ -252,9 +281,9 @@ export const resolveWorkloadImage = Effect.fn(function* (
       state: options.state,
       session: options.session,
     });
+    return { ...resolved, cleanupState: undefined };
   }
 
-  const kind = imageSourceKind(source);
   if (kind === "image") {
     const codeHash = (yield* computeStaticWorkloadImageHash(
       source,
@@ -264,6 +293,7 @@ export const resolveWorkloadImage = Effect.fn(function* (
       imageUri: source.image!,
       codeHash,
       state: undefined,
+      cleanupState: undefined,
     };
   }
 
@@ -281,11 +311,22 @@ export const resolveWorkloadImage = Effect.fn(function* (
 export const workloadImageHash = Effect.fn(function* (options: {
   adapter: ClusterAdapterService;
   source: WorkloadImageSource;
+  /** Deployment-only delivery strategy for a pre-built image. */
+  imageStrategy?: "mirror" | "direct";
   platform: string;
   port?: number | undefined;
   isExternal?: boolean | undefined;
   bootstrap: (importPath: string) => string;
 }) {
+  if (
+    imageSourceKind(options.source) === "image" &&
+    options.imageStrategy === "direct"
+  ) {
+    return yield* computeStaticWorkloadImageHash(
+      options.source,
+      options.platform,
+    );
+  }
   if (options.adapter.registry !== undefined) {
     return yield* options.adapter.registry.hash({
       source: options.source,
