@@ -1240,6 +1240,34 @@ export const steps: StepSpec[] = [
     notes:
       "So you provide the specific bindings, one per capability. It's a little more typing, and it keeps each bundle down to exactly the code it runs.",
   }),
+  api({
+    title: "The right bindings also depend on where it runs",
+    snippet: "api-10-lambda.error.ts",
+    error: { hide: true },
+    req: [...PROVIDED.slice(0, 2), WORKER],
+    notes: "Which bindings are right also depends on where the program runs. The program itself doesn't care, so let's swap Cloudflare.Worker for AWS.Lambda.Function.",
+  }),
+  api({
+    title: "It won't compile, because the native bindings need a Worker",
+    snippet: "api-10-lambda.error.ts",
+    error: { pick: firstLine("Type 'WorkerEnvironment'") },
+    req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
+    notes:
+      "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
+  }),
+  api({
+    title: "Swap the native bindings for HTTP, and it runs anywhere",
+    snippet: "api-11-http.error.ts",
+    // TODO: fails today: Cloudflare *Http layers also need CloudflareEnvironment and Self,
+    // which AWS.Lambda.Function doesn't provide yet.
+    error: { hide: true },
+    req: [
+      met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
+      met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
+    ],
+    notes:
+      "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. The permission changes with the layer too: each one mints an API token scoped to exactly what the code declared. Same program, different runtime, different layer. That's the other reason there's no AllBindings: the right implementation depends on the environment you're running in, so you choose it.",
+  }),
   lang({
     group: "phase-callback",
     title: "Remember the phase rule from our imaginary language?",
@@ -1280,34 +1308,6 @@ export const steps: StepSpec[] = [
     req: [...PROVIDED, PHANTOM],
     notes:
       "You can still make the call, but only by providing RuntimeContext.phantom: an explicit opt-out that squashes the error, like ts-expect-error. It's there for emergencies. Don't do this.",
-  }),
-  api({
-    title: "Now let's run it on AWS Lambda instead",
-    snippet: "api-10-lambda.error.ts",
-    error: { hide: true },
-    req: [...PROVIDED.slice(0, 2), WORKER],
-    notes: "Drop the construction-time read and the opt-out: that was a detour. The program doesn't care where it runs, so swap Cloudflare.Worker for AWS.Lambda.Function.",
-  }),
-  api({
-    title: "It won't compile, because the native bindings need a Worker",
-    snippet: "api-10-lambda.error.ts",
-    error: { pick: firstLine("Type 'WorkerEnvironment'") },
-    req: [...PROVIDED.slice(0, 2), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }],
-    notes:
-      "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
-  }),
-  api({
-    title: "Swap the native bindings for HTTP, and it runs anywhere",
-    snippet: "api-11-http.error.ts",
-    // TODO: fails today: Cloudflare *Http layers also need CloudflareEnvironment and Self,
-    // which AWS.Lambda.Function doesn't provide yet.
-    error: { hide: true },
-    req: [
-      met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
-      met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
-    ],
-    notes:
-      "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. The permission changes with the layer too: each one mints an API token scoped to exactly what the code declared. Same program, different runtime, different layer.",
   }),
   {
     kind: "code",
