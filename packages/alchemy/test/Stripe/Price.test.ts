@@ -234,3 +234,74 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "set tax behavior in place, then replace when it is already fixed",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Tax Behavior Price Product",
+      });
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TaxBehaviorPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 3000,
+          });
+        }),
+      );
+
+      expect(created.taxBehavior).toEqual("unspecified");
+
+      // `unspecified` is the one transition Stripe accepts as an update,
+      // so the price keeps its id. This is also the shape of adding
+      // `taxBehavior` to a price that was deployed before the attribute
+      // existed, where nothing is stored for it.
+      const specified = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TaxBehaviorPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 3000,
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+
+      expect(specified.id).toEqual(created.id);
+      expect(specified.taxBehavior).toEqual("exclusive");
+
+      const fetched = yield* GetPrice({ price: specified.id });
+      expect(fetched.tax_behavior).toEqual("exclusive");
+
+      // Stripe rejects any further change, so a new value replaces the price.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TaxBehaviorPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 3000,
+            taxBehavior: "inclusive",
+          });
+        }),
+      );
+
+      expect(replaced.id).not.toEqual(specified.id);
+      expect(replaced.taxBehavior).toEqual("inclusive");
+
+      const oldFetched = yield* GetPrice({ price: specified.id });
+      expect(oldFetched.active).toEqual(false);
+
+      yield* stack.destroy();
+
+      const deactivated = yield* waitUntilDeactivated(replaced.id);
+      expect(deactivated).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

@@ -183,3 +183,120 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "create with a fixed id, tax code, and marketing features",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fixedId = `prod_alchemy_fixed_${Date.now()}`;
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Product("FixedIdProduct", {
+            id: fixedId,
+            name: "Alchemy Fixed Id Product",
+            taxCode: "txcd_10000000",
+            marketingFeatures: [{ name: "Unlimited members" }],
+          });
+        }),
+      );
+
+      expect(created.id).toEqual(fixedId);
+      expect(created.taxCode).toEqual("txcd_10000000");
+      expect(created.marketingFeatures).toEqual([
+        { name: "Unlimited members" },
+      ]);
+
+      const fetched = yield* GetProduct({ id: fixedId });
+      expect(fetched.id).toEqual(fixedId);
+      expect(fetched.marketing_features).toEqual([
+        { name: "Unlimited members" },
+      ]);
+
+      // Tax code and marketing features are mutable, so the id is kept.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Product("FixedIdProduct", {
+            id: fixedId,
+            name: "Alchemy Fixed Id Product",
+            taxCode: "txcd_20030000",
+            marketingFeatures: [
+              { name: "Unlimited members" },
+              { name: "Priority support" },
+            ],
+          });
+        }),
+      );
+
+      expect(updated.id).toEqual(fixedId);
+      expect(updated.taxCode).toEqual("txcd_20030000");
+      expect(updated.marketingFeatures).toEqual([
+        { name: "Unlimited members" },
+        { name: "Priority support" },
+      ]);
+
+      // An empty list clears them.
+      const cleared = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Product("FixedIdProduct", {
+            id: fixedId,
+            name: "Alchemy Fixed Id Product",
+            taxCode: "txcd_20030000",
+            marketingFeatures: [],
+          });
+        }),
+      );
+
+      expect(cleared.marketingFeatures).toEqual([]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(fixedId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "replace the product when the fixed id changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const firstId = `prod_alchemy_first_${Date.now()}`;
+      const secondId = `prod_alchemy_second_${Date.now()}`;
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Product("MovedIdProduct", {
+            id: firstId,
+            name: "Alchemy Moved Id Product",
+          });
+        }),
+      );
+
+      expect(created.id).toEqual(firstId);
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Product("MovedIdProduct", {
+            id: secondId,
+            name: "Alchemy Moved Id Product",
+          });
+        }),
+      );
+
+      expect(replaced.id).toEqual(secondId);
+
+      const oldGone = yield* waitUntilGone(firstId);
+      expect(oldGone).toEqual("gone");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(secondId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
