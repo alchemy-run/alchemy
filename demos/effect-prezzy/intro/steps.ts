@@ -706,14 +706,14 @@ const STACK_3 = `export default Alchemy.Stack(
   "App",
   {
     providers: Cloudflare.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
 );`;
 const STACK_4 = `export default Alchemy.Stack(
   "App",
   {
     providers: Cloudflare.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const api = yield* Api;
@@ -1831,7 +1831,7 @@ export const steps: StepSpec[] = [
     title: "…and a place to remember what it deployed",
     code: STACK_3,
     notes:
-      "Then state: where Alchemy records what it deployed for each stage, so the next deploy knows what to create, update or delete. Here it's a local file; in CI you'd use a shared store.",
+      "Then state: where Alchemy records what it deployed for each stage, so the next deploy knows what to create, update or delete. Here it's stored in your Cloudflare account, so your laptop and CI share it.",
   }),
   stack({
     title: "Then it yields the Worker, and its providers bubble up",
