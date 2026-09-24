@@ -428,6 +428,7 @@ const INFERRED_DEV = `const api = Effect.gen(function* () {
   };
 });`;
 const GET_OBJECT: ReqItem = { name: "R2.GetObject<Uploads>", note: "inferred from bucket.get" };
+const GET_OBJECT_ON_FETCH: ReqItem = { ...GET_OBJECT, note: "provide it here, per request,\nor hoist it out with type tricks" };
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -668,33 +669,28 @@ export const steps: StepSpec[] = [
     title: "But that puts the requirement on fetch",
     code: INFERRED,
     req: [BUCKET],
-    fetchReq: [{ ...GET_OBJECT, note: "provide it here, per request,\nor hoist it out with type tricks" }],
+    fetchReq: [GET_OBJECT_ON_FETCH],
     notes:
       "The problem: the requirement lands on fetch, the runtime function, and the program as a whole doesn't have it. To satisfy it, you either provide a layer to fetch itself, on every request, or use type-level trickery to pluck it out of fetch and move it up to the program.",
   }),
-  {
-    kind: "code",
-    group: "leak",
-    file: "src/Storage.ts",
+  api({
     title: "So it leaks into every interface built on top of it",
-    src: {
-      code: `interface Storage {
+    code: `${INFERRED}
+
+interface Storage {
   get(key: string): Effect<File, NotFound, R2.GetObject<Uploads>>;
 }`,
-    },
     marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
+    req: [BUCKET],
+    fetchReq: [GET_OBJECT_ON_FETCH],
     notes:
       "Worse, it pollutes the function's type. Wrap the storage in an interface and the requirement comes along: the interface now says R2 and which bucket. So you can't hide infrastructure behind a service and swap its implementation with a Layer, because the implementation bleeds into the type.",
-  },
+  }),
   api({
     title: "And a type can't tell which paths actually run",
     code: INFERRED_DEV,
-    marks: [
-      { kind: "highlight", find: 'dev ? yield* R2.Bucket("Logs") : undefined', tone: "good" },
-      { kind: "highlight", find: 'if (logs) yield* logs.put("last-read", file)', tone: "good" },
-    ],
     req: [BUCKET],
-    fetchReq: [GET_OBJECT, { name: "R2.PutObject<Logs>", state: "bad", note: "required even when\nthere's no Logs bucket" }],
+    fetchReq: [GET_OBJECT_ON_FETCH, { name: "R2.PutObject<Logs>", state: "bad", note: "required even when\nthere's no Logs bucket" }],
     notes:
       "And the last problem: the type is the union of every path through the function. Here the Logs bucket only exists in dev, but the type can't know that, so it demands PutObject for Logs in production too. Types see all possible paths, never the one that actually runs.",
   }),
