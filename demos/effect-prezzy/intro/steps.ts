@@ -761,6 +761,20 @@ const stack = (s: {
 const SCRIPT = `aws s3api create-bucket --bucket uploads
 aws s3api put-bucket-versioning --bucket uploads \\
   --versioning-configuration Status=Enabled`;
+const SCRIPT_IF = `if ! aws s3api head-bucket --bucket uploads; then
+  aws s3api create-bucket --bucket uploads
+fi
+aws s3api put-bucket-versioning --bucket uploads \\
+  --versioning-configuration Status=Enabled`;
+const SCRIPT_IFS = `if ! aws s3api head-bucket --bucket uploads; then
+  aws s3api create-bucket --bucket uploads
+fi
+status=$(aws s3api get-bucket-versioning --bucket uploads \\
+  --query Status --output text)
+if [ "$status" != "Enabled" ]; then
+  aws s3api put-bucket-versioning --bucket uploads \\
+    --versioning-configuration Status=Enabled
+fi`;
 const CFN_1 = `Resources:
   Uploads:
     Type: AWS::S3::Bucket`;
@@ -852,14 +866,30 @@ export const steps: StepSpec[] = [
       "Without infrastructure as code, you change the cloud by running commands: create this bucket, then turn on versioning. A script of steps, run in order.",
   }),
   iac({
-    title: "…and each script has to know what already exists",
+    title: "…but running it a second time fails",
     lang: "shellscript",
     file: "setup.sh",
     code: SCRIPT,
-    marks: [{ kind: "underline", find: "create-bucket", label: "fails the second time", side: "right", tone: "bad" }],
+    marks: [{ kind: "underline", find: "create-bucket", label: "the bucket already exists", side: "right", tone: "bad" }],
+    diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
+    notes: "Run it again and create-bucket fails, because the bucket already exists.",
+  }),
+  iac({
+    title: "So you check what already exists first…",
+    lang: "shellscript",
+    file: "setup.sh",
+    code: SCRIPT_IF,
+    diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
+    notes: "So you add a check: only create the bucket if it isn't there yet.",
+  }),
+  iac({
+    title: "…for every single setting, and it never stops",
+    lang: "shellscript",
+    file: "setup.sh",
+    code: SCRIPT_IFS,
     diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
     notes:
-      "Run it again and create-bucket fails, because the bucket already exists. Every script has to know the current state of the world, and every change is another script.",
+      "And then for versioning, and then for every other setting, and every change after that. Every script ends up re-discovering the current state of the world, one if statement at a time.",
   }),
   iac({
     title: "Infrastructure as code describes what it should be instead",
