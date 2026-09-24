@@ -1,15 +1,21 @@
 ---
 title: Testing Providers
-description: Exercise a provider's create, update, replace, and delete paths with test.provider and a scratch in-memory stack.
+description: Exercise a provider's create, update, replace, adopt, and delete paths with test.provider and a private scratch stack.
+type: how-to
 ---
 
-After you build a provider, test its lifecycle. `test.provider` gives each test a private scratch stack. Create, update, replace, and delete runs never touch `.alchemy/` or a shared stage.
+After you build a provider, test its lifecycle against the real cloud.
+`test.provider` gives each test a **scratch stack** with private state,
+separate from your stages and from other tests. This guide covers create,
+update, replacement, planned actions, adoption, and cleanup.
 
-If you are building the provider itself, start at [Build a custom provider](/infrastructure-as-code/custom-provider).
+To build the provider first, see [Custom Provider](/infrastructure-as-code/custom-provider).
 
-## Scratch stacks with test.provider
+## Test create, update, and delete
 
-`test.provider(name, (stack) => effect)` builds a **scratch stack** with a private in-memory state store. The stack is isolated from `.alchemy/` and from sibling tests. Use it to test the create, update, replace, and delete paths of a provider:
+`test.provider(name, (stack) => effect)` hands the body a scratch stack.
+Each `stack.deploy` plans and applies against the same scratch state, so a
+second deploy with the same logical ID updates the resource:
 
 ```typescript
 const { test } = Test.make({ providers: MyProvider.providers() });
@@ -17,58 +23,126 @@ const { test } = Test.make({ providers: MyProvider.providers() });
 test.provider(
   "create, update, delete",
   (stack) => Effect.gen(function* () {
-    // create
-    const v1 = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* MyResource("Test", { name: "v1" });
-      }),
-    );
+    // create. stack.deploy also takes a resource Effect directly.
+    const v1 = yield* stack.deploy(MyResource("Test", { name: "v1" }));
 
-    // update — same logical ID, new inputs
-    const v2 = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* MyResource("Test", { name: "v2" });
-      }),
-    );
+    // update: same logical ID, new inputs
+    const v2 = yield* stack.deploy(MyResource("Test", { name: "v2" }));
     expect(v2.id).toBe(v1.id);
 
     // destroy
     yield* stack.destroy();
   }),
+  { timeout: 180_000 }, // Bun and Vitest default to 5s
 );
 ```
 
-For a full walkthrough with a real custom provider, see [Build a custom provider → Test the lifecycle](/infrastructure-as-code/custom-provider#test-the-lifecycle).
+See [Test harness › Timeouts](/testing/test-harness#timeouts) for timeout
+options. For a full walkthrough with a real provider, see
+[Custom Provider › Test the lifecycle](/infrastructure-as-code/custom-provider#test-the-lifecycle).
 
 ## Assert against the real cloud
 
-Inside the test body, the configured `providers` Layer is already in scope. Out-of-band SDK calls (`DynamoDB.describeTable`, `stripe.products.retrieve`, …) work without extra setup. Use them to assert that the cloud matches the resource's reported outputs, as in the [Stripe walkthrough](/infrastructure-as-code/custom-provider#test-the-lifecycle).
+The configured `providers` layer is in scope inside a `test.provider`
+body. Out-of-band SDK calls such as `DynamoDB.describeTable` or
+`stripe.products.retrieve` work without extra setup. Use them to check that
+the cloud matches the outputs the resource reports.
 
 ## Verify replacement
 
-Change a `stables` field, or any field your `diff` flags as `replace`, between two `stack.deploy` calls with the same logical ID:
+Between two `stack.deploy` calls with the same logical ID, change a prop
+that your provider's `diff` answers with `{ action: "replace" }`. The
+replacement gets a new identity:
 
 ```typescript
 expect(v2.id).not.toBe(v1.id);
 ```
 
+A prop change that `diff` does not flag is an update. Attributes the
+provider lists in `stables` keep their values across updates.
+
+## Assert the planned action
+
+`stack.plan(effect)` builds a plan against the scratch state without
+applying it. Use it to check how the engine treats a prop change without
+touching the cloud:
+
+```typescript
+yield* stack.deploy(MyResource("Test", { name: "v1" }));
+
+const plan = yield* stack.plan(MyResource("Test", { name: "v2" }));
+// Keyed by FQN, which is the logical ID for a top-level resource.
+// action is "create", "update", "replace", "noop", or "adopted".
+expect(plan.resources["Test"]).toMatchObject({ action: "update" });
+```
+
+`adopted` marks the first reconcile after a cold adoption.
+
+## Test adoption of existing resources
+
+When a resource has no prior state and its provider implements `read`, the
+engine calls `read` to check whether it already exists. To test that path,
+create the resource out of band, then deploy the same resource:
+
+```typescript
+test.provider(
+  "adopts an existing resource",
+  (stack) => Effect.gen(function* () {
+    // create it outside Alchemy, for example with your provider's SDK
+    yield* createThingOutOfBand({ name: "existing" });
+
+    const adopted = yield* stack.deploy(MyResource("Test", { name: "existing" }));
+    expect(adopted.name).toBe("existing");
+
+    yield* stack.destroy();
+  }),
+  { timeout: 180_000 },
+);
+```
+
+The outcome depends on what `read` returns. See
+[Adopting resources](/cli/adopting-resources) for each case.
+
+To test the takeover of an `Unowned` resource, pass `adopt: true` to
+`Test.make`. See [Test harness › adopt](/testing/test-harness#adopt).
+
+## Cleanup when a test fails
+
+A body that fails before its trailing `stack.destroy()` can leave cloud
+resources behind. With the Bun and Vitest adapters, scratch state lives in
+memory, so a later run can't find those resources to delete them.
+
+- **Vitest**: the adapter destroys the scratch stack after the body on
+  success, failure, or timeout. The trailing `stack.destroy()` is optional.
+- **Bun**: nothing destroys it for you. Wrap the body:
+
+```typescript
+test.provider(
+  "create, update, delete",
+  (stack) =>
+    Effect.gen(function* () {
+      // ... deploy and assert
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
+  { timeout: 180_000 },
+);
+```
+
+`stack.destroy()` is safe to run twice. If the body already destroyed the
+stack, the second call has nothing to delete.
+
 ## Scratch state vs persistent state
 
-| | `test` + `deploy(Stack)` | `test.provider` |
-|---|---|---|
-| State store | `state` option (default `localState()`) | private in-memory, per test |
-| Survives runs | yes (the point) | no |
-| Use case | end-to-end against a real stack | provider unit tests |
-
-For end-to-end tests against a real deployed Stack, see [Testing a Stack](/testing/testing-a-stack).
-
-## Seed pre-existing resources
-
-`test.provider`'s in-memory state is exposed as the `state` field on `ScratchStack` for advanced cases. For simpler seeds, call `stack.deploy(...)` once with the seed, then again with the actual test inputs. The second call sees the first call's output as existing state.
+`test.provider` is for provider tests. To test a deployed stack whose state
+persists across runs, use `test` with `deploy(Stack)`. See
+[Test a Stack](/testing), and
+[Test harness › Scratch stacks](/testing/test-harness#scratch-stacks) for
+where each adapter keeps scratch state.
 
 ## Where next
 
-- [Build a custom provider](/infrastructure-as-code/custom-provider): the provider this page tests, end to end.
-- [Providers](/infrastructure-as-code/provider): the operation contract under test.
+- [Custom Provider](/infrastructure-as-code/custom-provider): the
+  provider this page tests, end to end.
+- [Provider contract](/infrastructure-as-code/provider): the operations
+  under test.
 - [Test harness](/testing/test-harness): everything `Test.make` returns.
-- [Testing](/testing): the full harness reference.
+- [Test a Stack](/testing): end-to-end tests against a deployed stack.

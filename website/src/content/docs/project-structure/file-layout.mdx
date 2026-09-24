@@ -1,25 +1,34 @@
 ---
-title: File layout
-description: How to organize an Alchemy project. Use one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
+title: Organize project files
+description: Lay out an Alchemy project with one file per resource or layer, resources grouped by concern, and alchemy.run.ts as the composition root. Covers single-package projects and monorepos.
+type: how-to
 ---
 
-A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle)):
+This page takes a project from one `alchemy.run.ts` to a layout that
+scales, then shows the two ways to lay out a monorepo. The target shape
+follows
+[`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle):
 
 ```sh
 .
-├── alchemy.run.ts       # composition root — export default the Stack
+├── alchemy.run.ts          # composition root: stack, providers, state store, outputs
+├── .alchemy/               # local state, gitignore it
 ├── src/
-│   ├── Api.ts           # the Worker (Function/Server + its runtime code)
-│   ├── Db.ts            # Database + Branch + Hyperdrive — one concern
-│   └── schema.ts        # Drizzle schema shared by Db.ts and Api.ts
-└── test/
-    └── integ.test.ts    # deploys the Stack, hits the live URL
+│   ├── Api.ts              # Worker declaration + runtime code
+│   ├── Db.ts               # database unit: Schema + Project + Branch + Hyperdrive
+│   ├── Photos.ts           # one-line resource
+│   ├── Sandbox.ts          # Container class
+│   ├── Sandbox.runtime.ts  # SandboxLive (.make())
+│   └── schema.ts           # plain application code (Drizzle schema)
+└── test/                   # tests mirror the src/ tree
+    └── integ.test.ts       # deploys the stack, hits the live URL
 ```
 
-Three rules produce this shape. Use one file per Resource or Layer,
-group Resources that travel together, and keep `alchemy.run.ts`
-as the composition root. This page walks a project from one file
-to that shape.
+Three rules produce this shape:
+
+- Put each resource or layer in its own file.
+- Group resources that change together.
+- Keep `alchemy.run.ts` as the composition root.
 
 ## Start with one file
 
@@ -53,12 +62,13 @@ export default Alchemy.Stack(
 );
 ```
 
-This works until the file accumulates runtime code, stage
-logic, and a dozen Resources. Then split it.
+Split the file once it collects runtime code, stage logic, and a dozen
+resources.
 
-## One file per Resource
+## Put each resource in its own file
 
-A Resource declaration is a value. Give it its own module:
+A resource declaration is a value, so give it its own module. It stays
+inert until a stack yields it, so importing the file deploys nothing.
 
 ```typescript
 // src/Photos.ts
@@ -67,11 +77,9 @@ import * as Cloudflare from "alchemy/Cloudflare";
 export const Photos = Cloudflare.R2.Bucket("Photos");
 ```
 
-A declaration is inert until a Stack yields it. Importing this
-file deploys nothing.
-
-Workers get the same treatment. `main: import.meta.url` makes
-the file its own entrypoint:
+A Worker gets the same treatment. `main: import.meta.url` makes the file
+its own entrypoint, so the declaration and the runtime code live together
+with no separate `wrangler.toml`.
 
 ```typescript
 // src/Api.ts
@@ -80,7 +88,7 @@ import * as Effect from "effect/Effect";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  { main: import.meta.url },
+  { main: import.meta.url }, // this file is the Worker entry
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
@@ -91,53 +99,41 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The Worker's declaration and its runtime code live in one file.
-There is no separate `wrangler.toml` pointing at a script.
+Each layer also gets one file (see
+[Layers](/infrastructure-as-effects/layers)). Containers take two files.
+The class goes in `src/Sandbox.ts` and its `.make()` layer (`SandboxLive`)
+goes in `src/Sandbox.runtime.ts`, so a Durable Object that imports the
+class does not bundle the container runtime (see
+[Run a Container](/cloudflare/compute/run-a-container)).
 
-Layers follow the same rule. The `SandboxLive` Layer lives in
-`src/Sandbox.ts` (see
-[Layers](/infrastructure-as-effects/layers)).
+## Group resources by concern
 
-## Group by concern
-
-Resources that change together share a file:
+Resources that share a lifecycle share a file. A migration touches the
+schema, the project, and the branch, because `Drizzle.Schema` regenerates
+the SQL and `Neon.Branch` applies it.
 
 ```typescript
 // src/Db.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 
+// A unit: an exported Effect that anything can build on.
 export const NeonDb = Effect.gen(function* () {
   const schema = yield* Drizzle.Schema("app-schema", {
     schema: "./src/schema.ts",
     out: "./migrations",
   });
-
-  const project = yield* Neon.Project("app-db", {
-    region: "aws-us-east-1",
-  });
-
+  const project = yield* Neon.Project("app-db", { region: "aws-us-east-1" });
   const branch = yield* Neon.Branch("app-branch", {
     project,
-    migrations: schema,
+    migrations: schema, // Schema runs first, then Branch applies the SQL
   });
-
   return { project, branch, schema };
 });
-```
 
-A migration touches all three. Schema regenerates the SQL and
-Branch applies it, so they share a file. As a rule, group
-Resources when they share a lifecycle.
-
-## Wrap units in Effects, not in the Stack
-
-`NeonDb` above is an exported `Effect.gen`. It is a unit of
-composition that anything can build on:
-
-```typescript
-// src/Db.ts
+// A second unit that builds on the first.
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
   return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
@@ -146,31 +142,19 @@ export const Hyperdrive = Effect.gen(function* () {
 });
 ```
 
-Both `Hyperdrive` and `alchemy.run.ts` yield `NeonDb`. Each
-Resource is memoized by its logical ID, so the database is
-provisioned once no matter how many units yield it.
+Each unit is an Effect that other units and the stack can yield. Both
+`Hyperdrive` and `alchemy.run.ts` yield `NeonDb`. Alchemy memoizes each
+resource by its [logical ID](/infrastructure-as-code/resource#logical-id),
+so it provisions the database once.
 
-## Stage-conditional config
+Stage-specific props also live next to the resource, read with
+`yield* Alchemy.Stack` or
+[`Stack.useSync`](/infrastructure-as-code/stack#stackusesync-for-module-scope-resources).
 
-When a Resource's props differ by stage, read the stage where the
-Resource is declared:
+## Make `alchemy.run.ts` the composition root
 
-```typescript
-const { stage } = yield* Alchemy.Stack;
-
-const sandbox = yield* Cloudflare.Container("Sandbox", {
-  instanceType: stage === "prod" ? "standard-1" : "dev",
-});
-```
-
-The decision lives next to the Resource it affects, outside
-`alchemy.run.ts`. The most common case is `pr-*` stages
-borrowing staging's database via `.ref`, which is covered in
-[References](/infrastructure-as-code/references).
-
-## alchemy.run.ts is the composition root
-
-With the units in `src/`, the root file shrinks to wiring:
+With the units in `src/`, the root file names the stack, merges
+providers, picks a state store, and wires units into outputs:
 
 ```typescript
 // alchemy.run.ts
@@ -192,7 +176,7 @@ export default Alchemy.Stack(
       Drizzle.providers(),
       Neon.providers(),
     ),
-    state: Alchemy.localState(),
+    state: Alchemy.localState(), // writes .alchemy/
   },
   Effect.gen(function* () {
     const { branch } = yield* NeonDb;
@@ -208,37 +192,74 @@ export default Alchemy.Stack(
 );
 ```
 
-It names the Stack, merges Providers, picks a State Store, and
-wires units into outputs. The CLI discovers `alchemy.run.ts` at the
-project root automatically. Pass a path to override it (`alchemy deploy --config ./infra/app.ts`).
+If `alchemy.run.ts` keeps growing, something is missing a home in `src/`.
 
-If `alchemy.run.ts` is growing, something is missing a home in
-`src/`.
+The CLI loads `alchemy.run.ts` from the directory you run it in. Relative
+paths in props resolve from that same directory, not from the file that
+declares them.
 
-## The shape
-
+```sh
+alchemy deploy                          # ./alchemy.run.ts
+alchemy deploy infra/app.ts             # another entrypoint, positionally
+alchemy deploy --config infra/app.ts    # or with --config
 ```
+
+Moving the entrypoint does not move relative paths. Anchor them with
+`import.meta` when that matters (see
+[Anchor every path](/project-structure/monorepo-single-stack#anchor-every-path)).
+
+## Monorepos
+
+A monorepo has a backend package and a frontend that calls it. You also
+choose where the stacks live.
+
+### One stack at the workspace root
+
+```sh
 .
-├── alchemy.run.ts   # composition root — Stack, Providers, State Store, outputs
-├── .alchemy/        # local state — gitignore it
-└── src/
-    ├── Api.ts       # Worker — declaration + runtime code
-    ├── Db.ts        # database unit — Schema + Project + Branch + Hyperdrive
-    ├── Photos.ts    # one-line Resource
-    ├── Sandbox.ts   # Container Layer
-    └── schema.ts    # plain application code (Drizzle schema)
+├── package.json     # workspaces: ["frontend", "backend"]
+├── alchemy.run.ts   # the one stack, deploys both packages
+├── backend/         # Worker + API schema + typed client
+└── frontend/        # React app, built by the stack
 ```
 
-Tests mirror the tree under `test/`. The tutorial builds this
-shape step by step ([Part 2](/cloudflare/tutorial/part-2)).
+Both packages deploy in one plan. The frontend reads the Worker's URL
+from the in-memory Output, so you need no references and no deploy
+order. See [Deploy a monorepo with one stack](/project-structure/monorepo-single-stack).
+
+### One stack per package
+
+```sh
+.
+├── package.json           # workspaces: ["frontend", "backend"]
+├── backend/
+│   ├── alchemy.run.ts     # Backend stack
+│   └── src/Stack.ts       # typed handle the frontend imports
+└── frontend/
+    └── alchemy.run.ts     # Frontend stack, yield* Backend
+```
+
+The frontend reads the backend's deployed outputs through a typed
+cross-stack reference. Each package deploys and destroys on its own. See
+[Deploy a monorepo with many stacks](/project-structure/monorepo-multi-stack).
+
+### Choose a layout
+
+- **One stack**: start here. It has one plan, one state file, and no
+  ordering constraints.
+- **One stack per package**: use it when packages deploy on different
+  cadences, such as different teams or different CI. Also use it when the
+  backend has consumers beyond this frontend, or when you need to
+  `destroy` one package without touching the other.
 
 ## Where next
 
-- [Monorepo](/project-structure/monorepo) covers the workspace-level version
-  of this question, whether to use one Stack or one per package.
-- [References](/infrastructure-as-code/references) covers splits that
-  cross Stack boundaries.
-- [Layers](/infrastructure-as-effects/layers) shows how to promote
-  a multi-Resource unit into a swappable Layer.
-- [Stacks](/infrastructure-as-code/stack) covers the Stack service, stages,
-  and outputs used by the composition root.
+- [Cloudflare tutorial Part 2](/cloudflare/tutorial/part-2): makes the
+  first split, moving the Bucket to `src/bucket.ts` and adding the Worker
+  in `src/worker.ts`.
+- [Layers](/infrastructure-as-effects/layers): promote a multi-resource
+  unit into a swappable layer.
+- [References](/infrastructure-as-code/references): split across stacks,
+  or let `pr-*` stages borrow staging's database.
+- [Stacks](/infrastructure-as-code/stack): the stack service, stages, and
+  outputs the composition root uses.

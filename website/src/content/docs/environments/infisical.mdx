@@ -1,6 +1,7 @@
 ---
 title: Infisical
 description: Load an Infisical environment into your Stack. Use a machine identity on your machine and the platform's own OIDC token in CI.
+type: how-to
 ---
 
 [Infisical](https://infisical.com) keeps secrets in projects, split
@@ -8,9 +9,8 @@ into environments with folders inside each. `Infisical.Secrets`
 downloads one folder, with
 [secret references](https://infisical.com/docs/documentation/platform/secret-reference)
 expanded on the server, into the stack's
-[secret providers](/environments/secret-providers). It works the same
-way as [Doppler](/environments/doppler). This page covers only what
-differs.
+[secret providers](/environments/secret-providers). It works like
+[Doppler](/environments/doppler), and this page covers only what differs.
 
 ```typescript
 import * as Infisical from "alchemy/Infisical";
@@ -24,27 +24,30 @@ secrets: [
 ],
 ```
 
-`project` is the project's slug. With a user token, use the
-project's id, because Infisical only resolves slugs for machine
-identities.
-`environment` is the environment slug. The optional `path`,
-`recursive`, and `includeImports` narrow or widen what is read.
-Imports are on by default. A secret defined directly in the folder
-wins over an imported one.
+The options select what `Infisical.Secrets` reads:
+
+- `project`: the project slug. With a user token, use the project ID,
+  because Infisical only resolves slugs for machine identities.
+- `environment`: the environment slug.
+- `path`, `recursive`, `includeImports`: narrow or widen what is read.
+  Imports are on by default, and a secret defined directly in the folder
+  wins over an imported one.
 
 ## Connect your account
 
-Alchemy authenticates with an Infisical machine identity or user token. Create a
-[machine identity](https://infisical.com/docs/documentation/platform/identities/machine-identities)
-for yourself with
-[Universal Auth](https://infisical.com/docs/documentation/platform/identities/universal-auth),
-read access to your dev project, and a client secret.
-Then run `alchemy profile edit --add Infisical` and choose
-**Machine identity**. Every later command exchanges it for a fresh
-access token. The client secret remains subject to its configured
-expiry and use limits. **User token** takes the ten-day token from
-the dashboard's account menu. Both accept an API URL for
-the [EU cloud](https://eu.infisical.com) or a self-hosted instance.
+Run `alchemy profile edit --add Infisical` and pick a method. Both
+accept an API URL for the [EU cloud](https://eu.infisical.com) or a
+self-hosted instance.
+
+- **Machine identity**: create a
+  [machine identity](https://infisical.com/docs/documentation/platform/identities/machine-identities)
+  for yourself with
+  [Universal Auth](https://infisical.com/docs/documentation/platform/identities/universal-auth),
+  read access to your dev project, and a client secret. Every later
+  command exchanges it for a fresh access token. The client secret keeps
+  its configured expiry and use limits.
+- **User token**: takes the ten-day token from the dashboard's account
+  menu.
 
 ```sh
 alchemy profile edit --add Infisical --method universal-auth \
@@ -72,9 +75,9 @@ jobs:
 ```
 
 Platform detection, precedence, and the `INFISICAL_OIDC_TOKEN` and
-`INFISICAL_OIDC_AUDIENCE` overrides match
-[Doppler's](/environments/doppler#in-ci). `INFISICAL_API_URL` selects
-the EU cloud or a self-hosted instance in either mode.
+`INFISICAL_OIDC_AUDIENCE` overrides work as they do for Doppler. See
+[CLI › provider › OIDC tokens](/cli/provider#oidc-tokens) for every variable. `INFISICAL_API_URL`
+selects the EU cloud or a self-hosted instance in either mode.
 
 ## Where next
 

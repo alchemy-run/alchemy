@@ -1,14 +1,44 @@
 ---
 title: Test harness
 description: Reference for alchemy/Test. Covers every helper, hook, and option that Test.make exposes for Bun and Vitest.
+type: reference
 ---
 
 `alchemy/Test/Bun` and `alchemy/Test/Vitest` expose the same
-Effect-aware harness. For the end-to-end walkthrough, see
-[Testing a Stack](/testing/testing-a-stack). For provider-lifecycle
-testing, see [Testing Providers](/testing/testing-providers).
+Effect-aware harness. For the step-by-step guide, see
+[Test a Stack](/testing). For provider-lifecycle testing, see
+[Testing Providers](/testing/testing-providers).
 
-## What Test.make returns
+## Bun vs Vitest
+
+The two adapters expose the same API. Switching runners changes two
+imports:
+
+```diff lang="typescript"
+-import * as Test from "alchemy/Test/Bun";
+-import { expect } from "bun:test";
++import * as Test from "alchemy/Test/Vitest";
++import { expect } from "@effect/vitest";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
+```
+
+- **Bun**: each `test(...)` becomes a `bun.test(...)` call wrapped
+  with `Effect.runPromise`.
+- **Vitest**: each `test(...)` runs through `@effect/vitest`'s
+  `it.live`.
+
+`expect` and `describe` come from the underlying runner. The adapters
+differ in two places:
+
+- On Vitest, a failed `test.provider` body still destroys its scratch
+  stack. On Bun it does not. See [Scratch stacks](#scratch-stacks).
+- On Vitest, a per-test timeout can be a plain number. On Bun it must
+  be `{ timeout }`. See [Timeouts](#timeouts).
+
+## What `Test.make` returns
 
 One call returns a self-contained API for the file:
 
@@ -16,170 +46,185 @@ One call returns a self-contained API for the file:
 const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
   Test.make({
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
   });
 ```
 
-| Helper | Purpose |
-|---|---|
-| `test(name, effect)` | Effect-aware test. `HttpClient` and your providers Layer are in scope. |
-| `test.skip` / `test.skipIf` / `test.only` / `test.todo` | Skip, focus, and todo modifiers (same shape as `bun.test`). |
-| `test.provider(name, fn)` | [Provider-lifecycle test](/testing/testing-providers) against a scratch in-memory stack. |
-| `beforeAll(effect)` | Run an Effect once. Returns a lazy accessor (`yield* result`) that tests can use. |
-| `beforeEach(effect)` | Run an Effect before every test. |
-| `afterAll(effect)` / `afterAll.skipIf(predicate)` | Cleanup hook with conditional teardown. |
-| `afterEach(effect)` | Run an Effect after every test. |
-| `deploy(Stack, opts?)` | Plan and apply a stack, then resolve to its outputs. |
-| `destroy(Stack, opts?)` | Plan and apply against an empty desired state. |
+- `test(name, effect, options?)`: an Effect-aware test with
+  `HttpClient` in scope.
+- `test.skip` / `test.skipIf` / `test.only` / `test.todo`: skip,
+  focus, and todo modifiers. See [Test variants](#test-variants).
+- `test.provider(name, fn, options?)`: a
+  [provider-lifecycle test](/testing/testing-providers) against a
+  [scratch stack](#scratch-stacks).
+- `beforeAll(effect, options?)`: runs an Effect once and returns an
+  accessor that tests `yield*`.
+- `beforeEach(effect, options?)`: runs an Effect before every test.
+- `afterAll(effect, options?)` / `afterAll.skipIf(predicate)`: a
+  cleanup hook with conditional teardown.
+- `afterEach(effect, options?)`: runs an Effect after every test.
+- `deploy(Stack, options?)`: plans and applies the stack, then
+  resolves to its outputs. Options are `stage`, `force`, `include`,
+  and `exclude`. A filtered deploy resolves to `undefined`.
+- `destroy(Stack, options?)`: plans and applies an empty desired
+  state. The only option is `stage`.
 
-`Test.getWhenReady` / `Test.executeWhenReady` are module-level HTTP
-cold-start helpers. [Testing a Stack](/testing/testing-a-stack)
-covers them.
+`deploy` and `destroy` run non-interactively, so they never prompt for
+approval. They use the providers declared on the stack. Only
+`test.provider` bodies get the `providers` layer, so a plain `test` or
+hook that calls a cloud SDK must provide the services it needs itself.
 
-`expect` and `describe` come directly from the underlying runner,
-`bun:test` or `@effect/vitest`.
-
-## Test.make options
+## `Test.make` options
 
 ```typescript
 Test.make({
   providers,   // required
-  state,       // optional
-  profile,     // optional
-  stage,       // optional
-  dev,         // optional — run the suite against local emulators
-  adopt,       // optional
-  sidecar,     // optional — defaults to dev
+  state,       // optional, defaults to localState()
+  profile,     // optional, defaults to ALCHEMY_PROFILE
+  stage,       // optional, defaults to ALCHEMY_TEST_STAGE, then test_$USER
+  dev,         // optional, defaults to ALCHEMY_DEV, off otherwise
+  adopt,       // optional, defaults to false
+  sidecar,     // optional, defaults to the resolved dev flag
 });
 ```
 
-### `providers` (required)
+### `providers`
 
-The provider Layer that resolves resource implementations.
-It is usually the same one your `Stack` uses:
+Required. The provider layer that `test.provider` scratch stacks and
+their bodies use to resolve resource implementations and SDK clients.
+It is usually the same layer your stack uses:
 
 ```typescript
 providers: Cloudflare.providers(),
-// or merge multiple:
+// or merge several:
 providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 ```
 
 Credentials resolve through the same `AuthProviders` registry as
-`alchemy deploy`, so tests pick up stored profiles or
-the env-var auth methods registered by each provider.
+`alchemy deploy`. Tests pick up stored profiles or each provider's
+environment-variable auth.
 
 ### `state`
 
-The state store that top-level `deploy(Stack)` and
-`destroy(Stack)` use. `test.provider` does not use it. Defaults to
-`localState()`, which stores state in `.alchemy/` on disk.
+The store that test bodies and hooks see when they `yield* State`.
+Defaults to `localState()`, which writes to `.alchemy/` on disk. Most
+files leave it out.
 
 ```typescript
-state: Cloudflare.state(),  // R2-backed, survives across CI runners
-state: localState({ path: ".alchemy-test/" }),  // separate dir
-state: undefined,  // omit → defaults to localState()
+// alchemy.run.ts: deploy(Stack) and destroy(Stack) use this store, not Test.make's
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(), // shared across CI runners
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
 ```
 
-Persistent state lets `deploy(Stack)` skip recreating unchanged
-resources between runs. [Testing a Stack](/testing/testing-a-stack)
-covers the run-against-an-existing-stack pattern built on it.
+`test.provider` uses its own [scratch store](#scratch-stacks). See
+[State Store](/state-store) for the available stores, and
+[Share one stack across files](/testing#share-one-stack-across-files)
+to reuse one deployment in several files.
 
 ### `profile`
 
-Override `ALCHEMY_PROFILE` for this file only. Use it to pin
-tests to a sandbox profile regardless of what the environment
-sets:
+Overrides `ALCHEMY_PROFILE` for this file only. When omitted, the
+harness reads `ALCHEMY_PROFILE` from the environment or `.env`, as the
+CLI does.
 
 ```typescript
 Test.make({
   providers: AWS.providers(),
-  profile: "test-sandbox",
+  profile: "test-sandbox", // pin tests to a sandbox account
 });
 ```
 
-When omitted, the harness reads `ALCHEMY_PROFILE` from env or `.env`
-the same way the CLI does.
-
 ### `stage`
 
-Default stage for `deploy(Stack)` / `destroy(Stack)`. Defaults to
-`test_$USER` (e.g. `test_sam`) so two people running the same suite
-against one account don't collide. Override it per file or per call:
+The default stage for `deploy(Stack)` and `destroy(Stack)`. A unique
+stage per PR or run lets suites run in parallel against one account.
+Override it per file or per call:
 
 ```typescript
 Test.make({ providers, stage: "ci-pr-42" });
 
-// or per-call:
+// or per call:
 beforeAll(deploy(Stack, { stage: "ci-pr-42" }));
 afterAll.skipIf(!process.env.CI)(destroy(Stack, { stage: "ci-pr-42" }));
 ```
 
-A unique stage per PR or test run lets multiple suites run in
-parallel against the same provider account without colliding.
+When `stage` is omitted, the harness resolves it in this order:
+
+1. `ALCHEMY_TEST_STAGE`, which isolates CI jobs or worktrees without
+   editing any file (`ALCHEMY_TEST_STAGE=pr-42 bun test`).
+2. `test_$USER` (`$USERNAME` on Windows), such as `test_sam`, so two
+   people running the same suite against one account don't collide.
+3. `test_unknown` if neither is set.
+
+The harness does not read `ALCHEMY_STAGE`, which is the CLI's stage.
+So tests never touch the `live_$USER` stage of `alchemy deploy` or
+the `dev_$USER` stage of `alchemy dev`.
 
 ### `dev`
 
-Off by default, so tests deploy to the real cloud. `dev: true` runs
-the whole file in local-dev mode with the same wiring as
-[`alchemy dev`](/environments/local-development). Cloudflare
-Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in
-workerd with local simulators. AWS Lambda/ECS and the emulated AWS
-surface run in a local Docker emulator. Emulated resources do not
-touch any cloud account.
+`dev: true` runs the whole file in local-dev mode, with the same wiring
+as [`alchemy dev`](/environments/local-development). Off by default.
 
 ```typescript
 Test.make({
   providers: Cloudflare.providers(),
-  dev: true,  // deploy(Stack) boots workerd / Docker simulators
+  dev: true, // deploy(Stack) boots workerd and Docker emulators
 });
 ```
 
-The rest of the file stays the same. `beforeAll(deploy(Stack))`
-boots the stack locally. The outputs (`url`, ids) point at the
-local instances, so the same HTTP assertions run against
-`http://localhost:<port>`. Local resource ids are `dev:`-prefixed,
-which also proves no cloud call ran. `Alchemy.remote()` still
-pins individual resources live, as it does under `alchemy dev`.
+- **Cloudflare**: Workers, Durable Objects, KV, R2, D1, Queues, and
+  Workflows run in workerd with local simulators.
+- **AWS**: Lambda, ECS, and the emulated AWS services run in a local
+  Docker emulator.
+- **Outputs**: `url` and ids point at local instances, so the same
+  assertions run against `http://localhost:<port>`. Local ids start
+  with `dev:`, which proves no cloud call ran.
+- **`Alchemy.remote()`**: still pins individual resources live, as it
+  does under `alchemy dev`.
 
-When omitted, the flag falls back to the `ALCHEMY_DEV` env var.
-Leave it out of the file and set `ALCHEMY_DEV=1` locally to run the
-same suite against emulators while CI runs it live. Separately,
-`ALCHEMY_TEST_DEV=1` overrides the option in both directions.
-Use it to force an entire existing suite through local providers
-without editing each `Test.make`.
+When `dev` is omitted, the harness reads `ALCHEMY_DEV`. Leave it out of
+the file and set `ALCHEMY_DEV=1` locally to run against emulators while
+CI runs live. `ALCHEMY_TEST_DEV=1` (or `0`) overrides the option in
+both directions, which forces a whole suite through local providers
+without editing each file.
 
-[Cloudflare local development](/cloudflare/local-development) and
-[AWS local development](/aws/local-development) cover what each
-cloud emulates. The step-by-step walkthrough is
-[Cloudflare Tutorial Part 4](/cloudflare/tutorial/part-4).
+See [Cloudflare local development](/cloudflare/local-development) and
+[AWS local development](/aws/local-development) for what each cloud
+emulates.
 
 ### `adopt`
 
-Engine-level adoption policy for the run. It matches the CLI's
-`--adopt` flag. When `true`, a resource with no prior state whose
-physical counterpart already exists in the cloud is adopted via
-`provider.read` instead of failing. Defaults to `false`.
+The adoption policy for the run, matching the CLI's `--adopt` flag.
+When `true`, a resource with no prior state whose cloud counterpart
+already exists is adopted through `provider.read` and does not fail.
+Defaults to `false`.
 
 ### `sidecar`
 
-It only applies in dev mode and defaults to the resolved `dev` flag,
-so dev tests run local providers behind the same RPC sidecar
-process the real `alchemy dev` command uses. `sidecar: false` runs
-them in-process. This helps when debugging provider code, since
-no child process sits between you and the breakpoint.
+Applies only in dev mode and defaults to the resolved `dev` flag. With
+it on, local providers run behind the same RPC sidecar process that
+`alchemy dev` uses. `sidecar: false` runs them in-process, which helps
+when you debug provider code because no child process sits between
+you and the breakpoint.
 
 ## Hooks
 
 ### `beforeAll(effect) → Effect.Effect<A>`
 
-Runs the Effect once before any test in the file. It stores the
-result and returns a lazy accessor. `yield* accessor` inside any
-test or other hook returns the resolved value:
+Runs the Effect once before any test in the file and returns an
+accessor. `yield* accessor` in any test or later hook returns the
+value:
 
 ```typescript
 const stack = beforeAll(deploy(Stack));
 const seed = beforeAll(Effect.gen(function* () {
-  yield* DynamoDB.putItem({ /* ... */ });
+  const { url } = yield* stack; // hooks run in registration order
+  yield* HttpClient.post(`${url}/seed`); // no providers layer here, so seed over HTTP
   return Date.now();
 }));
 
@@ -201,13 +246,12 @@ beforeAll(deploy(Stack), { timeout: 300_000 });
 
 ### `beforeEach(effect)`
 
-Runs the Effect before every test. It returns no accessor, so use
-it for side-effect setup only (truncate a table, reset a feature
-flag, …).
+Runs the Effect before every test. It returns no accessor, so use it
+for side-effect setup such as truncating a table.
 
 ### `afterAll(effect)` and `afterAll.skipIf(predicate)`
 
-Cleanup hook with conditional teardown:
+A cleanup hook with conditional teardown. The default timeout is 120s.
 
 ```typescript
 afterAll(destroy(Stack));                          // always destroy
@@ -215,13 +259,13 @@ afterAll.skipIf(!process.env.CI)(destroy(Stack));  // CI only
 afterAll.skipIf(true)(destroy(Stack));             // never (debugging)
 ```
 
-`afterAll.skipIf(true)` short-circuits without registering a
-hook, so an `Effect` is never constructed and then dropped.
+`afterAll.skipIf(true)` registers no hook, so no Effect is built and
+then dropped.
 
 ### `afterEach(effect)`
 
-Runs after every test. Combine with `beforeEach` for
-test-isolated fixtures.
+Runs after every test. Combine it with `beforeEach` for per-test
+fixtures.
 
 ## Test variants
 
@@ -233,31 +277,44 @@ test.skipIf(process.env.CI)(
   Effect.gen(function* () { /* ... */ }),
 );
 
-test.only(
-  "the one I'm debugging",
-  Effect.gen(function* () { /* ... */ }),
-);
+test.only("the one I'm debugging", Effect.gen(function* () { /* ... */ }));
 
-test.todo("backfill once R2 has multipart helper");
-```
+test.todo("backfill once R2 has multipart helper"); // it.todo on Vitest
 
-`test.provider` mirrors the same shape. Its semantics are in
-[Testing Providers](/testing/testing-providers):
-
-```typescript
+// test.provider has the same modifiers:
 test.provider.skip(name, fn);
 test.provider.skipIf(condition)(name, fn);
 ```
 
-:::note[Vitest differences]
-On Vitest, `test.only` is supported. `test.todo` is a stub that
-maps to `it.todo`. `test.skip` / `test.skipIf` work identically.
-:::
+## Timeouts
 
-## HttpClient is in scope
+`beforeAll` and `afterAll` default to 120s. `test`, `test.provider`,
+`beforeEach`, and `afterEach` get the runner's own default, which is 5s
+for tests on both runners and 10s for Vitest hooks. Pass a longer
+timeout to anything that deploys or polls:
 
-`HttpClient` is wired into every `test` Effect, so you can call
-it directly:
+```typescript
+test(
+  "waits for the queue to drain",
+  Effect.gen(function* () { /* ... */ }),
+  { timeout: 90_000 }, // Vitest also accepts a plain 90_000
+);
+
+test.provider(
+  "create, update, delete",
+  (stack) => Effect.gen(function* () { /* ... */ }),
+  { timeout: 180_000 },
+);
+```
+
+`beforeEach` and `afterEach` take the same options as their second
+argument. To raise the default for a whole Bun run, pass
+`bun test --timeout <ms>`.
+
+## `HttpClient` is in scope
+
+Every `test` Effect has an `HttpClient` from
+`effect/unstable/http/FetchHttpClient`, the same client the CLI uses:
 
 ```typescript
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -272,39 +329,102 @@ test(
 );
 ```
 
-The implementation comes from
-`effect/unstable/http/FetchHttpClient`, the same client the CLI
-uses. For a full PUT/GET round-trip against a deployed stack,
-see [Testing a Stack → Drive the live URL](/testing/testing-a-stack).
+## Readiness helpers
 
-## Bun vs Vitest
+A fresh `workers.dev` URL or Lambda Function URL returns 404 or 5xx
+while routes and bindings propagate. These module-level helpers ride
+out that window:
 
-The two adapters expose the same API:
+```typescript
+import * as Test from "alchemy/Test/Bun";
+import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 
-```diff lang="typescript"
--import * as Test from "alchemy/Test/Bun";
--import { expect } from "bun:test";
-+import * as Test from "alchemy/Test/Vitest";
-+import { expect } from "@effect/vitest";
+// GET, retrying 404 and 5xx. Other statuses (200, 401, ...) return at once.
+yield* Test.getWhenReady(url);                          // 20 retries, exponential from 500ms
+yield* Test.getWhenReady(url, { times: 40 });
+yield* Test.executeWhenReady(HttpClientRequest.post(url)); // any request
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
+// Effect RPC transport over HTTP, with a content-type guard.
+Test.rpcClientLayer(url);
+Test.rpcClientLayer(url, {
+  serialization: RpcSerialization.json, // default ndjson
+  times: 5,                             // default 5 retries
+  schedule: Schedule.exponential("1 second"), // default exponential from 500ms, capped at 3s
+  guard: false,                         // plain fetch transport, to assert raw edge behavior
 });
+
+// A guarded fetch-backed HttpClient for other protocol clients.
+Test.guardedFetchLayer("application/json", { times: 5 });
 ```
 
-- **Bun** uses `bun:test` directly. Every `test(...)` becomes a
-  `bun.test(...)` call wrapped with `Effect.runPromise`.
-- **Vitest** uses `@effect/vitest`'s `it.live`, so tests stay
-  Effect-aware. The default hook timeout is the same (120s).
+- `getWhenReady` and `executeWhenReady` fail with `WorkerNotReady`
+  when the retries run out.
+- The guard rejects any response whose content type doesn't match and
+  retries it. A plain RPC transport would decode Cloudflare's HTML
+  placeholder page, which returns status 200, and fail with an opaque
+  `RpcClientDefect`.
 
-Pick whichever runner your project already uses. The test code
-does not change.
+## Scratch stacks
+
+`test.provider(name, (stack) => effect)` hands the body a scratch
+stack with a private state store and the file's `providers` layer.
+Successive calls share that store, and the body sees it when it does
+`yield* State`.
+
+```typescript
+test.provider("create and update", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();                     // drains rows an interrupted run left (durable store only)
+    yield* stack.deploy(MyResource("Test", { name: "v1" }));   // create
+    const plan = yield* stack.plan(MyResource("Test", { name: "v2" })); // no apply
+    yield* stack.deploy(MyResource("Test", { name: "v2" }));   // same logical ID: update or replace
+    yield* stack.destroy();                     // replans against an empty desired state
+  }),
+);
+```
+
+Scratch state is separate from a stack's own state:
+
+- **`deploy(Stack)` in a `test`**: uses the stack's `state` option, so
+  the deployment survives across runs. Use it for end-to-end tests.
+- **`test.provider`**: uses private per-test scratch state. Use it for
+  provider unit tests.
+
+`stack.deploy` and `stack.plan` accept `include` and `exclude`.
+`stack.destroy()` takes no filters. The store depends on the adapter:
+
+- **`alchemy/Test/Bun` and `alchemy/Test/Vitest`**: an in-memory store,
+  discarded when the process exits. These adapters can't name the test
+  file.
+- **`alchemy/Test/Alchemy`** (the alchemy-test runner): durable local
+  state under `.alchemy/state/<stack>/<stage>`. The stack name joins
+  the file path, minus a leading `test/` and the `.test.ts` suffix, to
+  the test name, with other characters replaced by `-`. The next run's
+  leading `stack.destroy()` finishes any interrupted delete.
+
+Vitest and the alchemy-test adapter destroy the scratch stack after
+the body on success, failure, or timeout. On Bun, a body that fails
+before its trailing `stack.destroy()` leaves cloud resources behind.
+See [Cleanup when a test fails](/testing/testing-providers#cleanup-when-a-test-fails).
+
+For a test or script that should never touch disk, pass an in-memory
+store as `state`:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as TestState from "alchemy/Test/TestState";
+
+// record is a ResourceState
+Alchemy.inMemoryState();                                    // empty
+Alchemy.inMemoryState({ [stack]: { [stage]: { [fqn]: record } } }); // seeded
+TestState.state({ [fqn]: record });                         // seeds only the current stack and stage
+```
 
 ## Where next
 
-- [Testing a Stack](/testing/testing-a-stack): deploy once, drive the live URL, tear down.
-- [Testing Providers](/testing/testing-providers): exercise create / update / replace / delete with `test.provider`.
-- [Testing](/testing): the testing overview.
-- [State Store](/state-store): choosing between `localState()`, `Cloudflare.state()`, and friends.
-- [Profiles](/environments/profiles): how `ALCHEMY_PROFILE` and the `profile` factory option resolve credentials.
+- [Test a Stack](/testing): deploy once, drive the live URL, tear down.
+- [Testing Providers](/testing/testing-providers): exercise create, update, replace, and delete with `test.provider`.
+- [State Store](/state-store): choose between `localState()`, `Cloudflare.state()`, and the other stores.
+- [Profiles](/environments/profiles): how `ALCHEMY_PROFILE` and the `profile` option resolve credentials.

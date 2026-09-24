@@ -1,71 +1,231 @@
 ---
-title: Testing
-description: How Alchemy tests work. They run on real clouds by default, use local emulators on demand, deploy one Stack per suite in an isolated stage, and follow deploy → assert → destroy.
+title: Test a Stack
+description: Deploy your real stack once per test file, drive it over HTTP, and tear it down.
+type: how-to
 ---
 
-Alchemy tests run against real clouds by default and use no mocks. A suite deploys a real Stack once, runs assertions against live resources, and tears it back down, in the order deploy → assert → destroy. The same suite can also run entirely on your machine. See [Local mode](#local-mode-dev-true) below.
+This guide integration-tests a deployed stack against the real cloud. You deploy once in `beforeAll`, drive the live URL from Effect-aware tests, and destroy the stack when you're done. You need a stack in `alchemy.run.ts` and credentials for its cloud, such as a [profile](/environments/profiles).
 
-## One deploy per suite
+Tests deploy to the `test_$USER` [stage](/environments/stages), so they never touch your `live_$USER` or `dev_$USER` deployments. To test a provider's create, update, and delete paths instead, see [Testing Providers](/testing/testing-providers).
 
-Deploy once in `beforeAll`, share the outputs handle across every test, and destroy in `afterAll`:
+## Set up the harness
+
+`Test.make` takes your providers once per file and returns the hooks and helpers the file needs:
 
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun"; // or "alchemy/Test/Vitest"
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
 });
+```
 
-const stack = beforeAll(deploy(Stack));
-afterAll(destroy(Stack));
+`deploy(Stack)` records state in the store declared on the stack itself, so `Test.make` needs no `state` option. See [Test harness](/testing/test-harness) for every option and [Bun vs Vitest](/testing/test-harness#bun-vs-vitest) for the runner switch.
+
+## Deploy once with `beforeAll`
+
+`beforeAll(deploy(Stack))` deploys once for the whole file and returns an accessor that every test can `yield*`:
+
+```typescript
+// Deploying a Container image can take longer than the 120s hook default.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 
 test(
-  "serves the deployed URL",
+  "worker returns a url",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const res = yield* HttpClient.get(url);
-    expect(res.status).toBe(200);
+    expect(url).toBeString();
   }),
 );
 ```
 
-For the full walkthrough, see [Testing a Stack](/testing/testing-a-stack).
+A second `beforeAll` can `yield* stack` to seed data. See [Hooks](/testing/test-harness#hooks).
 
-For every option, hook, and variant, see the [Test harness](/testing/test-harness) reference.
+## Drive the live endpoint
 
-## Stage isolation
-
-Tests default to `test_$USER` (e.g. `test_sam`). This matches how
-`alchemy deploy` uses `live_$USER` and `alchemy dev` uses
-`dev_$USER`. So tests never touch your live or local-dev deployments,
-and two people running the same suite don't collide. A unique stage
-per PR lets CI suites run in parallel against the same account:
+`HttpClient` is in scope in every test, so you can call the deployed URL directly:
 
 ```typescript
-Test.make({ providers, stage: "ci-pr-42" });
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+
+test(
+  "PUT and GET round-trip an object",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const put = yield* HttpClient.put(`${url}/hello.txt`, {
+      body: HttpBody.text("Hello, World!"),
+    });
+    expect(put.status).toBe(201);
+
+    const get = yield* HttpClient.get(`${url}/hello.txt`);
+    expect(yield* get.text).toBe("Hello, World!");
+  }),
+);
 ```
 
-The per-call form is covered in [Test harness → stage](/testing/test-harness#stage).
+## Retry the first request
 
-## Local mode (`dev: true`)
-
-The harness has the same local-dev mode as [`alchemy dev`](/environments/local-development). It's off by default. Turn it on and the whole suite runs against local emulators with no cloud calls. Cloudflare Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in workerd. AWS Lambda/ECS and the emulated AWS surface run in a local Docker emulator:
+A fresh `workers.dev` URL or Lambda Function URL returns 404 or 5xx for a few seconds while routes, bindings, and IAM propagate. Wrap the first request of each test in `Test.getWhenReady`:
 
 ```typescript
-Test.make({
+test(
+  "worker answers once the edge converges",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    // Retries 404 and 5xx only, so a deliberate 401 or 403 returns at once.
+    const response = yield* Test.getWhenReady(url);
+    expect(response.status).toBe(200);
+  }),
+  { timeout: 90_000 }, // the runner's 5s default is shorter than the retry window
+);
+```
+
+Use `Test.executeWhenReady(request)` for other methods. To retry any other effect, use `Effect.retry` with a bounded schedule:
+
+```typescript
+import * as Schedule from "effect/Schedule";
+
+const response = yield* HttpClient.get(`${url}/health`).pipe(
+  Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+);
+```
+
+See [Readiness helpers](/testing/test-harness#readiness-helpers) for the defaults and [Timeouts](/testing/test-harness#timeouts) for per-test timeouts.
+
+## Run it
+
+Run the file with your test runner:
+
+```sh
+bun test test/integ.test.ts   # Bun
+npx vitest run test/integ.test.ts   # Vitest
+```
+
+The first run deploys the stack. Later runs diff against the recorded state and skip unchanged resources.
+
+## Poll async effects
+
+Queues drain, workflows complete, and crons fire after the request returns. Poll them with `Effect.repeat` and a bounded schedule, and give the test a timeout longer than the whole schedule:
+
+```typescript
+test(
+  "workflow completes",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const started = yield* HttpClient.post(`${url}/workflow/start`);
+    const { instanceId } = (yield* started.json) as { instanceId: string };
+
+    const status = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`).pipe(
+      Effect.flatMap((res) => res.json),
+      Effect.map((body) => body as { status: string }),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s.status === "complete",
+        times: 30, // fail fast instead of running into the test timeout
+      }),
+    );
+    expect(status.status).toBe("complete");
+  }),
+  { timeout: 90_000 },
+);
+```
+
+Avoid `while (Date.now() < deadline)` loops, because they ignore interruption.
+
+## Tear down or keep the stack
+
+Destroy the stack on CI, and keep it alive locally so re-runs are fast:
+
+```typescript
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack)); // keep alive with NO_DESTROY=1
+afterAll.skipIf(!process.env.CI)(destroy(Stack));          // destroy on CI only
+```
+
+## Run against local emulators
+
+Set `dev: true` to run the same file against local emulators. The `url` output then points at `http://localhost:<port>`:
+
+```typescript
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
-  dev: true,
+  dev: true, // or leave it out and set ALCHEMY_DEV=1 in your shell
 });
 ```
 
-Nothing else changes. `deploy(Stack)` boots the stack locally, and the tests drive `http://localhost:<port>` instead of the cloud. You don't need a separate testing setup (e.g. workerd + a vitest plugin). The harness runs your real Stack in the same local runtimes `alchemy dev` uses. To keep one test file that runs locally on your laptop and live in CI, omit the flag and set `ALCHEMY_DEV=1` in your shell.
+See [Test harness › dev](/testing/test-harness#dev) for what runs locally and [Tutorial Part 4](/cloudflare/tutorial/part-4) for a walkthrough.
 
-For full option semantics, see [Test harness → dev](/testing/test-harness#dev).
+## Run in CI
+
+Give every PR its own stage so suites run in parallel against one account:
+
+```typescript
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  stage: `pr-${process.env.PR_NUMBER}`, // or set ALCHEMY_TEST_STAGE
+});
+```
+
+See [Test harness › stage](/testing/test-harness#stage) and the [CI guide](/environments/ci) for the workflow file.
+
+## Drive an RPC Worker
+
+A Worker that serves [Effect RPC](/apis/effect-rpc) needs an RPC client. `Test.rpcClientLayer(url)` provides the transport and retries through the cold-start window:
+
+```typescript
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import { MyRpcs } from "../src/rpcs.ts";
+
+test(
+  "worker answers RPC calls",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    yield* Effect.gen(function* () {
+      const client = yield* RpcClient.make(MyRpcs);
+      const pong = yield* client.Ping({ message: "hi" });
+      expect(pong.echo).toBe("hi");
+    }).pipe(Effect.scoped, Effect.provide(Test.rpcClientLayer(url)));
+  }),
+  { timeout: 60_000 },
+);
+```
+
+## Share one stack across files
+
+Files that deploy the same stack at the same stage share one deployment, and the second file's `deploy(Stack)` is a no-op diff. The default `test_$USER` stage already does this for one developer. To share across users or CI jobs, pin the stage in each file:
+
+```typescript
+// test/api.integ.test.ts AND test/queue.integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  stage: "shared", // same stage → same stack instance
+});
+```
+
+Then give the stack a remote store, such as `Cloudflare.state()`, so every machine reads the same state. See [State Store](/state-store).
+
+## Run against an existing deployment
+
+To test a stack you already deployed with `alchemy deploy`, read its outputs in place of the deploy:
+
+```typescript
+const stack = beforeAll(
+  process.env.SKIP_DEPLOY
+    ? Effect.succeed({ url: process.env.STACK_URL! })
+    : deploy(Stack),
+);
+```
 
 ## Where next
 
-- [Testing a Stack](/testing/testing-a-stack): deploy a Stack and drive it over HTTP, end to end.
-- [Testing Providers](/testing/testing-providers): exercise a provider's create/update/replace/delete with `test.provider`.
-- [Test harness](/testing/test-harness): every `Test.make` option, hook, and variant.
-- [Observability](/testing/observability): wire exporters, monitors, and alarms into the same Stack.
-- [Tutorial Part 3](/cloudflare/tutorial/part-3): your first integration test, walked through step by step.
-- [Tutorial Part 4](/cloudflare/tutorial/part-4): running the same tests against local emulators with `dev: true`.
+- [Test harness](/testing/test-harness): every option, hook, and helper on `Test.make`.
+- [Testing Providers](/testing/testing-providers): test a custom provider's lifecycle with `test.provider`.
+- [CI](/environments/ci): run deploys and suites from GitHub Actions with per-PR stages.
+- [Cloudflare Tutorial Part 3](/cloudflare/tutorial/part-3) and [AWS Tutorial Part 3](/aws/tutorial/part-3): your first integration test, step by step.
+- [State Store](/state-store): choose between local and remote state.

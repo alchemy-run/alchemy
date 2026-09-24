@@ -63,6 +63,15 @@ export const fromEffect = <A, Req = never>(
   effect: Effect.Effect<A, never, Req>,
 ): ToOutput<A, Req> => new EffectExpr(VoidExpr, () => effect) as any;
 
+/**
+ * Returns `true` if `value` is an {@link Output}.
+ *
+ * @example
+ * ```typescript
+ * Output.isOutput(bucket.bucketName); // true
+ * Output.isOutput("my-bucket"); // false
+ * ```
+ */
 export const isOutput = (value: any): value is Output<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&
@@ -111,6 +120,10 @@ export const ExprSymbol = Symbol.for("alchemy/Expr");
 
 const exprKind = (node: any): unknown => node?.[ExprSymbol]?.kind ?? node?.kind;
 
+/**
+ * Returns `true` for any internal expression node, the building blocks
+ * that `map`, `all`, `interpolate`, and property access produce.
+ */
 export const isExpr = (value: any): value is Expr<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&
@@ -735,6 +748,19 @@ export const evaluate: <A, Req = never>(
     return expr;
   }) as Effect.Effect<any>;
 
+/**
+ * Returns `true` if `value`, or anything nested inside its plain objects
+ * and arrays, is lazy (an {@link Output} or a Resource).
+ *
+ * `hasOutputs` and {@link upstream} power the dependency graph. Use them
+ * when a custom provider needs to know whether props are fully resolved.
+ *
+ * @example
+ * ```typescript
+ * Output.hasOutputs({ name: bucket.bucketName }); // true
+ * Output.hasOutputs({ name: "my-bucket" }); // false
+ * ```
+ */
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
 
@@ -781,6 +807,19 @@ export const upstreamAny = (
 };
 
 // TODO(sam): add a type
+/**
+ * Returns the upstream resources an {@link Output} depends on, keyed by
+ * each resource's fully qualified name.
+ *
+ * `upstream` and {@link hasOutputs} power the dependency graph. Use them
+ * when a custom provider needs to inspect an Output's dependencies.
+ *
+ * @example
+ * ```typescript
+ * const url = Output.interpolate`https://${bucket.bucketName}.example.com`;
+ * Output.upstream(url); // { Bucket: bucket }
+ * ```
+ */
 export const upstream = <E extends Output<any, any>>(
   expr: E,
   seen: WeakSet<object> = new WeakSet(),
@@ -849,6 +888,15 @@ export const log = <A>(_value: A) =>
     // TODO(sam): implement a log effect
   });
 
+/**
+ * Builds an environment variable name from a logical ID and a suffix.
+ * Both parts are uppercased and `-` becomes `_`.
+ *
+ * @example
+ * ```typescript
+ * Output.toEnvKey("my-bucket", "name"); // "MY_BUCKET_NAME"
+ * ```
+ */
 export const toEnvKey = <const ID extends string, const Suffix extends string>(
   id: ID,
   suffix: Suffix,

@@ -15,6 +15,7 @@
     "docs:generate": "bun run build:reference && bun run build:llms",
     "docs:build": "bun run build",
     "docs:check": "bun run docs:generate && DOCS_FAST=1 astro build",
+    "docs:lint": "vale sync && vale --glob='!src/content/docs/{providers,blog}/**' src/content/docs",
     "generate:readme-hero": "bun scripts/generate-readme-hero.ts",
     "build": "bun scripts/generate-brand-assets.ts && bun run build:reference && bun run build:llms && astro build",
     "dev:site": "astro dev",

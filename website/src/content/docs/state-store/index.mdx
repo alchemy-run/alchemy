@@ -1,65 +1,54 @@
 ---
 title: State Store
-description: How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
+description: Choose where Alchemy records what it deployed (local files, Cloudflare, AWS S3, or Postgres) and set it up.
+type: how-to
 ---
 
 import StateStoreBootstrap from "../../../components/marketing-islands/StateStoreBootstrap.tsx";
 
-Alchemy persists resource state between deploys so it can compute
-diffs. A diff compares the desired state in your code against the
-current state of your infrastructure.
+Every stack sets a `state` option that says where Alchemy records what
+it deployed. Alchemy diffs your code against this record to plan each
+deploy. There is no default, so a stack without `state` fails before
+it plans:
 
-## How state is stored
+```text
+Stack "MyApp" is missing a state store. Add a `state` layer to the stack options
+```
 
-Each resource's state is keyed by its **fully qualified name** (FQN),
-which includes the namespace path and
-[logical ID](/infrastructure-as-code/resource#logical-id). State is
-scoped by [stack name](/infrastructure-as-code/stack) and
-[**stage**](/environments/stages), so different stacks and
-environments are isolated from each other.
+## Choose a store
 
-A resource's persisted state includes:
+Pick the store that matches where your team already runs:
 
-- **Resource type**: e.g. `Cloudflare.R2.Bucket`
-- **Input properties**: the props you passed when creating it
-- **Output attributes**: the values returned after creation
-- **Instance ID**: a unique identifier for this instance
-- **Lifecycle status**: `created`, `updating`, `deleting`, etc.
-- **[Bindings](/infrastructure-as-effects/binding)**: data attached by policies and event sources
+- `Alchemy.localState()` from `alchemy`: JSON files under
+  `.alchemy/state/`. Use it for solo development.
+- `Cloudflare.state()` from `alchemy/Cloudflare`: a Worker backed by a
+  Durable Object. Use it for teams and CI on Cloudflare, so every
+  machine shares one state.
+- `AWS.state()` from `alchemy/AWS`: an S3 bucket. Use it for teams and
+  CI on AWS.
+- `postgresState()` from `alchemy/State/PostgresState`: two tables in a
+  Postgres database. It's the only built-in store that locks concurrent
+  deploys.
+- `Alchemy.inMemoryState()` from `alchemy`: process memory, lost on
+  exit. Use it for tests and scripts only.
+
+For another backend, such as Redis or DynamoDB, see
+[Custom State Store](/state-store/custom-state-store).
 
 ## Local state
 
-By default, state is stored on disk in the `.alchemy/` directory:
-
-```
-.alchemy/
-  state/
-    MyApp/
-      dev_sam/
-        Bucket.json
-        Worker.json
-```
-
-Add `.alchemy/` to your `.gitignore`:
-
-```sh
-echo ".alchemy/" >> .gitignore
-```
-
-Local state works for solo development. Each developer gets their own
-state via their default stage (`dev_$USER`).
-
-## Remote state
-
-For teams and CI, configure a remote state store so all deploys share
-the same state. Alchemy includes a Cloudflare-backed store:
+Pass `Alchemy.localState()` as the stack's `state`:
 
 ```typescript
-Alchemy.Stack(
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
   "MyApp",
   {
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     // ...
@@ -67,73 +56,164 @@ Alchemy.Stack(
 );
 ```
 
+Alchemy writes one JSON file per resource, plus one for the stack
+output:
+
+```text
+.alchemy/
+  state/
+    MyApp/
+      live_sam/
+        Bucket.json
+        Worker.json
+        __stack_output__.json
+```
+
+Keep the directory out of git:
+
+```sh
+echo ".alchemy/" >> .gitignore
+```
+
+Each developer gets their own state through the default stage,
+`live_$USER` for `alchemy deploy` and `dev_$USER` for `alchemy dev`.
+See [Stages](/environments/stages).
+
 ## Cloudflare state store
 
-`Cloudflare.state()` is the recommended state store for projects
-already running on Cloudflare. It persists state in a Worker backed
-by a Durable Object with embedded SQLite. The auth token and
-encryption key are kept in your account's Secrets Store.
+`Cloudflare.state()` keeps state in a Worker named
+`alchemy-state-store`, backed by a Durable Object with embedded SQLite.
+It takes no options. Every stack and stage that uses it on the same
+account shares that one Worker.
+
+```typescript
+state: Cloudflare.state(),
+```
+
+The Worker's bearer token and the key that encrypts state at rest live
+in your account's Secrets Store.
 
 ### First-run bootstrap
 
-The first time you run `alchemy deploy`, `plan`, or `dev` against a
-stack configured with `Cloudflare.state()`, Alchemy can't find the
-state-store Worker on your account. It pauses to ask permission
-before deploying it. If you confirm, Alchemy runs a one-time deploy
-of the state-store and its supporting resources:
+The first `alchemy deploy`, `plan`, or `dev` on an account without the
+store pauses and asks before deploying it. Confirm, and Alchemy deploys
+the Worker, a Secrets Store, and its two secrets once for the account:
 
 <StateStoreBootstrap client:visible />
 
-What gets created:
+Later runs find the Worker and skip the prompt. On every run, Alchemy
+checks the store's version and asks before upgrading an outdated store
+in place. See
+[`provider cloudflare bootstrap`](/cli/cloudflare#provider-cloudflare-bootstrap)
+for the name of each bootstrap resource, and to deploy or repair the
+store without running a stack, for example after an interrupted
+bootstrap.
 
-- **`Api`**: the state-store Worker itself (a Durable Object with
-  embedded SQLite, enabled on a `workers.dev` subdomain)
-- **`AlchemyStateStoreToken`**: bearer token used by the CLI to
-  authenticate to the Worker, stored in your Secrets Store
-- **`StateStoreEncryptionKey`**: symmetric key used to encrypt
-  resource state at rest inside the Durable Object's SQLite
-- **`StateStoreSecrets`**: the Secrets Store that holds the two
-  secrets above, scoped to your Cloudflare account
-- **`StateStoreAuthTokenValue` / `StateStoreEncryptionKeyValue`**:
-  the generated random values bound into the secrets above
+After the bootstrap, Alchemy caches the store's URL and bearer token per
+profile:
 
-These resources are reused across every stack and stage that uses
-`Cloudflare.state()` on this account. Alchemy does not duplicate
-them per project. Subsequent runs detect the existing Worker and skip
-the prompt.
+```text
+~/.alchemy/credentials/<profile>/cloudflare-state-store.json
+# or $ALCHEMY_HOME/credentials/<profile>/... when ALCHEMY_HOME is set
+```
 
-### Where credentials live
+The cache records the Cloudflare account ID. When you switch accounts,
+Alchemy discards it and derives new credentials for the current account.
+`alchemy profile rename` moves the profile's cache directory with it,
+and `alchemy profile delete` removes it.
 
-After the bootstrap, Alchemy writes the state-store URL and bearer
-token to a credentials file under your Alchemy profile directory
-(`~/.alchemy/<profile>/cloudflare-state-store.json` by default). On
-CI, set `CI=true`. Alchemy then resolves the credentials from the
-Secrets Store on every run via a short-lived edge-preview Worker, so
-nothing needs to be persisted to disk.
+### In CI
 
-### Customizing the worker name
+With `CI=true`, Alchemy never prompts. A missing or outdated store fails
+the run unless you deploy it ahead of time or pass `--yes`:
 
-By default the state-store Worker is named `alchemy-state-store`.
-Pass `workerName` to use a separate state store. For example, use
-this when you want a dedicated store per Cloudflare account or per
-team:
+```sh
+# deploy or upgrade the store once, before the first CI run
+alchemy provider cloudflare bootstrap --profile <your-ci-profile>
+
+# or deploy/upgrade a missing or outdated store without asking (also works locally)
+alchemy deploy --yes
+```
+
+In CI, Alchemy doesn't write the credential cache. It reads the bearer
+token back from the account-wide Secrets Store on every run by
+uploading a short-lived edge-preview Worker that binds the secret. Binding a secret
+needs more than read access, so the CI token needs `Secrets Store Write`:
+
+- `Secrets Store Read` allows only
+  `GET /accounts/{id}/secrets_store/stores`.
+- The edge-preview upload that mounts the binding,
+  `POST .../scripts/{name}/edge-preview`, is rejected without
+  `Secrets Store Write`.
+
+See [CI](/environments/ci) for the full token setup.
+
+## AWS S3 state store
+
+`AWS.state()` keeps state as JSON objects in an S3 bucket:
 
 ```typescript
-state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
 ```
+
+Every option is optional:
+
+```typescript
+state: AWS.state({
+  // default: alchemy-state-{accountId}-{region}-an
+  // custom names follow <prefix>-<accountId>-<region>-an (account-regional namespace)
+  bucketName: "my-company-state-123456789012-us-east-1-an",
+  // default: bucket root. A trailing "/" is added.
+  prefix: "alchemy",
+  // default: AES256, no KMS key. Existing objects are not rewritten.
+  encryption: {
+    sseAlgorithm: "aws:kms",
+    kmsMasterKeyId: "alias/alchemy-state",
+  },
+}),
+```
+
+The keys mirror local state, with the bucket in place of
+`.alchemy/state`:
+
+```text
+s3://{bucket}/{prefix}{stack}/{stage}/{fqn}.json
+s3://{bucket}/{prefix}{stack}/{stage}/__stack_output__.json
+```
+
+Alchemy creates the bucket on the first state operation, never when the
+layer is built. On every run, it enables versioning, blocks public
+access, and enforces bucket-owner object ownership, even on an existing
+bucket. See the [`AWS.state` reference](/providers/AWS/StateStore) for
+SSE-C settings.
 
 ## Postgres state store
 
-`postgresState()` persists state in a Postgres database you already run. It also locks state during a run. Each `(stack, stage)` holds a session advisory lock for the duration of a run, so two concurrent deploys of the same stage cannot interleave.
+`postgresState()` keeps state in a Postgres database you already run.
+Import it from `alchemy/State/PostgresState`, because the `alchemy/State`
+barrel is bundled into Worker code and the Postgres driver runs only on
+Node.
 
 ```typescript
+import * as Alchemy from "alchemy";
 import { postgresState } from "alchemy/State/PostgresState";
 import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
 
-Alchemy.Stack(
+export default Alchemy.Stack(
   "MyApp",
   {
-    providers: Prisma.providers(),
+    providers: myProviders(), // your stack's providers layer
     state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
   },
   Effect.gen(function* () {
@@ -142,56 +222,124 @@ Alchemy.Stack(
 );
 ```
 
-Import it from `alchemy/State/PostgresState`. It is not in the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
-
-## State and lifecycle
-
-State transitions track the lifecycle of each resource:
-
-| Status      | Meaning                                                          |
-| ----------- | ---------------------------------------------------------------- |
-| `creating`  | Create operation in progress                                     |
-| `created`   | Resource exists and is healthy                                   |
-| `updating`  | Update operation in progress                                     |
-| `updated`   | Resource was updated successfully                                |
-| `deleting`  | Delete operation in progress                                     |
-| `replacing` | Resource is being replaced (new one created, old pending delete) |
-
-These intermediate states (`creating`, `updating`, `deleting`) exist
-because state is persisted before the cloud operation completes. If
-the process crashes mid-operation, Alchemy uses the intermediate
-state to recover on the next deploy.
-
-## In-memory state (testing)
-
-For tests, Alchemy provides an in-memory state store so tests don't
-touch the filesystem:
+Pass exactly one of `url` or `client`. The other options have defaults:
 
 ```typescript
-import * as TestState from "alchemy/Test/TestState";
+import * as PgClient from "@effect/sql-pg/PgClient";
 
-// Seed with existing resource state
-const state = TestState.state({
-  Bucket: {
-    /* ... */
-  },
+// url: a Redacted URL, or an Effect that yields one (Config.Redacted is an Effect).
+// The store opens its own @effect/sql-pg pool and closes it with the state layer.
+// Install @effect/sql-pg (which depends on pg) to use it.
+postgresState({ url: Config.Redacted("STATE_DATABASE_URL") });
+
+// client: an SqlClient pool you own. The store only runs queries on it.
+// It must hand out at least two connections, because one holds the lock and
+// another verifies it. A single-connection client (PgClient.makeClient) is
+// refused at the first lease check, and a pool capped at maxConnections: 1 hangs.
+// Inside an Effect.gen:
+const sql = yield* PgClient.make({
+  url: yield* Config.Redacted("STATE_DATABASE_URL"),
+});
+postgresState({
+  client: sql,
+  lockKeyPrefix: "alchemy", // lock key is {lockKeyPrefix}:{stack}/{stage}
+  leaseCheckTtlMs: 5000, // how long a passing lock check is trusted
+  id: "postgres", // store ID reported in telemetry
 });
 ```
 
-The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
-handles state setup automatically.
+On first use, the store creates the `alchemy_resource_state` and
+`alchemy_stack_output` tables if they don't exist. Nothing touches the
+database when the layer is built.
 
-## Writing your own state store
+## Concurrent deploys
 
-A state store is an Effect `Layer` that provides the `State`
-service. You can back it with Postgres, S3, Redis, DynamoDB, or any
-other backend. See [Custom State Store](/state-store/custom-state-store)
-for the full walkthrough.
+Only `postgresState()` serializes runs. The first state operation on a
+`(stack, stage)` takes a Postgres advisory lock that it holds until the
+run ends. A second run of the same stack and stage fails immediately:
+
+```text
+another deploy holds the Postgres state lock '...'
+```
+
+If the process crashes, Postgres releases the lock when the connection
+drops.
+
+Local, Cloudflare, and S3 state have no lock, so concurrent deploys of
+one stack and stage can interleave their writes. Run one at a time, for
+example with a CI concurrency group per stage (see [CI](/environments/ci)).
+
+## Switching state stores
+
+A new `state` option points Alchemy at a store with no records for your
+stack. On the next plan, Alchemy calls each provider's `read` to look
+for the resource in the cloud:
+
+- **Found and owned by this stack, stage, and logical ID**: Alchemy
+  adopts it and updates it to match your code.
+- **Found but owned by something else**: the plan fails unless you pass
+  `--adopt`. See [Resource lifecycle › Adoption](/infrastructure-as-code/resource-lifecycle#adoption).
+- **Not found, or the provider has no `read`**: Alchemy creates it
+  again. An original that still exists stays in the cloud, untracked.
+
+To keep every resource, copy state across before you switch.
+`syncState` from `alchemy/State` makes `destination` mirror the resource
+records in `source` for every stack and stage:
+
+```typescript
+import { syncState } from "alchemy/State";
+
+// source and destination are StateService values.
+// Overwrites matching keys, and deletes records and stacks that exist
+// only in destination. Stack outputs are not copied. The next deploy rewrites them.
+yield* syncState(source, destination);
+```
+
+Because it deletes destination-only stacks, don't point it at a store
+that other projects share. To inspect either store before and after,
+pass `--backend local|cloudflare|aws` to an `alchemy state` subcommand. See
+[Inspecting State](/cli/inspecting-state).
+
+## What the store records
+
+Alchemy keys each resource's record by its
+[fully qualified name](/infrastructure-as-code/resource#fully-qualified-names)
+(FQN), scoped by [stack](/infrastructure-as-code/stack) and
+[stage](/environments/stages). A record holds:
+
+- **Resource type**: for example `Cloudflare.R2.Bucket`.
+- **Input properties**: the props you passed.
+- **Output attributes**: the values the provider returned.
+- **Instance ID**: a unique ID for this instance of the resource.
+- **Lifecycle status**: for example `created`, `updating`, or `replaced`.
+  Alchemy writes it before each cloud call, so a crashed deploy can
+  recover on the next run. See
+  [Resource lifecycle › Recovering from failures](/infrastructure-as-code/resource-lifecycle#recovering-from-failures).
+- **[Bindings](/infrastructure-as-effects/binding)**: data that bindings
+  and event sources attached.
+
+Each `(stack, stage)` also stores the stack's output after a successful
+deploy, which [cross-stack references](/infrastructure-as-code/references)
+read. Records can hold secret values, such as `Redacted` props, so limit
+who can read the store.
+
+## State in tests
+
+In tests, `deploy(Stack)` and `destroy(Stack)` use the stack's own
+`state` option. `test.provider` scratch stacks get a private store,
+durable on disk or in memory depending on the test adapter, as
+[Test harness › Scratch stacks](/testing/test-harness#scratch-stacks)
+describes.
 
 ## Where next
 
 - [Custom State Store](/state-store/custom-state-store): implement the
-  `StateService` interface end-to-end.
-- [Testing Providers](/testing/testing-providers): the in-memory store in practice.
-- [References](/infrastructure-as-code/references): reading another
+  `StateService` interface for another backend.
+- [Stages](/environments/stages): how stage names scope state.
+- [CI](/environments/ci): use a remote store from GitHub Actions.
+- [Inspecting State](/cli/inspecting-state): read and repair state from
+  the CLI.
+- [Test harness › Scratch stacks](/testing/test-harness#scratch-stacks):
+  the store that tests and scratch stacks use.
+- [References](/infrastructure-as-code/references): read another
   stack's outputs.

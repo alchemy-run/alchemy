@@ -113,6 +113,20 @@ export interface StreamEventSourceProps {
  * );
  * ```
  *
+ * ### Batching and Retries
+ * **Example:** Bound a Poison Record's Blast Radius
+ * ```typescript
+ * yield* AWS.Kinesis.consumeStreamRecords(
+ *   stream,
+ *   {
+ *     startingPosition: "LATEST",
+ *     bisectBatchOnFunctionError: true, // split a failing batch to isolate the bad record
+ *     maximumRetryAttempts: 3, // then stop retrying it
+ *   },
+ *   (records) => Stream.runForEach(records, (record) => Effect.log(record.eventID)),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface StreamEventSource extends Binding.Service<
@@ -138,6 +152,19 @@ export type StreamEventSourceService = <StreamReq = never, Req = never>(
  *
  * The Lambda runtime implementation creates an event source mapping and forwards
  * matching `aws:kinesis` records into the supplied `Stream`.
+ *
+ * @example Bound a poison record's blast radius
+ * ```typescript
+ * yield* AWS.Kinesis.consumeStreamRecords(
+ *   stream,
+ *   {
+ *     startingPosition: "LATEST",
+ *     bisectBatchOnFunctionError: true, // split a failing batch to isolate the bad record
+ *     maximumRetryAttempts: 3, // then stop retrying it
+ *   },
+ *   (records) => Stream.runForEach(records, (record) => Effect.log(record.eventID)),
+ * );
+ * ```
  *
  * @example Forward stream records into an SQS queue
  * ```typescript

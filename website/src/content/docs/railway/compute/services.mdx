@@ -7,8 +7,10 @@ A [`Service`](/providers/railway/service) is a container in a
 Railway [Project](/railway/compute/projects). Point it at a public
 image (`hashicorp/http-echo`), an Effect program (`main`), or a
 GitHub repo (`repo` + `branch`). Several Services
-share one Project. Canvas Functions — Effect-native or one TypeScript file, no
-Docker, no registry — are [`Railway.Function`](/railway/compute/functions).
+share one Project.
+
+Canvas Functions, either Effect-native or one TypeScript file with no
+Docker and no registry, are [`Railway.Function`](/railway/compute/functions).
 
 ## Image service
 
@@ -108,7 +110,16 @@ const query = yield* Railway.bindService(Query);
 const greeting = yield* query.greet("sam");
 ```
 
-See [Functions](/railway/compute/functions#schemaless-rpc) for the
+The dispatcher on the private mesh supports value methods only, so a
+method can't return a Stream. The callee's typed failures pass through
+to the caller. The dispatcher adds two failures of its own:
+
+- `Railway.RpcCallError`: a transport failure, such as a missing host,
+  a network error, an unreadable reply, or no reply within 25 seconds.
+- `Railway.RpcUnauthorized`: the callee rejected the shared token.
+
+See [Schemaless RPC](/apis/schemaless) for the Shape rules, and
+[Functions](/railway/compute/functions#schemaless-rpc) for the
 Function side of the same stub.
 
 ## Pin a region
@@ -127,7 +138,7 @@ export default class Api extends Railway.Service<Api>()(
 
 `port` is the port the process listens on. Alchemy writes it to
 `PORT` and uses it as the generated `*.up.railway.app` `targetPort`.
-Default `3000` for Effect-native Services. Pass `5678` for
+It defaults to `3000` for Effect-native Services, so pass `5678` for
 `hashicorp/http-echo`.
 
 ```diff lang="typescript"
@@ -137,7 +148,7 @@ export default class Api extends Railway.Service<Api>()(
 +  { project: Site, main: import.meta.url, region: "us-west2", port: 3000 },
 ```
 
-## The public URL
+## Public address
 
 Yield the Service in the Stack. `api.url` is
 `https://{name}.up.railway.app`. Alchemy creates that hostname with
@@ -159,9 +170,10 @@ There is no IpAssignment resource. Railway's edge terminates TLS on
 
 ## Healthcheck
 
-`healthcheck` / `healthcheckPath` is the HTTP path Railway probes.
-`healthcheckTimeout` is seconds. Railway load-balances public traffic
-across whatever replicas are running. Alchemy does not pin a count.
+`healthcheck` / `healthcheckPath` is the HTTP path Railway probes,
+and `healthcheckTimeout` is in seconds. Railway load-balances public
+traffic across whatever replicas are running, and Alchemy does not pin
+a count.
 
 ```typescript
 const api = yield* Railway.Service("Api", {
@@ -215,8 +227,10 @@ For an Effect-native Service, Alchemy bundles `main` with Rolldown
 and generates a Dockerfile (`FROM oven/bun:1` unless you pass
 `image`). If the hash matches the last successful deploy, it skips
 the upload. Otherwise it tars the context and uploads it the same
-way `railway up` does. Railway builds and deploys. No local Docker
-daemon. No registry.
+way `railway up` does.
+
+Railway builds and deploys the image, so you need no local Docker
+daemon and no registry.
 
 Changed code is a new Railway build and an in-place update.
 Unchanged code is a no-op.
@@ -314,7 +328,7 @@ export default class Worker extends Railway.Service<Worker>()(
 
 If the process exits, Railway restarts it.
 
-## Multiple Services, one Project
+## Several services in one project
 
 Each Service has its own image, env, and lifecycle. Point several
 at the same `project`.
@@ -343,21 +357,20 @@ Service logs live in the Railway dashboard. `alchemy logs` (including
 
 ## Where next
 
-The [tutorial](/railway/tutorial/part-2) builds a Service step by
-step. [Functions](/railway/compute/functions) covers Effect-native
-and canvas Functions, including [schemaless RPC](/railway/compute/functions#schemaless-rpc).
-[Volumes](/railway/data/volumes) covers `MountVolume`.
-[Postgres](/railway/data/postgres) binds with `ConnectPostgres`.
-[MySQL](/railway/data/mysql) and [Mongo](/railway/data/mongo) are the
-same shape.
-[Redis](/railway/data/redis) binds with `ReadWriteRedis`.
-[Buckets](/railway/data/buckets) bind with `PutObject` / `GetObject`.
-[Variables](/railway/data/variables) covers `Config.Redacted`,
-`Railway.Variable`, and `Railway.ref`.
-The [`Service` reference](/providers/railway/service) lists every
-prop.
-[Example: railway-project](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-project)
-is an image Service.
-[Example: railway-service](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service)
-is an Effect-native Service bound to Postgres, MySQL, Redis, an
-Effect Function, and a Group.
+- [Tutorial](/railway/tutorial/part-2): build a Service step by step.
+- [Functions](/railway/compute/functions): Effect-native and canvas
+  Functions, including [schemaless RPC](/railway/compute/functions#schemaless-rpc).
+- [Volumes](/railway/data/volumes): `MountVolume`.
+- [Postgres](/railway/data/postgres): bind with `ConnectPostgres`.
+  [MySQL](/railway/data/mysql) and [Mongo](/railway/data/mongo) have the
+  same shape.
+- [Redis](/railway/data/redis): bind with `ReadWriteRedis`.
+- [Buckets](/railway/data/buckets): bind with `PutObject` / `GetObject`.
+- [Variables](/railway/data/variables): `Config.Redacted`,
+  `Railway.Variable`, and `Railway.ref`.
+- [`Service` reference](/providers/railway/service): every prop.
+- [Example: railway-project](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-project):
+  an image Service.
+- [Example: railway-service](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service):
+  an Effect-native Service bound to Postgres, MySQL, Redis, an Effect
+  Function, and a Group.

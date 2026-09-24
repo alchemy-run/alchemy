@@ -1,34 +1,37 @@
 ---
 title: Layers
-description: A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
+description: A layer defines a service contract with swappable implementations. In Alchemy, a layer can own resources and bindings, so shared services carry their own infrastructure and permissions.
+type: explanation
 ---
 
-As your application grows, you'll need to share parts of your code
-with Layers. A
-[**Layer**](https://effect.website/docs/requirements-management/layers/)
+A [**layer**](https://effect.website/docs/requirements-management/layers/)
 is Effect's unit of service construction. It defines how to build a
-service, so you can swap in different implementations of that service
-across your code, such as a different storage backend or a different
-cloud.
+service, so you can swap in a different storage backend or a different
+cloud without touching the code that uses it.
 
-In Alchemy, a Layer can contain
-[Resources](/infrastructure-as-code/resource) and
-[Bindings](/infrastructure-as-effects/binding). This lets you create
-shareable services that carry their own infrastructure and permissions.
-You can share them within your codebase, across packages, or publish
-them to npm for others to use.
-
-The sections below show how they work.
+In Alchemy, a layer can contain [resources](/infrastructure-as-code/resource)
+and [bindings](/infrastructure-as-effects/binding). A shared service
+then carries its own infrastructure and permissions, whether you share
+it within your codebase, across packages, or on npm.
 
 ## The contract
 
-A service is a `Context.Service`. This is a typed tag that names a
-capability:
+A service is a `Context.Service`, a typed tag that names a capability:
 
 ```typescript
 import * as Alchemy from "alchemy";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+
+export interface Job {
+  id: string;
+  status: string;
+}
+
+export class JobError extends Data.TaggedError("JobError")<{
+  cause: unknown;
+}> {}
 
 export class JobService extends Context.Service<
   JobService,
@@ -39,79 +42,54 @@ export class JobService extends Context.Service<
 ```
 
 Consumers write `yield* JobService` and get this typed object. The
-signature mentions `Alchemy.RuntimeContext` (covered below) and nothing
-cloud-specific.
+signature mentions nothing cloud-specific, so every implementation must
+map its storage errors to `JobError`. `Alchemy.RuntimeContext` is
+covered [below](#the-types-hold-the-boundary).
 
 ## The implementation
 
-`Layer.effect(JobService, …)` builds the service. It reads as "to
-construct `JobService`, run this Effect":
+`Layer.effect(JobService, …)` builds the service. This one declares a
+KV Namespace, binds it, and implements the contract against the client:
 
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 export const JobServiceKV = Layer.effect(
   JobService,
   Effect.gen(function* () {
+    // a real KV Namespace, owned by this layer
+    const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
+    // a typed client for reading and writing it at runtime
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
+
     return {
       getJob: Effect.fn(function* (id: string) {
-        // TODO: read the job from storage
+        // Job | null, fails with the KV NamespaceError
+        const job = yield* kv
+          .get<Job>(id, "json")
+          .pipe(Effect.mapError((cause) => new JobError({ cause })));
+        if (job === null) {
+          return yield* new JobError({ cause: `job ${id} not found` });
+        }
+        return job;
       }),
     };
   }),
 );
 ```
 
-Declare the storage. This is a real KV namespace owned by the Layer:
-
-```diff lang="typescript"
-+import * as Cloudflare from "alchemy/Cloudflare";
- import * as Effect from "effect/Effect";
- import * as Layer from "effect/Layer";
-
- export const JobServiceKV = Layer.effect(
-   JobService,
-   Effect.gen(function* () {
-+    const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
-+
-     return {
-       // ...
-     };
-   }),
- );
-```
-
-Bind the namespace. `kv` is a typed client for reading and writing that
-namespace at runtime:
-
-```diff lang="typescript"
-   Effect.gen(function* () {
-     const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
-+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
-
-     return {
-       // ...
-     };
-   }),
-```
-
-Implement the contract against the client:
-
-```diff lang="typescript"
-     return {
-       getJob: Effect.fn(function* (id: string) {
--        // TODO: read the job from storage
-+        return yield* kv.get<Job>(id, "json");
-       }),
-     };
-```
-
 ## The consumer
 
-A Worker yields the service and provides the Layer:
+A Worker yields the service and provides the layer:
 
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
@@ -120,87 +98,98 @@ export default Cloudflare.Worker(
 
     return {
       fetch: Effect.gen(function* () {
-        return yield* jobs.getJob("job-1");
+        return yield* HttpServerResponse.json(yield* jobs.getJob("job-1"));
       }),
     };
   }).pipe(
     Effect.provide(
+      // satisfies JobServiceKV's KV binding privately
       JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
     ),
   ),
 );
 ```
 
-Providing the Layer brings the infrastructure in. On the next deploy,
-the `MyKV` namespace is created in the
-[Stack](/infrastructure-as-code/stack) and bound to this Worker, so
-`kv.get` works inside its handlers.
-
-The inner `Layer.provide` satisfies `JobServiceKV`'s dependency on the KV
-runtime binding privately. The handler sees only `JobService`:
-
-```typescript
-JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding))
-```
+Providing the layer brings the infrastructure in. On the next deploy,
+the `MyKV` namespace is created in the [stack](/infrastructure-as-code/stack)
+and bound to this Worker. The handler sees only `JobService`.
 
 ## Reuse across Workers
 
-A Layer is a value. Provide `JobServiceKV` to a second Worker and both
-share the same namespace, because `KV.Namespace("MyKV")` has a stable
-logical id:
+A layer is a value. Provide `JobServiceKV` to a second Worker, such as
+`Admin`, with the same line:
 
 ```typescript
-// src/Admin.ts
-export default Cloudflare.Worker(
-  "Admin",
-  { main: import.meta.url },
+Effect.provide(
+  JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+)
+```
+
+`KV.Namespace("MyKV")` has a stable logical ID, so the stack ends up
+with one `MyKV` namespace bound to both `Api` and `Admin`.
+
+## Swapping implementations
+
+A second layer can implement `JobService` over different storage. Say
+`JobServiceDynamo` declares an `AWS.DynamoDB.Table` and binds it with
+`AWS.DynamoDB.GetItem`. An `AWS.Lambda.Function` runs the same handler
+on top of it:
+
+```typescript
+import * as AWS from "alchemy/AWS";
+
+export default AWS.Lambda.Function(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     const jobs = yield* JobService;
-    // ...
+
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* jobs.getJob("job-1"));
+      }),
+    };
   }).pipe(
     Effect.provide(
-      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+      // was: JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding))
+      // on deploy, GetItemHttp grants dynamodb:GetItem on the table to the role
+      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
     ),
   ),
 );
 ```
 
-The Stack ends up with one `MyKV` namespace, bound to both `Api` and
-`Admin`.
+A swap works only when every binding inside the layer supports the
+host. `AWS.DynamoDB.GetItemHttp` needs AWS `Credentials` and `Region`
+and grants IAM to AWS hosts such as Lambda Functions and ECS Tasks, so
+`JobServiceDynamo` can't back a Cloudflare Worker. Some AWS bindings
+do support a Worker host, such as `AWS.S3.GetObjectHttp` (see the
+[S3 reference](/providers/AWS/S3)).
 
-## Swapping implementations
-
-Changing the implementation is a one-line change:
-
-```diff lang="typescript"
--      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
-+      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
-```
-
-This swap crosses clouds. The Worker still runs on Cloudflare, but its
-jobs now come from a DynamoDB table on AWS. The credentials and
-permissions are wired up automatically.
-
-Alchemy's own Bindings follow the same tag/Layer split
-([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
+Alchemy's own bindings follow the same tag and layer split. See
+[Bindings › A contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer).
 
 ## The types hold the boundary
 
-A Layer that needs an environment the host can't supply is a compile
+A layer that needs an environment the host can't supply is a compile
 error:
 
 ```typescript
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
-  handler.pipe(Effect.provide(JobServiceDynamo)),
-  // ✗ Type error: the Layer requires AWS `Credentials` and `Region`,
+  handler.pipe(
+    Effect.provide(
+      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
+    ),
+  ),
+  // ✗ Type error: the layer requires AWS `Credentials` and `Region`,
   //   which a Cloudflare Worker can't provide
 );
 ```
 
 `Alchemy.RuntimeContext` marks methods that only work inside a deployed
-handler ([Phases](/infrastructure-as-effects/phases)):
+handler (see [Phases](/infrastructure-as-effects/phases)):
 
 ```typescript
 Effect.gen(function* () {
@@ -211,34 +200,39 @@ Effect.gen(function* () {
 
   return {
     fetch: Effect.gen(function* () {
-      return yield* jobs.getJob("job-1"); // ✓
+      return yield* HttpServerResponse.json(yield* jobs.getJob("job-1")); // ✓
     }),
   };
 });
 ```
 
-## Composing Layers
+## Composing layers
 
-A typical app provides one Layer per capability:
+A typical app provides one layer per capability. Each brings its own
+resources into the stack and its own typed service into scope:
 
 ```typescript
 .pipe(
-  Effect.provide(Layer.mergeAll(
-    JobServiceKV,         // provides JobService
-    BetterAuthD1,         // provides BetterAuth
-    RateLimiterDurable,   // provides RateLimiter
-  )),
+  Effect.provide(
+    // Layer.mergeAll combines independent services
+    Layer.mergeAll(
+      JobServiceKV,         // provides JobService
+      BetterAuthD1,         // provides BetterAuth
+      RateLimiterDurable,   // provides RateLimiter
+    ).pipe(
+      // Layer.provide satisfies their dependencies without exposing them
+      Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding),
+    ),
+  ),
 )
 ```
 
-Each Layer brings its own resources into the Stack and its own typed
-service into scope. Use `Layer.mergeAll` for independent services and
-`Layer.provide` to satisfy one Layer's dependencies privately from
-another.
-
 ## Where next
 
+- [Event Sources](/infrastructure-as-effects/event-sources): bindings
+  that run your code when something happens on a resource. Next page.
 - [Circular Bindings](/infrastructure-as-effects/circular-bindings):
-  the tag/Layer split applied to two services that reference each other.
+  the tag and layer split applied to two services that reference each
+  other.
 - [Bindings](/infrastructure-as-effects/binding): the deploy-time
-  mechanics Layers are built on.
+  mechanics layers are built on.

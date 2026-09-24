@@ -1,27 +1,27 @@
 ---
 title: Local development
 description: How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
+type: explanation
 ---
 
 import Terminal from "../../../components/Terminal.astro";
 
 `alchemy dev` runs your stack on your machine. Your compute runs
-locally (Workers in workerd, Lambda and ECS in Docker
-containers). The services around it are emulated, and code
-changes hot reload in milliseconds. `Alchemy.remote()` runs any
-resource against the real cloud when you need it.
+locally, the services around it are emulated, and code changes hot
+reload in milliseconds. `Alchemy.remote()` runs any resource against
+the real cloud when you need it.
 
-This page covers the concepts shared by every cloud. For what
-each cloud emulates and how, see the dedicated guides:
+This page covers the concepts shared by every cloud. For what each
+cloud emulates, see its guide:
 
 - **[Cloudflare local development](/cloudflare/local-development)**:
   Workers run in workerd. Simulators cover KV, R2, D1, Queues,
-  Hyperdrive, Workflows, Containers, and the Worker binding
-  surface (browser rendering, images, email, cron, Stream, …).
-- **[AWS local development](/aws/local-development)**: Lambda
-  and ECS run in Docker containers with close to 40 emulated
-  services (S3, DynamoDB, SQS, SNS, EventBridge, API Gateway, …).
-  No AWS account is required.
+  Hyperdrive, Workflows, Containers, and the Worker binding surface,
+  such as browser rendering, images, email, cron, and Stream.
+- **[AWS local development](/aws/local-development)**: Lambda and ECS
+  run in Docker containers with close to 40 emulated services, such as
+  S3, DynamoDB, SQS, SNS, EventBridge, and API Gateway. No AWS account
+  is required.
 
 ## How it works
 
@@ -39,22 +39,25 @@ alchemy dev
 Three things happen:
 
 1. **Emulatable services run locally.** Resources whose provider
-   ships a local implementation are created as local simulators
-   with `dev:`-prefixed ids. No cloud calls are made.
-2. **Your code runs locally.** Workers execute in workerd,
-   Lambda functions and ECS tasks run in Docker containers, and
-   websites run on their framework's own dev server. Bindings are
-   wired to the local simulators.
-3. **File changes hot reload.** When you edit your code, the
-   running compute swaps in the new code without a redeploy.
+   ships a local implementation are created as local simulators. No
+   cloud calls are made.
+2. **Your code runs locally.** Workers execute in workerd, Lambda
+   functions and ECS tasks run in Docker containers, and websites run
+   on their framework's own dev server. Bindings are wired to the
+   local simulators, and logs and stack traces come straight from the
+   local process.
+3. **File changes hot reload.** When you edit your code, the running
+   compute swaps in the new code without a redeploy.
 
-Resources whose provider has no local implementation deploy to
-the real cloud. By default they go into the
-[`dev_$USER` stage](/environments/stages). This stage is separate
-from `alchemy deploy`'s `live_$USER` stage, so a bare
-`alchemy dev` cannot replace a stage you deployed. A stack can mix
-emulated and live-only resources. Tear the local-dev stage down
-with `alchemy destroy --stage dev_$USER`.
+Resources whose provider has no local implementation deploy to the
+real cloud, in the [`dev_$USER` stage](/environments/stages) by
+default. That stage is separate from the `live_$USER` stage of
+`alchemy deploy`, so a bare `alchemy dev` cannot replace a stage you
+deployed.
+
+```sh
+alchemy destroy --stage dev_$USER   # tear down the local-dev stage
+```
 
 ## Hot module reloading
 
@@ -68,111 +71,81 @@ with `alchemy destroy --stage dev_$USER`.
 [s2][d]• Rebuilding worker ...[/d]
 [g]✓[/g] [b]Worker[/b] [d]reloaded in 38ms[/d]`} />
 
-- Code changes take effect in milliseconds
-- Resources stay running across reloads. Only your application
-  code is rebuilt
+Code changes take effect in milliseconds. Resources stay running
+across reloads, and only your application code is rebuilt.
 
-Any process with a dev server, such as Vite or Next, can join the
-loop through [Command.Dev](/command/dev-servers). `alchemy dev`
-starts it and restarts it when its inputs change. On deploy it is
-a no-op.
+Any process with a dev server, such as Vite or Next, can join the loop
+through [Command.Dev](/command/dev-servers). `alchemy dev` starts it and
+restarts it when its inputs change. On deploy it is a no-op.
 
 ## Local by default, live on demand
 
-In dev, emulatable resources run as simulators. A local
-resource's id is `dev:`-prefixed. The prefix also proves that no
-cloud call ran.
+In dev, emulatable resources run as simulators, and every other
+resource runs live. A local resource's id starts with `dev:`, which
+proves that no cloud call ran.
 
-The local simulators serve more than your compute's bindings.
-Node-side capability clients follow the same rule. A seed script
-in an [Action](/infrastructure-as-code/action) that writes to a
-`dev:` KV Namespace or S3 bucket writes to the same local
+Node-side capability clients use the same simulators as your compute.
+A seed script in an [Action](/infrastructure-as-code/action) that
+writes to a `dev:` KV Namespace or S3 bucket writes to the same
 simulator your Worker or Lambda reads.
 
-Every other resource runs live in dev automatically.
-`Alchemy.remote()` (below) runs an emulatable resource against
-the real cloud when local fidelity isn't enough.
+### Running a resource live in dev
 
-## Debugging
-
-Because your code runs locally, you can attach a debugger:
-
-- Set breakpoints in your IDE
-- Inspect variables and call stacks
-- Profile performance
-
-## Running a resource live in dev
-
-`Alchemy.remote()` opts a resource out of local emulation. The
-resource runs live even in dev:
+`Alchemy.remote()` opts a resource, or a whole scope, out of local
+emulation:
 
 ```typescript
 import * as Alchemy from "alchemy";
 
+// One resource
 const worker = yield* Worker("Api", { ... }).pipe(Alchemy.remote());
-```
 
-During `alchemy deploy` the pin is a no-op because everything is
-already live. If a remote resource needs credentials you don't
-have, `alchemy dev` tells you before it touches anything.
-
-### Opt out a whole scope
-
-```typescript
+// A whole scope. Captured at registration, like adopt().
 yield* Effect.gen(function* () {
   const api = yield* Worker("Api", { ... });
   const site = yield* Worker("Site", { ... });
 }).pipe(Alchemy.remote());
 ```
 
-The policy is ambient and captured at registration, like
-`adopt()`. Everything inside the scope runs live. Resources with
-no local emulation already run live in dev, so `remote()` on them
-is a no-op.
+`remote()` is a no-op during `alchemy deploy`, and on resources with
+no local emulation. If a remote resource needs credentials you don't
+have, `alchemy dev` tells you before it touches anything.
 
-Local and live resources combine into hybrid topologies. For
-example, a local Worker can produce into a live queue whose local
-consumer drains it, or a local Lambda can read a live Secrets
-Manager secret. See the per-cloud guides for examples.
+Local and live resources combine into hybrid topologies. For example,
+a local Worker can produce into a live queue whose local consumer
+drains it, or a local Lambda can read a live Secrets Manager secret.
+See the per-cloud guides for examples.
 
 ### Switching is a replacement
 
-A resource moves between local and live when you deploy after a
-dev session or when you add or remove `remote()`. The move is
-planned as a **replacement**. The new instance is created live,
-and the local one (the workerd instance, the Docker container, the
-dev process) is torn down. Dev state never silently becomes cloud
-state.
+A resource moves between local and live when you deploy after a dev
+session, or when you add or remove `remote()`. The engine plans that
+move as a replacement. It creates the new instance live, then tears
+down the local one (the workerd instance, the Docker container, or
+the dev process), so dev state never becomes cloud state.
 
-## Dev vs Deploy
+## Dev vs deploy
 
-|                     | `alchemy dev`                            | `alchemy deploy`   |
-| ------------------- | ---------------------------------------- | ------------------ |
-| Emulatable services | Local simulators (`remote()` for live)   | Deployed to cloud  |
-| Everything else     | Deployed to cloud (personal stage)       | Deployed to cloud  |
-| Application code    | Runs locally (workerd, Docker)           | Deployed to cloud  |
-| File watching       | Hot reload on change                     | Manual redeploy    |
-| Debugging           | Attach local debugger                    | Tail logs          |
-| Speed               | Milliseconds                             | Seconds to minutes |
+- **Emulatable services**: local simulators in `alchemy dev`
+  (`remote()` for live), deployed to the cloud by `alchemy deploy`.
+- **Everything else**: deployed to the cloud in both, to your
+  personal `dev_$USER` stage in dev.
+- **Application code**: runs locally in workerd or Docker in dev,
+  deployed to the cloud by deploy.
+- **File watching**: hot reload on change in dev, manual redeploy
+  otherwise.
+- **Debugging**: local logs and stack traces in dev, tailed logs
+  after a deploy.
+- **Speed**: milliseconds in dev, seconds to minutes for a deploy.
 
-To automate the deploy side, see the [CI guide](/environments/ci).
-
-## Testing in dev mode
-
-The [test harness](/testing/test-harness) has the same switch.
-`Test.make({ dev: true })` runs a suite's `deploy(Stack)` against
-the local emulators (Cloudflare in workerd, AWS in Docker) instead
-of the real cloud. It is off by default and works on both the Bun
-and Vitest adapters. Integration tests then run on your machine
-with no cloud calls and no separate `alchemy dev` terminal. See
-[Test harness → dev](/testing/test-harness#dev).
+To automate the deploy side, see [CI](/environments/ci).
 
 ## Where next
 
 - [Cloudflare local development](/cloudflare/local-development): what runs in workerd and which bindings are simulated.
-- [AWS local development](/aws/local-development): the emulated AWS surface, Lambda/ECS containers, and zero-credential dev.
+- [AWS local development](/aws/local-development): the emulated AWS surface, Lambda and ECS containers, and dev without credentials.
+- [Test a Stack](/testing): run the same test suite against the local emulators with `Test.make({ dev: true })`.
 - [CI](/environments/ci): deploy the same stack from GitHub Actions with PR previews.
 - [Stages](/environments/stages): how `live_$USER`, `dev_$USER`, `pr-42`, and `prod` stay isolated.
 - [Dev servers](/command/dev-servers): run any framework dev server as a `Command.Dev` resource in the dev loop.
-- [Testing](/testing): run the same test suite against the local emulators with `Test.make({ dev: true })`.
-- [Local Providers](/infrastructure-as-code/local-provider): build the local implementation of a resource.
+- [Local Provider](/infrastructure-as-code/local-provider): build the local implementation of a resource.

@@ -1,28 +1,26 @@
 ---
 title: Custom State Store
-description: Build a Postgres-backed Alchemy state store step by step. Implement the StateService interface, plug it into a stack, and test it end-to-end.
+description: Build a Postgres-backed Alchemy state store step by step. Implement the StateService interface, test it, and plug it into a stack.
+type: how-to
 ---
 
-A state store is an Effect `Layer` that provides Alchemy's
-`State` service. The built-in stores (`localState()` on disk,
-`Cloudflare.state()` on Cloudflare) cover most cases. If you
-already run Postgres, S3, Redis, or DynamoDB, you can back state
-with that instead.
+Write your own state store when you want Alchemy to keep state in a
+backend the [built-in stores](/state-store#choose-a-store) don't cover,
+such as Redis or DynamoDB. This guide builds a simplified Postgres store,
+`myPostgresState()`, tests a round-trip through it, and plugs it into a
+stack.
 
-This guide builds a Postgres-backed state store from scratch. By the
-end you'll have a `postgresState()` layer you can drop into any
-`Alchemy.Stack`, and a test that round-trips a resource through it.
-If you only need a Postgres store, use the built-in one from `alchemy/State/PostgresState`. It adds advisory locking. This guide builds a simplified version to teach the interface.
-
-See [State Store](/state-store) for an overview of what
-state Alchemy persists and why.
+You need a Postgres database you can write to and the
+[`postgres`](https://github.com/porsager/postgres) package. For a
+production Postgres store, use the built-in `postgresState()` from
+`alchemy/State/PostgresState`, which also locks each stack and stage
+during a run.
 
 ## Scaffold the layer
 
-A state store is a `Layer.Layer<State, never, R>` where `R` is any
-ambient services your implementation needs. The `State` service does
-not hold a `StateService` directly. It holds an
-`Effect<StateService>` that lazily builds one:
+A state store is a `Layer.Layer<State, never, R>`, where `R` is any
+services your implementation needs. The `State` service holds an
+`Effect<StateService>` that builds the store lazily:
 
 ```typescript
 class State extends Context.Service<State, Effect.Effect<StateService>>()(
@@ -30,38 +28,42 @@ class State extends Context.Service<State, Effect.Effect<StateService>>()(
 ) {}
 ```
 
-The indirection exists because commands like `alchemy profile show`
-provide the state layer but never touch state. A store must not
-connect to its backend (open a DB connection, deploy a worker, prompt
-for credentials) only because the layer was built. Wrapping the builder
-in [`Effect.cached`](https://effect.website/docs/getting-started/control-flow/#caching)
-defers initialization until the first `yield* State`. It also caches
-the result so later accesses reuse the same `StateService`.
+Commands like `alchemy profile show` build the state layer but never
+touch state, so a store must not connect to its backend when the layer
+is built. Wrap the builder in
+[`Effect.cached`](https://effect.website/docs/getting-started/control-flow/#caching)
+to defer that work to the first `yield* State` and reuse the result
+afterward.
 
-Start with an empty `StateService` so the types compile, then fill it
-in one method at a time.
-
-Create `src/postgres-state.ts`:
+Start with a `StateService` whose methods all die, so the types compile.
+Then fill it in one method at a time. Create `src/postgres-state.ts`:
 
 ```typescript
 // src/postgres-state.ts
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { State, type StateService } from "alchemy/State";
+import {
+  STATE_STORE_VERSION,
+  State,
+  type StateService,
+} from "alchemy/State";
 
 export interface PostgresStateProps {
   connectionString: string;
 }
 
-export const postgresState = (props: PostgresStateProps) =>
-  // `Effect.cached` returns an `Effect<Effect<StateService>>`; yielding
-  // it inside `Layer.effect` hands `State` the deferred, memoized
-  // initializer. The body below only runs on first `yield* State`.
+export const myPostgresState = (props: PostgresStateProps) =>
+  // Effect.cached hands State a memoized initializer.
+  // The body below runs only on the first `yield* State`.
   Layer.effect(State, Effect.cached(makePostgresState(props)));
 
 const makePostgresState = (_props: PostgresStateProps) =>
   Effect.gen(function* () {
     const service: StateService = {
+      // short, stable, kebab-case name reported in telemetry
+      id: "my-postgres",
+      // state-store contract version the CLI was built against
+      getVersion: () => Effect.succeed(STATE_STORE_VERSION),
       listStacks: () => Effect.die("not implemented"),
       listStages: () => Effect.die("not implemented"),
       list: () => Effect.die("not implemented"),
@@ -70,45 +72,38 @@ const makePostgresState = (_props: PostgresStateProps) =>
       delete: () => Effect.die("not implemented"),
       deleteStack: () => Effect.die("not implemented"),
       getReplacedResources: () => Effect.die("not implemented"),
+      getOutput: () => Effect.die("not implemented"),
+      setOutput: () => Effect.die("not implemented"),
     };
     return service;
   });
 ```
 
-Alchemy accepts this layer, but it dies on every operation.
-Next, wire up the database.
+Alchemy accepts this layer, but every state operation dies. Next, wire
+up the database.
 
 ## Connect to Postgres
 
-Use the [`postgres`](https://github.com/porsager/postgres)
-package and create one schema with a single `state` table keyed by
-`(stack, stage, fqn)`. Acquire the connection with `Effect.acquireRelease`
-so it's released when the stack tears down. This requires a `Scope`,
-so the layer becomes `Layer.scoped`.
+Create two tables. `alchemy_state` holds one row per resource, keyed by
+`(stack, stage, fqn)`. `alchemy_stack_output` holds one row per
+`(stack, stage)` for the stack's output, which
+[`getOutput` and `setOutput`](#implement-getoutput-and-setoutput) use.
 
-Initialization is deferred, so capture the scope at layer-build time
-and provide it to the cached initializer. The connection opens lazily
-on first use, and its release is still tied to the stack's lifetime:
+Open the connection with `Effect.acquireRelease` so it closes when the
+stack tears down. `acquireRelease` needs a `Scope`, so capture the
+layer's scope and provide it to the lazy initializer:
 
 ```diff lang="typescript"
-// src/postgres-state.ts
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 +import * as Scope from "effect/Scope";
 +import postgres from "postgres";
-import { State, type StateService } from "alchemy/State";
+// ...
 
-export interface PostgresStateProps {
-  connectionString: string;
-}
-
-export const postgresState = (props: PostgresStateProps) =>
+export const myPostgresState = (props: PostgresStateProps) =>
 -  Layer.effect(State, Effect.cached(makePostgresState(props)));
-+  Layer.scoped(
++  Layer.effect(
 +    State,
 +    Effect.gen(function* () {
-+      // Capture the layer's scope so the deferred initializer can
-+      // register the connection's release on it.
++      // the layer's scope, so the deferred initializer can register the release on it
 +      const context = yield* Effect.context<Scope.Scope>();
 +      const make = makePostgresState(props).pipe(
 +        Effect.provideContext(context),
@@ -117,7 +112,8 @@ export const postgresState = (props: PostgresStateProps) =>
 +    }),
 +  );
 
-const makePostgresState = (props: PostgresStateProps) =>
+-const makePostgresState = (_props: PostgresStateProps) =>
++const makePostgresState = (props: PostgresStateProps) =>
   Effect.gen(function* () {
 +    const sql = yield* Effect.acquireRelease(
 +      Effect.sync(() => postgres(props.connectionString)),
@@ -135,54 +131,54 @@ const makePostgresState = (props: PostgresStateProps) =>
 +        )
 +      `,
 +    );
++    yield* Effect.promise(
++      () => sql`
++        create table if not exists alchemy_stack_output (
++          stack text not null,
++          stage text not null,
++          value jsonb not null,
++          primary key (stack, stage)
++        )
++      `,
++    );
 +
     const service: StateService = {
-      listStacks: () => Effect.die("not implemented"),
       // ...
-    };
-    return service;
-  });
 ```
+
+The connection opens on first use, and its release runs when the layer's
+scope closes.
 
 ## Implement `set` and `get`
 
-These are the two hot-path methods Alchemy calls during every
-deploy.
+Alchemy calls these two methods throughout every deploy. Follow these
+rules when you write them:
 
-A few things to know before writing them:
-
-- **Use `encodeState` / `reviveState`** from `alchemy/State` when
-  serializing. They handle `Secret` values, `Date`s, and other
-  non-JSON types in `ResourceState`.
-- **Return `undefined` from `get`** for missing rows. Don't error.
-  `StateStoreError` is for transport failures only.
-- **Map thrown errors** through `StateStoreError` so Alchemy can
-  surface them with context.
+- **Encode on write, revive on read.** `encodeState`, `reviveState`, and
+  `reviveStateRecursive` from `alchemy/State` preserve values that plain
+  JSON loses, such as `Redacted`, `Duration`, and `Date`. Pass
+  `reviveState` to `JSON.parse` for a JSON string. Call
+  `reviveStateRecursive` on an already-parsed object, such as a `jsonb`
+  column read without `::text`.
+- **Protect the store.** A `Redacted` value is written in plaintext
+  inside a `__redacted__` marker.
+- **Return `undefined` from `get` for a missing row.** Keep
+  `StateStoreError` for transport failures.
+- **Map thrown errors to `StateStoreError`** so Alchemy can report them
+  with context.
+- **Return the written `value` from `set`**, as the interface requires.
 
 ```diff lang="typescript"
-// src/postgres-state.ts
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import postgres from "postgres";
--import { State, type StateService } from "alchemy/State";
-+import {
-+  State,
+import {
+  STATE_STORE_VERSION,
+  State,
 +  StateStoreError,
 +  encodeState,
 +  reviveState,
-+  type StateService,
-+} from "alchemy/State";
+  type StateService,
+} from "alchemy/State";
 
-// ...
-
-const makePostgresState = (props: PostgresStateProps) =>
-  Effect.gen(function* () {
-    const sql = yield* Effect.acquireRelease(
-      Effect.sync(() => postgres(props.connectionString)),
-      (sql) => Effect.promise(() => sql.end()),
-    );
-
-    // ... create table ...
+// ... inside makePostgresState, after the tables are created:
 
 +    const run = <A>(thunk: () => Promise<A>) =>
 +      Effect.tryPromise({
@@ -195,9 +191,7 @@ const makePostgresState = (props: PostgresStateProps) =>
 +      });
 +
     const service: StateService = {
-      listStacks: () => Effect.die("not implemented"),
-      listStages: () => Effect.die("not implemented"),
-      list: () => Effect.die("not implemented"),
+      // ...
 -      get: () => Effect.die("not implemented"),
 -      set: () => Effect.die("not implemented"),
 +      get: ({ stack, stage, fqn }) =>
@@ -218,40 +212,76 @@ const makePostgresState = (props: PostgresStateProps) =>
 +        run(
 +          () => sql`
 +            insert into alchemy_state (stack, stage, fqn, value)
-+            values (${stack}, ${stage}, ${fqn}, ${sql.json(encodeState(value))})
++            values (${stack}, ${stage}, ${fqn}, ${JSON.stringify(encodeState(value))}::jsonb)
 +            on conflict (stack, stage, fqn)
 +            do update set value = excluded.value
 +          `,
 +        ).pipe(Effect.as(value)),
-+
-      delete: () => Effect.die("not implemented"),
-      deleteStack: () => Effect.die("not implemented"),
-      getReplacedResources: () => Effect.die("not implemented"),
+      // ...
     };
-    return service;
-  });
+```
+
+## Implement `getOutput` and `setOutput`
+
+Alchemy calls `setOutput` with the stack's resolved output after a deploy
+succeeds. [Cross-stack references](/infrastructure-as-code/references)
+call `getOutput` to read it back. The output can hold the same non-JSON
+values as resource state, so encode and revive it the same way:
+
+```diff lang="typescript"
+-  getOutput: () => Effect.die("not implemented"),
+-  setOutput: () => Effect.die("not implemented"),
++  // undefined when the stack has no output at this stage (never deployed, or destroyed)
++  getOutput: ({ stack, stage }) =>
++    run(
++      () => sql<{ value: string }[]>`
++        select value::text from alchemy_stack_output
++        where stack = ${stack} and stage = ${stage}
++      `,
++    ).pipe(
++      Effect.map((rows) =>
++        rows.length === 0
++          ? undefined
++          : JSON.parse(rows[0].value, reviveState),
++      ),
++    ),
++
++  setOutput: ({ stack, stage, value }) =>
++    run(
++      () => sql`
++        insert into alchemy_stack_output (stack, stage, value)
++        values (${stack}, ${stage}, ${JSON.stringify(encodeState(value))}::jsonb)
++        on conflict (stack, stage)
++        do update set value = excluded.value
++      `,
++    ).pipe(Effect.as(value)),
 ```
 
 ## Implement `list`, `listStacks`, `listStages`
 
-These power `alchemy destroy`, drift detection, and the CLI's
-inspection commands. They're plain `select distinct`
-queries:
+These power `alchemy destroy`, drift detection, and the CLI's inspection
+commands. `list` returns the resource FQNs in one stage. `listStacks` and
+`listStages` also include stacks and stages that have only an output
+row, so they `union` both tables:
 
 ```diff lang="typescript"
-const service: StateService = {
 -  listStacks: () => Effect.die("not implemented"),
 -  listStages: () => Effect.die("not implemented"),
 -  list: () => Effect.die("not implemented"),
 +  listStacks: () =>
 +    run(() => sql<{ stack: string }[]>`
-+      select distinct stack from alchemy_state order by stack
++      select stack from alchemy_state
++      union
++      select stack from alchemy_stack_output
++      order by stack
 +    `).pipe(Effect.map((rows) => rows.map((r) => r.stack))),
 +
 +  listStages: (stack) =>
 +    run(() => sql<{ stage: string }[]>`
-+      select distinct stage from alchemy_state
-+      where stack = ${stack} order by stage
++      select stage from alchemy_state where stack = ${stack}
++      union
++      select stage from alchemy_stack_output where stack = ${stack}
++      order by stage
 +    `).pipe(Effect.map((rows) => rows.map((r) => r.stage))),
 +
 +  list: ({ stack, stage }) =>
@@ -259,23 +289,15 @@ const service: StateService = {
 +      select fqn from alchemy_state
 +      where stack = ${stack} and stage = ${stage} order by fqn
 +    `).pipe(Effect.map((rows) => rows.map((r) => r.fqn))),
-+
-  // get / set unchanged ...
-  delete: () => Effect.die("not implemented"),
-  deleteStack: () => Effect.die("not implemented"),
-  getReplacedResources: () => Effect.die("not implemented"),
-};
 ```
 
 ## Implement `delete` and `deleteStack`
 
-`deleteStack` deletes the entire stack when `stage` is omitted, or
-only one stage when provided:
+`delete` removes one resource record. `deleteStack` removes a whole
+stack when `stage` is omitted, or one stage when it's set. It removes
+the output rows too, so a destroyed stack disappears from `listStacks`:
 
 ```diff lang="typescript"
-const service: StateService = {
-  // listStacks / listStages / list / get / set unchanged ...
-
 -  delete: () => Effect.die("not implemented"),
 -  deleteStack: () => Effect.die("not implemented"),
 +  delete: ({ stack, stage, fqn }) =>
@@ -289,26 +311,30 @@ const service: StateService = {
 +      stage === undefined
 +        ? sql`delete from alchemy_state where stack = ${stack}`
 +        : sql`delete from alchemy_state where stack = ${stack} and stage = ${stage}`,
-+    ).pipe(Effect.asVoid),
-+
-  getReplacedResources: () => Effect.die("not implemented"),
-};
++    ).pipe(
++      Effect.andThen(
++        run(() =>
++          stage === undefined
++            ? sql`delete from alchemy_stack_output where stack = ${stack}`
++            : sql`delete from alchemy_stack_output where stack = ${stack} and stage = ${stage}`,
++        ),
++      ),
++      Effect.asVoid,
++    ),
 ```
 
 ## Implement `getReplacedResources`
 
-When Alchemy replaces a resource, the old one is kept in the store
-with `status: "replaced"` until its destroy operation succeeds.
-`getReplacedResources` returns that backlog so the next deploy can
-finish cleanup.
+When Alchemy replaces a resource, it keeps the old one in the record's
+`old` field. After the new resource exists, the record's status stays
+`replaced` until the old one is deleted. `getReplacedResources` returns
+the records in that state, so the next deploy can finish cleanup.
 
-You can implement this on top of `list` + `get`, but it's cheaper to
-push the filter into Postgres:
+A resource replaced several times nests earlier generations in the `old`
+chain, so return only the top-level records. You can build this on
+`list` and `get`, but filtering in Postgres is cheaper:
 
 ```diff lang="typescript"
-const service: StateService = {
-  // ...
-
 -  getReplacedResources: () => Effect.die("not implemented"),
 +  getReplacedResources: ({ stack, stage }) =>
 +    run(
@@ -323,57 +349,46 @@ const service: StateService = {
 +        rows.map((r) => JSON.parse(r.value, reviveState)),
 +      ),
 +    ),
-};
-```
-
-## Plug it into a stack
-
-Pass your layer as the `state` option, exactly like the built-in
-stores:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-+import { postgresState } from "./src/postgres-state.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
--    state: Cloudflare.state(),
-+    state: postgresState({
-+      connectionString: process.env.DATABASE_URL!,
-+    }),
-  },
-  Effect.gen(function* () {
-    // resources...
-  }),
-);
 ```
 
 ## Test the round-trip
 
-Spin up a throwaway Postgres (Docker, Testcontainers, or a local
-instance) and verify a resource round-trips through your store. The
-test uses a double `yield*`. The first resolves the `State` service to
-its `Effect<StateService>` initializer. The second runs it to get the
-`StateService`.
+Before you use the store in a stack, check that a resource and a stack
+output round-trip through it. Point the test at a throwaway Postgres,
+such as a Docker container, Testcontainers, or a local instance.
+
+The test yields `State` twice. The first `yield*` returns the
+`Effect<StateService>` initializer, and the second runs it. The fixture
+is a real `ResourceState` record for a created resource:
 
 ```typescript
 // test/postgres-state.test.ts
 import { describe, expect, it } from "vitest";
 import * as Effect from "effect/Effect";
-import { State } from "alchemy/State";
-import { postgresState } from "../src/postgres-state.ts";
+import { State, type ResourceState } from "alchemy/State";
+import { myPostgresState } from "../src/postgres-state.ts";
 
-const layer = postgresState({
+const layer = myPostgresState({
   connectionString: process.env.TEST_DATABASE_URL!,
 });
 
-describe("postgresState", () => {
-  it("round-trips a resource", () =>
+const bucket: ResourceState = {
+  kind: "resource", // action records use kind: "action"
+  resourceType: "Cloudflare.R2.Bucket",
+  namespace: undefined,
+  fqn: "Bucket",
+  logicalId: "Bucket",
+  instanceId: "abc123",
+  providerVersion: 0,
+  status: "created", // "created" requires both props and attr
+  downstream: [],
+  bindings: [],
+  props: { name: "my-bucket" },
+  attr: { name: "my-bucket" },
+};
+
+describe("myPostgresState", () => {
+  it("round-trips a resource and a stack output", () =>
     Effect.gen(function* () {
       const state = yield* yield* State;
 
@@ -381,14 +396,7 @@ describe("postgresState", () => {
         stack: "Test",
         stage: "dev",
         fqn: "Bucket",
-        value: {
-          id: "Bucket",
-          fqn: "Bucket",
-          status: "created",
-          kind: "Cloudflare.R2.Bucket",
-          props: { name: "my-bucket" },
-          output: { name: "my-bucket" },
-        } as any,
+        value: bucket,
       });
 
       const got = yield* state.get({
@@ -396,43 +404,85 @@ describe("postgresState", () => {
         stage: "dev",
         fqn: "Bucket",
       });
-      expect(got?.id).toBe("Bucket");
+      expect(got?.logicalId).toBe("Bucket");
 
       const fqns = yield* state.list({ stack: "Test", stage: "dev" });
       expect(fqns).toContain("Bucket");
 
+      yield* state.setOutput({
+        stack: "Test",
+        stage: "dev",
+        value: { url: "https://example.com" },
+      });
+      const output = yield* state.getOutput({ stack: "Test", stage: "dev" });
+      expect(output).toEqual({ url: "https://example.com" });
+
       yield* state.deleteStack({ stack: "Test" });
       const after = yield* state.list({ stack: "Test", stage: "dev" });
       expect(after).toEqual([]);
+      expect(yield* state.listStacks()).not.toContain("Test");
     }).pipe(Effect.provide(layer), Effect.scoped, Effect.runPromise));
 });
 ```
 
-For end-to-end testing of a real stack against your store, see
-[Testing a Stack](/testing/testing-a-stack).
+## Plug it into a stack
 
-## Things to know
+Pass your layer as the stack's `state` option, the same way as a
+built-in store:
 
-A few details that aren't obvious from the interface but matter in
-production:
+```diff lang="typescript"
+// alchemy.run.ts
++import { myPostgresState } from "./src/postgres-state.ts";
+// ...
 
-- **FQNs are arbitrary strings** containing `/` and other
-  characters. Postgres handles them fine as parameterized values,
-  but if your backend uses FQNs in keys (filenames, S3 keys, Redis
-  keys) you'll need to escape them. Alchemy ships
-  `encodeFqn` / `decodeFqn` from `alchemy/FQN`.
-- **Concurrent writes happen** during a deploy as Alchemy applies
-  resources in parallel. Your backend needs row-level (or
-  equivalent) consistency on the `(stack, stage, fqn)` key.
-- **State persists between deploys**, so schema changes to
-  `ResourceState` are effectively migrations. Be conservative with
-  the encoded shape, and use `reviveState` so future Alchemy
-  versions can deserialize what you wrote.
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+-    state: Cloudflare.state(),
++    state: myPostgresState({
++      connectionString: process.env.DATABASE_URL!,
++    }),
+  },
+  // ...
+);
+```
 
-## Reference implementations
+Changing `state` does not move existing state. See
+[Switching state stores](/state-store#switching-state-stores). To run a
+real stack against your store end to end, see
+[Test a Stack](/testing).
 
-To start from one of the built-ins:
+## Production concerns
 
-- [`LocalState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/LocalState.ts): filesystem-backed, the simplest end-to-end example
-- [`HttpStateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/HttpStateStore.ts): HTTP client against the Alchemy state API
-- [`InMemoryState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/InMemoryState.ts): minimal in-process map, useful as a template
+The interface doesn't show these details, but they matter in production:
+
+- **FQNs are arbitrary strings** that can contain `/` and other
+  characters. Postgres handles them as parameterized values. If your
+  backend puts FQNs in keys, such as filenames, S3 keys, or Redis keys,
+  escape them with `encodeFqn` and `decodeFqn` from `alchemy/FQN`.
+- **Writes arrive concurrently** because Alchemy applies resources in
+  parallel. Your backend needs row-level, or equivalent, consistency on
+  the `(stack, stage, fqn)` key.
+- **Nothing stops two deploys of the same stage** from running at once
+  with this store. The built-in `postgresState()` adds a
+  per-`(stack, stage)` advisory lock. See
+  [Concurrent deploys](/state-store#concurrent-deploys).
+- **State persists between deploys**, so a change to the encoded
+  `ResourceState` shape is a migration. Keep the shape stable, and use
+  `reviveState` so future Alchemy versions can read what you wrote.
+
+## Where next
+
+- [State Store](/state-store): the built-in stores and how to choose one.
+- [`LocalState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/LocalState.ts):
+  the filesystem store, the simplest complete example.
+- [`PostgresState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/PostgresState.ts):
+  the production Postgres store, with advisory locking.
+- [`HttpStateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/HttpStateStore.ts):
+  an HTTP client for the Alchemy state API.
+- [`InMemoryState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/InMemoryState.ts):
+  a minimal in-process map, useful as a template.
+- [Test a Stack](/testing): run a real stack against your store.
+- [References](/infrastructure-as-code/references): how other stacks
+  read stack outputs.

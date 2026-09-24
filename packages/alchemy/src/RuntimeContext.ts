@@ -7,23 +7,41 @@ import type { HttpEffect } from "./Http.ts";
 import type { CallbackFactory } from "./Callback.ts";
 import type { Output } from "./Output.ts";
 
+/**
+ * The object a runtime's `createRuntimeContext(id)` returns. It accumulates
+ * everything the user's constructor Effect registers: env values, handlers,
+ * and exports. After the constructor runs, the Platform folds `env` and
+ * `exports` back onto the resource's props, so the provider receives them
+ * in `news`.
+ */
 export interface BaseRuntimeContext {
   Type: string;
   id: string;
   env: Record<string, any>;
   /**
-   * Read a value by its (already-canonical) key. The key is used verbatim;
-   * callers must {@link sanitizeKey} first. See {@link sanitizeKey}.
+   * Read a value by its (already-canonical) key. Called at runtime inside
+   * the deployed artifact to read back the key that {@link set} stored in
+   * the environment. The key is used verbatim; callers must
+   * {@link sanitizeKey} first. See {@link sanitizeKey}.
    */
   get<T>(key: string): Effect.Effect<T | undefined>;
   /**
    * Store an output under the given (already-canonical) key, returning the key.
-   * The key is used verbatim; callers must {@link sanitizeKey} first.
+   * Called during plan when a binding or config lookup captures an
+   * `Output`. The key is used verbatim; callers must {@link sanitizeKey} first.
    */
   set(id: string, output: Output): Effect.Effect<string>;
+  /**
+   * Resolves to what the bundled entrypoint runs. For hosts (servers,
+   * containers, EC2 instances) this is a single `program` Effect.
+   */
   exports?: Effect.Effect<Record<string, any>>;
   /** Register a durable callback in the current host instance, when supported. */
   makeCallback?: CallbackFactory;
+  /**
+   * Receives the user's `fetch` handler and the whole returned shape (for
+   * RPC). Register it however the platform serves HTTP.
+   */
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },

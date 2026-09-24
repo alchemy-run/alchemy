@@ -263,6 +263,10 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
  *   {@link LocalProviderSpec.stop}. Idempotent.
  * - **list** — join every registered instance's fiber to its Attributes.
  *
+ * A fresh dev session starts with an empty registry, so `diff` plans an
+ * `update` and the process restarts even though state says it was
+ * previously `created`.
+ *
  * All reconcile/delete work for one logical resource is serialized behind
  * a per-id semaphore so restarts never interleave.
  *

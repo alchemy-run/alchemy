@@ -1,9 +1,10 @@
 ---
 title: Doppler
 description: Load a Doppler config into your Stack. Log in with the browser on your machine and use a service token in CI.
+type: how-to
 ---
 
-[Doppler](https://www.doppler.com) organises secrets into projects,
+[Doppler](https://www.doppler.com) organizes secrets into projects,
 each with configs such as `dev`, `stg`, and `prd`. `Doppler.Secrets`
 downloads one config into the stack's
 [secret providers](/environments/secret-providers), without writing
@@ -20,31 +21,33 @@ secrets: [
 ],
 ```
 
-Browser login and personal tokens are not scoped to a single config,
-so `project` and `config` are required with those. A
+Browser login and personal tokens can read many configs, so `project`
+and `config` are required with those. A
 [service token](https://docs.doppler.com/docs/service-tokens) is
-scoped to one config, so both may be omitted. Doppler's
-[branch configs](https://docs.doppler.com/docs/branch-configs) map
-onto preview stages if `pr-42` should inherit from `dev`.
+scoped to one config, so both may be omitted. To let `pr-42` inherit
+from `dev`, map preview stages onto Doppler's
+[branch configs](https://docs.doppler.com/docs/branch-configs).
 
 ## Connect your account
 
-Run `alchemy profile edit --add Doppler`. **Login** opens the Doppler
-dashboard. Approve the request and Alchemy stores the token in your
-[profile](/environments/profiles). It shows up in Doppler as
-`Alchemy (<your hostname>)`, and
-`alchemy profile edit --remove Doppler` revokes it. **API token**
-takes a service or
-[personal token](https://docs.doppler.com/docs/personal-tokens) you
-already have. Non-interactively:
+Run `alchemy profile edit --add Doppler` and pick a method. Alchemy
+stores the token in your [profile](/environments/profiles).
+
+- **Login**: opens the Doppler dashboard. Approve the request, and the
+  token shows up in Doppler as `Alchemy (<your hostname>)`.
+  `alchemy profile edit --remove Doppler` revokes it.
+- **API token**: takes a service or
+  [personal token](https://docs.doppler.com/docs/personal-tokens) you
+  already have.
 
 ```sh
+# Non-interactive API token setup
 alchemy profile edit --add Doppler --method api-token --set token=env:DOPPLER_TOKEN
 ```
 
 ## In CI
 
-Alchemy never reads profiles in CI. The environment decides. The
+Alchemy never reads profiles in CI, so the environment decides. The
 simplest option is a service token in `DOPPLER_TOKEN`:
 
 ```yaml
@@ -53,12 +56,12 @@ simplest option is a service token in `DOPPLER_TOKEN`:
     DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 ```
 
-On Doppler's Team and Enterprise plans, use OIDC to avoid storing a
-long-lived Doppler token. Create a
+On Doppler's Team and Enterprise plans, OIDC avoids storing a
+long-lived token. Create a
 [service account identity](https://docs.doppler.com/docs/service-account-identities)
-that trusts your platform's OIDC issuer and set `DOPPLER_IDENTITY_ID`.
-Alchemy exchanges the platform's own identity token for a short-lived
-Doppler token on every run:
+that trusts your platform's OIDC issuer, and set `DOPPLER_IDENTITY_ID`.
+Alchemy exchanges the platform's identity token for a short-lived
+Doppler token on every run.
 
 ```yaml
 jobs:
@@ -72,27 +75,17 @@ jobs:
           DOPPLER_IDENTITY_ID: ${{ vars.DOPPLER_IDENTITY_ID }}
 ```
 
-Alchemy detects GitHub Actions, Vercel, and supported
-Google Cloud runtimes. Each platform must be configured to issue a token
-whose issuer, subject, and audience match the Doppler identity's trust policy.
-Use your job's actual subject claim when you configure that policy. It can
-vary with the repository, branch, environment, and organization settings.
+The token's issuer, subject, and audience must match the identity's
+trust policy. Use your job's actual subject claim, which can vary with
+the repository, branch, environment, and organization settings.
 
-For GitLab, name the token in the job's
-[`id_tokens`](https://docs.gitlab.com/ci/secrets/id_token_authentication/)
-block `DOPPLER_OIDC_TOKEN` and set its `aud` to the audience trusted by
-Doppler. `SIGSTORE_ID_TOKEN` is also detected when `GITLAB_CI` is set.
-On other platforms, `DOPPLER_OIDC_TOKEN` accepts an explicitly supplied token.
+Alchemy also detects Vercel, GitLab, and Google Cloud runtimes. See
+[CLI › provider › OIDC tokens](/cli/provider#oidc-tokens) for the per-platform OIDC variables
+(`DOPPLER_OIDC_TOKEN`, `DOPPLER_OIDC_AUDIENCE`) and
+`alchemy provider check-env`.
 
-`DOPPLER_OIDC_AUDIENCE` sets the requested audience on GitHub Actions
-and Google Cloud. It is required for Google's
-[metadata identity endpoint](https://docs.cloud.google.com/docs/authentication/get-id-token).
-It does not change the audience of tokens already supplied by Vercel,
-GitLab, or `DOPPLER_OIDC_TOKEN`.
-
-`DOPPLER_TOKEN` wins over `DOPPLER_IDENTITY_ID`, and either wins over
-a profile, so a teammate can deploy with a token they were handed.
-`alchemy provider check-env` lists these variables.
+`DOPPLER_TOKEN` wins over `DOPPLER_IDENTITY_ID`, and either wins over a
+profile. A teammate can deploy with a token they were handed.
 
 ## Where next
 

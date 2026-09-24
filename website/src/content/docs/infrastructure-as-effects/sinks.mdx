@@ -1,22 +1,22 @@
 ---
 title: Sinks
-description: A Sink is the write-side dual of an Event Source. It is a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
+description: A sink is the write-side dual of an event source. It is a binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
+type: explanation
 ---
 
-A **Sink** is the dual of an [Event Source](/infrastructure-as-effects/event-sources).
-It is a [Binding](/infrastructure-as-effects/binding) for *writing* that
-exposes a resource as an Effect
-[`Sink`](https://effect.website/docs/sink/introduction/). An
-Event Source hands you records as a `Stream`. A Sink accepts a
-`Stream` and drains it into the resource's batch API
-(`SendMessageBatch`, `PublishBatch`, `PutRecords`). It also emits the
-minimal IAM to go with it.
+A **sink** is a [binding](/infrastructure-as-effects/binding) for
+writing. It exposes a resource as an Effect
+[`Sink`](https://effect.website/docs/sink/introduction/) that drains a
+`Stream` into the resource's batch API, such as `SendMessageBatch`,
+`PublishBatch`, or `PutRecords`. An
+[event source](/infrastructure-as-effects/event-sources) is the read-side
+dual.
 
-## A Sink in a constructor
+## A sink in a constructor
 
-Like every Binding, a Sink is declared in the
+Like every binding, you declare a sink in the
 [Effectful Constructor](/infrastructure-as-effects/runtime#the-effectful-constructor)
-and used in the interface it returns:
+and use it in the handlers it returns:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -32,7 +32,7 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     const sink = yield* AWS.SQS.QueueSink(OutboundQueue);
-    // → Sink<void, string, readonly string[], never>
+    // → Sink<void, QueueSinkEntry, readonly QueueSinkEntry[], QueueSinkError>
     // → policy: sqs:SendMessage + sqs:SendMessageBatch on OutboundQueue's ARN
 
     return {
@@ -40,16 +40,18 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
         const request = yield* HttpServerRequest;
         const body = (yield* request.json) as { messages: string[] };
 
-        yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+        yield* Stream.fromIterable(body.messages).pipe(
+          // a SendMessageBatchRequestEntry without its Id
+          Stream.map((message) => ({ MessageBody: message })),
+          Stream.run(sink),
+        );
 
-        return yield* HttpServerResponse.json({
-          ok: true,
-          count: body.messages.length,
-        });
+        return yield* HttpServerResponse.json({ count: body.messages.length });
       }),
     };
   }).pipe(
     Effect.provide(
+      // QueueSinkHttp implements QueueSink over the SendMessageBatch contract
       AWS.SQS.QueueSinkHttp.pipe(
         Layer.provideMerge(AWS.SQS.SendMessageBatchHttp),
       ),
@@ -58,103 +60,75 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
 ) {}
 ```
 
-`QueueSink` is the contract. The provided `AWS.SQS.QueueSinkHttp`
-Layer implements it over `SendMessageBatch`, which is itself a
-contract satisfied by `SendMessageBatchHttp`. Implementation Layers
-can depend on other contracts, so the provide chains a
-`Layer.provideMerge`. The Layer attaches the least-privilege policy
-statements to the Function's role. The `yield*` returns a plain
-Effect `Sink`. You don't read a `QUEUE_URL` env var, and you don't
-chunk `SendMessageBatchCommand` calls by hand. Every Binding follows
-the same contract-and-Layer split. See
-[Bindings › A contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer).
+You don't read a `QUEUE_URL` env var or chunk `SendMessageBatchCommand`
+calls by hand. The sink assigns each batch entry's `Id`, and the layer
+attaches least-privilege statements scoped to the queue's ARN.
 
-## Element types
+`AWS.SNS.TopicSink` and `AWS.Kinesis.StreamSink` work the same way. The
+generated [SQS](/providers/AWS/SQS), [SNS](/providers/AWS/SNS), and
+[Kinesis](/providers/AWS/Kinesis) reference pages list each sink's
+element type, batch limits, and IAM actions.
 
-Sinks are typed by the element they accept, so the type system stops
-you from feeding the wrong shape in:
+## Batching and failures
 
-| Sink                          | Element                  | Batch API          | IAM emitted                                    |
-| ----------------------------- | ------------------------ | ------------------ | ---------------------------------------------- |
-| `SQS.QueueSink(queue)`        | `string`                 | `SendMessageBatch` | `sqs:SendMessage`, `sqs:SendMessageBatch`      |
-| `SNS.TopicSink(topic)`        | `string`                 | `PublishBatch`     | `sns:Publish`                                  |
-| `Kinesis.StreamSink(stream)`  | `PutRecordsRequestEntry` | `PutRecords`       | `kinesis:PutRecords`                           |
+A sink drains its input chunk by chunk. It splits each chunk into
+batches that fit the API's limits, sends them one at a time in order,
+and checks the per-entry results:
 
-Every policy is scoped to the exact resource ARN.
+- **Transient failures** are resent up to five times, with exponential
+  backoff from 200 ms. For SQS and SNS these are entries with
+  `SenderFault: false`, and Kinesis treats every failed record as
+  transient.
+- **Permanent rejections** are dropped with a warning log. Only
+  `QueueSink` and `TopicSink` drop entries, and only those with
+  `SenderFault: true`.
+- **Exhausted retries** fail the sink with a `BatchRetryExhaustedError`
+  whose `entries` field holds the stranded entries.
+- **A failed API call** fails the sink with the batch API's own error,
+  such as `SendMessageBatchError`.
 
-`QueueSink` and `TopicSink` take message bodies as `string`.
-`StreamSink` takes raw `PutRecordsRequestEntry` values, so you keep
-control of `PartitionKey`:
-
-```typescript
-export default class Ingest extends AWS.Lambda.Function<Ingest>()(
-  "Ingest",
-  { main: import.meta.url, functionUrl: true },
-  Effect.gen(function* () {
-    const sink = yield* AWS.Kinesis.StreamSink(ClickStream);
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const body = (yield* request.json) as {
-          records: Array<{ partitionKey: string; data: string }>;
-        };
-
-        yield* Stream.fromIterable(
-          body.records.map((record) => ({
-            PartitionKey: record.partitionKey,
-            Data: new TextEncoder().encode(record.data),
-          })),
-        ).pipe(Stream.run(sink));
-
-        return yield* HttpServerResponse.json({ ok: true });
-      }),
-    };
-  }),
-  // (layers elided — same shape as Publisher above:
-  //  AWS.Kinesis.StreamSinkHttp over AWS.Kinesis.PutRecordsHttp)
-) {}
-```
-
-## Batching
-
-A Sink drains its input chunk by chunk. Each chunk of the stream
-becomes one call to the underlying batch API. To control batch
-size, rechunk the stream before running it into the sink:
+A sink never makes a batch larger than the chunk it receives. Rechunk
+the stream to send smaller batches:
 
 ```typescript
 yield* Stream.fromIterable(messages).pipe(
-  Stream.rechunk(10), // one SendMessageBatch call per 10 messages
+  Stream.map((message) => ({ MessageBody: message })),
+  Stream.rechunk(5), // at most 5 messages per SendMessageBatch call
   Stream.run(sink),
 );
 ```
 
 ## Source → transform → sink
 
-The model pays off when you compose a Sink with an
-[Event Source](/infrastructure-as-effects/event-sources). Every step
-is a `Stream` or a `Sink`, so the whole pipe-and-transform pipeline
-is one expression inside the constructor:
+A sink composes with an [event source](/infrastructure-as-effects/event-sources).
+Every step is a `Stream` or a `Sink`, so the whole pipeline is one
+expression inside the constructor:
 
 ```typescript
+// Alchemy does not unmarshall DynamoDB records, so describe the raw shape
+type OrderImage = { id: { S: string }; status: { S: string } };
+
 export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
   "OrderRelay",
   { main: import.meta.url },
   Effect.gen(function* () {
     const sink = yield* AWS.SQS.QueueSink(OutboundQueue);
 
-    yield* AWS.DynamoDB.consumeTableChanges<Order>(
+    yield* AWS.DynamoDB.consumeTableChanges<OrderImage>(
       OrdersTable,
-      {
-        streamViewType: "NEW_AND_OLD_IMAGES",
-        startingPosition: "LATEST",
-      },
+      { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "LATEST" },
       (records) =>
         records.pipe(
-          Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
-          Stream.filter((order) => order.status === "PAID"),
-          Stream.map((order) => JSON.stringify({ orderId: order.id })),
+          Stream.map((r) => r.dynamodb.NewImage),
+          // the type guard also drops records with no NewImage, such as deletes
+          Stream.filter(
+            (image): image is OrderImage => image?.status.S === "PAID",
+          ),
+          Stream.map((image) => ({
+            MessageBody: JSON.stringify({ orderId: image.id.S }),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
   }).pipe(
@@ -167,19 +141,27 @@ export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
 ) {}
 ```
 
-The pipeline uses two binding calls. The provided Layers attach both
-sides of the policy to the Function's role. These are
-`dynamodb:DescribeStream`, `GetRecords`, and `GetShardIterator` on
-`OrdersTable`'s stream, plus `sqs:SendMessage` and `SendMessageBatch`
-on `OutboundQueue`. `AWS.Lambda.TableEventSource` wires the
-event-source mapping.
+An event-source handler's error type is `never`. End the pipeline with
+`Effect.orDie`, or handle every error the sink can fail with, for
+example `Effect.catchTag("BatchRetryExhaustedError", ...)` to decide
+what happens to stranded entries.
 
-You can add `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
-or `Stream.mapEffect` anywhere along the chain. They are all the
-same `Stream` code you'd write in a plain Effect program.
+The provided layers attach both sides of the policy to the Function's
+role and wire the event-source mapping:
+
+- `dynamodb:DescribeStream`, `GetRecords`, and `GetShardIterator` on
+  `OrdersTable`'s stream.
+- `sqs:SendMessage` and `SendMessageBatch` on `OutboundQueue`.
+
+`Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`, and
+`Stream.mapEffect` drop in anywhere along the chain, the same as in a
+plain Effect program.
 
 ## Where next
 
-- [Event Sources](/infrastructure-as-effects/event-sources): the read-side dual, which exposes resources as `Stream`s.
-- [Bindings](/infrastructure-as-effects/binding): the deploy-time mechanics every Sink shares.
-- [Layers](/infrastructure-as-effects/layers): hide Sinks behind a service interface.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings):
+  two runtimes that bind each other. Next page.
+- [Event Sources](/infrastructure-as-effects/event-sources): the
+  read-side dual, which exposes resources as `Stream`s.
+- [Layers](/infrastructure-as-effects/layers): hide sinks behind a
+  service interface.

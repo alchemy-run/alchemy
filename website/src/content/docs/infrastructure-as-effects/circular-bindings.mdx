@@ -1,50 +1,30 @@
 ---
-title: Circular Bindings
-description: How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+title: Bind two runtimes to each other
+description: Model two runtimes that reference each other, such as Worker A and Worker B or two Lambda Functions, with tagged classes and layers.
+type: how-to
 ---
 
-import DAG from "../../../components/DAG.astro";
+Use this pattern when two runtimes call each other, such as a web
+Worker that calls an auth Worker which calls back for billing. Each
+side needs the other's URL, so neither can be created first. You break
+the cycle by importing only each runtime's Tag across files and keeping
+its implementation in a layer that the stack provides.
 
-Real systems have cycles. A web Worker calls an internal Worker for
-auth. The internal Worker calls back into the web Worker for
-billing. Two Lambdas trigger each other through a queue.
-
-Most IaC engines reject these. You can't create A before B if A
-needs B's URL and B also needs A's URL. Alchemy resolves the
-deadlock by separating **identity** (a class used as a Tag) from
-**implementation** (a Layer attached via `.make()`).
-
-This guide builds on [Bindings](/infrastructure-as-effects/binding) and
-[Layers](/infrastructure-as-effects/layers). It walks through two
-Workers that call each other, one step at a time.
-
-## Sketch the cycle
-
-The goal is two Workers, `A` and `B`. Each one delegates half of its
-work to the other.
+This guide builds two Workers, `A` and `B`, that call each other over
+RPC. It assumes you know [Bindings](/infrastructure-as-effects/binding)
+and [Layers](/infrastructure-as-effects/layers). If your runtimes form
+no cycle, declare each one inline instead (see
+[Runtime › Three ways to declare a runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-a-runtime)).
 
 ```
 GET /  →  A  ──rpc──▶  B
               ◀──rpc───
 ```
 
-The naive approach writes `import { B } from "./B.ts"` inside `A.ts`
-and `import { A } from "./A.ts"` inside `B.ts`. The imports succeed at
-the module level. At deploy time, neither Worker can be created
-first because each needs the other's URL.
+## Declare both tags
 
-The fix is to import only the **Tag** across the cycle. Importing a
-Tag is cheap and has no side effects. Keep each Worker's **runtime
-implementation** behind a `.make()` call that runs only when the
-Stack provides it.
-
-## Create A as a Tag
-
-Start `src/A.ts` with only the class and no runtime yet. The class
-extends `Cloudflare.Worker<A, Shape>()(...)`, which produces a typed
-identifier you can `yield*` from anywhere. The second type parameter
-declares the shape A's runtime will expose. Here that is a `work`
-method.
+Declare each Worker as a class with no implementation. The second type
+parameter declares the shape its runtime exposes, here a `work` method:
 
 ```typescript
 // src/A.ts
@@ -54,16 +34,6 @@ import * as Effect from "effect/Effect";
 export class A extends Cloudflare.Worker<A, { work: () => Effect.Effect<string> }>()("A") {}
 ```
 
-`A` is now a Tag. It carries the type of A's interface but no
-implementation. Importing it from another file does not load any
-runtime code, because there is no implementation yet. This makes the
-cycle resolvable.
-
-## Create B as a Tag
-
-Do the same for `B`. At this point both files declare only identity
-and shape, with no runtime.
-
 ```typescript
 // src/B.ts
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -72,15 +42,14 @@ import * as Effect from "effect/Effect";
 export class B extends Cloudflare.Worker<B, { work: () => Effect.Effect<string> }>()("B") {}
 ```
 
-`A` and `B` can now `import` each other. Importing the other's class
-triggers no runtime code on either side.
+`A` and `B` are now Tags. Each carries its Worker's type but no
+runtime code, so the two files can import each other without side
+effects.
 
-## Add A's runtime, binding B
+## Add `A`'s runtime, binding `B`
 
-Attach A's implementation with `A.make(...)`. Inside the Construction phase,
-`yield* Cloudflare.Workers.bindWorker(B)` produces a typed stub whose
-methods dispatch to B's deployed Worker at runtime. A also exposes its
-own `work` RPC method so B can call back into it.
+Attach A's implementation with `A.make(...)`. `bindWorker(B)` imports
+only B's Tag and returns a [typed RPC stub](/apis/schemaless):
 
 ```diff lang="typescript"
   // src/A.ts
@@ -94,27 +63,24 @@ own `work` RPC method so B can call back into it.
 + export default A.make(
 +   { main: import.meta.url },
 +   Effect.gen(function* () {
++     // deploy time: registers the service binding
++     // runtime: b.work() is a native RPC call to B's deployed Worker
 +     const b = yield* Cloudflare.Workers.bindWorker(B);
 +     return {
 +       fetch: Effect.gen(function* () {
-+         // delegate half the work to B over the RPC stub
 +         return HttpServerResponse.text(yield* b.work());
 +       }),
++       // B calls back into this method
 +       work: () => Effect.succeed("A handled its half"),
 +     };
 +   }),
 + );
 ```
 
-The `import { B }` line pulls in B's Tag only. `bindWorker(B)`
-returns a [typed RPC stub](/apis/schemaless). At plan time it
-registers the service binding. At runtime `b.work()` round-trips to
-B's deployed Worker as a native RPC call.
+## Add `B`'s runtime, binding `A`
 
-## Add B's runtime, binding A
-
-Mirror the same pattern in `B.ts`. B's runtime imports A's Tag and
-binds it.
+Mirror the pattern in `B.ts`. Neither file needs the other's `.make()`
+to be evaluated:
 
 ```diff lang="typescript"
   // src/B.ts
@@ -139,15 +105,10 @@ binds it.
 + );
 ```
 
-This is the symmetric half of the cycle. `A` imports `B`'s Tag and
-binds it. `B` imports `A`'s Tag and binds it. Neither file needs the
-other's `.make()` to be evaluated.
+## Wire both into the stack
 
-## Wire both into the Stack
-
-The Stack pulls in both Tags (via `import { A }` / `import { B }`)
-and both Layers (via the default exports). `Effect.provide` attaches
-the Layers to the generator so the Tags resolve to real Workers.
+The stack yields both Tags and provides both layers from the default
+exports:
 
 ```typescript
 // alchemy.run.ts
@@ -169,67 +130,29 @@ export default Alchemy.Stack(
 );
 ```
 
-`yield* A` and `yield* B` succeed only because `ALive` and `BLive`
-are provided. If you forget one, TypeScript flags the missing layer
-at the call site.
+If you forget a layer, the plan fails before anything deploys with a
+`MissingImplementationError`. Its message names the class and shows the
+`.make(...)` layer to provide:
 
-## How alchemy resolves the cycle
-
-Alchemy plans the cycle in two passes:
-
-<DAG
-  nodes={[
-    { id: "Decl", label: "declare", type: "A & B Tags" },
-    { id: "Pre", label: "precreate", type: "reserve URLs", tone: "accent" },
-    { id: "Create", label: "create", type: "deferred Outputs" },
-    { id: "Wire", label: "update", type: "wire bindings", tone: "accent" },
-  ]}
-  edges={[
-    { from: "Decl", to: "Pre" },
-    { from: "Pre", to: "Create" },
-    { from: "Create", to: "Wire" },
-  ]}
-/>
-
-1. The **Tags** are registered up front, so the graph knows that A
-   and B both exist.
-2. Each provider's [`precreate`](/infrastructure-as-code/provider#precreate) hook
-   reserves the resource (and its physical URL) without needing the
-   other side's outputs.
-3. `create` runs in parallel using deferred Outputs. Bindings see
-   `Output<string>` placeholders that resolve later.
-4. A converge pass calls `update` once both sides exist and wires in
-   the real cross-references. Types stay sound throughout because
-   Outputs are typed.
-
-The same pattern works for Lambda↔Lambda, Worker↔Container, or any
-mix. The Tag/Layer split is a property of every Function resource
-([Runtime](/infrastructure-as-effects/runtime)), so it applies beyond
-Workers.
-
-## When you don't need this
-
-If your services form a DAG (no cycles), you can keep declaration
-and implementation in one expression:
-
-```typescript
-export default Cloudflare.Worker(
-  "MyWorker",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    /* ... */
-  }),
-);
+```text
+Cloudflare.Worker<A> was yielded without its implementation.
 ```
 
-The tagged-class pattern only pays off when something else needs to
-reference the Worker before its implementation is in scope. For
-non-circular reuse across files, see [Layers](/infrastructure-as-effects/layers).
+TypeScript does not catch this case. Yielding a bare Tag only requires
+the resource's providers, so a missing layer still type-checks.
 
-The deferred `Output` mechanism behind the two-phase plan is covered
-in [Inputs & Outputs](/infrastructure-as-code/outputs).
+At deploy time, each provider's `precreate` reserves its Worker and URL
+before either side reconciles, which breaks the deadlock.
+[Resource lifecycle › Cycles](/infrastructure-as-code/resource-lifecycle#cycles) covers
+how the engine converges the cycle. The same pattern works for
+Lambda↔Lambda, Worker↔Container, or any mix, because every runtime
+supports the Tag and layer split.
 
 ## Where next
 
-- [Inputs & Outputs](/infrastructure-as-code/outputs): the deferred references that make the cycle resolvable.
-- [Providers](/infrastructure-as-code/provider): the `precreate` hook that reserves resources up front.
+- [Resource lifecycle › Cycles](/infrastructure-as-code/resource-lifecycle#cycles): how
+  the engine precreates, reconciles, and converges a cycle.
+- [Provider contract](/infrastructure-as-code/provider#precreate): the
+  `precreate` hook that reserves resources up front.
+- [Inputs & Outputs](/infrastructure-as-code/outputs): the deferred
+  references that make the cycle resolvable.

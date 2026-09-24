@@ -1,0 +1,7 @@
+extends: existence
+message: "Avoid em dashes. Use a period or a plain connecting word."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#dashes-and-other-punctuation
+level: suggestion
+nonword: true
+tokens:
+  - "—"
