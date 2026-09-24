@@ -679,7 +679,7 @@ export const steps: StepSpec[] = [
   // Act 5: the same program, in Alchemy. The code grows one idea at a time;
   // beside it, the Worker's Req: what it still needs from the outside world.
   api({
-    title: "So let's write the program again with Effect",
+    title: "Let's write the program again with Effect",
     snippet: "api-01-effect.ts",
     req: [],
     notes:
@@ -723,7 +723,7 @@ export const steps: StepSpec[] = [
       "The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
-    title: "So the bucket moves out, and the layer goes on construction",
+    title: "Moving the bucket out puts the layer on construction",
     code: INFERRED_HOISTED,
     req: [BUCKET, GET_OBJECT_HOISTED],
     notes:
@@ -761,7 +761,7 @@ export const steps: StepSpec[] = [
       "But the if only runs in dev, and a type can't know that. fetch's type is the union of every path through it, so R2.PutObject for Logs is required everywhere, production included. Types see every possible path, never the one that actually runs.",
   }),
   api({
-    title: "So the Layer has to cover every path the code might take",
+    title: "Now the Layer has to cover every path the code might take",
     code: INFERRED_DEV,
     req: [
       BUCKET,
@@ -827,7 +827,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "So the interface has to name R2, and the bucket",
+    title: "The only fix is to name R2, and the bucket, in the interface",
     src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}` },
     marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
     notes:
@@ -837,7 +837,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "service",
     file: "src/Storage.ts",
-    title: "…so there can never be a second implementation",
+    title: "Now there can never be a second implementation",
     src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}\n\n${STORAGE_S3}` },
     marks: [
       { kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" },
@@ -847,7 +847,7 @@ export const steps: StepSpec[] = [
       "And that's the nail in the coffin. Try an S3 implementation: same code, but its get requires S3.GetObject, and the interface already promised R2. You can't swap implementations, which is the whole point of a service. Infrastructure requirements can't live in the runtime function's type.",
   },
   api({
-    title: "So the binding is declared in construction instead",
+    title: "The binding is declared in construction instead",
     snippet: "api-04-get.ts",
     req: [BUCKET, { ...READ, note: "declared in construction" }],
     notes:
@@ -895,7 +895,7 @@ export const steps: StepSpec[] = [
       "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet. Req picks up RuntimeContext.",
   }),
   api({
-    title: "A Worker can't provide RuntimeContext, so it won't compile",
+    title: "It won't compile, because a Worker can't provide RuntimeContext",
     snippet: "api-08-construct.error.ts",
     error: { pick: firstLine("Type 'RuntimeContext'") },
     req: [...PROVIDED, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
@@ -917,7 +917,7 @@ export const steps: StepSpec[] = [
     notes: "The program doesn't care where it runs. Swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
-    title: "The native bindings need a Worker, so it won't compile",
+    title: "It won't compile, because the native bindings need a Worker",
     snippet: "api-10-lambda.error.ts",
     error: { pick: firstLine("Type 'WorkerEnvironment'") },
     req: [...PROVIDED.slice(0, 4), { ...WORKER, state: "bad", note: "a Lambda Function isn't a Worker" }, PHANTOM],
@@ -949,7 +949,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "stack",
     file: "alchemy.run.ts",
-    title: "So provisioning code never ships with the Worker",
+    title: "Provisioning code never ships with the Worker",
     src: { snippet: "stack.ts", regions: ["show"] },
     marks: [{ kind: "box", find: "providers: Cloudflare.providers()", tone: "construct" }],
     panel: {
@@ -1023,7 +1023,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "app",
     file: "src/Shorty.ts",
-    title: "So you can swap the infrastructure and keep the logic",
+    title: "Swap the infrastructure and keep the logic",
     src: { snippet: "app-neon.ts", regions: ["show"] },
     req: { label: REQ_LABEL, items: [{ name: "Links", state: "met", note: "LinksNeon\nNeon Postgres over Hyperdrive" }] },
     notes: "Swap the Layer and the infrastructure changes underneath: D1, Neon, DynamoDB. The business logic doesn't change. We'll do this for real in the demo.",
