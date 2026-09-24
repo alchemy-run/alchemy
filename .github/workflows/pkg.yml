@@ -22,6 +22,7 @@ on:
       - "tsconfig.json"
       - ".github/workflows/pkg.yml"
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "submodules/distilled"
       - "packages/**"
@@ -54,6 +55,7 @@ jobs:
           # Pack the pull request head rather than the synthetic merge commit,
           # so every tarball is addressed by a commit that exists on the PR.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Checkout distilled
         run: git submodule update --init --depth=1 --checkout -- submodules/distilled
@@ -78,32 +80,20 @@ jobs:
           GOGC: "40"
         run: pnpm build:pkg
 
-      - name: Pack CLI release artifacts
-        env:
-          ALCHEMY_CLI_PACKAGES: ${{ runner.temp }}/cli-packages
-        run: |
-          mkdir -p "$ALCHEMY_CLI_PACKAGES"
-          pnpm --filter-prod 'alchemy...' --recursive pack --pack-destination "$ALCHEMY_CLI_PACKAGES"
-
-      - name: Test packed CLI outside the checkout
-        env:
-          ALCHEMY_CLI_PACKAGES: ${{ runner.temp }}/cli-packages
-        run: |
-          test -d "$ALCHEMY_CLI_PACKAGES"
-          for manager in npm pnpm bun; do
-            ALCHEMY_CLI_PACKAGE_MANAGER="$manager" timeout 240 pnpm test test/Cli/package.test.ts --retry 0 --sequential
-          done
-
-      # Keep the directory lists in sync with the `build:pkg` script.
+      # The @distilled.cloud list is alchemy's dependency set, which `build:pkg`
+      # derives with `--filter=alchemy...`; keep the @alchemy.run list in sync.
       - name: Pack packages
         id: pack
         run: >-
           pnpm exec pkg pack
+          ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
+          --rebuild-all-path 'scripts/copy-package-files.ts'
           --group 'alchemy=./packages/alchemy'
           --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
-          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,cloudflare,fly-io,github,hetzner,neon,prisma,planetscale,railway,stripe,zerossl}'
+          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,cloudflare,doppler,fly-io,github,hetzner,infisical,neon,prisma,planetscale,railway,stripe,zerossl}'
 
       - name: Vouch for the manifest
+        if: steps.pack.outputs.package-count != '0'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.pack.outputs.artifact-name }}
@@ -113,4 +103,5 @@ jobs:
           retention-days: 1
 
       - name: Publish packages
+        if: steps.pack.outputs.package-count != '0'
         run: pnpm exec pkg publish

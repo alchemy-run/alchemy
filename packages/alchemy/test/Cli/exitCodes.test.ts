@@ -65,7 +65,7 @@ const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
     return { stderr, exitCode };
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe("CLI exit codes", () => {
+describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
   it.live("dev without a stack entrypoint reports it and exits 1", () =>
     Effect.gen(function* () {
       const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);
@@ -92,6 +92,20 @@ describe("CLI exit codes", () => {
         );
         expect(stderr).not.toContain("PlatformError");
       }),
+  );
+
+  it.live("plan accepts --adopt like deploy --dry-run", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject([
+        "plan",
+        "--adopt",
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).not.toContain("Unrecognized flag");
+      expect(stderr).toContain(
+        "Stack entrypoint 'alchemy.run.ts' does not exist",
+      );
+    }),
   );
 
   it.live("bare `profile` without a terminal prints help and exits 1", () =>

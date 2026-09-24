@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
@@ -8,17 +9,13 @@ import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
-import {
-  isWorkflowExport,
-  type WorkflowExport,
-} from "../../Workflows/Workflow.ts";
-import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "../DurableObject.ts";
+import { isWorkflowExport } from "../../Workflows/Workflow.ts";
+import { isDurableObjectExport } from "../DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
+import type { WorkerExport } from "../WorkerRuntimeContext.ts";
+import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
 
 /**
  * Bundler options for a Worker: Rolldown input/output overrides and
@@ -52,7 +49,7 @@ export interface WorkerBundleOptions {
       }
     | {
         kind: "effect";
-        exports: Record<string, DurableObjectExport | WorkflowExport>;
+        exports: Record<string, WorkerExport>;
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
@@ -142,6 +139,7 @@ const configureCloudflarePlugins = (
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  const dotAlchemy = yield* dotAlchemyDirectory;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
@@ -236,7 +234,7 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      dir: `.alchemy/bundles/${options.id}`,
+      dir: path.join(dotAlchemy, "bundles", options.id),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
@@ -280,31 +278,35 @@ export const WorkerBundle = Effect.gen(function* () {
 });
 
 export const makeEffectVirtualEntry = (
-  exports: Record<string, DurableObjectExport | WorkflowExport>,
+  exports: Record<string, WorkerExport>,
   stack: { name: string; stage: string },
 ) => {
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
+  const migrations: Record<string, SqlMigrationSnapshot> = {};
   for (const [className, entry] of Object.entries(exports)) {
     if (isDurableObjectExport(entry)) {
       doClasses.push(className);
     } else if (isWorkflowExport(entry)) {
       wfClasses.push(className);
+    } else if (entry.kind === "sqlMigrations") {
+      migrations[className] = entry.snapshot;
     }
   }
+  const hasMigrations = Object.keys(migrations).length > 0;
   const hasDoClasses = doClasses.length > 0;
   const hasWfClasses = wfClasses.length > 0;
   return (importPath: string) => `
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare/Bridge";
+import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}${hasMigrations ? ", withSqlMigrations" : ""} } from "alchemy/Cloudflare/Bridge";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
 
 const meta = {
-  entrypoint,
+  entrypoint: ${hasMigrations ? `withSqlMigrations(entrypoint, ${JSON.stringify(migrations)})` : "entrypoint"},
   stack: {
     name: ${JSON.stringify(stack.name)},
     stage: ${JSON.stringify(stack.stage)},

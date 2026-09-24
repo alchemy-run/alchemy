@@ -11,10 +11,11 @@ import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
+import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
- * hub's "Resources" group and its reference URLs belong to the hub tab
+ * hub's "API Reference" group and its reference URLs belong to the hub tab
  * (see docs-tabs.ts). The Reference tab is a directory — its sidebar is
  * just the list of providers, each linking to its hub.
  */
@@ -45,11 +46,10 @@ function providersSidebarEntry() {
 }
 
 /**
- * A cloud hub's "Resources" section: that provider's slice of the generated
- * reference tree below Guides, expanded one level (categories/services show,
- * everything inside them stays collapsed) so each hub is self-sufficient.
+ * A cloud hub's "API Reference" section: that provider's slice of the generated
+ * alphabetical list of reference pages below Guides.
  * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
- * them all and gets one merged Resources group.
+ * them all and gets one merged API Reference group.
  *
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
@@ -72,7 +72,50 @@ function providerResourcesEntry(...providers: string[]) {
           collapsed: true,
           items: entryItems(provider),
         }));
-  return { label: "Resources", collapsed: false, items };
+  return { label: "API Reference", collapsed: false, items };
+}
+
+function sortFrontendItems(items: readonly { label: string; link: string }[]) {
+  return items.toSorted((a, b) => {
+    const overviewOrder =
+      Number(b.label === "Overview") - Number(a.label === "Overview");
+    return (
+      overviewOrder ||
+      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
+    );
+  });
+}
+
+type ReferenceItem =
+  | { label: string; link: string }
+  | { label: string; items: readonly ReferenceItem[] };
+
+function providerApiReferenceEntry(...providers: string[]) {
+  const flatten = (
+    items: readonly ReferenceItem[],
+    prefix: readonly string[],
+  ): { label: string; link: string }[] =>
+    items.flatMap((item) => {
+      if ("items" in item) {
+        // Generated category and service groups can share a name.
+        return flatten(
+          item.items,
+          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
+        );
+      }
+      return [{ label: [...prefix, item.label].join("."), link: item.link }];
+    });
+
+  return {
+    label: "API Reference",
+    collapsed: false,
+    items: providers.flatMap((provider) =>
+      flatten(
+        providersSidebar.find((group) => group.label === provider)?.items ?? [],
+        providers.length > 1 ? [provider] : [],
+      ),
+    ),
+  };
 }
 
 /**
@@ -121,7 +164,10 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.copyFile(full, target);
+              await fs.writeFile(
+                target,
+                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
+              );
             }),
           );
         }
@@ -148,6 +194,9 @@ export default defineConfig({
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
+    "/better-auth/database-layers": "/better-auth/databases",
+    "/better-auth/migrations": "/better-auth/guides/migrations",
+    "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
   trailingSlash: "ignore",
@@ -176,6 +225,7 @@ export default defineConfig({
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
+        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -187,7 +237,7 @@ export default defineConfig({
         {
           icon: "discord",
           label: "Discord",
-          href: "https://discord.gg/jwKw8dBJdN",
+          href: "/discord",
         },
       ],
       editLink: {
@@ -311,6 +361,12 @@ export default defineConfig({
                   link: "/environments/custom-auth-provider",
                 },
                 { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Secret providers",
+                  link: "/environments/secret-providers",
+                },
+                { label: "Doppler", link: "/environments/doppler" },
+                { label: "Infisical", link: "/environments/infisical" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -473,7 +529,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/cloudflare/frontend/frontends",
@@ -509,9 +565,10 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "Vinext", link: "/cloudflare/frontend/vinext" },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -535,6 +592,7 @@ export default defineConfig({
                 { label: "R2", link: "/cloudflare/data/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
                 {
                   label: "Shared database",
@@ -660,7 +718,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/aws/frontend/websites",
@@ -672,6 +730,7 @@ export default defineConfig({
                   link: "/aws/frontend/full-stack-tanstack-rpc-drizzle",
                 },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "Vinext", link: "/aws/frontend/vinext" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
                 { label: "Octane", link: "/aws/frontend/octane" },
                 {
@@ -698,7 +757,7 @@ export default defineConfig({
                 { label: "Vite", link: "/aws/frontend/vite" },
                 { label: "Vue", link: "/aws/frontend/vue" },
                 { label: "Waku", link: "/aws/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -721,6 +780,8 @@ export default defineConfig({
                 { label: "DynamoDB", link: "/aws/data/dynamodb" },
                 { label: "S3", link: "/aws/data/s3" },
                 { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
               ],
             },
             {
@@ -824,7 +885,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/hetzner/frontend/websites",
@@ -832,6 +893,7 @@ export default defineConfig({
                 { label: "Astro", link: "/hetzner/frontend/astro" },
                 { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
                 { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "Vinext", link: "/hetzner/frontend/vinext" },
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
@@ -857,7 +919,7 @@ export default defineConfig({
                 { label: "Vite", link: "/hetzner/frontend/vite" },
                 { label: "Vocs", link: "/hetzner/frontend/vocs" },
                 { label: "Waku", link: "/hetzner/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -868,7 +930,13 @@ export default defineConfig({
             },
             {
               label: "Data",
-              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+              items: [
+                { label: "Volumes", link: "/hetzner/data/volumes" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/hetzner/data/drizzle-postgres",
+                },
+              ],
             },
             {
               label: "Networking",
@@ -891,7 +959,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/fly/frontend/websites",
@@ -899,6 +967,7 @@ export default defineConfig({
                 { label: "Astro", link: "/fly/frontend/astro" },
                 { label: "Foldkit", link: "/fly/frontend/foldkit" },
                 { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "Vinext", link: "/fly/frontend/vinext" },
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
@@ -924,7 +993,7 @@ export default defineConfig({
                 { label: "Vite", link: "/fly/frontend/vite" },
                 { label: "Vocs", link: "/fly/frontend/vocs" },
                 { label: "Waku", link: "/fly/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -932,6 +1001,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
                 { label: "Sprites", link: "/fly/compute/sprites" },
                 { label: "Regions", link: "/fly/compute/regions" },
               ],
@@ -941,6 +1014,10 @@ export default defineConfig({
               items: [
                 { label: "Volumes", link: "/fly/data/volumes" },
                 { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
                 { label: "Redis", link: "/fly/data/redis" },
                 { label: "Tigris", link: "/fly/data/tigris" },
                 { label: "Secrets", link: "/fly/data/secrets" },
@@ -964,7 +1041,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/railway/frontend/websites",
@@ -972,6 +1049,7 @@ export default defineConfig({
                 { label: "Astro", link: "/railway/frontend/astro" },
                 { label: "Foldkit", link: "/railway/frontend/foldkit" },
                 { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "Vinext", link: "/railway/frontend/vinext" },
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {
@@ -997,7 +1075,7 @@ export default defineConfig({
                 { label: "Vite", link: "/railway/frontend/vite" },
                 { label: "Vocs", link: "/railway/frontend/vocs" },
                 { label: "Waku", link: "/railway/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -1021,6 +1099,14 @@ export default defineConfig({
                 { label: "Volumes", link: "/railway/data/volumes" },
                 { label: "Postgres", link: "/railway/data/postgres" },
                 { label: "MySQL", link: "/railway/data/mysql" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/railway/data/drizzle-postgres",
+                },
+                {
+                  label: "Drizzle + MySQL",
+                  link: "/railway/data/drizzle-mysql",
+                },
                 { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
                 { label: "Variables", link: "/railway/data/variables" },
@@ -1075,6 +1161,38 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/neon" },
             { label: "Setup", link: "/neon/setup" },
+            { label: "Organization governance", link: "/neon/governance" },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Vite", link: "/neon/frontend/vite" },
+                { label: "Astro", link: "/neon/frontend/astro" },
+                { label: "Next.js", link: "/neon/frontend/nextjs" },
+                { label: "Nuxt", link: "/neon/frontend/nuxt" },
+                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
+                { label: "React Router", link: "/neon/frontend/react-router" },
+                { label: "SolidStart", link: "/neon/frontend/solidstart" },
+                {
+                  label: "TanStack Start",
+                  link: "/neon/frontend/tanstack-start",
+                },
+                { label: "Waku", link: "/neon/frontend/waku" },
+                { label: "Octane", link: "/neon/frontend/octane" },
+                { label: "Foldkit", link: "/neon/frontend/foldkit" },
+                { label: "Vocs", link: "/neon/frontend/vocs" },
+                { label: "Static Site", link: "/neon/frontend/static-site" },
+              ],
+            },
+            {
+              label: "Upload tutorial",
+              items: [
+                { label: "Overview", link: "/neon/tutorial" },
+                { label: "Backend", link: "/neon/tutorial/backend" },
+                { label: "Functions", link: "/neon/tutorial/functions" },
+                { label: "Browser", link: "/neon/tutorial/frontend" },
+                { label: "Preview branches", link: "/neon/tutorial/previews" },
+              ],
+            },
             {
               label: "Data",
               items: [
@@ -1089,6 +1207,23 @@ export default defineConfig({
                 {
                   label: "Preview branches per PR",
                   link: "/neon/guides/preview-branches",
+                },
+                { label: "AI Gateway setup", link: "/neon/guides/ai-gateway" },
+                {
+                  label: "Production Auth",
+                  link: "/neon/guides/production-auth",
+                },
+                {
+                  label: "Private networking",
+                  link: "/neon/guides/private-networking",
+                },
+                {
+                  label: "Custom domains",
+                  link: "/neon/guides/custom-domains",
+                },
+                {
+                  label: "State and recovery",
+                  link: "/neon/guides/state-recovery",
                 },
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
               ],
@@ -1116,6 +1251,10 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/prisma/data/drizzle-postgres",
+                },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
                 { label: "Buckets", link: "/prisma/data/buckets" },
@@ -1123,11 +1262,12 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 { label: "Overview", link: "/prisma/frontend/websites" },
                 { label: "Astro", link: "/prisma/frontend/astro" },
                 { label: "Foldkit", link: "/prisma/frontend/foldkit" },
                 { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "Vinext", link: "/prisma/frontend/vinext" },
                 { label: "Nuxt", link: "/prisma/frontend/nuxt" },
                 { label: "Octane", link: "/prisma/frontend/octane" },
                 {
@@ -1144,7 +1284,7 @@ export default defineConfig({
                 { label: "Vite", link: "/prisma/frontend/vite" },
                 { label: "Vocs", link: "/prisma/frontend/vocs" },
                 { label: "Waku", link: "/prisma/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Guides",
@@ -1155,7 +1295,7 @@ export default defineConfig({
                 },
               ],
             },
-            providerResourcesEntry("Prisma"),
+            providerApiReferenceEntry("Prisma"),
           ],
         },
         {
@@ -1187,9 +1327,46 @@ export default defineConfig({
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
-            { label: "Database layers", link: "/better-auth/database-layers" },
-            { label: "Migrations", link: "/better-auth/migrations" },
-            providerResourcesEntry("BetterAuth"),
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "better-auth/tutorial" } }],
+            },
+            {
+              label: "Sign-in providers",
+              items: [
+                {
+                  autogenerate: { directory: "better-auth/sign-in-providers" },
+                },
+              ],
+            },
+            {
+              label: "Databases",
+              items: [{ autogenerate: { directory: "better-auth/databases" } }],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Config and secrets",
+                  link: "/better-auth/guides/configuration",
+                },
+                {
+                  label: "HTTP API middleware",
+                  link: "/better-auth/guides/http-api-middleware",
+                },
+                {
+                  label: "Secondary storage",
+                  link: "/better-auth/guides/secondary-storage",
+                },
+                { label: "Migrations", link: "/better-auth/guides/migrations" },
+                {
+                  label: "Upgrading from 1.6 to 1.7.5",
+                  link: "/better-auth/upgrades/from-1-6-to-1-7",
+                },
+              ],
+            },
+            { ...providerResourcesEntry("BetterAuth"), label: "Reference" },
           ],
         },
         {
@@ -1319,6 +1496,7 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "Databases", link: "/sql/databases" },
             {
               label: "Effect SQL",
               items: [
@@ -1341,7 +1519,15 @@ export default defineConfig({
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
-            providerResourcesEntry("SQL", "Drizzle"),
+            {
+              label: "Prisma ORM",
+              items: [
+                { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Contracts", link: "/sql/prisma/contracts" },
+                { label: "Migrations", link: "/sql/prisma/migrations" },
+              ],
+            },
+            providerApiReferenceEntry("SQL", "Drizzle"),
           ],
         },
         {

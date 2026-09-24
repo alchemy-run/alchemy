@@ -150,6 +150,15 @@ export default {
     request: Request,
     env: { UpgradeObject: DurableObjectNamespace<UpgradeObject> },
   ) {
+    if (
+      request.headers.get("x-alarm-worker-version") !== null &&
+      request.headers.get("x-alarm-worker-version") !== "v1"
+    ) {
+      return new Response("Alarm worker version mismatch", {
+        status: 409,
+        headers: { "x-alarm-worker-version": "v1" },
+      });
+    }
     const url = new URL(request.url);
     const name = url.searchParams.get("name") ?? "persisted-object";
     const object = env.UpgradeObject.getByName(name);

@@ -31,6 +31,7 @@ import { selectCliServices } from "./selectCli.ts";
 
 const commandMetadata = [
   ["provider", "Manage cloud provider prerequisites and utilities"],
+  ["prisma", "Generate Prisma Effect bindings and schemas"],
   ["deploy", "Deploy a stack"],
   ["dev", "Develop a stack with live reload"],
   ["destroy", "Destroy a deployed stack"],
@@ -52,6 +53,8 @@ const placeholderCommand = (name: CommandName, description: string) =>
 
 const loadCommand = async (name: CommandName) => {
   switch (name) {
+    case "prisma":
+      return (await import("./commands/prisma.ts")).prismaCommand;
     case "provider":
       return (await import("./commands/provider.ts")).providerCommand;
     case "deploy":

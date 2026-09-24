@@ -11,13 +11,25 @@ export const NODEJS_COMPAT_DEFAULT_ON = "2026-08-04";
 
 /** Apply language and runtime defaults while preserving explicit opt-outs. */
 export const withDefaultFlags = (
-  flags: Array<string>,
+  flags: Array<string> | undefined,
   {
     date = DEFAULT_COMPATIBILITY_DATE,
-    python = flags.includes("python_workers"),
+    python = flags?.includes("python_workers") ?? false,
     isExternal = true,
-  }: { date?: string; python?: boolean; isExternal?: boolean } = {},
+    bundle = true,
+  }: {
+    date?: string;
+    python?: boolean;
+    isExternal?: boolean;
+    bundle?: boolean;
+  } = {},
 ): Array<string> => {
+  // Prebuilt external Workers own their runtime configuration. In particular,
+  // adopting one with explicit flags must not inject Alchemy's build defaults.
+  // See https://github.com/alchemy-run/alchemy/issues/1721.
+  if (isExternal && !bundle && flags !== undefined) {
+    return [...flags];
+  }
   const defaults = new Set(flags);
   if (python) {
     defaults.add("python_workers");

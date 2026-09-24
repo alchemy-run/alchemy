@@ -1,8 +1,13 @@
 import type { App as FlyApp } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -15,6 +20,17 @@ import {
   sanitizeFlyAppName,
 } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
+
+export class AppDeletionAmbiguous extends Data.TaggedError(
+  "Fly.AppDeletionAmbiguous",
+)<{
+  appName: string;
+  evidence: string;
+}> {
+  get message() {
+    return `Deletion of ${this.appName} is uncertain (${this.evidence}); reconcile the App before retrying or recreating its name. Machine leases cannot fence App deletion.`;
+  }
+}
 
 export interface AppProps {
   /**
@@ -164,6 +180,7 @@ export type App = Resource<
  * ```
  *
  * @resource
+ * @product App
  */
 export const App = Resource<App>("Fly.App");
 
@@ -384,16 +401,62 @@ export const AppProvider = () =>
         },
         { concurrency: 4 },
       );
-      yield* machines
-        .deleteApp({ app_name: appName })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      yield* getByName(appName).pipe(
+      const http = yield* HttpClient.HttpClient;
+      const fetchOptions = yield* Effect.serviceOption(
+        FetchHttpClient.RequestInit,
+      );
+      yield* machines.deleteApp({ app_name: appName }).pipe(
+        Retry.none,
+        // Bun can replay DELETE on a reused socket below the SDK retry policy.
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.mapRequest(
+            http,
+            HttpClientRequest.setHeader("connection", "close"),
+          ),
+        ),
+        Effect.provideService(FetchHttpClient.RequestInit, {
+          ...Option.getOrUndefined(fetchOptions),
+          keepalive: false,
+          redirect: "error",
+        }),
+        Effect.timeout("30 seconds"),
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.catchTag(
+          [
+            "HttpClientError",
+            "TimeoutError",
+            "InternalServerError",
+            "BadGateway",
+            "ServiceUnavailable",
+            "GatewayTimeout",
+          ],
+          (error) =>
+            Effect.fail(
+              new AppDeletionAmbiguous({ appName, evidence: error._tag }),
+            ),
+        ),
+      );
+      const gone = yield* getByName(appName).pipe(
         Effect.map((app) => app === undefined),
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
           until: (gone) => gone,
           times: 8,
         }),
+        Effect.timeout("30 seconds"),
+        Effect.mapError(
+          (error) =>
+            new AppDeletionAmbiguous({
+              appName,
+              evidence: `delete accepted but absence verification failed: ${error._tag}`,
+            }),
+        ),
       );
+      if (!gone)
+        return yield* new AppDeletionAmbiguous({
+          appName,
+          evidence: "delete accepted but absence not observed",
+        });
     }),
   });

@@ -85,6 +85,8 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
       );
 
       return {
+        // V1 Workers can still reach the upgraded object during edge rollout.
+        snapshot: () => snapshot(true),
         reconstruct: () =>
           state.abort("alarm upgrade reconstruction", { retryAlarm: false }),
         probe: Effect.fn(
@@ -228,6 +230,13 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        const expectedVersion = request.headers["x-alarm-worker-version"];
+        if (expectedVersion !== undefined && expectedVersion !== "v2") {
+          return HttpServerResponse.text("Alarm worker version mismatch", {
+            status: 409,
+            headers: { "x-alarm-worker-version": "v2" },
+          });
+        }
         const url = new URL(request.url, "http://localhost");
         const action = url.pathname.slice(1);
         const object = objects.getByName(

@@ -1,6 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
@@ -15,6 +14,7 @@ import {
   type Main,
   type MainRpc,
   type MakeShape,
+  type PlatformIdentity,
   type PlatformProps,
   type PlatformServices,
 } from "../../Platform.ts";
@@ -33,9 +33,9 @@ import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
+import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
-import { type Assets, type AssetsProps } from "./Assets.ts";
+import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
 import type {
   WorkerAccessConfig,
   WorkerAccessIdentity,
@@ -45,7 +45,6 @@ import {
   WorkerExecutionContext,
   WorkerTypeId,
 } from "./WorkerRuntime.ts";
-import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -57,6 +56,7 @@ import type {
 } from "./WorkerBinding.ts";
 import {
   makeWorkerRuntimeContext,
+  type WorkerExport,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
 
@@ -127,29 +127,42 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
-type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
-
-// NOTE: `Worker<NormalizedBindings<...>>` must provably satisfy the
-// `WorkerBindings` constraint for *generic* `Bindings`, which restricts the
-// shapes usable here: conditional checks on the naked parameter `T` and an
-// outermost `Extract<..., WorkerBindingResource>` are provable; e.g.
-// `Unwrap<T> extends ...` as a check type is not.
 export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
 > = {
-  [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
-    infer T extends WorkerBindingResource,
-    any,
-    any
-  >
-    ? T extends Redacted.Redacted<infer V> | Config.Config<infer V>
-      ? V
-      : Unwrap<T>
-    : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
+  // Containers are declarations and Outputs stay deferred at declaration time.
+  [B in keyof Bindings]: Bindings[B] extends
+    | Container.Decl.Any
+    | Output.Output<any, any>
+    ? Bindings[B]
+    : Bindings[B] extends Effect.Effect<
+          infer T extends WorkerBindingResource,
+          any,
+          any
+        >
+      ? T
+      : Extract<Bindings[B], WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
-export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
+/**
+ * An external Worker's declared `env` as exposed on its declaration
+ * (`worker.env`): every entry is the binding value as declared (with
+ * Effect-valued entries resolved), except a Workflow binding, which surfaces
+ * as a {@link WorkflowBinding} carrying the Workflow's physical name as an
+ * `Output` of the current deploy.
+ */
+export type WorkerEnvBindings<Bindings> = {
+  readonly [B in keyof Bindings]: Bindings[B] extends WorkflowLike<infer Params>
+    ? WorkflowBinding<Params>
+    : Bindings[B];
+};
+
+export type WorkerAssetsConfig =
+  | string
+  | (AssetsConfig & { directory?: never })
+  | AssetsProps
+  | AssetsWithHash;
 
 /**
  * Fine-grained control over the Worker's `workers.dev` surface. The two
@@ -697,16 +710,46 @@ export interface WorkerProps<
   script?: string;
   compatibility?: {
     date?: string;
-    flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
+    /**
+     * Cloudflare runtime compatibility flags.
+     *
+     * For external Workers with `bundle: false`, an explicitly provided array
+     * is used exactly as declared, including `[]`. Omit this field to apply
+     * Alchemy's defaults.
+     *
+     * For all other Workers, supplied flags extend Alchemy's defaults:
+     * - `new_module_registry` is added unless `legacy_module_registry` is set.
+     * - `nodejs_compat` is added for dates before `2026-08-04` unless
+     *   `no_nodejs_compat` is set. External Workers also require a date on or
+     *   after `2024-09-23` for this default.
+     * - Effect Workers get `handle_cross_request_promise_resolution` for dates
+     *   before `2024-10-14`; explicitly disabling it is rejected.
+     * - Python Workers get `python_workers` instead of the JavaScript defaults.
+     *
+     * Duplicate flags are removed when defaults are applied.
+     */
+    flags?: (
+      | "nodejs_compat"
+      | "nodejs_compat_v2"
+      | "no_nodejs_compat"
+      | "nodejs_als"
+      | "new_module_registry"
+      | "legacy_module_registry"
+      | "handle_cross_request_promise_resolution"
+      | "no_handle_cross_request_promise_resolution"
+      | "python_workers"
+      | (string & {})
+    )[];
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   /**
-   * Tracks Durable Object and Workflow exports for Effect-native Workers only.
+   * Tracks Durable Object and Workflow exports and captured SQL migrations
+   * for Effect-native Workers only.
    * Populated automatically from bindings; do not set manually.
    * @internal
    */
-  exports?: Record<string, DurableObjectExport | WorkflowExport>;
+  exports?: Record<string, WorkerExport>;
   /**
    * Environment variables and native Cloudflare Bindings to bind to
    * the Worker. Accepts:
@@ -1275,6 +1318,26 @@ export type Worker<Bindings = any> = Resource<
   },
   Providers
 >;
+
+/** An external/async Worker declared without an Effect implementation. */
+export type ExternalWorker<Bindings = {}> = Worker<Bindings> & {
+  /**
+   * The external Worker's declared `env`. Not available on persisted references
+   * or Effect-native Worker construction results.
+   * A Workflow binding is exposed as a {@link WorkflowBinding} whose
+   * `workflowName` is an `Output` resolved in the same deploy, so a sibling
+   * resource (e.g. a Queue subscription to the Workflow's events) can
+   * consume the Workflow's physical name on its first deployment:
+   *
+   * ```typescript
+   * source: {
+   *   type: "workflows.workflow",
+   *   workflowName: worker.env.MY_WORKFLOW.workflowName,
+   * }
+   * ```
+   */
+  readonly env: WorkerEnvBindings<Bindings>;
+};
 
 /** The env key the resolved URL is injected under when `yield*`-ed. */
 const SELF_URL_BINDING_NAME = "WORKER_URL";
@@ -2366,7 +2429,8 @@ export const Worker: ResourceClassLike<Worker> &
         never,
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (
             _: never,
           ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
@@ -2409,7 +2473,8 @@ export const Worker: ResourceClassLike<Worker> &
         never,
         Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
         };
       /**
@@ -2438,11 +2503,12 @@ export const Worker: ResourceClassLike<Worker> &
               Req
             >,
       ): Effect.Effect<
-        Worker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
+        ExternalWorker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
         never,
         Req | Providers
       > &
-        Named<Id> & {
+        Named<Id> &
+        PlatformIdentity<Id> & {
           new (): Named<Id> &
             Tag<WorkerTypeId> & {
               /** @internal phantom */
@@ -2457,8 +2523,9 @@ export const Worker: ResourceClassLike<Worker> &
       const Bindings extends WorkerBindingProps = {},
       const Assets extends WorkerAssetsConfig | undefined = undefined,
       Req = never,
+      const Id extends string = string,
     >(
-      id: string,
+      id: Id,
       props:
         | InputProps<WorkerProps<Bindings, Assets>>
         | Effect.Effect<
@@ -2467,7 +2534,7 @@ export const Worker: ResourceClassLike<Worker> &
             Req
           >,
     ): Effect.Effect<
-      Worker<{
+      ExternalWorker<{
         [
           binding in keyof NormalizedBindings<Bindings, Assets>
         ]: NormalizedBindings<Bindings, Assets>[binding];
@@ -2475,7 +2542,8 @@ export const Worker: ResourceClassLike<Worker> &
         Rpc<{}>,
       never,
       Req | Providers
-    >;
+    > &
+      PlatformIdentity<Id>;
     <
       const Id extends string,
       Shape extends WorkerShape,
@@ -2484,7 +2552,7 @@ export const Worker: ResourceClassLike<Worker> &
         | Container.Application<any>
         | PlatformServices,
     >(
-      id: string,
+      id: Id,
       props: InputProps<WorkerProps>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
@@ -2492,7 +2560,8 @@ export const Worker: ResourceClassLike<Worker> &
       never,
       Extract<Req, Container.Application<any>> | Providers
     > &
-      Named<Id>;
+      Named<Id> &
+      PlatformIdentity<Id>;
     /**
      * The Worker's own public URL, injected as a binding on that same Worker.
      * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or

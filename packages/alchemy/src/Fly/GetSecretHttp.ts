@@ -23,6 +23,7 @@ import { makeHttpSecretBinding } from "./SecretHttp.ts";
  * ```
  *
  * @layer
+ * @product Secret
  * @provides Fly.GetSecret
  */
 export const GetSecretHttp = Layer.effect(

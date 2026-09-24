@@ -68,7 +68,10 @@ test(
     expect(res.status).toBe(204);
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -89,7 +92,10 @@ test(
     expect(body.message).toBe("world");
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -108,5 +114,8 @@ test(
     expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );

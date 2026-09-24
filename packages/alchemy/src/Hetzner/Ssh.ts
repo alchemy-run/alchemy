@@ -66,6 +66,7 @@ export interface SshClient {
  * ```
  *
  * @binding
+ * @product Server
  */
 export interface Ssh extends Binding.Service<
   Ssh,

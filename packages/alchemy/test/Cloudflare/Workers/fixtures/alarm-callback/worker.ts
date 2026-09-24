@@ -134,6 +134,10 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             );
           case "optional":
             return yield* HttpServerResponse.json(yield* object.optional());
+          case "release-pending":
+            return yield* HttpServerResponse.json(
+              yield* object.releasePending(),
+            );
           case "enable-optional":
             yield* object.enableOptional();
             break;

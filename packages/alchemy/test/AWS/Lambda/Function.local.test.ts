@@ -279,7 +279,7 @@ test.provider.skipIf(!dockerAvailable)(
       );
       expect(gone).toBe(true);
     }),
-  { timeout: 540_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 540_000 },
 );
 
 test.provider.skipIf(!dockerAvailable)(
@@ -370,5 +370,14 @@ test.provider.skipIf(!dockerAvailable)(
       );
       expect(gone).toBe(true);
     }),
-  { timeout: 540_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "provider:aws:sqs",
+      "local",
+    ],
+    timeout: 540_000,
+  },
 );

@@ -96,7 +96,15 @@ test(
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -127,7 +135,15 @@ test(
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -171,7 +187,15 @@ test(
     const aAfter = yield* requestUntilReady(client.get(`${urlA}/do`));
     expect((yield* aAfter.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -199,5 +223,13 @@ test(
     expect((yield* d1FromA.json) as { value: number }).toEqual({ value: 2 });
     expect((yield* doFromA.json) as { value: number }).toEqual({ value: 1 });
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
