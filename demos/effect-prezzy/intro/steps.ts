@@ -193,14 +193,12 @@ const program = (): StepSpec[] => [
   lang({
     title: "The call needs permission to read the bucket",
     src: { code: GET_FN },
-    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [GET] },
     notes: "For the function to call bucket.get, it needs an IAM policy that allows s3:GetObject on this bucket.",
   }),
   lang({
     title: "…and the bucket's name, as an environment variable",
     src: { code: GET_FN },
-    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
     diagram: { nodes: GRAPH(["versioning: on"], [ENV[0]!]), edges: [GET] },
     notes:
       "And it needs to know which bucket: its name is injected as an environment variable. The permission plus the configuration is what we call a binding.",
@@ -208,17 +206,12 @@ const program = (): StepSpec[] => [
   lang({
     title: "Sending to the queue creates another binding",
     src: { code: VERSIONED },
-    marks: [{ kind: "circle", find: "queue.send(file)", tone: "construct" }],
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes: "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
   }),
   lang({
     title: "The language infers every binding from the code",
     src: { code: VERSIONED },
-    marks: [
-      { kind: "circle", find: "bucket.get(req.key)", tone: "construct" },
-      { kind: "circle", find: "queue.send(file)", tone: "construct" },
-    ],
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
       "A cloud language derives all of this by static analysis. Nobody writes policies or environment variables by hand: the program is a graph of resources, and the code is the source of truth for how they connect.",
@@ -287,7 +280,6 @@ const program = (): StepSpec[] => [
     title: "Inferring bindings is a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
-    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "runtime" }],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
