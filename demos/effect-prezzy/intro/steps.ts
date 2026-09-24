@@ -58,6 +58,8 @@ export interface CodeSpec {
   diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
   aside?: { text: string; tone?: Tone; image?: string };
+  /** A big hand-written verdict stamped across the code. */
+  stamp?: string;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -461,6 +463,7 @@ const api = (s: {
   error?: CodeSpec["error"];
   quiet?: boolean;
   aside?: CodeSpec["aside"];
+  stamp?: string;
 }): CodeSpec => ({
   kind: "code",
   group: "api",
@@ -472,6 +475,7 @@ const api = (s: {
   error: s.error,
   quiet: s.quiet,
   aside: s.aside,
+  stamp: s.stamp,
   req: {
     label: REQ_LABEL,
     items: s.req,
@@ -1181,12 +1185,22 @@ export const steps: StepSpec[] = [
       "My first attempt looked exactly like the imaginary language. Just call bucket.get, and the type of that call carries the requirement: R2.GetObject for the Uploads bucket. No declaration needed.",
   }),
   api({
-    title: "But then the layer goes on fetch, which runs at runtime",
+    title: "It looked just like the imaginary language…",
+    code: INFERRED,
+    quiet: true,
+    stamp: "but it had problems",
+    req: [],
+    fetchReq: [GET_OBJECT],
+    notes:
+      "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
+  }),
+  api({
+    title: "First, the layer has to go on fetch, which runs at runtime",
     code: INFERRED_ON_FETCH,
     req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
-      "The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
+      "First, the requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
     title: "Moving the bucket out puts the layer on construction",
