@@ -582,7 +582,7 @@ const PUT_LOGS: ReqItem = { name: "R2.PutObject<Logs>", note: "hoisted out of fe
 const GET_OBJECT: ReqItem = { name: "R2.GetObject<Uploads>", note: "inferred from bucket.get" };
 const GET_OBJECT_HOISTED = met(
   { name: "R2.GetObject<Uploads>" },
-  "R2.ReadBucket(Uploads)\nhoisted out of fetch's type",
+  "R2.ReadBucket(Uploads)\ngrants s3:GetObject at deploy",
 );
 
 // The last problem: a service's interface can't hide which implementation it has.
@@ -1305,19 +1305,29 @@ export const steps: StepSpec[] = [
       "It looked just like the imaginary language, and I was pretty pleased with it. But it had problems, and they got worse the further I took it.",
   }),
   api({
+    title: "Providing its layer would grant exactly that permission",
+    code: INFERRED_ON_FETCH,
+    quiet: true,
+    marks: [{ kind: "underline", find: "Effect.provide(R2.ReadBucket(bucket))", label: "grants s3:GetObject", side: "right", tone: "good" }],
+    req: [],
+    fetchReq: [met(GET_OBJECT, "R2.ReadBucket(bucket)\ngrants s3:GetObject")],
+    notes:
+      "Here's the mechanism. To satisfy R2.GetObject, you provide a layer for it, R2.ReadBucket for this bucket. And providing that layer is what grants the policy: s3:GetObject on Uploads, and nothing more.",
+  }),
+  api({
     title: "First, the layer has to go on fetch, which runs at runtime",
     code: INFERRED_ON_FETCH,
     req: [],
     fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
     notes:
-      "First, the requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer is what grants the policy, and by then the deploy is long over. This makes no sense.",
+      "First, the requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
   api({
     title: "Moving the bucket out puts the layer on construction",
     code: INFERRED_HOISTED,
     req: [GET_OBJECT_HOISTED],
     notes:
-      "Where we actually want it is on the outer Effect, the construction phase. So the bucket moves out to module scope, where the layer can name it, and Effect.provide(R2.ReadBucket(Uploads)) goes on the outer Effect.",
+      "Where we actually want it is on the outer Effect, the construction phase. So the bucket moves out to module scope, where the layer can name it, and Effect.provide(R2.ReadBucket(Uploads)) goes on the outer Effect. Now its policy is granted at deploy time, where it belongs.",
   }),
   api({
     title: "But it's only found by digging into fetch's type",
