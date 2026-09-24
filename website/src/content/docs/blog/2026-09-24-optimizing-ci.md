@@ -69,4 +69,4 @@ We went through our runs to find where we were burning minutes ([#1362](https://
 
 ## Thanks to Blacksmith
 
-Huge shutout to our friends at [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. We are utilizing their fast Linux, macOS, and Windows runners. We found Github runners so slow that we were splitting our workloads. With blacksmith's fast runners we just throw our tests across platforms, deploy our content-heavy website, and run checks without having to even think about it.
+Huge shoutout to our friends at [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. We are utilizing their fast Linux, macOS, and Windows runners. We found Github runners so slow that we were splitting our workloads. With blacksmith's fast runners we just throw our tests across platforms, deploy our content-heavy website, and run checks without having to even think about it.
