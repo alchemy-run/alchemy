@@ -105,6 +105,8 @@ const COLORED_APP = `construct app() {
     queue.send(file)
   }
 }`;
+/** Step one of the colors: only construction is marked. */
+const CONSTRUCT_ONLY = COLORED_APP.replace("  runtime function api(req) {", "  function api(req) {");
 /** The question: what would a bucket created inside the function even mean? */
 const SCRATCH = VERSIONED.replace(
   "  const file = bucket.get(req.key)",
@@ -257,13 +259,32 @@ const program = (): StepSpec[] => [
       "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
   }),
   lang({
-    title: "Make the phases part of the language",
-    src: { code: COLORED_APP },
-    // The construct/runtime keywords carry the colors; nothing else to highlight.
-    quiet: true,
-    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    title: "Mark construction in the language: construct",
+    src: { code: CONSTRUCT_ONLY },
+    tints: [{ from: "const bucket", to: "const queue", tone: "construct" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"], ENV),
+      edges: BINDINGS,
+      frame: { label: "construction", tone: "construct" },
+    },
     notes:
-      "In a real language we could make the phases explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
+      "In a real language we'd make the phases explicit. First, construction: a construct function runs once, at deploy time, and everything it declares becomes infrastructure.",
+  }),
+  lang({
+    title: "…and runtime: the code that runs on each request",
+    src: { code: COLORED_APP },
+    tints: [
+      { from: "const bucket", to: "const queue", tone: "construct" },
+      { from: "const file", to: "queue.send(file)", tone: "runtime" },
+    ],
+    diagram: {
+      nodes: GRAPH(["versioning: on"], ENV),
+      edges: BINDINGS,
+      frame: { label: "construction", tone: "construct" },
+      incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
+    },
+    notes:
+      "Then runtime: a runtime function inside it runs on every request, using the resources construction declared. These are colored functions: construct and runtime are different colors, and the compiler knows which is which.",
   }),
   lang({
     title: "Now the compiler catches that mistake",
