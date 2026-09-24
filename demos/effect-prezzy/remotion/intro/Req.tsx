@@ -5,47 +5,45 @@ import { brand } from "../theme.ts";
 import { TONE } from "./draw.tsx";
 
 /** Vertical space per requirement. */
-export const REQ_ROW = 74;
+export const REQ_ROW = 58;
 
-const STYLE = {
-  open: { color: TONE.neutral, icon: "○", border: "rgba(201, 193, 174, 0.45)" },
-  met: { color: TONE.good, icon: "✓", border: TONE.good },
-  bad: { color: TONE.bad, icon: "✗", border: TONE.bad },
-} as const;
+/** The editor theme's colors for types and punctuation, so Req reads as code. */
+const TYPE = "#4ec9b0";
+const PUNCT = "#d4d4d4";
+const SIZE = 26;
 
+/** One member of the union: `| Name`, with a note beside it. */
 const Row = ({ item }: { item: ReqItem }) => {
-  const s = STYLE[item.state ?? "open"];
+  const state = item.state ?? "open";
+  const noteColor = state === "met" ? TONE.good : state === "bad" ? TONE.bad : brand.fgMuted;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "7px 14px",
-          border: `2px solid ${s.border}`,
-          borderRadius: 10,
-          background: "rgba(0, 0, 0, 0.25)",
-          fontFamily: mono,
-          fontSize: 22,
-          color: brand.fg,
-          whiteSpace: "nowrap",
-        }}
-      >
-        <span style={{ color: s.color, fontWeight: 700 }}>{s.icon}</span>
-        {item.name}
+    <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+      <div style={{ fontFamily: mono, fontSize: SIZE, whiteSpace: "pre", opacity: state === "met" ? 0.45 : 1 }}>
+        <span style={{ color: PUNCT }}>| </span>
+        <span
+          style={{
+            color: state === "bad" ? TONE.bad : TYPE,
+            textDecoration: state === "met" ? "line-through" : undefined,
+            textDecorationColor: TONE.good,
+            textDecorationThickness: 2,
+          }}
+        >
+          {item.name}
+        </span>
       </div>
       {item.note ? (
-        <div style={{ fontFamily: sans, fontSize: 18, lineHeight: 1.35, color: brand.fgMuted, whiteSpace: "pre" }}>{item.note}</div>
+        <div style={{ fontFamily: sans, fontSize: 18, lineHeight: 1.35, color: noteColor, whiteSpace: "pre" }}>
+          {state === "met" ? `✓ ${item.note}` : state === "bad" ? `✗ ${item.note}` : item.note}
+        </div>
       ) : null}
     </div>
   );
 };
 
 /**
- * The requirements (Effect's `Req`) of the code on screen. A requirement
- * that is new since the previous step slides in; one whose state or note
- * changed cross-fades; the rest stay still.
+ * The requirements (Effect's `Req`) of the code on screen, written as the
+ * union type they are. A member that is new since the previous step slides
+ * in; one whose state or note changed cross-fades; the rest stay still.
  */
 export const ReqView = ({
   req,
@@ -88,9 +86,8 @@ export const ReqView = ({
             left: x,
             top,
             fontFamily: mono,
-            fontSize: 22,
-            fontStyle: "italic",
-            color: brand.fgMuted,
+            fontSize: SIZE,
+            color: TYPE,
             opacity: prev && prev.items.length === 0 ? 1 : p,
           }}
         >

@@ -357,9 +357,9 @@ const deleter = (type: string) => `function deleter(remove: (id: string) => ${ty
 /** The Worker's requirements, listed beside its code. */
 const REQ_LABEL = "Req · what it needs";
 const BUCKET: ReqItem = { name: "R2.BucketProvider", note: "to create the bucket" };
-const READ: ReqItem = { name: "R2.ReadBucket(Uploads)", note: "to read it at runtime" };
+const READ: ReqItem = { name: "R2.ReadBucket", note: "to read it at runtime" };
 const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
-const WRITE: ReqItem = { name: "Queues.WriteQueue(Jobs)", note: "to send at runtime" };
+const WRITE: ReqItem = { name: "Queues.WriteQueue", note: "to send at runtime" };
 const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
 const PROVIDED_HTTP: ReqItem[] = [
   BUCKET,
@@ -619,7 +619,7 @@ export const steps: StepSpec[] = [
     title: "Reading from it adds another",
     snippet: "api-03-read.ts",
     req: [BUCKET, READ],
-    notes: "Ask to read from the bucket, and the program now also needs R2.ReadBucket for the Uploads bucket: something that can actually read it at runtime.",
+    notes: "Ask to read from the bucket, and the program now also needs R2.ReadBucket: something that can actually read it at runtime.",
   }),
   api({
     title: "The runtime code just calls it",
@@ -632,7 +632,7 @@ export const steps: StepSpec[] = [
     title: "Sending to a queue works the same way",
     snippet: "api-05-queue.ts",
     req: [BUCKET, READ, QUEUE, WRITE],
-    notes: "A queue is the same: declare it and Req gains Queues.QueueProvider, ask to write to it and it gains Queues.WriteQueue for Jobs. Req now lists everything this program needs.",
+    notes: "A queue is the same: declare it and Req gains Queues.QueueProvider, ask to write to it and it gains Queues.WriteQueue. Req now lists everything this program needs.",
   }),
   api({
     title: "Each requirement needs an implementation",
