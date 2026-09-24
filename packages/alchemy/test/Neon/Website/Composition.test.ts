@@ -48,6 +48,7 @@ test.provider(
       for (const root of roots) expect(yield* fs.exists(root)).toBe(false);
       yield* stack.destroy();
     }),
+  { tags: ["provider:neon", "provider:neon:website", "live"] },
 );
 
 test.provider(
@@ -70,5 +71,8 @@ test.provider(
       expect(plan.resources.Function?.action).toBe("create");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:website", "live"],
+    timeout: 120_000,
+  },
 );

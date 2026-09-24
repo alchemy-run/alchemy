@@ -77,5 +77,8 @@ test(
     }
     expect(probe).toBeDefined();
   }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );

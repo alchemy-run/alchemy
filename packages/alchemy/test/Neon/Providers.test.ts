@@ -56,4 +56,5 @@ it.live(
         ),
       ),
     ),
+  { tags: ["unit", "provider:neon", "local"] },
 );

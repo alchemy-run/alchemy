@@ -121,6 +121,7 @@ export interface SourceDevContext extends SourceContext {
 export interface SourceDevHandle {
   readonly mode: "server";
   readonly url: URL;
+  readonly serviceBinding?: "http";
 }
 
 /**
@@ -631,6 +632,7 @@ export const makeOctaneSource = (
       return {
         mode: "server",
         url: new URL(server.url),
+        serviceBinding: "http",
       } satisfies SourceDevHandle;
     }),
   };

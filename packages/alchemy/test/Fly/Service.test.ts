@@ -58,7 +58,16 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -166,7 +175,18 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "provider:fly:volume",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -213,7 +233,17 @@ test.provider(
         expect(missing._tag).toBe("NotFound");
       }
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "provider:fly:volume",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -262,5 +292,14 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -195,5 +195,17 @@ test(
     expect(body.ok).toEqual(true);
     expect(body.name).toEqual(SECRET_NAME);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:secret",
+      "provider:fly:service",
+      "provider:fly:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

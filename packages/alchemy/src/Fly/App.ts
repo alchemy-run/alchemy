@@ -180,6 +180,7 @@ export type App = Resource<
  * ```
  *
  * @resource
+ * @product App
  */
 export const App = Resource<App>("Fly.App");
 

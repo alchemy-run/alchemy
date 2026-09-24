@@ -52,6 +52,7 @@ test(
       ),
     ).toBe(true);
   }),
+  { tags: ["provider:neon", "provider:neon:projectvpcendpoint", "live"] },
 );
 
 test.provider(
@@ -102,6 +103,7 @@ test.provider(
         Effect.die("Unexpected Neon request in a no-I/O guard test"),
       ),
     ),
+  { tags: ["provider:neon", "provider:neon:projectvpcendpoint", "live"] },
 );
 
 test.provider(
@@ -142,6 +144,7 @@ test.provider(
         Effect.die("Unexpected Neon request in a no-I/O guard test"),
       ),
     ),
+  { tags: ["provider:neon", "provider:neon:projectvpcendpoint", "live"] },
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -286,5 +289,14 @@ test.provider.skipIf(!enabled)(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:project",
+      "provider:neon:projectvpcendpoint",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

@@ -141,5 +141,13 @@ test.provider.skipIf(!!process.env.FAST)(
       const leftover = yield* findRestApis("AgEsApi");
       expect(leftover).toHaveLength(0);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:apigateway",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

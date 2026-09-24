@@ -26,6 +26,7 @@ export type CronEventSourceService = <R = never>(
  * ```
  *
  * @binding
+ * @product Function
  */
 export interface CronEventSource extends Binding.Service<
   CronEventSource,

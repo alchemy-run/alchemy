@@ -227,5 +227,14 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:email",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 180_000,
+  },
 );

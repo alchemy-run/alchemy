@@ -111,5 +111,13 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "local",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -102,6 +102,7 @@ export interface Auth extends Resource<
  * ```
  *
  * @resource
+ * @product Auth
  */
 export const Auth = Resource<Auth>("Neon.Auth");
 

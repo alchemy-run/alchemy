@@ -112,5 +112,17 @@ test.provider.skipIf(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:aigateway",
+      "provider:neon:branch",
+      "provider:neon:credential",
+      "provider:neon:function",
+      "provider:neon:languagemodel",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

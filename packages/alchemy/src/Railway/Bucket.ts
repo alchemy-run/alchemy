@@ -273,6 +273,7 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Bucket: typeof BucketResource = Object.assign(
   (

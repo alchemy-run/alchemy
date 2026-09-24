@@ -337,6 +337,7 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * ```
  *
  * @resource
+ * @product MySQL
  */
 export const MySQL: typeof MySQLResource = Object.assign(
   (

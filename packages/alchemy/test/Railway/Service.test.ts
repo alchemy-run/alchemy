@@ -1,6 +1,10 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import {
+  activeReplicaRegions,
+  serviceRegionPlacement,
+} from "@/Railway/ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
 import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
@@ -456,7 +460,16 @@ test.provider(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -518,7 +531,16 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.worker.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const localContextDir = `${import.meta.dirname}/fixtures/local-context`;
@@ -614,7 +636,16 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.api.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // GitHub repo source requires a GitHub App connection on the Railway
@@ -645,7 +676,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:railway", "provider:railway:service", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!githubEntitled)(
@@ -692,5 +726,90 @@ test.provider.skipIf(!githubEntitled)(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
+);
+
+const placedRegions = (config: unknown, serviceId: string) =>
+  activeReplicaRegions(serviceRegionPlacement(config, serviceId)).map(
+    (row) => row.region,
+  );
+
+test.provider(
+  "pin a service to a region and move it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const region = "europe-west4-drams3a";
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Region", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+            region,
+          });
+          return { api };
+        }),
+      );
+
+      expect(created.api.region).toEqual(region);
+      const createdConfig = yield* railway.environment(
+        {
+          id: created.api.environmentId,
+          projectId: created.api.projectId,
+        },
+        { config: { where: { decryptVariables: false } } },
+      );
+      expect(
+        placedRegions(createdConfig.config, created.api.serviceId),
+      ).toEqual([region]);
+
+      const moved = "us-west2";
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Region", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+            region: moved,
+          });
+          return { api };
+        }),
+      );
+
+      expect(updated.api.serviceId).toEqual(created.api.serviceId);
+      expect(updated.api.region).toEqual(moved);
+      const updatedConfig = yield* railway.environment(
+        {
+          id: updated.api.environmentId,
+          projectId: updated.api.projectId,
+        },
+        { config: { where: { decryptVariables: false } } },
+      );
+      expect(
+        placedRegions(updatedConfig.config, updated.api.serviceId),
+      ).toEqual([moved]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

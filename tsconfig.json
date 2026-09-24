@@ -197,6 +197,9 @@
       "path": "./examples/cloudflare-website-sveltekit/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-service-bindings/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-waku/tsconfig.json"
     },
     {

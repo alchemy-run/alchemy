@@ -122,7 +122,15 @@ test(
       ]),
     });
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -148,7 +156,15 @@ test(
       ]),
     });
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Waits up to two minutes for durable finalizer evidence; skip under --fast.
@@ -218,7 +234,15 @@ test.provider.skipIf(!!process.env.FAST)(
         finalized: expect.arrayContaining(["websocket"]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 // Waits up to two minutes for durable finalizer evidence; skip under --fast.
@@ -294,7 +318,15 @@ test.provider.skipIf(!!process.env.FAST)(
         ]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -306,5 +338,13 @@ test(
     expect(response.status).toBe(500);
     expect(yield* response.text).not.toContain("intentional");
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
