@@ -26,6 +26,8 @@ alchemy
 │                      # manage credentials and accounts (bare `profile` opens the dashboard)
 │
 ├─ state list|read|delete        # inspect and manage the state store (bare `state` opens the explorer)
+│  ├─ protect|unprotect|login    # Cloudflare Access for the Cloudflare state store
+│  └─ token create|list|revoke   # service tokens for CI/CD
 │
 └─ provider
    ├─ check-env           # CI preflight: verify required provider env vars are set

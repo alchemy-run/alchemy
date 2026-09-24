@@ -14,6 +14,14 @@ import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import {
+  createStateStoreToken,
+  listStateStoreTokens,
+  loginToStateStore,
+  protectStateStore,
+  revokeStateStoreToken,
+  unprotectStateStore,
+} from "../../Cloudflare/StateStore/Protect.ts";
+import {
   bootstrap as bootstrapStateStore,
   teardownStateStore,
 } from "../../Cloudflare/StateStore/State.ts";
@@ -144,6 +152,60 @@ export const teardown = Effect.fn("Alchemist.provider.cloudflare.teardown")(
       yield* resolveStateStoreScope(input);
     yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
     return { accountId, workerName, deleted: [workerName] };
+  },
+);
+
+/** Put the state store behind Cloudflare Access. */
+export const protect = Effect.fn("Alchemist.state.protect")(function* (
+  input: Target,
+) {
+  const { layer, profile } = yield* resolveStateStoreScope(input);
+  return yield* Effect.provide(protectStateStore(profile), layer);
+});
+
+/** Remove Cloudflare Access from the state store. */
+export const unprotect = Effect.fn("Alchemist.state.unprotect")(function* (
+  input: Target,
+) {
+  const { layer, profile } = yield* resolveStateStoreScope(input);
+  return yield* Effect.provide(unprotectStateStore(profile), layer);
+});
+
+/** Log in to Cloudflare Access for the state store. */
+export const stateLogin = Effect.fn("Alchemist.state.login")(function* (
+  input: Target,
+) {
+  const { layer } = yield* resolveStateStoreScope(input);
+  return yield* Effect.provide(loginToStateStore(), layer);
+});
+
+/** Create a service token that can reach the protected state store. */
+export const createStateToken = Effect.fn("Alchemist.state.token.create")(
+  function* (input: Target & { readonly name: string }) {
+    const { layer, profile } = yield* resolveStateStoreScope(input);
+    return yield* Effect.provide(
+      createStateStoreToken(profile, input.name),
+      layer,
+    );
+  },
+);
+
+/** List the service tokens that can reach the protected state store. */
+export const listStateTokens = Effect.fn("Alchemist.state.token.list")(
+  function* (input: Target) {
+    const { layer, profile } = yield* resolveStateStoreScope(input);
+    return yield* Effect.provide(listStateStoreTokens(profile), layer);
+  },
+);
+
+/** Revoke a service token's access to the protected state store. */
+export const revokeStateToken = Effect.fn("Alchemist.state.token.revoke")(
+  function* (input: Target & { readonly name: string }) {
+    const { layer, profile } = yield* resolveStateStoreScope(input);
+    return yield* Effect.provide(
+      revokeStateStoreToken(profile, input.name),
+      layer,
+    );
   },
 );
 

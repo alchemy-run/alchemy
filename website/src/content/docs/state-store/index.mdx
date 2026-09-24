@@ -110,6 +110,48 @@ CI, set `CI=true`; the credentials are resolved from the Secrets
 Store on every run via a short-lived edge-preview Worker, so nothing
 needs to be persisted to disk.
 
+### Protect the store with Cloudflare Access
+
+The state store holds every stack's state, including secrets, so the
+bearer token is enough to read all of it. To require a Cloudflare
+login as well, put the store behind
+[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/):
+
+```sh
+alchemy state protect
+```
+
+Protection belongs to the store, so it covers every stack and stage in
+the account at once. The Access policy is fixed:
+
+- **Members of the Cloudflare account** sign in with their Cloudflare
+  account. Removing someone from the account removes their access.
+- **CI/CD pipelines** use service tokens created with
+  `alchemy state token create <name>`.
+
+Developers log in through the browser with
+[`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+the first time a command needs the store; `alchemy state login` does
+it ahead of time. In CI, create a token per pipeline and set the two
+values it prints as secrets:
+
+```sh
+alchemy state token create github-actions
+# CLOUDFLARE_ACCESS_CLIENT_ID=...
+# CLOUDFLARE_ACCESS_CLIENT_SECRET=...
+```
+
+`alchemy state token list` and `alchemy state token revoke <name>`
+manage existing tokens, and `alchemy state unprotect` removes Access
+again. Protection requires Cloudflare Zero Trust on the account (the
+Free plan covers up to 50 users). The `/version` path stays public so
+older alchemy versions can still detect the store.
+
+Access limits who can reach the store over the network. Anyone with
+permission to edit Workers, Secrets Store, or Access in the account
+can still get around it, so the Cloudflare account remains the
+security boundary.
+
 ### Customizing the worker name
 
 By default the state-store Worker is named `alchemy-state-store`.

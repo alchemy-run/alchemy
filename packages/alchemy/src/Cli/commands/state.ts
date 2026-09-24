@@ -1,8 +1,10 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Argument from "effect/unstable/cli/Argument";
 import { Command, Flag } from "effect/unstable/cli";
+import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
 import type { StateSource } from "../../Alchemist/routes/state.ts";
 import * as State from "../../State/index.ts";
@@ -285,6 +287,183 @@ const unsafeCommand = Command.make("unsafe", {}).pipe(
   Command.unlisted,
 );
 
+type CloudflareStateArgs = {
+  readonly envFile: Option.Option<string>;
+  readonly profile: string | undefined;
+};
+
+const cloudflareTarget = (args: CloudflareStateArgs) => ({
+  profile: args.profile,
+  envFile: Option.getOrUndefined(args.envFile),
+});
+
+const protectCommand = Command.make(
+  "protect",
+  { envFile, profile, yes },
+  instrumentCommand("state.protect")(
+    Effect.fn(function* ({ yes, ...args }) {
+      yield* confirmOrDecline({
+        yes,
+        message:
+          "Put the Cloudflare state store behind Cloudflare Access? Members of the Cloudflare account " +
+          "sign in with their Cloudflare account; CI needs a token from 'alchemy state token create'.",
+        confirmLabel: "Protect",
+        cancelLabel: "Cancel",
+      });
+      const result = yield* Cloudflare.protect(cloudflareTarget(args));
+      yield* CliKit.accessors.output.success(
+        result.status === "protected"
+          ? `The state store at ${result.host} is now protected by Cloudflare Access.`
+          : `Cloudflare Access for the state store at ${result.host} is up to date.`,
+      );
+      if (result.status === "protected") {
+        yield* CliKit.accessors.output.info(
+          "Create a token for each CI pipeline with 'alchemy state token create <name>'.",
+        );
+      }
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Protect the Cloudflare state store with Cloudflare Access (Cloudflare account members only)",
+  ),
+);
+
+const unprotectCommand = Command.make(
+  "unprotect",
+  { envFile, profile, yes },
+  instrumentCommand("state.unprotect")(
+    Effect.fn(function* ({ yes, ...args }) {
+      yield* confirmOrDecline({
+        yes,
+        message:
+          "Remove Cloudflare Access from the state store and delete its tokens? " +
+          "The store stays protected by its bearer token.",
+        confirmLabel: "Remove",
+        cancelLabel: "Cancel",
+      });
+      const result = yield* Cloudflare.unprotect(cloudflareTarget(args));
+      yield* result.status === "unprotected"
+        ? CliKit.accessors.output.success(
+            "Removed Cloudflare Access from the state store.",
+          )
+        : CliKit.accessors.output.info(
+            "The state store is not protected by Cloudflare Access.",
+          );
+    }),
+  ),
+).pipe(
+  Command.withDescription("Remove Cloudflare Access from the state store"),
+);
+
+const loginCommand = Command.make(
+  "login",
+  { envFile, profile },
+  instrumentCommand("state.login")(
+    Effect.fn(function* (args) {
+      const result = yield* Cloudflare.stateLogin(cloudflareTarget(args));
+      yield* result.protected
+        ? CliKit.accessors.output.success(
+            `Logged in to Cloudflare Access for ${result.host}.`,
+          )
+        : CliKit.accessors.output.info(
+            `The state store at ${result.host} is not protected by Cloudflare Access; there is nothing to log in to.`,
+          );
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Log in to Cloudflare Access for the state store (deploys prompt automatically)",
+  ),
+);
+
+const tokenName = Argument.String("name").pipe(
+  Argument.withDescription("Token name, e.g. github-actions"),
+);
+
+const tokenCreateCommand = Command.make(
+  "create",
+  { name: tokenName, envFile, profile },
+  instrumentCommand("state.token.create")(
+    Effect.fn(function* ({ name, ...args }) {
+      const token = yield* Cloudflare.createStateToken({
+        ...cloudflareTarget(args),
+        name,
+      });
+      yield* Console.log(
+        [
+          "",
+          `Created state store token "${token.name}"${token.expiresAt ? ` (expires ${token.expiresAt})` : ""}.`,
+          "",
+          `CLOUDFLARE_ACCESS_CLIENT_ID=${token.clientId}`,
+          `CLOUDFLARE_ACCESS_CLIENT_SECRET=${Redacted.value(token.clientSecret)}`,
+          "",
+          "Add both values as secrets in your CI provider.",
+        ].join("\n"),
+      );
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Create a service token that CI/CD uses to reach the protected state store",
+  ),
+);
+
+const tokenListCommand = Command.make(
+  "list",
+  { envFile, profile },
+  instrumentCommand("state.token.list")(
+    Effect.fn(function* (args) {
+      const tokens = yield* Cloudflare.listStateTokens(cloudflareTarget(args));
+      if (tokens.length === 0) {
+        yield* CliKit.accessors.output.info(
+          "No tokens. Create one with 'alchemy state token create <name>'.",
+        );
+        return;
+      }
+      yield* Console.log(
+        tokens
+          .map(
+            (token) =>
+              `${token.name}\t${token.clientId ?? ""}\t${token.expiresAt ? `expires ${token.expiresAt}` : ""}`,
+          )
+          .join("\n"),
+      );
+    }),
+  ),
+).pipe(
+  Command.withAlias("ls"),
+  Command.withDescription("List the state store's service tokens"),
+);
+
+const tokenRevokeCommand = Command.make(
+  "revoke",
+  { name: tokenName, envFile, profile, yes },
+  instrumentCommand("state.token.revoke")(
+    Effect.fn(function* ({ name, yes, ...args }) {
+      yield* confirmOrDecline({
+        yes,
+        message: `Revoke state store token '${name}'? Pipelines using it lose access immediately.`,
+        confirmLabel: "Revoke",
+        cancelLabel: "Cancel",
+      });
+      yield* Cloudflare.revokeStateToken({ ...cloudflareTarget(args), name });
+      yield* CliKit.accessors.output.success(`Revoked token '${name}'.`);
+    }),
+  ),
+).pipe(Command.withDescription("Revoke a state store service token"));
+
+const tokenCommand = Command.make("token", {}).pipe(
+  Command.withDescription(
+    "Manage service tokens for the protected Cloudflare state store",
+  ),
+  Command.withSubcommands([
+    tokenCreateCommand,
+    tokenListCommand,
+    tokenRevokeCommand,
+  ]),
+);
+
 export const stateCommand = Command.make(
   "state",
   { main: config, envFile, profile, backend },
@@ -302,6 +481,10 @@ export const stateCommand = Command.make(
     listCommand,
     readCommand,
     deleteCommand,
+    protectCommand,
+    unprotectCommand,
+    loginCommand,
+    tokenCommand,
     unsafeCommand,
   ]),
 );
