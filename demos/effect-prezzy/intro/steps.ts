@@ -594,33 +594,13 @@ export const steps: StepSpec[] = [
   },
   {
     kind: "code",
-    group: "class",
-    file: "functionless · app.ts",
-    title: "But it can't see inside a class that takes any Store",
-    src: {
-      code: `class Todos {
-  constructor(private store: Store) {}
-
-  handler() {
-    return new Function(stack, "Delete", async (id: string) => {
-      await this.store.delete(id);
-    });
-  }
-}`,
-    },
-    marks: [{ kind: "circle", find: "this.store.delete", label: "a table? a bucket? whichever was passed in", side: "right", tone: "bad" }],
-    notes:
-      "But peeking inside breaks down fast. this.store could be a DynamoDB table, a bucket, anything, depending on who constructed the class. The implementation isn't there to read.",
-  },
-  {
-    kind: "code",
     group: "hidden",
     file: "functionless · app.ts",
-    title: "Or a function that's passed in",
+    title: "But it can't see inside a function that's passed in",
     src: { code: deleter("Promise<void>") },
     marks: [{ kind: "circle", find: "remove(id)", label: "which function? could be anything", side: "right", tone: "bad" }],
     notes:
-      "Same with a function passed in. Which function is remove? It depends on the caller, so reading this body tells you nothing.",
+      "But peeking inside breaks down fast. Take a function that's passed in. Which function is remove? It depends on the caller, so reading this body tells you nothing.",
   },
   {
     kind: "code",
