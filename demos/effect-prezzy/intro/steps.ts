@@ -174,9 +174,30 @@ const program = (): StepSpec[] => [
       "Resources have configuration that changes over time. Turn on versioning in the code, and the language reconciles the real bucket to match.",
   }),
   lang({
-    title: "Unlike variables, resources outlive the program",
+    title: "Declare a queue the same way",
     src: { code: BQ },
     diagram: { nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)], edges: [] },
+    notes: "A queue is declared just like the bucket: one line, one real queue in the cloud.",
+  }),
+  lang({
+    title: "Unlike variables, resources outlive the program",
+    src: { code: BQ },
+    diagram: {
+      nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)],
+      edges: [],
+      labels: [
+        {
+          text: "these live in the cloud\nlong after the program runs",
+          x: 190,
+          y: 262,
+          tone: "construct",
+          arrows: [
+            { from: [300, 220], to: [462, 118] },
+            { from: [300, 335], to: [462, 425] },
+          ],
+        },
+      ],
+    },
     notes:
       "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
   }),

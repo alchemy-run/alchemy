@@ -44,8 +44,7 @@ const focusOf = (graph: MiniGraph | undefined, prev: MiniGraph | undefined) => {
     !!prev &&
     (graph.nodes.some((n) => node(n.id)) ||
       graph.edges.some(edge) ||
-      (graph.cards ?? []).some((c) => card(c.text)) ||
-      (graph.labels ?? []).some((l) => !prev.labels?.some((p) => p.text === l.text)));
+      (graph.cards ?? []).some((c) => card(c.text)));
   const ownNode = (id: string) => {
     const n = graph?.nodes.find((x) => x.id === id);
     const was = before.get(id);
@@ -205,20 +204,38 @@ export const MiniGraphView = ({
           : null}
         {(graph.labels ?? []).map((label) => {
           const isNew = !prev?.labels?.some((l) => l.text === label.text);
+          const color = TONE[label.tone ?? "construct"];
           return (
-            <text
-              key={label.text}
-              x={label.x}
-              y={label.y}
-              textAnchor="middle"
-              fill={TONE[label.tone ?? "construct"]}
-              fontFamily={hand}
-              fontWeight={700}
-              fontSize={40}
-              opacity={isNew ? fade(local, delay + 4) : 1}
-            >
-              {label.text}
-            </text>
+            <g key={label.text}>
+              <text
+                x={label.x}
+                y={label.y}
+                textAnchor="middle"
+                fill={color}
+                fontFamily={hand}
+                fontWeight={700}
+                fontSize={40}
+                opacity={isNew ? fade(local, delay + 4) : 1}
+              >
+                {label.text.split("\n").map((line, i) => (
+                  <tspan key={i} x={label.x} dy={i === 0 ? 0 : 44}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+              {(label.arrows ?? []).map((a, i) => (
+                <Arrow
+                  key={i}
+                  x1={a.from[0]}
+                  y1={a.from[1]}
+                  x2={a.to[0]}
+                  y2={a.to[1]}
+                  color={color}
+                  progress={isNew ? drawProgress(local, delay + 6 + i * 3, 8) : 1}
+                  bend={0.15}
+                />
+              ))}
+            </g>
           );
         })}
       </svg>

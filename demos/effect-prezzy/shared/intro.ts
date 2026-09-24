@@ -67,7 +67,15 @@ export interface MiniGraph {
   /** A dashed frame around the whole drawing, e.g. "everything construction builds". */
   frame?: { label: string; tone?: Tone };
   /** Hand-written labels at a position in the drawing. */
-  labels?: { text: string; x: number; y: number; tone?: Tone }[];
+  labels?: {
+    /** `\n` breaks lines. */
+    text: string;
+    x: number;
+    y: number;
+    tone?: Tone;
+    /** Hand-drawn arrows from the label to what it's about. */
+    arrows?: { from: [number, number]; to: [number, number] }[];
+  }[];
 }
 
 export interface CodeStep {

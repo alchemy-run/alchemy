@@ -11,6 +11,8 @@ const AREA = { x: 110, y: 170, width: 1700, height: 870 };
 const PANEL_WIDTH = 560;
 /** Width kept for the drawing when a step has one. */
 export const DIAGRAM_WIDTH = 760;
+/** Left edge of the drawing (MiniGraph's area). */
+const DRAWING_X = 1090;
 const CHAR = 0.6;
 const LINE = 1.55;
 
@@ -197,6 +199,21 @@ export const CodeSlide = ({
           }}
         >
           {step.pseudo ? "an imaginary cloud language" : step.file}
+        </div>
+      ) : null}
+      {step.diagram ? (
+        <div
+          style={{
+            position: "absolute",
+            left: DRAWING_X,
+            top: AREA.y,
+            fontFamily: mono,
+            fontSize: 22,
+            color: brand.fgMuted,
+            opacity: morph ? 1 : t,
+          }}
+        >
+          the cloud
         </div>
       ) : null}
       {/* lines new or changed since the previous step in this sequence, in diff green */}
