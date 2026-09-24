@@ -8,7 +8,7 @@ import {
   watchStaticFile,
   type CalculateMetadataFunction,
 } from "remotion";
-import { introTimeline, type IntroJson, type IntroStep } from "../../shared/intro.ts";
+import { introTimeline, type CodeStep, type IntroJson, type IntroStep } from "../../shared/intro.ts";
 import { VIDEO } from "../../shared/types.ts";
 import { Caption } from "../scene/Scene.tsx";
 import { Slide } from "../slides/Slide.tsx";
@@ -60,7 +60,12 @@ export const Intro = ({ intro }: IntroProps) => {
     <AbsoluteFill>
       <Stage />
       {step.kind === "code" ? (
-        <CodeSlide step={step} prev={prev?.kind === "code" ? prev : undefined} local={local} />
+        <CodeSlide
+          step={step}
+          prev={prev?.kind === "code" ? prev : undefined}
+          prev2={intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined}
+          local={local}
+        />
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}

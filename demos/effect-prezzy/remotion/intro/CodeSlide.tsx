@@ -127,7 +127,18 @@ const MarkView = ({ mark, g, step, progress, index }: { mark: Mark; g: ReturnTyp
   );
 };
 
-export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeStep; local: number }) => {
+export const CodeSlide = ({
+  step,
+  prev,
+  prev2,
+  local,
+}: {
+  step: CodeStep;
+  prev?: CodeStep;
+  /** The step before `prev`: what was dimmed and drawn when this step began. */
+  prev2?: CodeStep;
+  local: number;
+}) => {
   const { fps } = useVideoConfig();
   const g = layout(step);
   const morph = prev && prev.group === step.group;
@@ -140,11 +151,26 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
   const marksStart = morph ? 18 : 12;
 
   // Lines new or changed since the previous step stay bright; the rest dims.
+  // Each line moves from how bright it was at the end of the previous step.
   const changed = (i: number) => !!morph && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
   const anyChanged = step.lines.some((_, i) => changed(i));
-  const dim = anyChanged
-    ? interpolate(local, [10, 22], [1, 0.4], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
-    : 1;
+  const morph2 = !!prev && !!prev2 && prev.group === step.group && prev2.group === prev.group;
+  const prevMatched = morph2 ? matchLines(prev2, prev!) : new Map<number, number>();
+  const prevChanged = (j: number) => morph2 && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
+  const prevAny = morph2 && prev!.lines.some((_, j) => prevChanged(j));
+  const dimT = interpolate(local, [10, 22], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const lineLevel = (i: number) => {
+    const target = anyChanged ? (changed(i) ? 1 : 0.4) : 1;
+    const from = matched.get(i);
+    const start = from === undefined ? target : prevAny ? (prevChanged(from) ? 1 : 0.4) : 1;
+    return start + (target - start) * dimT;
+  };
+  // A mark already drawn in the previous step stays drawn instead of redrawing.
+  const sameMark = (m: Mark) =>
+    !!morph &&
+    prev!.marks.some(
+      (p) => p.kind === m.kind && lineText(prev!.lines[p.line] ?? []).slice(p.col, p.col + p.len) === lineText(step.lines[m.line] ?? []).slice(m.col, m.col + m.len),
+    );
 
   const tintOf = (i: number) => step.tints.find((tint) => i >= tint.from && i <= tint.to);
   const focused = (i: number) => !step.focus || (i >= step.focus.from && i <= step.focus.to);
@@ -163,7 +189,8 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
             fontFamily: step.pseudo ? hand : mono,
             fontSize: step.pseudo ? 30 : 20,
             color: step.pseudo ? TONE.runtime : brand.fgMuted,
-            opacity: t,
+            // Continuing the same code: the label is already there.
+            opacity: morph ? 1 : t,
           }}
         >
           {step.pseudo ? "an imaginary cloud language" : step.file}
@@ -217,7 +244,7 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
         const y = y0 + (g.top + i * g.lh - y0) * t;
         const x = x0 + (g.left - x0) * t;
         const size = (from !== undefined ? pg.size : g.size) + (g.size - (from !== undefined ? pg.size : g.size)) * t;
-        const opacity = (from !== undefined ? 1 : newIn) * (focused(i) ? 1 : 0.28) * (changed(i) ? 1 : dim);
+        const opacity = (from !== undefined ? 1 : newIn) * (focused(i) ? 1 : 0.28) * lineLevel(i);
         return (
           <div
             key={`line-${i}`}
@@ -246,13 +273,14 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
       ) : null}
       <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
         {step.marks.map((mark, i) => (
-          <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={drawProgress(local, marksStart + i * 14)} />
+          <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={sameMark(mark) ? 1 : drawProgress(local, marksStart + i * 14)} />
         ))}
       </svg>
       {step.diagram ? (
         <MiniGraphView
           graph={step.diagram}
           prev={morph ? prev?.diagram : undefined}
+          prev2={morph && prev2?.group === step.group ? prev2.diagram : undefined}
           local={local}
           delay={marksStart}
         />

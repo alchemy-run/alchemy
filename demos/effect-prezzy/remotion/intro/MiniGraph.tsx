@@ -19,6 +19,46 @@ const exit = (n: { x: number; y: number }, dx: number, dy: number, pad = 8) => {
   return { x: n.x + dx * t, y: n.y + dy * t };
 };
 
+type Edge = MiniGraph["edges"][number];
+const edgeKey = (e: Edge) => `${e.from}->${e.to}`;
+
+/** What changed in `graph` since `prev`: that stays bright, everything else dims. */
+const focusOf = (graph: MiniGraph | undefined, prev: MiniGraph | undefined) => {
+  const before = new Map(prev?.nodes.map((n) => [n.id, n]));
+  const old = new Map(prev?.edges.map((e) => [edgeKey(e), e]));
+  const edge = (e: Edge) => {
+    const was = old.get(edgeKey(e));
+    return !!prev && (!was || was.tone !== e.tone || was.label !== e.label);
+  };
+  const node = (id: string) => {
+    const n = graph?.nodes.find((x) => x.id === id);
+    const was = before.get(id);
+    if (!prev || !n) return false;
+    const own = !was || (n.notes ?? []).some((note) => !was.notes?.includes(note));
+    // The ends of a changed connection stay bright too.
+    return own || (graph?.edges ?? []).some((e) => edge(e) && (e.from === id || e.to === id));
+  };
+  const card = (text: string) => !!prev && !prev.cards?.some((c) => c.text === text);
+  const any =
+    !!graph &&
+    !!prev &&
+    (graph.nodes.some((n) => node(n.id)) ||
+      graph.edges.some(edge) ||
+      (graph.cards ?? []).some((c) => card(c.text)) ||
+      (graph.labels ?? []).some((l) => !prev.labels?.some((p) => p.text === l.text)) ||
+      (!!graph.incoming && prev.incoming?.to !== graph.incoming.to));
+  const ownNode = (id: string) => {
+    const n = graph?.nodes.find((x) => x.id === id);
+    const was = before.get(id);
+    return !!prev && !!n && (!was || (n.notes ?? []).some((note) => !was.notes?.includes(note)));
+  };
+  return { any, node, ownNode, edge, card };
+};
+
+/** Brightness now, and at the end of the previous step, so unchanged parts don't flicker. */
+const DIM = 0.4;
+const level = (focus: { any: boolean }, on: boolean) => (focus.any ? (on ? 1 : DIM) : 1);
+
 /**
  * Draws the program's architecture as it stands at this step. Anything new
  * since the previous step animates in; nodes that moved glide to their new
@@ -27,11 +67,14 @@ const exit = (n: { x: number; y: number }, dx: number, dy: number, pad = 8) => {
 export const MiniGraphView = ({
   graph,
   prev,
+  prev2,
   local,
   delay,
 }: {
   graph: MiniGraph;
   prev?: MiniGraph;
+  /** The step before `prev`: tells us what was dimmed when this step began. */
+  prev2?: MiniGraph;
   local: number;
   delay: number;
 }) => {
@@ -48,16 +91,7 @@ export const MiniGraphView = ({
     }),
   );
   const oldEdges = new Set(prev?.edges.map((e) => `${e.from}->${e.to}`));
-  const oldTones = new Map(prev?.edges.map((e) => [`${e.from}->${e.to}`, e.tone]));
   const oldLabels = new Set(prev?.edges.map((e) => `${e.from}->${e.to}:${e.label}`));
-  const edgeChanged = (e: MiniGraph["edges"][number]) => {
-    const key = `${e.from}->${e.to}`;
-    return !oldEdges.has(key) || oldTones.get(key) !== e.tone || !oldLabels.has(`${key}:${e.label}`);
-  };
-  const nodeChanged = (n: MiniNode) => {
-    const was = before.get(n.id);
-    return !was || (n.notes ?? []).some((note) => !was.notes?.includes(note));
-  };
   const oldCards = new Set(prev?.cards?.map((c) => c.text));
   const newNodes = graph.nodes.filter((n) => !before.has(n.id));
   const edgeStart = delay + newNodes.length * 6;
@@ -65,14 +99,15 @@ export const MiniGraphView = ({
   const graphBottom = Math.max(...graph.nodes.map((n) => n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38), 0);
 
   // What changed since the previous step stays bright (and green); the rest dims.
-  const anyChanged =
-    !!prev &&
-    (graph.nodes.some(nodeChanged) ||
-      graph.edges.some(edgeChanged) ||
-      (graph.cards ?? []).some((c) => !oldCards.has(c.text)) ||
-      (graph.labels ?? []).some((l) => !prev.labels?.some((p) => p.text === l.text)) ||
-      (!!graph.incoming && prev.incoming?.to !== graph.incoming.to));
-  const dim = anyChanged ? fade(local, delay - 8, 12) * -0.6 + 1 : 1;
+  // Each part moves from how it looked at the end of the previous step, so
+  // parts that stay dim (or stay bright) don't move at all.
+  const now = focusOf(graph, prev);
+  const then = focusOf(prev, prev2);
+  const t = fade(local, delay - 8, 12);
+  const brightness = (on: boolean, was: boolean) => {
+    const from = level(then, was);
+    return from + (level(now, on) - from) * t;
+  };
   const glow = fade(local, delay + 4, 10);
 
   let newEdge = 0;
@@ -89,7 +124,9 @@ export const MiniGraphView = ({
           const s = exit(a, dx, dy);
           const t = exit(b, -dx, -dy);
           const isNew = !oldEdges.has(`${e.from}->${e.to}`);
-          const changed = !!prev && edgeChanged(e);
+          const changed = now.edge(e);
+          const prevEdge = prev?.edges.find((x) => edgeKey(x) === edgeKey(e));
+          const opacity = brightness(changed, !!prevEdge && then.edge(prevEdge));
           const progress = isNew ? drawProgress(local, edgeStart + newEdge++ * 8, 14) : 1;
           // The permission sits on the arrow, a little past its middle.
           const lx = s.x + (t.x - s.x) * 0.5;
@@ -97,7 +134,7 @@ export const MiniGraphView = ({
           const lw = (e.label?.length ?? 0) * 12.6 + 26;
           const labelIn = isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`) ? fade(local, edgeStart + 10, 10) : 1;
           return (
-            <g key={`${e.from}->${e.to}`} opacity={changed ? 1 : dim}>
+            <g key={`${e.from}->${e.to}`} opacity={opacity}>
               <Arrow
                 x1={s.x}
                 y1={s.y}
@@ -167,10 +204,12 @@ export const MiniGraphView = ({
       {graph.nodes.map((n) => {
         const p = placed.get(n.id)!;
         const isNew = !before.has(n.id);
-        const changed = !!prev && nodeChanged(n);
-        // The ends of a new connection stay bright too (without the glow).
-        const connected = !!prev && graph.edges.some((e) => edgeChanged(e) && (e.from === n.id || e.to === n.id));
-        const appear = (isNew ? fade(local, delay + newNodes.indexOf(n) * 6) : 1) * (changed || connected ? 1 : dim);
+        const changed = now.ownNode(n.id);
+        // Grow in only when new; dimming changes opacity, never size.
+        const grow = isNew ? fade(local, delay + newNodes.indexOf(n) * 6) : 1;
+        const opacity = grow * brightness(now.node(n.id), then.node(n.id));
+        // A glow for the box that changed; last step's glow fades out instead of popping.
+        const glowing = changed ? glow : then.ownNode(n.id) ? 1 - t : 0;
         const oldNotes = new Set(before.get(n.id)?.notes);
         return (
           <div key={n.id}>
@@ -188,11 +227,12 @@ export const MiniGraphView = ({
                 borderRadius: 18,
                 background: "#1c1a17",
                 border: `3px solid ${n.color}`,
-                boxShadow: changed
-                  ? `0 0 0 ${5 * glow}px rgba(126,231,135,0.45), 0 0 ${36 * glow}px rgba(126,231,135,0.4), 0 12px 34px rgba(0,0,0,0.45)`
-                  : "0 12px 34px rgba(0,0,0,0.45)",
-                opacity: appear,
-                transform: `scale(${0.9 + 0.1 * appear})`,
+                boxShadow:
+                  glowing > 0
+                    ? `0 0 0 ${5 * glowing}px rgba(126,231,135,0.45), 0 0 ${36 * glowing}px rgba(126,231,135,0.4), 0 12px 34px rgba(0,0,0,0.45)`
+                    : "0 12px 34px rgba(0,0,0,0.45)",
+                opacity,
+                transform: `scale(${0.9 + 0.1 * grow})`,
                 fontFamily: sans,
                 fontSize: 34,
                 fontWeight: 600,
@@ -242,7 +282,7 @@ export const MiniGraphView = ({
       >
         {(graph.cards ?? []).map((card) => {
           const isNew = !oldCards.has(card.text);
-          const q = (isNew ? fade(local, cardStart + newCard++ * 8) : 1) * (isNew || !prev ? 1 : dim);
+          const q = (isNew ? fade(local, cardStart + newCard++ * 8) : 1) * brightness(now.card(card.text), then.card(card.text));
           const color = TONE[card.tone ?? "construct"];
           return (
             <div
