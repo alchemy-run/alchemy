@@ -196,6 +196,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
       label: mark.label,
       side: mark.side,
       tone: mark.tone,
+      arrow: mark.arrow,
     };
   });
   const lines = tokenize(code, !!spec.pseudo);

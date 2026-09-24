@@ -34,6 +34,8 @@ export interface CodeSpec {
     label?: string;
     side?: "right" | "left" | "above" | "below";
     tone?: Tone;
+    /** Set the label further away, with an arrow pointing at the mark. */
+    arrow?: boolean;
   }[];
   /**
    * For `*.error.ts` snippets: which lines of the compiler's message to show,
@@ -716,6 +718,27 @@ export const steps: StepSpec[] = [
     ],
     notes:
       "And now the layers carry the policies, so we have to provide every policy for every path the code could take. The Logs bucket only exists in dev, but the type is the union of all paths, so it demands PutObject for Logs everywhere. Production gets the Logs bucket and its policy whether it runs that code or not.",
+  }),
+  api({
+    title: "…even the ones it never takes",
+    code: INFERRED_DEV,
+    marks: [
+      {
+        kind: "underline",
+        find: "R2.WriteBucket(Logs)",
+        label: "prod gets a permission only dev needs:\nleast privilege, violated",
+        side: "below",
+        arrow: true,
+        tone: "bad",
+      },
+    ],
+    req: [
+      BUCKET,
+      GET_OBJECT_HOISTED,
+      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+    ],
+    notes:
+      "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. That's a least-privilege violation, baked in by the type system.",
   }),
   api({
     title: "And it leaks into every interface built on top of it",

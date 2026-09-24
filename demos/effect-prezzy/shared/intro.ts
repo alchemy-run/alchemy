@@ -23,6 +23,8 @@ export interface Mark {
   label?: string;
   side?: "right" | "left" | "above" | "below";
   tone?: Tone;
+  /** Set the label further away, with a hand-drawn arrow pointing at the mark. */
+  arrow?: boolean;
 }
 
 export interface CodeError {

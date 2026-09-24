@@ -5,7 +5,7 @@ import { brand, vscode } from "../theme.ts";
 import { DrillView } from "./Drill.tsx";
 import { ReqView, reqHeight } from "./Req.tsx";
 import { MiniGraphView } from "./MiniGraph.tsx";
-import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
+import { Arrow, boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
 /** The code canvas, inside the frame and above the caption band. */
 /** Below the step title at the top of the frame. */
@@ -142,10 +142,12 @@ const MarkView = ({ mark, g, step, progress, index }: { mark: Mark; g: ReturnTyp
     path = boxPath(r.x, r.y, w, (lastLine - mark.line + 1) * g.lh, seed);
   } else path = "";
 
+  // An arrowed label sits well clear of the code, with the arrow bridging the gap.
+  const reach = mark.arrow ? 110 : 0;
   const labelPos = (() => {
     switch (mark.side ?? "right") {
       case "below":
-        return { x: r.x + r.w / 2, y: r.y + r.h + (mark.kind === "circle" ? 34 : 22), anchor: "middle" as const };
+        return { x: r.x + r.w / 2, y: r.y + r.h + (mark.kind === "circle" ? 34 : 22) + reach, anchor: "middle" as const };
       case "above":
         return { x: r.x + r.w / 2, y: r.y - (mark.kind === "circle" ? 30 : 16), anchor: "middle" as const };
       case "left":
@@ -159,6 +161,9 @@ const MarkView = ({ mark, g, step, progress, index }: { mark: Mark; g: ReturnTyp
     }
   })();
   const labelIn = interpolate(progress, [0.55, 1], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const labelSize = Math.min(52, Math.max(34, g.size * 1.05));
+  const labelLines = (mark.label ?? "").split("\n");
+  const arrowIn = interpolate(progress, [0.35, 0.8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <g>
@@ -175,15 +180,30 @@ const MarkView = ({ mark, g, step, progress, index }: { mark: Mark; g: ReturnTyp
           fill={color}
           fontFamily={hand}
           fontWeight={700}
-          fontSize={Math.min(52, Math.max(34, g.size * 1.05))}
+          fontSize={labelSize}
           opacity={labelIn}
           stroke={brand.bg}
           strokeWidth={12}
           strokeLinejoin="round"
           paintOrder="stroke"
         >
-          {mark.label}
+          {labelLines.map((line, i) => (
+            <tspan key={i} x={labelPos.x} dy={i === 0 ? 0 : labelSize * 1.05}>
+              {line}
+            </tspan>
+          ))}
         </text>
+      ) : null}
+      {mark.arrow && mark.label && (mark.side === "below" || mark.side === "above") ? (
+        <Arrow
+          x1={labelPos.x - 30}
+          y1={mark.side === "below" ? labelPos.y - labelSize * 0.9 : labelPos.y + labelSize * 0.4}
+          x2={r.x + r.w / 2}
+          y2={mark.side === "below" ? r.y + r.h + 10 : r.y - 10}
+          color={color}
+          progress={arrowIn}
+          bend={0.18}
+        />
       ) : null}
     </g>
   );
