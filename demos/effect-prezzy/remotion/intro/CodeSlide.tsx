@@ -145,10 +145,10 @@ export const CodeSlide = ({
   const matched = matchLines(morph ? prev : undefined, step);
   const pg = prev ? layout(prev) : g;
   const t = morph
-    ? interpolate(local, [0, 16], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: (x) => 1 - (1 - x) ** 3 })
-    : interpolate(local, [0, 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const newIn = morph ? interpolate(local, [8, 20], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : t;
-  const marksStart = morph ? 18 : 12;
+    ? interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: (x) => 1 - (1 - x) ** 3 })
+    : interpolate(local, [0, 6], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const newIn = morph ? interpolate(local, [2, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : t;
+  const marksStart = morph ? 6 : 4;
 
   // Lines new or changed since the previous step stay bright; the rest dims.
   // Each line moves from how bright it was at the end of the previous step.
@@ -158,7 +158,7 @@ export const CodeSlide = ({
   const prevMatched = morph2 ? matchLines(prev2, prev!) : new Map<number, number>();
   const prevChanged = (j: number) => morph2 && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
   const prevAny = morph2 && prev!.lines.some((_, j) => prevChanged(j));
-  const dimT = interpolate(local, [10, 22], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const dimT = interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const lineLevel = (i: number) => {
     const target = anyChanged ? (changed(i) ? 1 : 0.4) : 1;
     const from = matched.get(i);
@@ -276,7 +276,7 @@ export const CodeSlide = ({
       ) : null}
       <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
         {step.marks.map((mark, i) => (
-          <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={sameMark(mark) ? 1 : drawProgress(local, marksStart + i * 14)} />
+          <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={sameMark(mark) ? 1 : drawProgress(local, marksStart + i * 4, 9)} />
         ))}
       </svg>
       {step.diagram ? (
@@ -289,7 +289,7 @@ export const CodeSlide = ({
         />
       ) : null}
       {step.panel ? (
-        <Panel step={step} local={local} delay={marksStart + step.marks.length * 14} fps={fps} />
+        <Panel step={step} local={local} delay={marksStart + step.marks.length * 4} fps={fps} />
       ) : null}
     </AbsoluteFill>
   );
@@ -298,8 +298,8 @@ export const CodeSlide = ({
 const ErrorView = ({ step, g, local, delay }: { step: CodeStep; g: ReturnType<typeof layout>; local: number; delay: number }) => {
   const error = step.error!;
   const r = rect(step, g, error);
-  const p = drawProgress(local, delay, 12);
-  const box = interpolate(local, [delay + 8, delay + 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const p = drawProgress(local, delay, 8);
+  const box = interpolate(local, [delay + 4, delay + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   // A squiggle along the error range.
   const wave: string[] = [];
   for (let x = 0; x <= r.w * p; x += 6) wave.push(`${r.x + x},${r.y + r.h - 4 + (Math.floor(x / 6) % 2 ? 4 : 0)}`);
@@ -355,7 +355,7 @@ const Panel = ({ step, local, delay }: { step: CodeStep; local: number; delay: n
   const panel = step.panel!;
   const x = AREA.x + AREA.width - PANEL_WIDTH;
   const inAt = (i: number) =>
-    interpolate(local, [delay + i * 8, delay + i * 8 + 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    interpolate(local, [delay + i * 3, delay + i * 3 + 7], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <div
       style={{

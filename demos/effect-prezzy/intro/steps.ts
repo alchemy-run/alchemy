@@ -234,7 +234,6 @@ const program = (): StepSpec[] => [
     },
     notes:
       "So the program doesn't run once from top to bottom. Construction is declarative: it builds the architecture, the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
-    frames: 75,
   }),
   lang({
     title: "Imagine the phases as colored functions",
@@ -271,7 +270,6 @@ const program = (): StepSpec[] => [
     },
     notes:
       "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
-    frames: 75,
   }),
 ];
 
@@ -286,7 +284,6 @@ export const steps: StepSpec[] = [
     subtitle: "…without building a new language. Yet.",
     notes:
       "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language (at least not yet).",
-    frames: 75,
   },
   ...program(),
 
@@ -413,7 +410,6 @@ new Lambda.Function(stack, 'MyFunction', {
       { kind: "circle", find: "Req", label: "what it needs", side: "above", tone: "construct" },
     ],
     notes: "Effect is what unlocked the path forward. Look at Effect's type: success, errors, and the requirements channel.",
-    frames: 75,
   },
   {
     kind: "code",

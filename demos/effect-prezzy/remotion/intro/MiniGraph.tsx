@@ -8,7 +8,7 @@ import { Arrow, drawProgress, TONE } from "./draw.tsx";
 const AREA = { x: 1090, y: 170, width: 720 };
 const NODE = { w: 230, h: 84 };
 
-const fade = (local: number, delay: number, frames = 12) =>
+const fade = (local: number, delay: number, frames = 7) =>
   interpolate(local, [delay, delay + frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
 /** Where a line from a node's centre towards (dx, dy) leaves its box. */
@@ -77,7 +77,7 @@ export const MiniGraphView = ({
   local: number;
   delay: number;
 }) => {
-  const glide = interpolate(local, [0, 16], [0, 1], {
+  const glide = interpolate(local, [0, 8], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: (t) => 1 - (1 - t) ** 3,
@@ -93,8 +93,8 @@ export const MiniGraphView = ({
   const oldLabels = new Set(prev?.edges.map((e) => `${e.from}->${e.to}:${e.label}`));
   const oldCards = new Set(prev?.cards?.map((c) => c.text));
   const newNodes = graph.nodes.filter((n) => !before.has(n.id));
-  const edgeStart = delay + newNodes.length * 6;
-  const cardStart = edgeStart + graph.edges.filter((e) => !oldEdges.has(`${e.from}->${e.to}`)).length * 8 + 6;
+  const edgeStart = delay + newNodes.length * 2;
+  const cardStart = edgeStart + graph.edges.filter((e) => !oldEdges.has(`${e.from}->${e.to}`)).length * 3 + 3;
   const graphBottom = Math.max(...graph.nodes.map((n) => n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38), 0);
 
   // What changed since the previous step stays bright (and green); the rest dims.
@@ -102,12 +102,12 @@ export const MiniGraphView = ({
   // parts that stay dim (or stay bright) don't move at all.
   const now = focusOf(graph, prev);
   const then = focusOf(prev, prev2);
-  const t = fade(local, delay - 8, 12);
+  const t = fade(local, 0, 8);
   const brightness = (on: boolean, was: boolean) => {
     const from = level(then, was);
     return from + (level(now, on) - from) * t;
   };
-  const glow = fade(local, delay + 4, 10);
+  const glow = fade(local, delay, 6);
 
   let newEdge = 0;
   let newCard = 0;
@@ -126,12 +126,12 @@ export const MiniGraphView = ({
           const changed = now.edge(e);
           const prevEdge = prev?.edges.find((x) => edgeKey(x) === edgeKey(e));
           const opacity = brightness(changed, !!prevEdge && then.edge(prevEdge));
-          const progress = isNew ? drawProgress(local, edgeStart + newEdge++ * 8, 14) : 1;
+          const progress = isNew ? drawProgress(local, edgeStart + newEdge++ * 3, 8) : 1;
           // The permission sits on the arrow, a little past its middle.
           const lx = s.x + (t.x - s.x) * 0.5;
           const ly = s.y + (t.y - s.y) * 0.5;
           const lw = (e.label?.length ?? 0) * 12.6 + 26;
-          const labelIn = isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`) ? fade(local, edgeStart + 10, 10) : 1;
+          const labelIn = isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`) ? fade(local, edgeStart + 5, 5) : 1;
           return (
             <g key={`${e.from}->${e.to}`} opacity={opacity}>
               <Arrow
@@ -164,7 +164,7 @@ export const MiniGraphView = ({
               const w = Math.max(...xs) + 26 - x;
               const h = Math.max(...ys) + 26 - y;
               const color = TONE[graph.frame.tone ?? "construct"];
-              const q = prev?.frame ? 1 : fade(local, delay, 14);
+              const q = prev?.frame ? 1 : fade(local, delay, 8);
               return (
                 <g opacity={q}>
                   <rect x={x} y={y} width={w} height={h} rx={22} fill={`${color}0d`} stroke={color} strokeWidth={2.5} strokeDasharray="10 8" />
@@ -183,13 +183,13 @@ export const MiniGraphView = ({
               const n = placed.get(graph.incoming.to)!;
               const color = TONE[graph.incoming.tone ?? "runtime"];
               const isNew = prev?.incoming?.to !== graph.incoming.to;
-              const p = isNew ? drawProgress(local, delay + 10, 14) : 1;
+              const p = isNew ? drawProgress(local, delay + 3, 8) : 1;
               const top = n.y - NODE.h / 2;
               const y1 = top - 250;
               const y2 = top - 12;
               const dots = [0, 1, 2].map((k) => ((local + k * 16) % 48) / 48);
               return (
-                <g opacity={isNew ? fade(local, delay + 10, 10) : 1}>
+                <g opacity={isNew ? fade(local, delay + 3, 6) : 1}>
                   <Arrow x1={n.x} y1={y1} x2={n.x} y2={y2} color={color} progress={p} bend={0} />
                   {p >= 1
                     ? dots.map((d, k) => (
@@ -215,7 +215,7 @@ export const MiniGraphView = ({
               fontFamily={hand}
               fontWeight={700}
               fontSize={40}
-              opacity={isNew ? fade(local, delay + 12) : 1}
+              opacity={isNew ? fade(local, delay + 4) : 1}
             >
               {label.text}
             </text>
@@ -227,7 +227,7 @@ export const MiniGraphView = ({
         const isNew = !before.has(n.id);
         const changed = now.ownNode(n.id);
         // Grow in only when new; dimming changes opacity, never size.
-        const grow = isNew ? fade(local, delay + newNodes.indexOf(n) * 6) : 1;
+        const grow = isNew ? fade(local, delay + newNodes.indexOf(n) * 2) : 1;
         const opacity = grow * brightness(now.node(n.id), then.node(n.id));
         // A glow for the box that changed; last step's glow fades out instead of popping.
         const glowing = changed ? glow : then.ownNode(n.id) ? 1 - t : 0;
@@ -265,7 +265,7 @@ export const MiniGraphView = ({
             </div>
             {(n.notes ?? []).map((note, i) => {
               const fresh = !oldNotes.has(note);
-              const q = fresh ? fade(local, delay + 8 + i * 6, 10) : 1;
+              const q = fresh ? fade(local, delay + 3 + i * 2, 6) : 1;
               return (
                 <div
                   key={note}
@@ -303,7 +303,7 @@ export const MiniGraphView = ({
       >
         {(graph.cards ?? []).map((card) => {
           const isNew = !oldCards.has(card.text);
-          const q = (isNew ? fade(local, cardStart + newCard++ * 8) : 1) * brightness(now.card(card.text), then.card(card.text));
+          const q = (isNew ? fade(local, cardStart + newCard++ * 3) : 1) * brightness(now.card(card.text), then.card(card.text));
           const color = TONE[card.tone ?? "construct"];
           return (
             <div

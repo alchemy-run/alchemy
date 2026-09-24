@@ -54,7 +54,7 @@ const captionAt = (plan: SceneSchedule, frame: number) => {
 };
 
 export const Caption = ({ text, since }: { text: string; since: number }) => {
-  const t = interpolate(since, [0, 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const t = interpolate(since, [0, 5], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <div
       style={{
