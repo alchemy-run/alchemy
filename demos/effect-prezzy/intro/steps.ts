@@ -981,7 +981,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "cdk",
     file: "infra/api.ts",
-    title: "Under the hood, the CDK just generates CloudFormation",
+    title: "…or so I thought. The CDK just generated CloudFormation",
     src: { code: CDK },
     beside: { file: "cdk synth → template.yaml", lang: "yaml", src: { code: CDK_SYNTH } },
     links: [
@@ -991,7 +991,7 @@ export const steps: StepSpec[] = [
     ],
     frames: 45,
     notes:
-      "But it's worth being clear about what the CDK actually is. Run cdk synth and your TypeScript executes once, on your machine, and spits out a CloudFormation template. Every construct becomes a block of YAML. That template is what actually gets deployed.",
+      "Or so I thought. It's worth being clear about what the CDK actually is. Run cdk synth and your TypeScript executes once, on your machine, and spits out a CloudFormation template. Every construct becomes a block of YAML. That template is what actually gets deployed.",
   },
   {
     kind: "code",
