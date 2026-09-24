@@ -117,6 +117,11 @@ const COLORED_APP = `construct app() {
     queue.send(file)
   }
 }`;
+/** What the function needs, inferred from its body the way a type would be. */
+const INFERRED_NEEDS = COLORED_APP.replace(
+  "  runtime function api(req) {",
+  "  // needs: s3:GetObject | sqs:SendMessage\n  runtime function api(req) {",
+);
 /** Step one of the colors: only construction is marked. */
 const CONSTRUCT_ONLY = COLORED_APP.replace("  runtime function api(req) {", "  function api(req) {");
 /** The question: what would a bucket created inside the function even mean? */
@@ -341,13 +346,31 @@ const program = (): StepSpec[] => [
     title: "And inferring permissions becomes a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    diagramLinks: [
+      { from: "bucket.get(req.key)", to: { edge: ["api", "bucket"] } },
+      { from: "queue.send(file)", to: { edge: ["api", "queue"] } },
+    ],
+    frames: 40,
+    notes:
+      "And working out those permissions is a kind of type checking. Each call in the runtime function tells you something it needs: bucket.get needs s3:GetObject on that bucket, queue.send needs sqs:SendMessage on that queue.",
+  }),
+  lang({
+    title: "…just as a compiler infers a type from a function's body",
+    src: { code: INFERRED_NEEDS },
+    quiet: true,
+    marks: [{ kind: "box", find: "// needs: s3:GetObject | sqs:SendMessage", tone: "construct" }],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
       labels: [{ text: "for every possible req…", x: 360, y: 530, tone: "runtime" }],
     },
+    diagramLinks: [
+      { from: "bucket.get(req.key)", to: { edge: ["api", "bucket"] } },
+      { from: "queue.send(file)", to: { edge: ["api", "queue"] } },
+    ],
     notes:
-      "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
+      "A compiler infers a function's return type by looking at every path through its body. Do the same with the calls, and you infer what the function needs: s3:GetObject and sqs:SendMessage, for every possible request. Its permissions become part of its type, and the policy falls out of type checking.",
   }),
 ];
 

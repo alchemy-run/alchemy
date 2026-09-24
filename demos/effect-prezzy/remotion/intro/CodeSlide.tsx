@@ -477,7 +477,13 @@ export const CodeSlide = ({
             // keeps the arc clear of nodes and notes between the code and its target.
             const y1 = r.y + r.h * 0.92;
             const gx = g.left + Math.max(...step.lines.map((l) => lineText(l).length)) * g.cw + 14;
-            const start = marksStart + i * 6;
+            // A link that was already drawn on the previous step stays drawn.
+            const text = (st: CodeStep, sp: { line: number; col: number; len: number }) =>
+              lineText(st.lines[sp.line] ?? []).slice(sp.col, sp.col + sp.len);
+            const drawn = prev?.diagramLinks?.some(
+              (p) => JSON.stringify(p.to) === JSON.stringify(link.to) && text(prev, p.from) === text(step, link.from),
+            );
+            const start = drawn ? -100 : marksStart + i * 6;
             return (
               <g key={i}>
                 {stroke(underlinePath(r.x, y1, r.w, i * 5 + 2), color, drawProgress(local, start, 6), 3)}
