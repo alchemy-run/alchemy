@@ -1345,12 +1345,12 @@ export const steps: StepSpec[] = [
       "And conditional infrastructure is just ordinary code. Only in dev do we create a Logs bucket and bind it for writing. No new syntax, no analysis: an if statement, or here a ternary.",
   }),
   api({
-    title: "Running the code discovers the bindings, not analyzing it",
+    title: "And then \"peeking inside\" is solved by just running the code",
     snippet: "api-04b-dev.ts",
     marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
     req: [{ ...READ, note: "declared in construction" }, { ...WRITE_LOGS, note: "only bound when\nthis line runs" }],
     notes:
-      "Here's the key. Alchemy doesn't read your code to find the bindings. It runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
+      "And that solves peeking inside. Alchemy doesn't read your code to find the bindings. It just runs it. In dev the WriteBucket line runs, and the binding and its policy are attached. In production it's skipped, so production never gets that permission. Least privilege, for free. The types still say which implementations must be available; running the code decides what's actually granted.",
   }),
   api({
     title: "That's why construction runs at deploy time…",
