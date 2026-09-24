@@ -129,6 +129,7 @@ catalog:
   changelogithub: "^13.16.1"
   chokidar: "^5.0.0"
   cookie: "^2.0.1"
+  cuelume: "^0.2.2"
   dedent: "^1.7.2"
   devalue: "5.8.1"
   dotenv: "^17.4.2"

@@ -1,5 +1,6 @@
 ---
 import Logo from "./Logo.astro";
+import { CONTRIBUTORS } from "../../data/contributors";
 
 interface FooterLink {
   label: string;
@@ -52,6 +53,14 @@ const cols: FooterCol[] = [
   //   ],
   // },
 ];
+
+// Community contributors, most commits first: a few faces, then the rest
+// as a count linking to GitHub's contributors graph.
+const SHOWN = 8;
+const faces = CONTRIBUTORS.slice(0, SHOWN);
+const rest = CONTRIBUTORS.length - faces.length;
+const graph =
+  "https://github.com/alchemy-run/alchemy/graphs/contributors?all=1";
 ---
 
 <footer class="alc-footer">
@@ -62,6 +71,32 @@ const cols: FooterCol[] = [
         Infrastructure as Effects. A single, type-safe TypeScript program for your cloud.
       </p>
       <div class="alc-footer__copy">Apache-2.0 · © 2026 Functionless, Inc.</div>
+      <div class="alc-footer__people">
+        <ul class="alc-footer__faces" aria-label="Contributors">
+          {faces.map((c) => (
+            <li>
+              <a
+                href={`https://github.com/${c.login}`}
+                title={`@${c.login} · ${c.commits} commits`}
+              >
+                <img
+                  src={`https://github.com/${c.login}.png?size=64`}
+                  alt={`@${c.login}`}
+                  width="28"
+                  height="28"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
+        {rest > 0 && (
+          <a class="alc-footer__more" href={graph} aria-label={`${rest} more contributors on GitHub`}>
+            +{rest}
+          </a>
+        )}
+      </div>
     </div>
     {cols.map((col) => (
       <div>
@@ -125,6 +160,54 @@ const cols: FooterCol[] = [
     font-family: var(--alc-font-mono);
     font-size: 11px;
     color: var(--alc-fg-4);
+  }
+  .alc-footer__people {
+    margin-top: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .alc-footer__faces {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+  }
+  .alc-footer__faces li + li {
+    margin-left: -12px;
+  }
+  .alc-footer__faces a {
+    position: relative;
+    display: block;
+    border-radius: 50%;
+    transition: transform 160ms ease;
+  }
+  .alc-footer__faces a:hover,
+  .alc-footer__faces a:focus-visible {
+    z-index: 1;
+    transform: translateY(-2px);
+  }
+  .alc-footer__faces a:focus-visible {
+    outline: 2px solid var(--alc-accent);
+    outline-offset: 2px;
+  }
+  .alc-footer__faces img {
+    display: block;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    /* A ring in the footer color separates the overlapping faces. */
+    box-shadow: 0 0 0 2px var(--alc-bg-nav);
+    background: var(--alc-hairline);
+  }
+  .alc-footer__more {
+    font-family: var(--alc-font-mono);
+    font-size: 13px;
+    color: var(--alc-accent-deep);
+    text-decoration: none;
+  }
+  .alc-footer__more:hover {
+    text-decoration: underline;
   }
   .alc-footer__heading {
     font-family: var(--alc-font-mono);

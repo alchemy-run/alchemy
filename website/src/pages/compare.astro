@@ -1,19 +1,10 @@
 ---
 import Marketing from "../layouts/Marketing.astro";
-import CodeBlock from "../components/marketing/CodeBlock.astro";
 import Button from "../components/marketing/Button.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import Yantra from "../brand/Yantra.astro";
-import MiniLoop from "../components/compare/MiniLoop.astro";
-
-const TEST_SRC = `const stack = beforeAll(deploy(Stack));
-afterAll(destroy(Stack));
-
-test("stores a session", Effect.gen(function* () {
-  const { url } = yield* stack;
-  const res = yield* HttpClient.post(\`\${url}/session\`);
-  expect(res.status).toBe(200);
-}));`;
+import TestLoop from "../components/compare/TestLoop.astro";
+import OneLine from "../components/compare/OneLine.astro";
 
 const TOOLS = ["Alchemy", "SST", "Pulumi", "Terraform", "AWS CDK"] as const;
 
@@ -158,18 +149,16 @@ const STEP = 128;
 const X0 = 70;
 type DevMode = {
     id: string;
-    label: string;
     headline: string;
     sub: string;
     hops: Hop[];
 };
-// Alchemy's row is interactive: `remote()` moves any resource (or the whole
-// stack) to the real cloud during `alchemy dev`, or you can skip dev and
-// deploy every change. Boxes are matched across modes by `key`.
+// Alchemy's row is interactive: drag Lambda or DynamoDB across the network
+// line (`remote()` in `alchemy dev`). Both in the cloud means every edit is a
+// deploy. Boxes are matched across modes by `key`.
 const ALCHEMY_MODES: DevMode[] = [
     {
         id: "local",
-        label: "Emulate all",
         headline: "0 round trips",
         sub: "Runs offline. Edits reload in place.",
         hops: [
@@ -180,9 +169,8 @@ const ALCHEMY_MODES: DevMode[] = [
     },
     {
         id: "remote-data",
-        label: "Remote data",
         headline: "1 round trip",
-        sub: "remote() puts one resource in the real cloud. Your code still runs locally.",
+        sub: "remote() puts DynamoDB in the real cloud. Your Lambda still runs locally.",
         hops: [
             { label: "browser", lane: "m", key: "src" },
             { label: "Lambda · Docker", lane: "m", key: "fn" },
@@ -190,21 +178,19 @@ const ALCHEMY_MODES: DevMode[] = [
         ],
     },
     {
-        id: "remote-all",
-        label: "All remote",
-        headline: "1 round trip",
-        sub: "Wrap the stack in remote() and dev deploys it for real, redeploying as you edit.",
+        id: "remote-fn",
+        headline: "2 round trips",
+        sub: "remote() deploys the Lambda for real. It still reads and writes your local DynamoDB.",
         hops: [
             { label: "browser", lane: "m", key: "src" },
             { label: "Lambda", lane: "c", key: "fn" },
-            { label: "DynamoDB", lane: "c", key: "db" },
+            { label: "DynamoDB · floci", lane: "m", key: "db" },
         ],
     },
     {
         id: "deploy",
-        label: "Deploy",
-        headline: "Deploy first",
-        sub: "Or skip dev: run alchemy deploy on every change, the Terraform way.",
+        headline: "Deploy each edit",
+        sub: "With the whole stack in remote(), dev redeploys it for real as you edit.",
         hops: [
             { label: "edit", lane: "m", key: "src" },
             // Half the Terraform row's hold: no engine or provider plugins to start.
@@ -460,6 +446,9 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         headline: m.headline,
         sub: m.sub,
         local: m.hops.every((h) => h.lane === "m"),
+        lanes: Object.fromEntries(
+            m.hops.flatMap((h) => (h.key ? [[h.key, h.lane]] : [])),
+        ),
         aria: traceLabel("Alchemy", m.hops, g.crossings.length),
         path: g.path,
         segs: segs.map((c) => c.map((n) => +n.toFixed(2))),
@@ -469,30 +458,6 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
     };
 });
 
-// ---------- testing: the deploy → test → destroy → edit loop ----------
-const LOOP = (() => {
-    const c = 150,
-        r = 108;
-    const pt = (deg: number) => {
-        const t = (deg * Math.PI) / 180;
-        return [
-            +(c + r * Math.cos(t)).toFixed(1),
-            +(c + r * Math.sin(t)).toFixed(1),
-        ];
-    };
-    const nodes = [
-        { label: "deploy", time: "~12s", deg: -90 },
-        { label: "test", time: "<1s", deg: 0 },
-        { label: "destroy", time: "~4s", deg: 90 },
-        { label: "edit", time: "", deg: 180 },
-    ].map((n) => ({ ...n, xy: pt(n.deg) }));
-    const arcs = nodes.map((n) => {
-        const [x0, y0] = pt(n.deg + 24);
-        const [x1, y1] = pt(n.deg + 66);
-        return `M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`;
-    });
-    return { nodes, arcs };
-})();
 ---
 
 <Marketing
@@ -508,13 +473,7 @@ const LOOP = (() => {
                 Alchemy vs existing IaC solutions
             </h1>
             <p class="cmp-hero__lede" data-copy>
-                Most existing IaC solutions wrap terraform in some way.
-                <br />
-                Alchemy ships its own IaC engine, opening the door for more
-                fully integrated features: <a href="#testing">testing</a>,{" "}
-                <a href="#engine">engine</a>, <a href="#bindings">bindings</a>,{" "}
-                <a href="#permissions">permissions</a>, and{" "}
-                <a href="#local">local dev</a>.
+                Most existing IaC solutions wrap terraform or are managed services in some way. Alchemy ships its own IaC engine in TypeScript, opening the door for more fully integrated features: <a href="#testing">testing</a>, <a href="#engine">engine</a>, <a href="#bindings">bindings</a>, <a href="#permissions">permissions</a>, and <a href="#local">local dev</a>.
             </p>
         </div>
     </section>
@@ -583,170 +542,9 @@ const LOOP = (() => {
                 A complete iteration loop for agents
             </h2>
             <p class="cmp-lede" data-copy>
-                Alchemy test deploys a real stack, runs tests on that
-                deployment, then tears it down all from the test runner you
-                already use. All agent's have to do to test against real
-                infrastructure is make a code change, then run a test file; this
-                keeps the loop extremely tight and lets ai agents move fast
-                without breaking. Our{" "}
-                <a href="https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-preview-benchmark">
-                    preview benchmark
-                </a>{" "}
-                takes 17 seconds for 1 full loop,{" "}
-                <strong>no competitor even has a full loop</strong>.
+                Alchemy Test deploys a real stack, runs tests on that deployment, then tears it down all from the test runner you already use. All agent's have to do to test against real infrastructure is make a code change, then run a test file; this keeps the loop extremely tight and lets ai agents move fast without breaking. Our <a href="https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-preview-benchmark"> preview benchmark </a> takes 17 seconds for 1 full loop, <strong>no competitor even has a full loop</strong>.
             </p>
-            <div class="cmp-split cmp-split--loop">
-                <figure class="dg-loop is-ours">
-                    <svg
-                        viewBox="0 0 300 300"
-                        role="img"
-                        aria-label="Alchemy's loop: deploy about 12 seconds, test under 1 second, destroy about 4 seconds, edit, then deploy again."
-                    >
-                        <defs>
-                            <marker
-                                id="dg-arrow"
-                                viewBox="0 0 10 10"
-                                refX="7"
-                                refY="5"
-                                markerWidth="7"
-                                markerHeight="7"
-                                orient="auto-start-reverse"
-                            >
-                                <path d="M0 1 L9 5 L0 9 z" />
-                            </marker>
-                        </defs>
-                        <circle
-                            class="dg-loop__track"
-                            cx="150"
-                            cy="150"
-                            r="108"
-                        />
-                        {LOOP.arcs.map((d) => (
-                            <path
-                                class="dg-loop__arc"
-                                d={d}
-                                marker-end="url(#dg-arrow)"
-                            />
-                        ))}
-                        {LOOP.nodes.map((n) => (
-                            <g
-                                class="dg-loop__node"
-                                transform={`translate(${n.xy[0]} ${n.xy[1]})`}
-                            >
-                                <circle r="30" />
-                                <text
-                                    y={n.time ? -2 : 4}
-                                    text-anchor="middle"
-                                    class="dg-loop__label"
-                                >
-                                    {n.label}
-                                </text>
-                                {n.time && (
-                                    <text
-                                        y="13"
-                                        text-anchor="middle"
-                                        class="dg-loop__time"
-                                    >
-                                        {n.time}
-                                    </text>
-                                )}
-                            </g>
-                        ))}
-                        <text
-                            x="150"
-                            y="146"
-                            text-anchor="middle"
-                            class="dg-loop__total"
-                        >
-                            ~17s
-                        </text>
-                        <text
-                            x="150"
-                            y="166"
-                            text-anchor="middle"
-                            class="dg-loop__caption"
-                        >
-                            per loop
-                        </text>
-                    </svg>
-                    <figcaption>Alchemy</figcaption>
-                </figure>
-                <CodeBlock
-                    filename="test/api.test.ts"
-                    code={TEST_SRC}
-                    compact
-                />
-            </div>
-            <ul class="dg-broken">
-                <li class="dg-broken__card">
-                    <MiniLoop
-                        tool="SST"
-                        nodes={["manual", "ok", "manual", "ok"]}
-                        arcs={["manual", "manual", "manual", "manual"]}
-                    />
-                    <div class="dg-broken__text">
-                        <p class="dg-broken__tool" data-copy>
-                            SST
-                        </p>
-                        <h3 class="dg-broken__headline" data-copy>
-                            Tests can't deploy &amp; destroy
-                        </h3>
-                        <p class="dg-broken__body" data-copy>
-                            <code>sst shell</code> can give tests access to
-                            resources via link, but deploying and tearing down
-                            the stack still need to be done outside of the test
-                            runner.
-                        </p>
-                    </div>
-                </li>
-                <li class="dg-broken__card">
-                    <MiniLoop
-                        tool="Pulumi"
-                        nodes={["ok", "diy", "ok", "ok"]}
-                        arcs={["diy", "diy", "ok", "ok"]}
-                    />
-                    <div class="dg-broken__text">
-                        <p class="dg-broken__tool" data-copy>
-                            Pulumi
-                        </p>
-                        <h3 class="dg-broken__headline" data-copy>
-                            Make your own test runner
-                        </h3>
-                        <p class="dg-broken__body" data-copy>
-                            Pulumi exposes and automation api that can deploy
-                            and destroy, but passing outputs to tests and
-                            cleaning up properly after failures means you need
-                            to write your own testing harness.
-                        </p>
-                    </div>
-                </li>
-                <li class="dg-broken__card">
-                    <MiniLoop
-                        tool="Terraform"
-                        nodes={["ok", "broken", "ok", "ok"]}
-                        arcs={["ok", "broken", "ok", "ok"]}
-                    />
-                    <div class="dg-broken__text">
-                        <p class="dg-broken__tool" data-copy>
-                            Terraform
-                        </p>
-                        <h3 class="dg-broken__headline" data-copy>
-                            Tests must be entirely decoupled
-                        </h3>
-                        <p class="dg-broken__body" data-copy>
-                            Terraform test can assert what resources are
-                            deployed, but it doesn't verify whats running in
-                            those resources is correct
-                        </p>
-                    </div>
-                </li>
-            </ul>
-            <ul class="dg-legend" aria-label="Legend">
-                <li><span class="dg-legend__ok" aria-hidden="true"></span>part of the loop</li>
-                <li><span class="dg-legend__manual" aria-hidden="true"></span>by hand, outside the test</li>
-                <li><span class="dg-legend__diy" aria-hidden="true"></span>possible, you build it</li>
-                <li><span class="dg-legend__broken" aria-hidden="true"></span>can't do what the loop needs</li>
-            </ul>
+            <TestLoop />
         </div>
     </section>
 
@@ -799,129 +597,14 @@ const LOOP = (() => {
                 One line does three jobs
             </h2>
             <p class="cmp-lede" data-copy>
-                For a function to read a table it needs a permission, config
-                that points it at the table, and a client to call it. In
-                Alchemy, the function's code asks for the capability, and that
-                one line produces all three. SST's <code>link</code> covers the
-                first two; elsewhere they live in three places that nothing
-                keeps in sync.
+                To read a table, a function needs three things that usually
+                live in three different places: a permission, the table's
+                name, and a client. In Alchemy the function's code asks for
+                the capability, and that one line produces all three: its
+                statement in the IAM policy, the table's name, and a typed
+                client.
             </p>
-            <div class="dg-bindrows">
-                <figure class="dg-brow is-ours">
-                    <figcaption class="dg-trace__meta">
-                        <span class="dg-trace__tool">Alchemy</span>
-                        <span class="dg-trace__headline">3 of 3</span>
-                        <span class="dg-trace__sub">
-                            One call wires all three, checked by the compiler.
-                        </span>
-                    </figcaption>
-                    <div class="dg-fan">
-                        <code class="dg-chip dg-chip--src">
-                            yield* DynamoDB.GetItem(table)
-                        </code>
-                        <svg
-                            class="dg-fan__lines"
-                            viewBox="0 0 80 150"
-                            preserveAspectRatio="none"
-                            aria-hidden="true"
-                        >
-                            <path d="M0 75 C 40 75, 40 25, 80 25" />
-                            <path d="M0 75 L 80 75" />
-                            <path d="M0 75 C 40 75, 40 125, 80 125" />
-                        </svg>
-                        <ul class="dg-fan__out">
-                            <li class="dg-chip">
-                                <b>Permission</b>
-                                <code>dynamodb:GetItem</code> on this table
-                            </li>
-                            <li class="dg-chip">
-                                <b>Config</b>table name injected at deploy
-                            </li>
-                            <li class="dg-chip">
-                                <b>Client</b>typed <code>getItem()</code>
-                            </li>
-                        </ul>
-                    </div>
-                </figure>
-                <figure class="dg-brow">
-                    <figcaption class="dg-trace__meta">
-                        <span class="dg-trace__tool">SST</span>
-                        <span class="dg-trace__headline">2 of 3</span>
-                        <span class="dg-trace__sub">
-                            <code>link</code> wires the permission and config.
-                            Your handler still makes its own SDK call.
-                        </span>
-                    </figcaption>
-                    <div class="dg-fan">
-                        <code class="dg-chip dg-chip--src">link: [table]</code>
-                        <svg
-                            class="dg-fan__lines"
-                            viewBox="0 0 80 150"
-                            preserveAspectRatio="none"
-                            aria-hidden="true"
-                        >
-                            <path d="M0 75 C 40 75, 40 25, 80 25" />
-                            <path d="M0 75 L 80 75" />
-                            <path
-                                class="is-broken"
-                                d="M0 75 C 40 75, 40 125, 80 125"
-                            />
-                        </svg>
-                        <ul class="dg-fan__out">
-                            <li class="dg-chip">
-                                <b>Permission</b>
-                                <code>dynamodb:*</code> on this table
-                            </li>
-                            <li class="dg-chip">
-                                <b>Config</b>typed{" "}
-                                <code>Resource.Table.name</code>
-                            </li>
-                            <li class="dg-chip is-broken">
-                                <b>Client</b>SDK call in your handler, unchecked
-                            </li>
-                        </ul>
-                    </div>
-                </figure>
-                <figure class="dg-brow">
-                    <figcaption class="dg-trace__meta">
-                        <span class="dg-trace__tool">
-                            Pulumi &amp; Terraform
-                        </span>
-                        <span class="dg-trace__headline">0 of 3</span>
-                        <span class="dg-trace__sub">
-                            Three places, and nothing checks that they agree.
-                        </span>
-                    </figcaption>
-                    <div class="dg-fan">
-                        <span class="dg-fan__none">
-                            nothing ties them together
-                        </span>
-                        <span aria-hidden="true"></span>
-                        <ol class="dg-apart">
-                            <li class="dg-chip">
-                                <b>Permission</b>
-                                <span class="dg-file">policy in your IaC</span>
-                            </li>
-                            <li class="dg-q" aria-hidden="true">
-                                ??
-                            </li>
-                            <li class="dg-chip">
-                                <b>Config</b>
-                                <span class="dg-file">env var in your IaC</span>
-                            </li>
-                            <li class="dg-q" aria-hidden="true">
-                                ??
-                            </li>
-                            <li class="dg-chip">
-                                <b>Client</b>
-                                <span class="dg-file">
-                                    SDK call in your handler
-                                </span>
-                            </li>
-                        </ol>
-                    </div>
-                </figure>
-            </div>
+            <OneLine />
         </div>
     </section>
 
@@ -938,11 +621,7 @@ const LOOP = (() => {
                 Principle of least privilege
             </h2>
             <p class="cmp-lede" data-copy>
-                In Alchemy permission policies are created from your code, allow
-                least privilege security policies to be enforced on the type
-                level. SST comes close but the permissions aren't as granular.
-                Pulumi &amp; terraform offer absolutely no enforcement and you
-                have to manually maintain permission policies yourself.
+                In Alchemy permission policies are created from your code. This allows least privilege security policies to be inferred on the type level. SST provides link to automate common policy usecases, but are one size fits all, not lease privilege. Pulumi &amp; terraform offer no enforcement, so you have to manually maintain permission policies yourself.
             </p>
             <div class="dg-perm">
                 {[
@@ -1036,7 +715,7 @@ const LOOP = (() => {
     <section class="cmp-section cmp-pat-6" id="local" aria-labelledby="local-h">
         <div class="cmp-container">
             <h2 class="cmp-h2" id="local-h" data-copy>
-                Built in emulation
+                True emulation for faster dev loops
             </h2>
             <p class="cmp-lede" data-copy>
                 <code>alchemy dev</code> runs your stack entirely on your
@@ -1063,34 +742,27 @@ const LOOP = (() => {
                         >
                             <figcaption class="dg-trace__meta">
                                 <span class="dg-trace__tool">{t.tool}</span>
-                                <span class="dg-trace__headline" data-headline>
-                                    {t.headline}
+                                {/* Alchemy's text changes with the drag: every variant sits
+                                    in the same grid cell (hidden) so the column is always
+                                    sized to the longest and never shifts. */}
+                                <span class="dg-trace__headline dg-stack">
+                                    <span data-headline>{t.headline}</span>
+                                    {t.modes?.map((m) => (
+                                        <span class="dg-sizer" aria-hidden="true">
+                                            {m.headline}
+                                        </span>
+                                    ))}
                                 </span>
-                                <span
-                                    class="dg-trace__sub"
-                                    data-sub
-                                    aria-live="polite"
-                                >
-                                    {t.sub}
+                                <span class="dg-trace__sub dg-stack">
+                                    <span data-sub aria-live="polite">
+                                        {t.sub}
+                                    </span>
+                                    {t.modes?.map((m) => (
+                                        <span class="dg-sizer" aria-hidden="true">
+                                            {m.sub}
+                                        </span>
+                                    ))}
                                 </span>
-                                {t.modes && (
-                                    <fieldset class="dg-modes">
-                                        <legend class="dg-sr">
-                                            How Alchemy runs in dev
-                                        </legend>
-                                        {t.modes.map((m, mi) => (
-                                            <label>
-                                                <input
-                                                    type="radio"
-                                                    name="alc-dev-mode"
-                                                    value={mi}
-                                                    checked={mi === 0}
-                                                />
-                                                <span>{m.label}</span>
-                                            </label>
-                                        ))}
-                                    </fieldset>
-                                )}
                             </figcaption>
                             <div
                                 class="dg-trace__scroll"
@@ -1100,7 +772,7 @@ const LOOP = (() => {
                             >
                                 <svg
                                     viewBox={`0 0 660 ${TRACE_H}`}
-                                    role="img"
+                                    role={t.modes ? "group" : "img"}
                                     aria-label={traceLabel(
                                         t.tool,
                                         t.hops,
@@ -1187,6 +859,15 @@ const LOOP = (() => {
                                                       !p.shown && "is-ghost",
                                                   ]}
                                                   data-hop={si}
+                                                  {...(ALCHEMY_SLOTS[si] === "fn" ||
+                                                  ALCHEMY_SLOTS[si] === "db"
+                                                      ? {
+                                                            "data-drag":
+                                                                ALCHEMY_SLOTS[si],
+                                                            tabindex: "0",
+                                                            role: "button",
+                                                        }
+                                                      : {})}
                                                   style={`transform: translate(${p.x}px, ${p.y}px)`}
                                               >
                                                   <rect
@@ -1373,6 +1054,42 @@ const LOOP = (() => {
                                             stays on your machine
                                         </text>
                                     )}
+                                    {t.modes && (
+                                        <g
+                                            class="dg-hint"
+                                            data-hint
+                                            aria-hidden="true"
+                                        >
+                                            <defs>
+                                                <marker
+                                                    id="dg-hint-head"
+                                                    viewBox="0 0 10 10"
+                                                    refX="6"
+                                                    refY="5"
+                                                    markerWidth="9"
+                                                    markerHeight="9"
+                                                    orient="auto"
+                                                >
+                                                    <path
+                                                        class="dg-hint__head"
+                                                        d="M1 1.5 L7 5 L1.5 8.5"
+                                                    />
+                                                </marker>
+                                            </defs>
+                                            <path
+                                                class="dg-hint__arrow"
+                                                d="M 398 131 C 376 124, 344 112, 334 70"
+                                                marker-end="url(#dg-hint-head)"
+                                            />
+                                            <text
+                                                x="406"
+                                                y="146"
+                                                transform="rotate(-3 406 146)"
+                                            >
+                                                drag me to the cloud!
+                                            </text>
+                                        </g>
+                                    )}
                                 </svg>
                             </div>
                         </figure>
@@ -1450,7 +1167,7 @@ const LOOP = (() => {
 </script>
 
 <script>
-    // Alchemy's dev-mode picker in "Emulated, not proxied". On a switch the
+    // Alchemy's draggable row in "True emulation". On a switch the
     // boxes glide to their new spots and the dotted route bends with them
     // (redrawn every frame from the live box positions); boxes a mode doesn't
     // use shrink into the line. Then the new route, crossings, and dot land.
@@ -1466,6 +1183,7 @@ const LOOP = (() => {
         headline: string;
         sub: string;
         local: boolean;
+        lanes: Record<string, "m" | "c" | "b">;
         aria: string;
         path: string;
         segs: number[][];
@@ -1538,17 +1256,80 @@ const LOOP = (() => {
             fig.classList.remove("is-switching");
         };
 
-        fig.addEventListener("change", (e) => {
-            const next = modes[Number((e.target as HTMLInputElement).value)];
-            if (!next || next === current) return;
-            const from = current;
-            current = next;
+        // The route between the current box positions: one cubic per slot gap,
+        // split in half across a hidden slot (mirrors the server-side build).
+        type Cubic = number[];
+        const cubic = (a: Slot, b: Slot): Cubic => {
+            const h = (b.x - a.x) / 2;
+            return [a.x, a.y, a.x + h, a.y, b.x - h, b.y, b.x, b.y];
+        };
+        const split = ([x0, y0, ax, ay, bx, by, x1, y1]: Cubic): Cubic[] => {
+            const mid = (p: number, q: number) => (p + q) / 2;
+            const [m1x, m1y, m2x, m2y, m3x, m3y] = [
+                mid(x0!, ax!), mid(y0!, ay!), mid(ax!, bx!),
+                mid(ay!, by!), mid(bx!, x1!), mid(by!, y1!),
+            ];
+            const [n1x, n1y, n2x, n2y] = [
+                mid(m1x, m2x), mid(m1y, m2y), mid(m2x, m3x), mid(m2y, m3y),
+            ];
+            const [px, py] = [mid(n1x, n2x), mid(n1y, n2y)];
+            return [
+                [x0!, y0!, m1x, m1y, n1x, n1y, px, py],
+                [px, py, n2x, n2y, m3x, m3y, x1!, y1!],
+            ];
+        };
+        const segsFor = (slots: Slot[]) => {
+            const segs: Cubic[] = [];
+            for (let i = 0; i < slots.length - 1; ) {
+                if (slots[i + 1]!.shown) {
+                    segs.push(cubic(slots[i]!, slots[i + 1]!));
+                    i += 1;
+                } else {
+                    segs.push(...split(cubic(slots[i]!, slots[i + 2]!)));
+                    i += 2;
+                }
+            }
+            return segs;
+        };
+
+        const hint = svg.querySelector<SVGGElement>("[data-hint]");
+        const NET_Y = 85;
+        const NAMES: Record<string, string> = {
+            fn: "Lambda",
+            db: "DynamoDB",
+        };
+        const laneOf = (key: string, m = current) =>
+            m.lanes[key] === "c" ? "c" : "m";
+        const describe = () =>
+            boxes.forEach((g) => {
+                const key = g.dataset.drag;
+                if (!key) return;
+                const inCloud = laneOf(key) === "c";
+                g.setAttribute(
+                    "aria-label",
+                    `${NAMES[key]}, ${inCloud ? "in the cloud" : "on your machine"}. Press Enter to move it ${inCloud ? "to your machine" : "to the cloud"}.`,
+                );
+            });
+        const target = (key: string, lane: "m" | "c") => {
+            const fn = key === "fn" ? lane : laneOf("fn");
+            const db = key === "db" ? lane : laneOf("db");
+            return modes.find(
+                (m) => laneOf("fn", m) === fn && laneOf("db", m) === db,
+            )!;
+        };
+
+        const switchTo = (next: ModeData, from: ModeData) => {
             cancelAnimationFrame(frame);
+            if (next !== current) {
+                hint?.classList.add("is-hidden");
+                headline.textContent = next.headline;
+                sub.textContent = next.sub;
+                done?.classList.toggle("is-hidden", !next.local);
+                svg.setAttribute("aria-label", next.aria);
+            }
+            current = next;
+            describe();
             fig.classList.add("is-switching");
-            headline.textContent = next.headline;
-            sub.textContent = next.sub;
-            done?.classList.toggle("is-hidden", !next.local);
-            svg.setAttribute("aria-label", next.aria);
             boxes.forEach((g, i) => {
                 const s = next.slots[i]!;
                 g.classList.toggle("is-ghost", !s.shown);
@@ -1567,16 +1348,11 @@ const LOOP = (() => {
             const t0 = performance.now();
             const tick = (now: number) => {
                 const k = ease(Math.min(1, (now - t0) / MOVE_MS));
-                const at = next.slots.map((s, i) => {
+                boxes.forEach((g, i) => {
                     const f = from.slots[i]!;
-                    return [f.x + (s.x - f.x) * k, f.y + (s.y - f.y) * k] as [
-                        number,
-                        number,
-                    ];
+                    const s = next.slots[i]!;
+                    place(g, s, f.x + (s.x - f.x) * k, f.y + (s.y - f.y) * k);
                 });
-                boxes.forEach((g, i) =>
-                    place(g, next.slots[i]!, at[i]![0], at[i]![1]),
-                );
                 path.setAttribute(
                     "d",
                     draw(
@@ -1591,6 +1367,138 @@ const LOOP = (() => {
                 else land(next);
             };
             frame = requestAnimationFrame(tick);
+        };
+
+        // Drag Lambda or DynamoDB across the network line. While dragging, the
+        // box follows the pointer and the route bends to it; on release the
+        // row settles into whichever setup the boxes now describe.
+        const toSvg = (e: PointerEvent) => {
+            const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(
+                svg.getScreenCTM()!.inverse(),
+            );
+            return { x: pt.x, y: pt.y };
+        };
+        let drag: {
+            g: SVGGElement;
+            i: number;
+            key: string;
+            dx: number;
+            dy: number;
+            slots: Slot[];
+        } | null = null;
+        for (const g of boxes) {
+            const key = g.dataset.drag;
+            if (!key) continue;
+            const i = boxes.indexOf(g);
+            g.addEventListener("pointerdown", (e) => {
+                if (e.button !== 0) return;
+                cancelAnimationFrame(frame);
+                const s = current.slots[i]!;
+                const p = toSvg(e);
+                drag = {
+                    g, i, key,
+                    dx: p.x - s.x,
+                    dy: p.y - s.y,
+                    slots: current.slots.map((x) => ({ ...x })),
+                };
+                g.setPointerCapture(e.pointerId);
+                fig.classList.add("is-switching", "is-dragging");
+                hint?.classList.add("is-hidden");
+                e.preventDefault();
+            });
+            g.addEventListener("pointermove", (e) => {
+                if (!drag || drag.g !== g) return;
+                const p = toSvg(e);
+                const s = drag.slots[i]!;
+                const home = current.slots[i]!;
+                // Free vertically between the lanes, a little give sideways.
+                s.y = Math.max(40, Math.min(130, p.y - drag.dy));
+                s.x = home.x + Math.max(-24, Math.min(24, p.x - drag.dx - home.x));
+                place(g, s);
+                path.setAttribute("d", draw(segsFor(drag.slots)));
+                g.classList.toggle("is-over", (s.y > NET_Y) !== (laneOf(key) === "c"));
+            });
+            const drop = () => {
+                if (!drag || drag.g !== g) return;
+                const s = drag.slots[i]!;
+                const from = { ...current, slots: drag.slots, segs: segsFor(drag.slots) };
+                drag = null;
+                g.classList.remove("is-over");
+                fig.classList.remove("is-dragging");
+                switchTo(target(key, s.y > NET_Y ? "c" : "m"), from);
+            };
+            g.addEventListener("pointerup", drop);
+            g.addEventListener("pointercancel", drop);
+            g.addEventListener("keydown", (e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                switchTo(target(key, laneOf(key) === "c" ? "m" : "c"), current);
+            });
+        }
+        describe();
+    }
+</script>
+
+<script>
+    import { play } from "cuelume";
+
+    // Resources you can't move (anything but Alchemy's Lambda and DynamoDB)
+    // give a little under the pointer, then snap back with a red flash and
+    // cuelume's error sound. The first node (browser / edit) and deploy steps
+    // aren't resources, so they're left alone.
+    const GIVE = 7; // max offset in SVG units
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (const svg of document.querySelectorAll<SVGSVGElement>(".dg-trace svg")) {
+        svg.addEventListener("pointerdown", (e) => {
+            const g = (e.target as Element).closest<SVGGElement>(
+                ".dg-hop:not([data-drag]):not(.is-ghost):not(.is-boundary):not([data-hop='0'])",
+            );
+            if (!g || e.button !== 0) return;
+            const toSvg = (ev: PointerEvent) =>
+                new DOMPoint(ev.clientX, ev.clientY).matrixTransform(
+                    svg.getScreenCTM()!.inverse(),
+                );
+            const start = toSvg(e);
+            const base = g.style.transform;
+            let moved = false;
+            g.classList.remove("is-snapping");
+            g.setPointerCapture(e.pointerId);
+            // Resists harder the further you pull, never past GIVE.
+            const give = (d: number) => GIVE * Math.tanh(d / (GIVE * 3));
+            const move = (ev: PointerEvent) => {
+                const p = toSvg(ev);
+                const dx = p.x - start.x;
+                const dy = p.y - start.y;
+                if (Math.hypot(dx, dy) > 3) moved = true;
+                if (!reduced) {
+                    g.style.transform = `${base} translate(${give(dx)}px, ${give(dy)}px)`;
+                }
+            };
+            const end = (ev: PointerEvent) => {
+                g.removeEventListener("pointermove", move);
+                g.removeEventListener("pointerup", end);
+                g.removeEventListener("pointercancel", end);
+                g.classList.add("is-snapping");
+                g.style.transform = base;
+                if (moved && ev.type === "pointerup") {
+                    g.classList.remove("is-refused");
+                    void g.getBoundingClientRect(); // restart the flash
+                    g.classList.add("is-refused");
+                    play("error");
+                }
+            };
+            g.addEventListener("pointermove", move);
+            g.addEventListener("pointerup", end);
+            g.addEventListener("pointercancel", end);
+            e.preventDefault();
+        });
+        svg.addEventListener("animationend", (e) => {
+            (e.target as Element).closest(".dg-hop")?.classList.remove("is-refused");
+        });
+        svg.addEventListener("transitionend", (e) => {
+            if (e.propertyName === "transform") {
+                (e.target as Element).classList.remove("is-snapping");
+            }
         });
     }
 </script>
@@ -1865,35 +1773,10 @@ const LOOP = (() => {
     .dg-verdict--yes {
         color: var(--alc-accent-deep);
     }
-    .dg-chip {
-        display: block;
-        padding: 10px 12px;
-        border: 1px dashed var(--alc-hairline-3);
-        border-radius: 10px;
-        background: var(--alc-bg);
-        font-size: 13px;
-        line-height: 1.4;
-        color: var(--alc-fg-2);
-    }
-    .dg-chip b {
-        display: block;
-        margin-bottom: 2px;
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--alc-fg-3);
-    }
-    .dg-chip code,
     .dg-perm code,
     .cmp-lede code {
         font-family: var(--alc-font-mono);
         font-size: 0.92em;
-        color: var(--alc-fg-1);
-    }
-    .is-ours .dg-chip {
-        border-style: solid;
-        border-color: color-mix(in srgb, var(--alc-accent) 70%, transparent);
-        background: var(--alc-bg);
         color: var(--alc-fg-1);
     }
 
@@ -1954,107 +1837,6 @@ const LOOP = (() => {
         border-style: solid;
         border-color: var(--alc-accent);
         background: color-mix(in srgb, var(--alc-accent) 8%, transparent);
-    }
-
-    /* ---------- bindings ---------- */
-    .dg-bindrows {
-        display: grid;
-        gap: 40px;
-    }
-    .dg-brow {
-        display: grid;
-        grid-template-columns: 220px minmax(0, 1fr);
-        align-items: center;
-        gap: 20px;
-    }
-    .dg-brow .dg-fan {
-        max-width: 720px;
-    }
-    .dg-brow:not(.is-ours) .dg-fan__lines {
-        stroke: var(--alc-fg-3);
-    }
-    .dg-fan__lines .is-broken {
-        stroke: var(--alc-danger);
-        stroke-dasharray: 1 6;
-        stroke-linecap: round;
-    }
-    .dg-chip.is-broken {
-        border-color: color-mix(in srgb, var(--alc-danger) 70%, transparent);
-    }
-    .dg-fan__none {
-        font-size: 13px;
-        font-style: italic;
-        color: var(--alc-fg-3);
-    }
-    .dg-fan {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1.2fr);
-        align-items: center;
-    }
-    .dg-chip--src {
-        font-family: var(--alc-font-mono);
-        font-size: 12.5px;
-        word-break: break-word;
-    }
-    .dg-fan__lines {
-        width: 100%;
-        height: 100%;
-        fill: none;
-        stroke: var(--alc-accent);
-        stroke-width: 1.5;
-        stroke-dasharray: 4 4;
-    }
-    .dg-fan__lines path {
-        vector-effect: non-scaling-stroke;
-    }
-    .dg-fan__out,
-    .dg-apart {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 10px;
-    }
-    .dg-fan__out {
-        grid-template-rows: repeat(3, 1fr);
-    }
-    .dg-apart {
-        gap: 0;
-        justify-items: stretch;
-    }
-    .dg-file {
-        font-family: var(--alc-font-mono);
-        font-size: 12px;
-    }
-    .dg-q {
-        justify-self: center;
-        display: grid;
-        place-items: center;
-        /* "??" nods to chess.com's blunder mark, in the page's dashed style. */
-        width: 24px;
-        height: 24px;
-        margin: 6px 0;
-        border: 1px dashed var(--alc-danger);
-        border-radius: 50%;
-        font: 700 11px var(--alc-font-mono);
-        letter-spacing: -0.08em;
-        color: var(--alc-danger);
-        position: relative;
-    }
-    .dg-q::before,
-    .dg-q::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        width: 0;
-        height: 6px;
-        border-left: 1px dashed var(--alc-hairline-3);
-    }
-    .dg-q::before {
-        bottom: 100%;
-    }
-    .dg-q::after {
-        top: 100%;
     }
 
     /* ---------- permissions: needed vs granted ---------- */
@@ -2136,9 +1918,6 @@ const LOOP = (() => {
     #permissions .dg-legend__manual {
         border: 1.5px dashed var(--alc-danger);
     }
-    #testing .dg-legend__manual {
-        border: 1.5px dashed var(--alc-fg-3);
-    }
 
     /* ---------- local dev: request traces ---------- */
     .dg-kicker {
@@ -2184,6 +1963,15 @@ const LOOP = (() => {
         line-height: 1.45;
         color: var(--alc-fg-3);
     }
+    .dg-stack {
+        display: grid;
+    }
+    .dg-stack > * {
+        grid-area: 1 / 1;
+    }
+    .dg-sizer {
+        visibility: hidden;
+    }
     .dg-sr {
         position: absolute;
         width: 1px;
@@ -2192,49 +1980,74 @@ const LOOP = (() => {
         clip-path: inset(50%);
         white-space: nowrap;
     }
-    .dg-modes {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 10px 0 0;
-        padding: 0;
-        border: 0;
+    /* Other resources can be grabbed, but refuse to move. The first node
+       and deploy steps can't be grabbed at all. */
+    .dg-hop:not(.is-ghost):not(.is-boundary):not([data-hop="0"]) {
+        cursor: grab;
     }
-    .dg-modes label {
-        position: relative;
-        cursor: pointer;
+    .dg-hop.is-snapping {
+        transition: transform 260ms cubic-bezier(0.3, 1.6, 0.5, 1);
     }
-    .dg-modes input {
-        position: absolute;
-        inset: 0;
-        opacity: 0;
-        margin: 0;
-        cursor: pointer;
+    .dg-hop.is-refused > rect {
+        animation: dg-refuse 650ms ease-out;
     }
-    .dg-modes span {
-        display: inline-block;
-        padding: 4px 10px;
-        border: 1px dashed var(--alc-hairline-3);
-        border-radius: 999px;
-        font-size: 12px;
-        color: var(--alc-fg-2);
+    @keyframes dg-refuse {
+        0%,
+        45% {
+            stroke: var(--alc-danger);
+            stroke-width: 2.5;
+            fill: color-mix(in srgb, var(--alc-danger) 14%, var(--alc-bg));
+        }
+    }
+    /* Alchemy's Lambda and DynamoDB can be dragged across the network. */
+    .dg-hop[data-drag] {
+        cursor: grab;
+        touch-action: none;
+        outline: none;
+    }
+    .is-dragging,
+    .is-dragging .dg-hop[data-drag] {
+        cursor: grabbing;
+    }
+    .dg-hop[data-drag] > rect {
         transition:
-            border-color 200ms ease,
-            color 200ms ease,
-            background 200ms ease;
+            opacity 300ms ease,
+            width 300ms ease,
+            stroke 200ms ease,
+            stroke-width 200ms ease;
     }
-    .dg-modes label:hover span {
-        color: var(--alc-fg-1);
+    .dg-hop[data-drag]:hover > rect,
+    .dg-hop[data-drag]:focus-visible > rect {
+        stroke: var(--alc-accent);
+        stroke-width: 2;
     }
-    .dg-modes input:checked + span {
-        border-style: solid;
-        border-color: var(--alc-accent);
-        background: color-mix(in srgb, var(--alc-accent) 12%, transparent);
-        color: var(--alc-fg-1);
+    .dg-hop[data-drag]:focus-visible > rect {
+        stroke-dasharray: 3 3;
     }
-    .dg-modes input:focus-visible + span {
-        outline: 2px solid var(--alc-accent);
-        outline-offset: 2px;
+    /* Past the line: the drop will move it. */
+    .dg-hop.is-over > rect {
+        stroke: var(--alc-accent);
+        stroke-width: 2;
+        fill: color-mix(in srgb, var(--alc-accent) 14%, var(--alc-bg));
+    }
+    .dg-hint {
+        transition: opacity 300ms ease;
+        pointer-events: none;
+    }
+    .dg-hint.is-hidden {
+        opacity: 0;
+    }
+    .dg-hint text {
+        font: 600 19px var(--alc-font-hand);
+        fill: var(--alc-accent-deep);
+    }
+    .dg-hint__arrow,
+    .dg-hint__head {
+        fill: none;
+        stroke: var(--alc-accent-deep);
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
     }
     /* Mode switch: nodes glide between lanes; path, crossings, and dot fade
        out while the new route is drawn. */
@@ -2359,108 +2172,6 @@ const LOOP = (() => {
         }
     }
 
-    /* ---------- testing loop ---------- */
-    .cmp-split--loop {
-        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
-        align-items: center;
-    }
-    .dg-loop {
-        text-align: center;
-    }
-    .dg-loop svg {
-        width: 100%;
-        max-width: 340px;
-    }
-    .dg-loop figcaption {
-        margin-top: 6px;
-    }
-    .dg-loop__track {
-        fill: none;
-        stroke: var(--alc-hairline);
-        stroke-width: 1;
-    }
-    .dg-loop__arc {
-        fill: none;
-        stroke: var(--alc-accent);
-        stroke-width: 2;
-        stroke-dasharray: 5 6;
-        animation: dg-flow 1.4s linear infinite;
-    }
-    #dg-arrow path {
-        fill: var(--alc-accent);
-    }
-    @keyframes dg-flow {
-        to {
-            stroke-dashoffset: -22;
-        }
-    }
-    .dg-loop__node circle {
-        fill: var(--alc-bg);
-        stroke: color-mix(in srgb, var(--alc-accent) 70%, transparent);
-        stroke-width: 1.5;
-    }
-    .dg-loop__label {
-        font: 600 13px var(--alc-font-sans);
-        fill: var(--alc-fg-1);
-    }
-    .dg-loop__time {
-        font: 11px var(--alc-font-mono);
-        fill: var(--alc-fg-3);
-    }
-    .dg-loop__total {
-        font: 500 30px var(--alc-font-serif);
-        fill: var(--alc-fg-1);
-    }
-    .dg-loop__caption {
-        font: 12px var(--alc-font-sans);
-        fill: var(--alc-fg-3);
-    }
-    .dg-broken {
-        list-style: none;
-        margin: 32px 0 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
-    }
-    .dg-broken__card {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding: 4px 0;
-    }
-    .dg-broken__tool {
-        margin: 0;
-        font-family: var(--alc-font-serif);
-        font-size: 15px;
-        color: var(--alc-fg-3);
-    }
-    .dg-broken__headline {
-        margin: 2px 0 6px;
-        font-family: var(--alc-font-serif);
-        font-weight: 500;
-        font-size: 21px;
-        line-height: 1.2;
-        color: var(--alc-fg-1);
-    }
-    .dg-broken__body {
-        margin: 0;
-        font-size: 13.5px;
-        line-height: 1.55;
-        color: var(--alc-fg-2);
-    }
-    .dg-legend__ok {
-        background: color-mix(in srgb, var(--alc-accent) 45%, transparent);
-        border: 1.5px solid var(--alc-accent);
-    }
-    .dg-legend__diy {
-        border: 1.5px dashed var(--alc-warn);
-    }
-    .dg-legend__broken {
-        background: color-mix(in srgb, var(--alc-danger) 25%, transparent);
-        border: 1.5px solid var(--alc-danger);
-    }
-
     /* ---------- fit + cta ---------- */
     .cmp-cta {
         margin-top: 40px;
@@ -2474,9 +2185,7 @@ const LOOP = (() => {
         .cmp-split,
         .cmp-cards--2,
         .cmp-cards--3,
-        .dg-brow,
-        .dg-trace,
-        .dg-broken {
+        .dg-trace {
             grid-template-columns: minmax(0, 1fr);
         }
     }
@@ -2546,13 +2255,6 @@ const LOOP = (() => {
         }
         .dg-perm .dg-verdict {
             font-size: 12px;
-        }
-        .dg-fan {
-            grid-template-columns: minmax(0, 1fr);
-            gap: 10px;
-        }
-        .dg-fan__lines {
-            display: none;
         }
         .cmp-table {
             min-width: 820px;

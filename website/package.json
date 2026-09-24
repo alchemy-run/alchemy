@@ -40,6 +40,7 @@
     "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
     "astro": "catalog:",
+    "cuelume": "catalog:",
     "effect": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
