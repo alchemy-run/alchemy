@@ -458,6 +458,20 @@ const GET_OBJECT_HOISTED = met(
   "R2.ReadBucket(Uploads)\nhoisted out of fetch",
 );
 
+// The last problem: a service's interface can't hide which implementation it has.
+const SERVICE = `class Storage extends Context.Service<Storage, {
+  get(key: string): Effect<File, NotFound>;
+}>()("Storage") {}`;
+const SERVICE_R2 = SERVICE.replace("Effect<File, NotFound>", "Effect<File, NotFound, R2.GetObject<Uploads>>");
+const STORAGE_R2 = `const StorageR2 = Layer.effect(Storage, Effect.gen(function* () {
+  const bucket = yield* R2.Bucket("Uploads");
+  return { get: (key) => bucket.get(key) };
+}));`;
+const STORAGE_S3 = `const StorageS3 = Layer.effect(Storage, Effect.gen(function* () {
+  const bucket = yield* S3.Bucket("Files");
+  return { get: (key) => bucket.get(key) };
+}));`;
+
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
@@ -740,28 +754,54 @@ export const steps: StepSpec[] = [
     notes:
       "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. That's a least-privilege violation, baked in by the type system.",
   }),
-  api({
-    title: "And it leaks into every interface built on top of it",
-    code: `${INFERRED_DEV}
-
-interface Storage {
-  get(key: string): Effect<File, NotFound, R2.GetObject<Uploads>>;
-}`,
-    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
-    req: [
-      BUCKET,
-      GET_OBJECT_HOISTED,
-      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "The last problem shows up when you put it behind a service",
+    src: { code: SERVICE },
+    notes:
+      "The last problem is the one that killed this design. Effect's answer to encapsulation is a service: an interface, with implementations provided as Layers. Here's Storage: get a file by key. It says nothing about where files live.",
+  },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "Implementing it with R2 needs R2.GetObject<Uploads>",
+    src: { code: `${SERVICE}\n\n${STORAGE_R2}` },
+    marks: [{ kind: "underline", find: "bucket.get(key)", label: "requires R2.GetObject<Uploads>", side: "right", tone: "bad" }],
+    notes:
+      "Now implement it with R2. Because the requirement is inferred from usage, this get doesn't just return a file: its type also requires R2.GetObject for the Uploads bucket. And that doesn't match the interface, which requires nothing.",
+  },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "So the interface has to name R2, and the bucket",
+    src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}` },
+    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
+    notes:
+      "The only way to make it fit is to put the requirement in the interface. Now Storage says R2, and which bucket. The implementation has leaked into the interface.",
+  },
+  {
+    kind: "code",
+    group: "service",
+    file: "src/Storage.ts",
+    title: "…so there can never be a second implementation",
+    src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}\n\n${STORAGE_S3}` },
+    marks: [
+      { kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" },
+      { kind: "underline", find: { text: "bucket.get(key)", nth: 2 }, label: "requires S3.GetObject<Files>: doesn't fit", side: "right", tone: "bad" },
     ],
     notes:
-      "And it pollutes the function's type. Wrap the storage in an interface and the requirement comes along: the interface now says R2 and which bucket. So you can't hide infrastructure behind a service and swap its implementation with a Layer, because the implementation bleeds into the type.",
-  }),
+      "And that's the nail in the coffin. Try an S3 implementation: same code, but its get requires S3.GetObject, and the interface already promised R2. You can't swap implementations, which is the whole point of a service. Infrastructure requirements can't live in the runtime function's type.",
+  },
   api({
     title: "So the binding is declared in construction instead",
     snippet: "api-04-get.ts",
     req: [BUCKET, { ...READ, note: "declared in construction" }],
     notes:
-      "So the binding moved to construction. R2.ReadBucket(bucket) is a declaration that runs when the program is built, which means it can be conditional: only declare the Logs binding in dev. It puts the requirement on the program, where it belongs, and fetch just calls the client it returned. That's the one difference from the imaginary language: you say what you'll do with a resource, up front.",
+      "So the binding moved to construction. R2.ReadBucket(bucket) is a declaration that runs when the program is built, so it can be conditional: only declare the Logs binding in dev, and production never gets that permission. The requirement lands on the program, where a Layer can satisfy it, and fetch just calls the client it got back, so its type stays clean and a service built on it can have any implementation. That's the one difference from the imaginary language: you say what you'll do with a resource, up front.",
   }),
   api({
     title: "Sending to a queue works the same way",
