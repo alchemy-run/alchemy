@@ -42,6 +42,18 @@ export interface PanelItem {
   bar?: number;
 }
 
+/** A value threaded down a call chain, drawn beside the code. */
+export interface Drill {
+  /** Small heading above the chain. */
+  label: string;
+  /** The value being passed down: highlighted and threaded wherever it appears. */
+  name: string;
+  /** One call per line, outermost first; leading spaces set the depth. */
+  lines: string[];
+  /** Hand-written note under the chain. */
+  note?: string;
+}
+
 /** A small architecture drawing beside the code: it evolves with the code. */
 export interface MiniNode {
   id: string;
@@ -96,6 +108,7 @@ export interface CodeStep {
   error?: CodeError;
   panel?: { title: string; items: PanelItem[] };
   diagram?: MiniGraph;
+  drill?: Drill;
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;
   frames: number;

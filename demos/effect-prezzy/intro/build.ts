@@ -199,7 +199,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
   const lines = tokenize(code, !!spec.pseudo);
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
-  const available = spec.panel ? 1060 : 1560;
+  const available = spec.panel || spec.drill ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
@@ -217,6 +217,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
     error,
     panel: spec.panel,
     diagram: spec.diagram,
+    drill: spec.drill,
     quiet: spec.quiet,
     frames: spec.frames ?? 30,
   };

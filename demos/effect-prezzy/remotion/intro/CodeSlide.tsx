@@ -2,6 +2,7 @@ import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
 import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
+import { DrillView } from "./Drill.tsx";
 import { MiniGraphView } from "./MiniGraph.tsx";
 import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
@@ -20,7 +21,7 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 /** Pixel geometry for the code block, centred in whatever space it gets. */
 const layout = (step: CodeStep) => {
-  const width = AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.error ? PANEL_WIDTH + 60 : 0);
+  const width = AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.error ? PANEL_WIDTH + 60 : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
@@ -311,6 +312,16 @@ export const CodeSlide = ({
           prev2={morph && prev2?.group === step.group ? prev2.diagram : undefined}
           local={local}
           delay={marksStart}
+        />
+      ) : null}
+      {step.drill ? (
+        <DrillView
+          drill={step.drill}
+          x={AREA.x + AREA.width - PANEL_WIDTH}
+          labelY={AREA.y}
+          top={g.top}
+          local={local}
+          delay={marksStart + step.marks.filter((m) => !sameMark(m)).length * 4}
         />
       ) : null}
       {step.panel ? (

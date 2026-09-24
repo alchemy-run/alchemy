@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { MiniGraph, PanelItem, Tone } from "../shared/intro.ts";
+import type { Drill, MiniGraph, PanelItem, Tone } from "../shared/intro.ts";
 
 /** Where in the code: the first match of `text` (or the `nth`, 1-based). */
 export type Find = string | { text: string; nth?: number };
@@ -40,6 +40,8 @@ export interface CodeSpec {
   panel?: { title: string; items: PanelItem[] };
   /** A drawing beside the code that evolves with it. */
   diagram?: MiniGraph;
+  /** A value passed down a call chain, drawn beside the code. */
+  drill?: Drill;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
   frames?: number;
@@ -426,6 +428,36 @@ export const steps: StepSpec[] = [
     ],
     notes:
       "And every dependency had to be listed up front, in depends, and then prop-drilled into the handler as an argument. The code that uses the topic can't just reach for it.",
+  },
+  {
+    kind: "code",
+    group: "punchcard",
+    file: "punchcard · stack.ts",
+    title: "…and carried through every function on the way down",
+    src: { code: PUNCHCARD },
+    tints: [
+      { from: "const topic", to: "depends: topic", tone: "construct" },
+      { from: "async (event", to: "}));", tone: "runtime" },
+    ],
+    marks: [
+      { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
+      { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
+    ],
+    drill: {
+      label: "in a real app",
+      name: "topic",
+      lines: [
+        "handler(event, topic)",
+        "  placeOrder(order, topic)",
+        "    chargeCard(order, topic)",
+        "      sendReceipt(order, topic)",
+        "        topic.publish(receipt)",
+      ],
+      note: "carried by every layer, used by one",
+    },
+    frames: 45,
+    notes:
+      "That's prop drilling. The handler rarely publishes directly: it calls placeOrder, which calls chargeCard, which calls sendReceipt, and only that last one publishes. Every function in between has to take the topic as a parameter just to hand it down. Add a second resource and you touch every signature again.",
   },
   {
     kind: "code",
