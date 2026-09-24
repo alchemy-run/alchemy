@@ -10,7 +10,7 @@ import {
 } from "remotion";
 import { introTimeline, type CodeStep, type IntroJson, type IntroStep } from "../../shared/intro.ts";
 import { VIDEO } from "../../shared/types.ts";
-import { Caption } from "../scene/Scene.tsx";
+import { sans } from "../fonts.ts";
 import { Slide } from "../slides/Slide.tsx";
 import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
@@ -55,7 +55,8 @@ export const Intro = ({ intro }: IntroProps) => {
     return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle }} />;
   }
   // The caption stays put across steps that share it.
-  const captionSince = prev && prev.title === step.title ? local + 100 : local;
+  // The step's title is the slide's heading; it changes with every step.
+  const titleIn = prev && prev.title === step.title ? 1 : Math.min(1, local / 5);
   return (
     <AbsoluteFill>
       <Stage />
@@ -69,7 +70,24 @@ export const Intro = ({ intro }: IntroProps) => {
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}
-      <Caption text={step.title} since={captionSince} />
+      <div
+        style={{
+          position: "absolute",
+          left: 110,
+          right: 110,
+          top: 44,
+          fontFamily: sans,
+          fontSize: 52,
+          fontWeight: 700,
+          letterSpacing: -0.6,
+          lineHeight: 1.15,
+          color: brand.fg,
+          opacity: titleIn,
+          transform: `translateY(${(1 - titleIn) * 6}px)`,
+        }}
+      >
+        {step.title}
+      </div>
     </AbsoluteFill>
   );
 };

@@ -6,7 +6,8 @@ import { MiniGraphView } from "./MiniGraph.tsx";
 import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
 /** The code canvas, inside the frame and above the caption band. */
-const AREA = { x: 110, y: 90, width: 1700, height: 820 };
+/** Below the step title at the top of the frame. */
+const AREA = { x: 110, y: 170, width: 1700, height: 870 };
 const PANEL_WIDTH = 560;
 /** Width kept for the drawing when a step has one. */
 export const DIAGRAM_WIDTH = 760;
@@ -28,7 +29,8 @@ const layout = (step: CodeStep) => {
   const left = step.diagram ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
   // With a drawing the program grows over several steps: pin its first line
   // so new lines extend downward instead of pushing the code up.
-  const top = step.diagram ? AREA.y + 150 : AREA.y + Math.max(0, (AREA.height - blockH) / 2);
+  // Code starts just under the file label; short snippets sit centred in the space.
+  const top = step.diagram ? AREA.y + 90 : AREA.y + 50 + Math.max(0, (AREA.height - 50 - blockH) / 2);
   return { size, cw, lh, left, top, blockW, blockH, width };
 };
 
@@ -182,21 +184,19 @@ export const CodeSlide = ({
           style={{
             position: "absolute",
             left: AREA.x,
-            top: 40,
+            top: AREA.y,
             display: "flex",
             alignItems: "center",
             gap: 12,
-            // A plain heading: the imaginary language, or the file being shown.
-            fontFamily: sans,
-            fontSize: 40,
-            fontWeight: 600,
-            letterSpacing: -0.3,
-            color: brand.fg,
+            // What the code is: the imaginary language, or the file being shown.
+            fontFamily: mono,
+            fontSize: 22,
+            color: brand.fgMuted,
             // Continuing the same code: the label is already there.
             opacity: morph ? 1 : t,
           }}
         >
-          {step.pseudo ? "An imaginary cloud language" : step.file}
+          {step.pseudo ? "an imaginary cloud language" : step.file}
         </div>
       ) : null}
       {/* lines new or changed since the previous step in this sequence, in diff green */}

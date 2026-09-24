@@ -201,7 +201,7 @@ const resolveCode = async (spec: CodeSpec): Promise<IntroStep> => {
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
   const available = spec.panel ? 1060 : 1560;
   const fontSize =
-    spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(760 / (lines.length * 1.5))));
+    spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
     kind: "code",
     title: spec.title,

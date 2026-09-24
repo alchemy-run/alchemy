@@ -5,7 +5,7 @@ import { brand, vscode } from "../theme.ts";
 import { Arrow, drawProgress, TONE } from "./draw.tsx";
 
 /** The drawing area, right of the code and above the caption band. */
-const AREA = { x: 1090, y: 170, width: 720 };
+const AREA = { x: 1090, y: 250, width: 720 };
 const NODE = { w: 230, h: 84 };
 
 const fade = (local: number, delay: number, frames = 7) =>
