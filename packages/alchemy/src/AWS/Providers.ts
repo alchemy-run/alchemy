@@ -1327,11 +1327,19 @@ export const providers = () =>
           // Keep this service-sized group nested: a flat mergeAll here exceeds
           // Effect's variadic inference limit and silently drops tail layers.
           Layer.mergeAll(
-            EC2.ClientVpnEndpointProvider(),
-            EC2.ClientVpnTargetNetworkAssociationProvider(),
-            EC2.ClientVpnAuthorizationRuleProvider(),
-            EC2.ClientVpnRouteProvider(),
-            EC2.DefaultSecurityGroupProvider(),
+            flociDual(EC2.ClientVpnEndpoint, () =>
+              EC2.ClientVpnEndpointProvider(),
+            ),
+            flociDual(EC2.ClientVpnTargetNetworkAssociation, () =>
+              EC2.ClientVpnTargetNetworkAssociationProvider(),
+            ),
+            flociDual(EC2.ClientVpnAuthorizationRule, () =>
+              EC2.ClientVpnAuthorizationRuleProvider(),
+            ),
+            flociDual(EC2.ClientVpnRoute, () => EC2.ClientVpnRouteProvider()),
+            flociDual(EC2.DefaultSecurityGroup, () =>
+              EC2.DefaultSecurityGroupProvider(),
+            ),
             flociDual(EC2.DhcpOptions, () => EC2.DhcpOptionsProvider()),
             flociDual(EC2.EgressOnlyInternetGateway, () =>
               EC2.EgressOnlyInternetGatewayProvider(),
