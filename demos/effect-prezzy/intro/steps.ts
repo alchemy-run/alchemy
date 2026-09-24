@@ -661,9 +661,9 @@ export const steps: StepSpec[] = [
     title: "A programming language for the cloud",
     eyebrow: "Alchemy",
     heading: "A programming language for the cloud",
-    subtitle: "…without building a new language. Yet.",
+    subtitle: "…without building a new language",
     notes:
-      "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language (at least not yet).",
+      "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language.",
   },
 
   // Act 0: why combine infrastructure and runtime code at all
