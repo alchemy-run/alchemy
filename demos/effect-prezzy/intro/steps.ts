@@ -924,6 +924,22 @@ export const steps: StepSpec[] = [
     notes:
       "The native binding layers require a Cloudflare Worker, and a Lambda Function can't provide one. The type checker catches it before anything is deployed.",
   }),
+  api({
+    title: "Swap the native bindings for HTTP, and it runs anywhere",
+    snippet: "api-11-http.error.ts",
+    // TODO: fails today: Cloudflare *Http layers also need CloudflareEnvironment and Self,
+    // which AWS.Lambda.Function doesn't provide yet.
+    error: { hide: true },
+    req: [
+      BUCKET,
+      met(READ, "ReadBucketHttp\nmints an R2 read-only API token"),
+      QUEUE,
+      met(WRITE, "WriteQueueHttp\nmints a Queues write-only API token"),
+      PHANTOM,
+    ],
+    notes:
+      "Swap each binding layer for its HTTP twin. ReadBucketHttp and WriteQueueHttp call Cloudflare's API instead of a native binding, so they don't need a Worker, and the Cloudflare.Worker requirement disappears. The permission changes with the layer too: each one mints an API token scoped to exactly what the code declared. Same program, different runtime, different layer.",
+  }),
   {
     kind: "code",
     group: "stack",
