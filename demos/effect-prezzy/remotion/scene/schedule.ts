@@ -12,6 +12,10 @@ export const TIMING = {
   openTab: 14,
   /** A patch: scroll to it and show removed lines in red, swap in the new lines, then hold in green. */
   patch: { show: 12, change: 14, hold: 16 },
+  /** Removed lines collapse over this long, then added lines stream in one per `perLine`. */
+  patchDelete: 8,
+  patchPerLine: 2,
+  patchStreamMax: 60,
   /** Base time on the architecture window, plus time per new node or edge. */
   diagram: 90,
   diagramPerAdded: 10,
@@ -86,6 +90,17 @@ const appOf = (beat: Beat, current: AppId): AppId => {
   }
 };
 
+/**
+ * How long a patch's change phase lasts: removed lines collapse, then added
+ * lines stream in one at a time, so long additions take a little longer.
+ */
+export const patchChange = (rows: readonly { kind: string }[]) => {
+  const added = rows.filter((r) => r.kind === "add").length;
+  const removed = rows.some((r) => r.kind === "del");
+  const stream = Math.min(TIMING.patchStreamMax, added * TIMING.patchPerLine);
+  return Math.max(TIMING.patch.change, (removed ? TIMING.patchDelete : 0) + stream);
+};
+
 export const schedule = async (
   capture: SceneCapture,
   fps: number,
@@ -148,7 +163,7 @@ export const schedule = async (
           await highlight(beat.file, beat.before),
           await highlight(beat.file, beat.after),
         );
-        work = TIMING.patch.show + TIMING.patch.change + TIMING.patch.hold;
+        work = TIMING.patch.show + patchChange(segment.view.rows) + TIMING.patch.hold;
         break;
       case "terminal":
         work = Math.max(1, Math.round((beat.end - beat.start) * fps));

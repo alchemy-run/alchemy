@@ -258,13 +258,23 @@ const DEL_BAR = "#f85149";
 
 const Code = ({ state }: { state: EditorState }) => {
   const view = state.view!;
-  const { show, change } = TIMING.patch;
+  const { show } = TIMING.patch;
   const t = state.local;
-  // Removed lines collapse and added lines open up during the change phase.
-  const progress =
-    t === Infinity ? 1 : interpolate(t, [show, show + change], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const ease = (x: number) => 1 - (1 - x) ** 3;
-  const p = ease(progress);
+  const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+  const hasDel = view.rows.some((r) => r.kind === "del");
+  const addedTotal = view.rows.filter((r) => r.kind === "add").length;
+  // Removed lines collapse first.
+  const p = t === Infinity || !hasDel ? 1 : ease(interpolate(t, [show, show + TIMING.patchDelete], [0, 1], clamp));
+  // Then added lines stream in one at a time, each at full size the moment it appears.
+  const streamFrom = show + (hasDel ? TIMING.patchDelete : 0);
+  const perLine = addedTotal ? Math.min(TIMING.patchPerLine, TIMING.patchStreamMax / addedTotal) : 0;
+  const addIndex = new Map<Row, number>();
+  view.rows.forEach((r) => {
+    if (r.kind === "add") addIndex.set(r, addIndex.size);
+  });
+  const shown = (row: Row) =>
+    t === Infinity || t >= streamFrom + (addIndex.get(row) ?? 0) * perLine + perLine ? 1 : 0;
   const scroll =
     t === Infinity
       ? state.scrollTo
@@ -273,7 +283,7 @@ const Code = ({ state }: { state: EditorState }) => {
           extrapolateRight: "clamp",
           easing: ease,
         });
-  const heightOf = (row: Row) => (row.kind === "del" ? 1 - p : row.kind === "add" ? p : 1);
+  const heightOf = (row: Row) => (row.kind === "del" ? 1 - p : row.kind === "add" ? shown(row) : 1);
   // Pixel offset of the fractional scroll row, using the rows' current heights.
   let offset = 0;
   for (let i = 0; i < Math.floor(scroll) && i < view.rows.length; i++) offset += heightOf(view.rows[i]!);
@@ -308,8 +318,8 @@ const Code = ({ state }: { state: EditorState }) => {
                 position: "relative",
                 background: added ? ADD_BG : removed ? DEL_BG : undefined,
                 boxShadow: added ? `inset 3px 0 ${ADD_BAR}` : removed ? `inset 3px 0 ${DEL_BAR}` : undefined,
-                // Text fades with the row's height so squeezed lines don't smear.
-                opacity: row.kind === "add" ? p ** 2 : row.kind === "del" ? (1 - p) ** 2 : 1,
+                // Removed lines fade as they collapse; added lines appear whole.
+                opacity: row.kind === "del" ? (1 - p) ** 2 : 1,
               }}
             >
               <span
