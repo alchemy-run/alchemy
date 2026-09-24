@@ -753,7 +753,7 @@ export const steps: StepSpec[] = [
       "And that becomes really clear the moment your infrastructure is conditional. Say we only want a Logs bucket in dev, and fetch writes the last read to it when it's there. That write shows up in fetch's type as R2.PutObject for Logs, and the type magic hoists it up.",
   }),
   api({
-    title: "But a type can't tell that only happens in dev",
+    title: "But we can't tell that logs.put is only required during dev",
     code: INFERRED_DEV_2,
     marks: [{ kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" }],
     req: [BUCKET, GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
