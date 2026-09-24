@@ -91,20 +91,20 @@ const TWO = `const bucket = Bucket()
 const queue = Queue()`;
 const FN = `
 
-const api = Function(async (req) => {
+async function api(req) {
   const file = await bucket.get(req.key)
   await queue.send(file)
-})`;
+}`;
 const APP = TWO + FN;
 const VERSIONED = APP.replace("Bucket()", "Bucket({ versioning: true })");
 const COLORED_APP = `construct app() {
   const bucket = Bucket({ versioning: true })
   const queue = Queue()
 
-  return Function(runtime async (req) => {
+  runtime async function api(req) {
     const file = await bucket.get(req.key)
     await queue.send(file)
-  })
+  }
 }`;
 const COLORED_BAD = COLORED_APP.replace(
   "    const file = await bucket.get(req.key)",
@@ -146,8 +146,8 @@ const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): C
   ...spec,
 });
 const phaseTints = [
-  { from: "construct app", to: "return Function", tone: "construct" as const },
-  { from: "const file", to: "await queue.send", tone: "runtime" as const },
+  { from: "construct app", to: "const queue", tone: "construct" as const },
+  { from: "runtime async function", to: "await queue.send", tone: "runtime" as const },
 ];
 
 const program = (): StepSpec[] => [
@@ -207,8 +207,8 @@ const program = (): StepSpec[] => [
     title: "The program runs in two phases",
     src: { code: VERSIONED },
     tints: [
-      { from: "const bucket", to: "const api = Function", tone: "construct" },
-      { from: "const file", to: "await queue.send", tone: "runtime" },
+      { from: "const bucket", to: "const queue", tone: "construct" },
+      { from: "async function api", to: "await queue.send", tone: "runtime" },
     ],
     diagram: {
       nodes: GRAPH(["versioning: on"]),
@@ -226,14 +226,14 @@ const program = (): StepSpec[] => [
     tints: phaseTints,
     diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS },
     notes:
-      "In a real language we could make that explicit with colored functions: a construct function builds resources and returns a runtime function that uses them.",
+      "In a real language we could make that explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
   }),
   lang({
     title: "The colors are boundaries the compiler enforces",
     src: { code: COLORED_BAD },
     tints: [
-      { from: "construct app", to: "return Function", tone: "construct" },
-      { from: "const other", to: "await queue.send", tone: "runtime" },
+      { from: "construct app", to: "const queue", tone: "construct" },
+      { from: "runtime async function", to: "await queue.send", tone: "runtime" },
     ],
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
