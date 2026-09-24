@@ -292,7 +292,7 @@ const program = (): StepSpec[] => [
       "In a real language we'd make the phases explicit. First, construction: a construct function runs once, at deploy time, and everything it declares becomes infrastructure.",
   }),
   lang({
-    title: "One for runtime, where those resources implement the business logic",
+    title: "One for runtime, where those resources implement the API",
     src: { code: COLORED_APP },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
