@@ -126,6 +126,12 @@ const COLORED_BAD = COLORED_APP.replace(
   "    const scratch = Bucket()\n    const file = bucket.get(req.key)",
 );
 
+/** The mirror mistake: calling runtime code during construction. */
+const COLORED_EARLY = COLORED_APP.replace(
+  "  const queue = Queue()\n",
+  '  const queue = Queue()\n  bucket.get("hello.txt")\n',
+);
+
 const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]) => ({
   ...node,
   x,
@@ -144,7 +150,7 @@ const GET = { from: "api", to: "bucket", tone: "construct" as const, label: "s3:
 const SEND = { from: "api", to: "queue", tone: "construct" as const, label: "sqs:SendMessage" };
 const BINDINGS = [GET, SEND];
 const ENV = ["$BUCKET_NAME", "$QUEUE_URL"];
-const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): CodeSpec => ({
+const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize"> & { group?: string }): CodeSpec => ({
   kind: "code",
   group: "lang",
   pseudo: true,
@@ -1213,13 +1219,31 @@ export const steps: StepSpec[] = [
     notes:
       "So you provide the specific bindings, one per capability. It's a little more typing, and it keeps each bundle down to exactly the code it runs.",
   }),
+  lang({
+    group: "phase-callback",
+    title: "Remember the phase rule from our imaginary language?",
+    src: { code: COLORED_BAD },
+    marks: [{ kind: "strike", find: "Bucket()", label: "can't create a resource at runtime", side: "right", tone: "bad" }],
+    notes:
+      "Before we deploy, remember the rule from our imaginary language. Construction and runtime are different colors, and creating a bucket inside a request was a compile error.",
+  }),
+  lang({
+    group: "phase-callback",
+    title: "And construction can't call runtime code either",
+    src: { code: COLORED_EARLY },
+    quiet: true,
+    marks: [{ kind: "strike", find: 'bucket.get("hello.txt")', label: "no request yet", side: "right", tone: "bad" }],
+    notes:
+      "And the rule goes both ways. Reading the bucket is runtime code. Construction runs at deploy time, before there's any request, so calling it there should be an error too.",
+  }),
   api({
-    title: "But what if we read during construction?",
+    title: "So let's make that mistake in Alchemy",
     snippet: "api-08-construct.error.ts",
+    marks: [{ kind: "underline", find: 'yield* uploads.get("hello.txt");', label: "at deploy time", side: "right", tone: "bad" }],
     error: { hide: true },
     req: [...PROVIDED, { name: "RuntimeContext", note: "only exists during a request" }],
     notes:
-      "Remember the bucket we tried to create at runtime? Here's the mirror image: reading the bucket during construction, at deploy time, when there's no request yet. Req picks up RuntimeContext.",
+      "Let's make exactly that mistake in the Worker: read the bucket during construction, at deploy time, when there's no request yet. Req picks up RuntimeContext.",
   }),
   api({
     title: "It won't compile, because a Worker can't provide RuntimeContext",
