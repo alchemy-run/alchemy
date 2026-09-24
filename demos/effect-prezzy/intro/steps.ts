@@ -86,17 +86,14 @@ const C = {
   queue: { id: "queue", title: "Queue", color: "#e0a86b" },
   api: { id: "api", title: "Function", color: "#f38020" },
 };
-const ONE = "const bucket = Bucket()";
-const TWO = `const bucket = Bucket()
-const queue = Queue()`;
 const FN = `
 
 async function api(req) {
   const file = await bucket.get(req.key)
   await queue.send(file)
 }`;
-const APP = TWO + FN;
-const VERSIONED = APP.replace("Bucket()", "Bucket({ versioning: true })");
+const VERSIONED = `const bucket = Bucket({ versioning: true })
+const queue = Queue()${FN}`;
 const COLORED_APP = `construct app() {
   const bucket = Bucket({ versioning: true })
   const queue = Queue()
@@ -123,10 +120,7 @@ const GRAPH = (notes?: string[], env?: string[]) => [
   at(C.bucket, 590, 100, notes),
   at(C.queue, 590, 440),
 ];
-const USES = [
-  { from: "api", to: "bucket" },
-  { from: "api", to: "queue" },
-];
+const USES = [{ from: "api", to: "bucket" }];
 /** A binding: the connection carries its permission, and the Function gets an env var. */
 const GET = { from: "api", to: "bucket", tone: "construct" as const, label: "s3:GetObject" };
 const SEND = { from: "api", to: "queue", tone: "construct" as const, label: "sqs:SendMessage" };
@@ -144,68 +138,75 @@ const phaseTints = [
   { from: "runtime async function", to: "await queue.send", tone: "runtime" as const },
 ];
 
+const B1 = "const bucket = Bucket()";
+const B2 = "const bucket = Bucket({ versioning: true })";
+const BQ = `${B2}
+const queue = Queue()`;
+const EMPTY_FN = `${BQ}
+
+async function api(req) {
+}`;
+const GET_FN = `${BQ}
+
+async function api(req) {
+  const file = await bucket.get(req.key)
+}`;
+
 const program = (): StepSpec[] => [
   lang({
     title: "In a cloud language, a variable can be a resource",
-    src: { code: ONE },
-    diagram: { nodes: [at(C.bucket, 360, 250)], edges: [] },
+    src: { code: B1 },
+    diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
     notes:
       "Imagine a programming language for the cloud. Declaring a bucket doesn't allocate memory: it creates a real bucket in the cloud.",
   }),
   lang({
+    title: "Change the code, and the cloud is reconciled to match",
+    src: { code: B2 },
+    diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
+    notes:
+      "Resources have configuration that changes over time. Turn on versioning in the code, and the language reconciles the real bucket to match.",
+  }),
+  lang({
     title: "Resources outlive the program that declares them",
-    src: { code: TWO },
-    diagram: { nodes: [at(C.bucket, 360, 120), at(C.queue, 360, 380)], edges: [] },
+    src: { code: BQ },
+    diagram: { nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)], edges: [] },
     notes:
       "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
   }),
   lang({
     title: "A function is a resource too",
-    src: {
-      code: `${TWO}
-
-async function api(req) {
-}`,
-    },
-    diagram: { nodes: GRAPH(), edges: [] },
+    src: { code: EMPTY_FN },
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: [] },
     notes: "Declaring a function deploys it: another node in the world.",
   }),
   lang({
     title: "Reading the bucket connects the function to it",
-    src: {
-      code: `${TWO}
-
-async function api(req) {
-  const file = await bucket.get(req.key)
-}`,
-    },
-    diagram: { nodes: GRAPH(), edges: [USES[0]!] },
+    src: { code: GET_FN },
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: [USES[0]!] },
     notes: "Call bucket.get inside the function, and the function now depends on the bucket.",
   }),
   lang({
-    title: "Sending to the queue connects it to the queue",
-    src: { code: APP },
-    diagram: { nodes: GRAPH(), edges: USES },
-    notes: "Send to the queue as well: the program describes a graph of interconnected resources.",
-  }),
-  lang({
-    title: "Change the code, and the cloud is reconciled to match",
-    src: { code: VERSIONED },
-    diagram: { nodes: GRAPH(["versioning: on"]), edges: USES },
-    notes:
-      "Resources have configuration that changes over time. Change the code, and the language has to reconcile the real bucket with the new desired state.",
-  }),
-  lang({
-    title: "Each call needs a permission and configuration",
-    src: { code: VERSIONED },
+    title: "The call needs permission to read the bucket",
+    src: { code: GET_FN },
     marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
-    diagram: {
-      nodes: GRAPH(["versioning: on"], [ENV[0]!]),
-      edges: [GET, USES[1]!],
-    },
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: [GET] },
+    notes: "For the function to call bucket.get, it needs an IAM policy that allows s3:GetObject on this bucket.",
+  }),
+  lang({
+    title: "…and the bucket's name, as an environment variable",
+    src: { code: GET_FN },
+    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
+    diagram: { nodes: GRAPH(["versioning: on"], [ENV[0]!]), edges: [GET] },
     notes:
-      "For the function to call bucket.get, it needs an IAM policy allowing s3:GetObject, and the bucket's name in an environment variable. That connection is what we call a binding.",
-    frames: 75,
+      "And it needs to know which bucket: its name is injected as an environment variable. The permission plus the configuration is what we call a binding.",
+  }),
+  lang({
+    title: "Sending to the queue creates another binding",
+    src: { code: VERSIONED },
+    marks: [{ kind: "circle", find: "queue.send(file)", tone: "construct" }],
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    notes: "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
   }),
   lang({
     title: "The language infers every binding from the code",
@@ -216,8 +217,7 @@ async function api(req) {
     ],
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
-      "A cloud language would derive all of this by static analysis: see queue.send, infer sqs:SendMessage and inject the queue's URL. Nobody writes policies or environment variables by hand.",
-    frames: 75,
+      "A cloud language derives all of this by static analysis. Nobody writes policies or environment variables by hand: the program is a graph of resources, and the code is the source of truth for how they connect.",
   }),
   lang({
     title: "The program runs in two phases",
