@@ -14,7 +14,7 @@ import {
   type Website,
   type WebsiteScope,
 } from "./FrameworkSite.ts";
-import { importFrontendCore } from "../../Website/FrontendCore.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Configuration for a command-built Neon website. */
 export type StaticSiteProps = Omit<Command.BuildProps, "env"> &
@@ -122,7 +122,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       errorPage: props.errorPage,
     };
     if (local) {
-      const { makeNodeServeEntrySource } = yield* importFrontendCore;
+      const { makeNodeServeEntrySource } = yield* loadFrontendCore;
       const path = yield* Path.Path;
       const runtime = yield* Effect.sync(() => process.execPath);
       const command = Output.map(build.outdir, (outdir) => {

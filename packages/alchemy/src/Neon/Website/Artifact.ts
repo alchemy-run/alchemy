@@ -24,7 +24,7 @@ import {
   nativeArtifactError,
   neonRuntimeTarget as runtimeTarget,
 } from "../NativeArtifact.ts";
-import { importFrontendCore } from "../../Website/FrontendCore.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Build output staged after Website.Server finishes. */
 export interface WebsiteArtifactProps {
@@ -599,7 +599,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
           );
   }
   if (props.static) {
-    const { makeNeonServeEntrySource } = yield* importFrontendCore;
+    const { makeNeonServeEntrySource } = yield* loadFrontendCore;
     let source = makeNeonServeEntrySource({
       ...props.static,
       clientDirExpression: `fileURLToPath(new URL(${JSON.stringify(`./${relative(dist)}/`)}, import.meta.url))`,

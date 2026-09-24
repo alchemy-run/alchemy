@@ -19,7 +19,7 @@ import {
   type WebsiteAssetsProps,
   staticConfigFromAssets,
 } from "./FrameworkSite.ts";
-import { importFrontendCore } from "../../Website/FrontendCore.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 const DEFAULT_PORT = 3000;
 
@@ -203,7 +203,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       NODE_SERVE_ENTRY_FILE_NAME,
       relativeClientDirExpression,
       writeNodeServeEntry,
-    } = yield* importFrontendCore;
+    } = yield* loadFrontendCore;
     const servePath = path.join(
       path.dirname(outdir),
       NODE_SERVE_ENTRY_FILE_NAME,

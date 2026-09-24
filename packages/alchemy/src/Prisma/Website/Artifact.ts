@@ -11,7 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
 import { createComputeArchive } from "../ComputeArchive.ts";
-import { importFrontendCore } from "../../Website/FrontendCore.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Resolved framework output to stage after Website.Server has built it. */
 export interface WebsiteArtifactProps {
@@ -325,7 +325,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     yield* fs.symlink(path.relative(path.dirname(dest), staged(target)), dest);
   }
   if (props.static !== undefined) {
-    const { makeNodeServeEntrySource } = yield* importFrontendCore;
+    const { makeNodeServeEntrySource } = yield* loadFrontendCore;
     const client = path.relative(directory, staged(dist)).replaceAll("\\", "/");
     yield* fs.writeFileString(
       path.join(directory, "server.mjs"),
