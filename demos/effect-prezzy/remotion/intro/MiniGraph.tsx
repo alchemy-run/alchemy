@@ -49,9 +49,10 @@ export const MiniGraphView = ({
   );
   const oldEdges = new Set(prev?.edges.map((e) => `${e.from}->${e.to}`));
   const oldTones = new Map(prev?.edges.map((e) => [`${e.from}->${e.to}`, e.tone]));
+  const oldLabels = new Set(prev?.edges.map((e) => `${e.from}->${e.to}:${e.label}`));
   const edgeChanged = (e: MiniGraph["edges"][number]) => {
     const key = `${e.from}->${e.to}`;
-    return !oldEdges.has(key) || oldTones.get(key) !== e.tone;
+    return !oldEdges.has(key) || oldTones.get(key) !== e.tone || !oldLabels.has(`${key}:${e.label}`);
   };
   const nodeChanged = (n: MiniNode) => {
     const was = before.get(n.id);
@@ -90,6 +91,11 @@ export const MiniGraphView = ({
           const isNew = !oldEdges.has(`${e.from}->${e.to}`);
           const changed = !!prev && edgeChanged(e);
           const progress = isNew ? drawProgress(local, edgeStart + newEdge++ * 8, 14) : 1;
+          // The permission sits on the arrow, a little past its middle.
+          const lx = s.x + (t.x - s.x) * 0.5;
+          const ly = s.y + (t.y - s.y) * 0.5;
+          const lw = (e.label?.length ?? 0) * 12.6 + 26;
+          const labelIn = isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`) ? fade(local, edgeStart + 10, 10) : 1;
           return (
             <g key={`${e.from}->${e.to}`} opacity={changed ? 1 : dim}>
               <Arrow
@@ -101,21 +107,31 @@ export const MiniGraphView = ({
                 progress={progress}
                 bend={0}
               />
+              {e.label ? (
+                <g opacity={labelIn}>
+                  <rect x={lx - lw / 2} y={ly - 18} width={lw} height={36} rx={18} fill="#14110d" stroke={changed ? "#7ee787" : TONE.construct} strokeWidth={2} />
+                  <text x={lx} y={ly + 7} textAnchor="middle" fontFamily={mono} fontSize={21} fill={changed ? "#7ee787" : "#d4d4d4"}>
+                    {e.label}
+                  </text>
+                </g>
+              ) : null}
             </g>
           );
         })}
         {graph.incoming
           ? (() => {
               const n = placed.get(graph.incoming.to)!;
+              // Come in from below whatever is listed under the node (e.g. its env vars).
+              const under = NODE.h / 2 + (graph.nodes.find((x) => x.id === n.id)?.notes?.length ?? 0) * 38;
               const color = TONE[graph.incoming.tone ?? "runtime"];
               const isNew = prev?.incoming?.to !== graph.incoming.to;
               const p = isNew ? drawProgress(local, delay, 14) : 1;
               return (
                 <g>
-                  <Arrow x1={n.x} y1={n.y + NODE.h / 2 + 150} x2={n.x} y2={n.y + NODE.h / 2 + 10} color={color} progress={p} bend={0} />
+                  <Arrow x1={n.x} y1={n.y + under + 150} x2={n.x} y2={n.y + under + 14} color={color} progress={p} bend={0} />
                   <text
                     x={n.x}
-                    y={n.y + NODE.h / 2 + 196}
+                    y={n.y + under + 196}
                     textAnchor="middle"
                     fill={color}
                     fontFamily={hand}

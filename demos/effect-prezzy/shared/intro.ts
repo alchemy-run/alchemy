@@ -56,7 +56,8 @@ export interface MiniNode {
 
 export interface MiniGraph {
   nodes: MiniNode[];
-  edges: { from: string; to: string; tone?: Tone }[];
+  /** `label` sits on the arrow: the permission that connection grants. */
+  edges: { from: string; to: string; tone?: Tone; label?: string }[];
   /** Short facts shown under the drawing (permissions, env vars, errors). */
   cards?: { text: string; tone?: Tone }[];
   /** An arrow coming into a node from outside, e.g. requests. */

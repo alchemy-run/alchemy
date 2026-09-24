@@ -117,27 +117,21 @@ const at = (node: { id: string; title: string; color: string }, x: number, y: nu
   y,
   ...(notes ? { notes } : {}),
 });
-const GRAPH = (notes?: string[]) => [
-  at(C.api, 150, 250),
-  at(C.bucket, 540, 120, notes),
-  at(C.queue, 540, 380),
+/** The program's graph; `env` lists variables injected into the Function. */
+const GRAPH = (notes?: string[], env?: string[]) => [
+  at(C.api, 125, 270, env),
+  at(C.bucket, 590, 100, notes),
+  at(C.queue, 590, 440),
 ];
 const USES = [
   { from: "api", to: "bucket" },
   { from: "api", to: "queue" },
 ];
-const BINDINGS = [
-  { from: "api", to: "bucket", tone: "construct" as const },
-  { from: "api", to: "queue", tone: "construct" as const },
-];
-const BUCKET_CARDS = [
-  { text: "allow s3:GetObject on bucket" },
-  { text: "env BUCKET_NAME" },
-];
-const QUEUE_CARDS = [
-  { text: "allow sqs:SendMessage on queue" },
-  { text: "env QUEUE_URL" },
-];
+/** A binding: the connection carries its permission, and the Function gets an env var. */
+const GET = { from: "api", to: "bucket", tone: "construct" as const, label: "s3:GetObject" };
+const SEND = { from: "api", to: "queue", tone: "construct" as const, label: "sqs:SendMessage" };
+const BINDINGS = [GET, SEND];
+const ENV = ["$BUCKET_NAME", "$QUEUE_URL"];
 const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): CodeSpec => ({
   kind: "code",
   group: "lang",
@@ -206,9 +200,8 @@ async function api(req) {
     src: { code: VERSIONED },
     marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
     diagram: {
-      nodes: GRAPH(["versioning: on"]),
-      edges: [{ from: "api", to: "bucket", tone: "construct" }, USES[1]!],
-      cards: BUCKET_CARDS,
+      nodes: GRAPH(["versioning: on"], [ENV[0]!]),
+      edges: [GET, USES[1]!],
     },
     notes:
       "For the function to call bucket.get, it needs an IAM policy allowing s3:GetObject, and the bucket's name in an environment variable. That connection is what we call a binding.",
@@ -221,7 +214,7 @@ async function api(req) {
       { kind: "circle", find: "bucket.get(req.key)", tone: "construct" },
       { kind: "circle", find: "queue.send(file)", tone: "construct" },
     ],
-    diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS, cards: [...BUCKET_CARDS, ...QUEUE_CARDS] },
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
       "A cloud language would derive all of this by static analysis: see queue.send, infer sqs:SendMessage and inject the queue's URL. Nobody writes policies or environment variables by hand.",
     frames: 75,
@@ -234,7 +227,7 @@ async function api(req) {
       { from: "async function api", to: "await queue.send", tone: "runtime" },
     ],
     diagram: {
-      nodes: GRAPH(["versioning: on"]),
+      nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
       labels: [{ text: "construction builds this", x: 350, y: 20, tone: "construct" }],
       incoming: { to: "api", label: "runtime: every request", tone: "runtime" },
@@ -247,7 +240,7 @@ async function api(req) {
     title: "Imagine the phases as colored functions",
     src: { code: COLORED_APP },
     tints: phaseTints,
-    diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS },
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
       "In a real language we could make that explicit with colored functions: a construct function builds resources, and a runtime function inside it uses them.",
   }),
@@ -260,7 +253,7 @@ async function api(req) {
     ],
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
-      nodes: GRAPH(["versioning: on"]),
+      nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
       cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
     },
@@ -272,10 +265,9 @@ async function api(req) {
     tints: phaseTints,
     marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "runtime" }],
     diagram: {
-      nodes: GRAPH(["versioning: on"]),
+      nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
-      labels: [{ text: "for every possible req…", x: 360, y: 455, tone: "runtime" }],
-      cards: [...BUCKET_CARDS, ...QUEUE_CARDS],
+      labels: [{ text: "for every possible req…", x: 360, y: 530, tone: "runtime" }],
     },
     notes:
       "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
