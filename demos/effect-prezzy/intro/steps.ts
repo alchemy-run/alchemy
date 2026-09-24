@@ -502,7 +502,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "hidden",
     file: "functionless · app.ts",
-    title: "Or a class that can be built with different things",
+    title: "Or a class that accepts any implementation of Store",
     src: {
       code: `class Todos {
   constructor(private store: Store) {}
@@ -514,7 +514,7 @@ export const steps: StepSpec[] = [
   }
 }`,
     },
-    marks: [{ kind: "circle", find: "this.store.delete", label: "a table? a bucket? depends who built it", side: "right", tone: "bad" }],
+    marks: [{ kind: "circle", find: "this.store.delete", label: "a table? a bucket? whichever was passed in", side: "right", tone: "bad" }],
     notes:
       "Or a class member: this.store could be a DynamoDB table, a bucket, anything, depending on who constructed the class. The implementation isn't there to read.",
   },
