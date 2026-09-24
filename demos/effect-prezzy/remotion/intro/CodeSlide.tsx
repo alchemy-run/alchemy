@@ -92,7 +92,9 @@ const modifiedLines = (prev: CodeStep, step: CodeStep, matched: Map<number, numb
       let suf = 0;
       while (suf < old.length - pre && suf < text.length - pre && old[old.length - 1 - suf] === text[text.length - 1 - suf]) suf++;
       const score = pre + suf;
-      if (score < Math.max(old.length, text.length) * 0.5 || text.length - suf <= pre) return;
+      // Mostly the same line, or the old line with something inserted into it.
+      const insertion = score >= old.length && old.trim().length >= 2;
+      if ((!insertion && score < Math.max(old.length, text.length) * 0.5) || text.length - suf <= pre) return;
       if (!best || score > best.score || (score === best.score && Math.abs(j - i) < Math.abs(best.from - i)))
         best = { from: j, start: pre, end: text.length - suf, score };
     });
