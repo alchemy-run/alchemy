@@ -176,27 +176,27 @@ function api(req) {
 
 const program = (): StepSpec[] => [
   lang({
-    title: "I wanted one language where a variable can be a cloud resource",
+    title: "I wanted one language where a variable could be a cloud resource",
     src: { code: B1 },
     diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
     notes:
-      "Imagine a programming language for the cloud. Declaring a bucket doesn't allocate memory: it creates a real bucket in the cloud.",
+      "Imagine a programming language for the cloud. Declaring a bucket wouldn't allocate memory: it would create a real bucket in the cloud.",
   }),
   lang({
-    title: "Change its configuration, and the cloud is updated to match",
+    title: "Change its configuration, and the cloud would update to match",
     src: { code: B2 },
     diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
     notes:
-      "Resources have configuration that changes over time. Turn on versioning in the code, and the language reconciles the real bucket to match.",
+      "Resources have configuration that changes over time. Turn on versioning in the code, and the language would reconcile the real bucket to match.",
   }),
   lang({
-    title: "Declare a queue the same way",
+    title: "You'd declare a queue the same way",
     src: { code: BQ },
     diagram: { nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)], edges: [] },
-    notes: "A queue is declared just like the bucket: one line, one real queue in the cloud.",
+    notes: "A queue would be declared just like the bucket: one line, one real queue in the cloud.",
   }),
   lang({
-    title: "Unlike variables, resources outlive the program",
+    title: "Unlike variables, these resources would outlive the program",
     src: { code: BQ },
     diagram: {
       nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)],
@@ -215,48 +215,48 @@ const program = (): StepSpec[] => [
       ],
     },
     notes:
-      "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
+      "An ordinary program runs from start to finish and its state is gone. These wouldn't go away when the program ends: they'd be a persistent world, and the next run would start from it.",
   }),
   lang({
-    title: "Functions are resources too",
+    title: "Functions would be resources too",
     src: { code: EMPTY_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [] },
-    notes: "Declaring a function deploys it: another node in the world.",
+    notes: "Declaring a function would deploy it: another node in the world.",
   }),
   lang({
-    title: "When the function reads the bucket, they become connected",
+    title: "When the function reads the bucket, they'd become connected",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [USES[0]!] },
-    notes: "Call bucket.get inside the function, and the function now depends on the bucket.",
+    notes: "Call bucket.get inside the function, and the function would now depend on the bucket.",
   }),
   lang({
-    title: "That connection needs permission to read the bucket",
+    title: "That connection would need permission to read the bucket",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [GET] },
-    notes: "For the function to call bucket.get, it needs an IAM policy that allows s3:GetObject on this bucket.",
+    notes: "For the function to call bucket.get, it would need an IAM policy that allows s3:GetObject on this bucket.",
   }),
   lang({
     title: "…and the bucket's name, passed in as an environment variable",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"], [ENV[0]!]), edges: [GET] },
     notes:
-      "And it needs to know which bucket: its name is injected as an environment variable. The permission plus the configuration is what we call a binding.",
+      "And it would need to know which bucket: its name would be injected as an environment variable. The permission plus the configuration is what we call a binding.",
   }),
   lang({
-    title: "Sending to the queue connects them the same way",
+    title: "Sending to the queue would connect them the same way",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes: "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
   }),
   lang({
-    title: "The language works all of this out from the code",
+    title: "The language would work all of this out from code",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
     notes:
-      "A cloud language derives all of this by static analysis. Nobody writes policies or environment variables by hand: the program is a graph of resources, and the code is the source of truth for how they connect.",
+      "A cloud language would derive all of this by static analysis. Nobody would write policies or environment variables by hand: the program would be a graph of resources, and the code would be the source of truth for how they connect.",
   }),
   lang({
-    title: "But what if the function creates a bucket?",
+    title: "But what if the function created a bucket?",
     src: { code: SCRATCH },
     diagram: {
       nodes: [...GRAPH(["versioning: on"], ENV), SCRATCH_NODE],
@@ -264,10 +264,10 @@ const program = (): StepSpec[] => [
       labels: [{ text: "one per request?", x: 590, y: 622, tone: "bad" }],
     },
     notes:
-      "So far every resource was declared at the top. What if the function itself declares one? The function runs on every request, maybe thousands of times a second. Does each request get a new bucket? Who deletes them? Who gave the function permission to create them?",
+      "So far every resource was declared at the top. What if the function itself declared one? The function runs on every request, maybe thousands of times a second. Would each request get a new bucket? Who would delete them? Who would give the function permission to create them?",
   }),
   lang({
-    title: "Uh-oh. Resources need to be known ahead of time",
+    title: "Uh-oh. Resources would need to be known ahead of time",
     src: { code: SCRATCH },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -277,10 +277,10 @@ const program = (): StepSpec[] => [
       cards: [{ text: "✗ not known until a request arrives", tone: "bad" }],
     },
     notes:
-      "It doesn't make sense. Infrastructure is created once, ahead of time, by the deploy. The function only uses it. So there are really two different kinds of code in this program.",
+      "It wouldn't make sense. Infrastructure has to be created once, ahead of time, by the deploy. The function only uses it. So there would really be two different kinds of code in this program.",
   }),
   lang({
-    title: "So a cloud program is actually two phases",
+    title: "So a cloud program would really be two phases",
     src: { code: VERSIONED },
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
@@ -289,7 +289,7 @@ const program = (): StepSpec[] => [
       incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
     },
     notes:
-      "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
+      "Construction would be declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime would be imperative: the function body runs on every request, using what construction declared.",
   }),
   lang({
     title: "One for construction, containing the resource declarations",
@@ -317,7 +317,7 @@ const program = (): StepSpec[] => [
       "Then runtime: a runtime function inside it runs on every request, using the resources construction declared. These are colored functions: construct and runtime are different colors, and the compiler knows which is which.",
   }),
   lang({
-    title: "Now creating a bucket at runtime is a compile error",
+    title: "Now creating a bucket at runtime would be a compile error",
     src: { code: COLORED_BAD },
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
@@ -325,10 +325,10 @@ const program = (): StepSpec[] => [
       edges: BINDINGS,
       cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
     },
-    notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
+    notes: "The colors would be boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, would now be a compile error instead of a question.",
   }),
   lang({
-    title: "And inferring permissions becomes a kind of type checking",
+    title: "And inferring permissions would become a kind of type checking",
     src: { code: COLORED_APP },
     quiet: true,
     diagram: {
@@ -337,7 +337,7 @@ const program = (): StepSpec[] => [
       labels: [{ text: "for every possible req…", x: 360, y: 530, tone: "runtime" }],
     },
     notes:
-      "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
+      "Inferring the bindings would be like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
   }),
 ];
 
