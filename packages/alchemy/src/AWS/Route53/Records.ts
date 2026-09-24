@@ -9,6 +9,7 @@ import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 import {
+  canonicalName,
   normalizeHostedZoneId,
   normalizeName,
   toAliasTarget,
@@ -210,8 +211,7 @@ export const RecordsProvider = () =>
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
-            recordSet.Name.toLowerCase() ===
-              normalizeName(name).toLowerCase() &&
+            canonicalName(recordSet.Name) === canonicalName(name) &&
             recordSet.Type === type &&
             recordSet.SetIdentifier === undefined,
         );
