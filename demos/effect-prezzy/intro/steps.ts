@@ -134,8 +134,8 @@ const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): C
   ...spec,
 });
 const phaseTints = [
-  { from: "construct app", to: "const queue", tone: "construct" as const },
-  { from: "runtime async function", to: "await queue.send", tone: "runtime" as const },
+  { from: "const bucket", to: "const queue", tone: "construct" as const },
+  { from: "const file", to: "await queue.send", tone: "runtime" as const },
 ];
 
 const B1 = "const bucket = Bucket()";
@@ -224,7 +224,7 @@ const program = (): StepSpec[] => [
     src: { code: VERSIONED },
     tints: [
       { from: "const bucket", to: "const queue", tone: "construct" },
-      { from: "async function api", to: "await queue.send", tone: "runtime" },
+      { from: "const file", to: "await queue.send", tone: "runtime" },
     ],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
@@ -248,8 +248,8 @@ const program = (): StepSpec[] => [
     title: "The colors are boundaries the compiler enforces",
     src: { code: COLORED_BAD },
     tints: [
-      { from: "construct app", to: "const queue", tone: "construct" },
-      { from: "runtime async function", to: "await queue.send", tone: "runtime" },
+      { from: "const bucket", to: "const queue", tone: "construct" },
+      { from: "const other", to: "await queue.send", tone: "runtime" },
     ],
     marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
     diagram: {
