@@ -222,6 +222,30 @@ export interface ServiceProps extends PlatformProps {
   }>;
 }
 
+/** A port the Service publishes on Fly's proxy. */
+export interface ServiceEndpoint {
+  /**
+   * Hostname the port is published on: `{appName}.fly.dev`, or
+   * `{appName}.flycast` for a private Service.
+   */
+  host: string;
+  /** Port on Fly's proxy. */
+  port: number;
+  /** Port the process listens on inside the Machine. */
+  internalPort: number | undefined;
+  /** `tcp` or `udp`. */
+  protocol: string;
+  /** Fly proxy handlers (`tls`, `http`, `pg_tls`, …). Empty for raw TCP or UDP. */
+  handlers: string[];
+  /**
+   * URL when the port speaks HTTP: `https://` for `tls` + `http`, `http://`
+   * for plain `http`, with `:{port}` unless it is 443 or 80. `undefined`
+   * for other protocols, and for TLS ports on `.flycast` (Fly issues no
+   * certificate there).
+   */
+  url: string | undefined;
+}
+
 export type Service = Resource<
   "Fly.Service",
   ServiceProps,
@@ -247,12 +271,21 @@ export type Service = Resource<
     /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
     state: string;
     /**
-     * Public endpoint: `https://{appName}.fly.dev` for the default
-     * services. `undefined` for a private Service or when nothing is
-     * published. When `app` is set, `https://{appName}.fly.dev` whenever
-     * a port is published, since the App's addresses are managed elsewhere.
+     * Main public HTTP endpoint: the first published `tls` + `http` port
+     * as `https://{appName}.fly.dev[:port]`, else the first plain `http`
+     * port as `http://{appName}.fly.dev[:port]`. `https://{appName}.fly.dev`
+     * for the default services. `undefined` for a private Service or when
+     * no port speaks HTTP. When `app` is set, the App's addresses are
+     * managed elsewhere, so this is where the Service answers once the App
+     * is reachable. See {@link endpoints} for every published port.
      */
     url: string | undefined;
+    /**
+     * Every port the Service publishes, in declaration order. Ports that
+     * only redirect HTTP to HTTPS (`forceHttps`) and port ranges are
+     * omitted. Empty when nothing is published.
+     */
+    endpoints: ServiceEndpoint[];
     /**
      * Endpoint for other Apps in the organization over Fly's private
      * network: `http://{appName}.flycast`, routed by Fly's proxy. Set when
@@ -396,6 +429,45 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * `url` is `undefined` when you pass `services: []` (nothing is
  * published).
+ *
+ * ### Every published port
+ * `url` is one endpoint. A Service that publishes several ports has one
+ * endpoint per port at the same hostname, listed in `endpoints` with
+ * its port, handlers, and a URL when the port speaks HTTP. Ports that
+ * only redirect to HTTPS are left out.
+ *
+ * **Example:** An admin UI on 8443 and raw TCP on 7000
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     services: [
+ *       {
+ *         internalPort: 3000,
+ *         ports: [
+ *           { port: 80, handlers: ["http"], forceHttps: true },
+ *           { port: 443, handlers: ["tls", "http"] },
+ *         ],
+ *       },
+ *       { internalPort: 9000, ports: [{ port: 8443, handlers: ["tls", "http"] }] },
+ *       { internalPort: 7000, ports: [{ port: 7000 }] },
+ *     ],
+ *   },
+ *   Effect.gen(function* () {
+ *     return {};
+ *   }),
+ * ) {}
+ *
+ * api.url; // "https://{appName}.fly.dev"
+ * api.endpoints.map((endpoint) => endpoint.url);
+ * // ["https://{appName}.fly.dev", "https://{appName}.fly.dev:8443", undefined]
+ * ```
+ *
+ * :::note[Plain HTTP on other ports needs IPv6]
+ * The free shared IPv4 serves TLS on any port but plain HTTP only on
+ * port 80. A plain-HTTP port such as 8080 answers over IPv6 only.
+ * :::
  *
  * ### Private Services
  * `public: false` keeps a Service off the internet. It gets only a
@@ -826,9 +898,10 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * its own. The Services share the App's hostname, addresses, and
  * {@link Secret}s, and a {@link Certificate} on the App covers them.
  * Alchemy manages no addresses for a Service in a shared App: allocate
- * an {@link IpAssignment} on the App, and `url` is
- * `https://{appName}.fly.dev` whenever a port is published. `public`
- * does not apply.
+ * an {@link IpAssignment} on the App. `url` and `endpoints` follow the
+ * Service's own ports, so Services in one App tell themselves apart by
+ * port (`https://{appName}.fly.dev` and `https://{appName}.fly.dev:8443`).
+ * `public` does not apply.
  *
  * **Example:** API and worker sharing a secret
  * ```typescript
@@ -1135,23 +1208,47 @@ const portsOf = (services: FlyMachineService[] | undefined) =>
 const withPort = (base: string, port: number, standard: number) =>
   port === standard ? base : `${base}:${port}`;
 
-/** HTTPS on the first TLS port, else HTTP on the first HTTP port. */
-const publicUrlOf = (
-  appName: string,
+const isRedirect = (handlers: string[], forceHttps: boolean | undefined) =>
+  forceHttps === true && handlers.includes("http") && !handlers.includes("tls");
+
+/** Every published port on `host`, excluding HTTPS redirects and ranges. */
+const endpointListOf = (
+  host: string,
   services: FlyMachineService[] | undefined,
-) => {
-  const ports = portsOf(services).filter((entry) => entry.port !== undefined);
-  const tls = ports.find(
-    (entry) =>
-      entry.handlers?.includes("tls") && entry.handlers.includes("http"),
+): ServiceEndpoint[] => {
+  const flycast = host.endsWith(".flycast");
+  return (services ?? []).flatMap((service) =>
+    (service.ports ?? []).flatMap((entry) => {
+      const handlers = entry.handlers ?? [];
+      if (entry.port === undefined || isRedirect(handlers, entry.force_https))
+        return [];
+      const http = handlers.includes("http");
+      const tls = handlers.includes("tls");
+      const url = !http
+        ? undefined
+        : tls
+          ? flycast
+            ? undefined
+            : withPort(`https://${host}`, entry.port, 443)
+          : withPort(`http://${host}`, entry.port, 80);
+      return [
+        {
+          host,
+          port: entry.port,
+          internalPort: service.internal_port,
+          protocol: service.protocol ?? "tcp",
+          handlers,
+          url,
+        },
+      ];
+    }),
   );
-  if (tls?.port !== undefined)
-    return withPort(`https://${appName}.fly.dev`, tls.port, 443);
-  const http = ports.find((entry) => entry.handlers?.includes("http"));
-  if (http?.port !== undefined)
-    return withPort(`http://${appName}.fly.dev`, http.port, 80);
-  return undefined;
 };
+
+/** HTTPS on the first TLS port, else HTTP on the first plain HTTP port. */
+const mainUrlOf = (endpoints: ServiceEndpoint[]) =>
+  endpoints.find((endpoint) => endpoint.url?.startsWith("https://"))?.url ??
+  endpoints.find((endpoint) => endpoint.url !== undefined)?.url;
 
 /** Fly issues no certificate for `.flycast`: only plain HTTP qualifies. */
 const privateUrlOf = (
@@ -1209,12 +1306,18 @@ const endpointsOf = (
   access: { ownsApp: boolean; isPublic: boolean },
 ) => {
   if (!hasPublishedService(set.services))
-    return { url: undefined, privateUrl: undefined };
-  if (!access.ownsApp)
-    return { url: `https://${set.appName}.fly.dev`, privateUrl: undefined };
+    return { url: undefined, privateUrl: undefined, endpoints: [] };
+  const isPublic = !access.ownsApp || access.isPublic;
+  const endpoints = endpointListOf(
+    `${set.appName}.${isPublic ? "fly.dev" : "flycast"}`,
+    set.services,
+  );
   return {
-    url: access.isPublic ? publicUrlOf(set.appName, set.services) : undefined,
-    privateUrl: privateUrlOf(set.appName, set.services),
+    url: isPublic ? mainUrlOf(endpoints) : undefined,
+    privateUrl: access.ownsApp
+      ? privateUrlOf(set.appName, set.services)
+      : undefined,
+    endpoints,
   };
 };
 

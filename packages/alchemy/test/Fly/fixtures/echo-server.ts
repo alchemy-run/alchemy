@@ -2,7 +2,7 @@
 // Node strips the types, so only erasable TypeScript syntax is allowed here.
 import * as http from "node:http";
 
-const ECHO_BODY = "fly-echo";
+const ECHO_BODY = process.env.ECHO_BODY ?? "fly-echo";
 
 const port = Number(process.env.PORT ?? 3000);
 

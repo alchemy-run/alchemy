@@ -102,6 +102,45 @@ export default Alchemy.Stack(
 `url` is `undefined` when you pass `services: []` (nothing is
 published).
 
+## Every published port
+
+`url` is one endpoint. A Service that publishes several ports has one
+endpoint per port at the same hostname. `endpoints` lists them with
+the port, handlers, and a URL when the port speaks HTTP. Ports that
+only redirect to HTTPS are left out.
+
+```typescript
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    services: [
+      {
+        internalPort: 3000,
+        ports: [
+          { port: 80, handlers: ["http"], forceHttps: true },
+          { port: 443, handlers: ["tls", "http"] },
+        ],
+      },
+      { internalPort: 9000, ports: [{ port: 8443, handlers: ["tls", "http"] }] },
+      { internalPort: 7000, ports: [{ port: 7000 }] },
+    ],
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+`api.url` is `https://{appName}.fly.dev`. `api.endpoints` has three
+entries: 443 and 8443 with `https://` URLs, and 7000 with no URL,
+because raw TCP has no HTTP address.
+
+:::note[Plain HTTP on other ports needs IPv6]
+The free shared IPv4 serves TLS on any port but plain HTTP only on
+port 80. A plain-HTTP port such as 8080 answers over IPv6 only.
+:::
+
 ## A stable hostname
 
 `name` names the Service's App, so it is the `{name}.fly.dev`
@@ -402,9 +441,12 @@ Group Services when they need something that attaches to a `Fly.App`:
 
 Alchemy manages no addresses for a Service in a shared App. Allocate
 an [`IpAssignment`](/fly/networking#addresses-for-a-shared-app) on the
-App. `url` is `https://{appName}.fly.dev` whenever a port is
-published, `privateUrl` is `undefined`, and `public` does not apply
-(combining `app` and `public` fails with `Fly.InvalidServiceProps`).
+App. `url` and `endpoints` follow each Service's own ports, so
+Services in one App tell themselves apart by port: an API on 443 has
+`url` `https://{appName}.fly.dev`, and an admin UI on 8443 has
+`https://{appName}.fly.dev:8443`. `privateUrl` is `undefined`, and
+`public` and `network` do not apply (combining them with `app` fails
+with `Fly.InvalidServiceProps`).
 
 :::caution[One public HTTP Service per App]
 Fly's proxy routes an App's traffic by port only. Two Services that

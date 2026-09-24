@@ -369,6 +369,17 @@ test.provider(
       expect(owned.ownsApp).toBe(true);
       expect(owned.url).toEqual(`https://${owned.appName}.fly.dev`);
       expect(owned.privateUrl).toBeUndefined();
+      // Port 80 only redirects to HTTPS, so it is not an endpoint.
+      expect(owned.endpoints).toEqual([
+        {
+          host: `${owned.appName}.fly.dev`,
+          port: 443,
+          internalPort: 3000,
+          protocol: "tcp",
+          handlers: ["tls", "http"],
+          url: `https://${owned.appName}.fly.dev`,
+        },
+      ]);
       expect(yield* addressKinds(owned.appName)).toEqual([
         "flycast",
         "shared_v4",
@@ -419,6 +430,16 @@ test.provider(
       expect(hidden.echo.privateUrl).toEqual(
         `http://${hidden.echo.appName}.flycast`,
       );
+      expect(hidden.echo.endpoints).toEqual([
+        {
+          host: `${hidden.echo.appName}.flycast`,
+          port: 80,
+          internalPort: 3000,
+          protocol: "tcp",
+          handlers: ["http"],
+          url: `http://${hidden.echo.appName}.flycast`,
+        },
+      ]);
       expect(yield* addressKinds(hidden.echo.appName)).toEqual(["flycast"]);
       expect(
         yield* fetchFrom(hidden.caller, hidden.echo.privateUrl!, ECHO_BODY),
@@ -552,6 +573,91 @@ test.provider(
       yield* stack.destroy();
       for (const appName of [users.appName, gateway.appName, outsider.appName])
         expect(yield* appGone(appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
+);
+
+test.provider(
+  "Services in one App publish separate ports and each url reaches its own Service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Fly.App("PortsSite");
+          yield* Fly.IpAssignment("PortsV4", { app: site, type: "shared_v4" });
+          const api = yield* Echo(
+            {
+              app: site,
+              env: { ECHO_BODY: "api" },
+              services: [
+                {
+                  protocol: "tcp",
+                  internalPort: 3000,
+                  autostop: "off",
+                  ports: [
+                    { port: 80, handlers: ["http"], forceHttps: true },
+                    { port: 443, handlers: ["tls", "http"] },
+                  ],
+                },
+              ],
+            },
+            "PortsApi",
+          );
+          const admin = yield* Echo(
+            {
+              app: site,
+              env: { ECHO_BODY: "admin" },
+              services: [
+                {
+                  protocol: "tcp",
+                  internalPort: 3000,
+                  autostop: "off",
+                  ports: [{ port: 8443, handlers: ["tls", "http"] }],
+                },
+                {
+                  protocol: "tcp",
+                  internalPort: 3000,
+                  autostop: "off",
+                  ports: [{ port: 7000 }],
+                },
+              ],
+            },
+            "PortsAdmin",
+          );
+          return { api, admin };
+        }),
+      );
+      const { api, admin } = deployed;
+      const host = `${api.appName}.fly.dev`;
+      expect(admin.appName).toEqual(api.appName);
+      expect(api.url).toEqual(`https://${host}`);
+      expect(admin.url).toEqual(`https://${host}:8443`);
+      expect(admin.privateUrl).toBeUndefined();
+      expect(admin.endpoints).toEqual([
+        {
+          host,
+          port: 8443,
+          internalPort: 3000,
+          protocol: "tcp",
+          handlers: ["tls", "http"],
+          url: `https://${host}:8443`,
+        },
+        {
+          host,
+          port: 7000,
+          internalPort: 3000,
+          protocol: "tcp",
+          handlers: [],
+          url: undefined,
+        },
+      ]);
+      // TLS on a non-standard port is served over the shared IPv4.
+      expect(yield* getText(api.url!)).toEqual("api");
+      expect(yield* getText(admin.url!)).toEqual("admin");
+
+      yield* stack.destroy();
+      expect(yield* appGone(api.appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 400_000 },
 );
