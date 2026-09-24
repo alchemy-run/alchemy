@@ -139,6 +139,13 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
   const newIn = morph ? interpolate(local, [8, 20], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : t;
   const marksStart = morph ? 18 : 12;
 
+  // Lines new or changed since the previous step stay bright; the rest dims.
+  const changed = (i: number) => !!morph && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
+  const anyChanged = step.lines.some((_, i) => changed(i));
+  const dim = anyChanged
+    ? interpolate(local, [10, 22], [1, 0.4], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    : 1;
+
   const tintOf = (i: number) => step.tints.find((tint) => i >= tint.from && i <= tint.to);
   const focused = (i: number) => !step.focus || (i >= step.focus.from && i <= step.focus.to);
 
@@ -210,7 +217,7 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
         const y = y0 + (g.top + i * g.lh - y0) * t;
         const x = x0 + (g.left - x0) * t;
         const size = (from !== undefined ? pg.size : g.size) + (g.size - (from !== undefined ? pg.size : g.size)) * t;
-        const opacity = (from !== undefined ? 1 : newIn) * (focused(i) ? 1 : 0.28);
+        const opacity = (from !== undefined ? 1 : newIn) * (focused(i) ? 1 : 0.28) * (changed(i) ? 1 : dim);
         return (
           <div
             key={`line-${i}`}
