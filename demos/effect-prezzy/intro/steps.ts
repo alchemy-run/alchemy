@@ -54,6 +54,8 @@ export interface CodeSpec {
   beside?: Pick<CodeSpec, "file" | "src" | "lang" | "tints" | "marks">;
   /** Lines from text in this file to text in `beside`. */
   links?: { from: Find; to: Find; tone?: Tone }[];
+  /** Arcs from text in the code to a node or an edge's label in `diagram`. */
+  diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
   aside?: { text: string; tone?: Tone; image?: string };
   /** Don't highlight or spotlight the lines that changed since the previous step. */
@@ -252,6 +254,14 @@ const program = (): StepSpec[] => [
     title: "The language would work all of this out from code",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    diagramLinks: [
+      { from: "Bucket({ versioning: true })", to: { node: "bucket" } },
+      { from: "Queue()", to: { node: "queue" } },
+      { from: "function api(req)", to: { node: "api" } },
+      { from: "bucket.get(req.key)", to: { edge: ["api", "bucket"] } },
+      { from: "queue.send(file)", to: { edge: ["api", "queue"] } },
+    ],
+    frames: 55,
     notes:
       "A cloud language would derive all of this by static analysis. Nobody would write policies or environment variables by hand: the program would be a graph of resources, and the code would be the source of truth for how they connect.",
   }),

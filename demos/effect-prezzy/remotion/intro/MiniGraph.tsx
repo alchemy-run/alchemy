@@ -19,6 +19,23 @@ const exit = (n: { x: number; y: number }, dx: number, dy: number, pad = 8) => {
   return { x: n.x + dx * t, y: n.y + dy * t };
 };
 
+/** Where an arc into the drawing should land: the left edge of a node, or of an edge's label. */
+export const graphAnchor = (graph: MiniGraph, to: { node: string } | { edge: [string, string] }) => {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  if ("node" in to) {
+    const n = byId.get(to.node);
+    return n ? { x: AREA.x + n.x - NODE.w / 2 - 6, y: AREA.y + n.y } : undefined;
+  }
+  const a = byId.get(to.edge[0]);
+  const b = byId.get(to.edge[1]);
+  const e = graph.edges.find((x) => x.from === to.edge[0] && x.to === to.edge[1]);
+  if (!a || !b || !e) return undefined;
+  const s = exit(a, b.x - a.x, b.y - a.y);
+  const t = exit(b, a.x - b.x, a.y - b.y);
+  const lw = (e.label?.length ?? 0) * 12.6 + 26;
+  return { x: AREA.x + (s.x + t.x) / 2 - lw / 2 - 6, y: AREA.y + (s.y + t.y) / 2 };
+};
+
 type Edge = MiniGraph["edges"][number];
 const edgeKey = (e: Edge) => `${e.from}->${e.to}`;
 

@@ -4,7 +4,7 @@ import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
 import { DrillView } from "./Drill.tsx";
 import { ReqView, reqHeight } from "./Req.tsx";
-import { MiniGraphView } from "./MiniGraph.tsx";
+import { graphAnchor, MiniGraphView } from "./MiniGraph.tsx";
 import { Arrow, boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
 /** The code canvas, inside the frame and above the caption band. */
@@ -464,6 +464,35 @@ export const CodeSlide = ({
           local={local}
           delay={marksStart}
         />
+      ) : null}
+      {step.diagram && step.diagramLinks ? (
+        <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+          {step.diagramLinks.map((link, i) => {
+            const to = graphAnchor(step.diagram!, link.to);
+            if (!to) return null;
+            const color = TONE[link.tone ?? "construct"];
+            const r = rect(step, g, link.from);
+            // The underline runs on along the baseline to just past the code, bends
+            // to the target's height there, then runs straight in: turning early
+            // keeps the arc clear of nodes and notes between the code and its target.
+            const y1 = r.y + r.h * 0.92;
+            const gx = g.left + Math.max(...step.lines.map((l) => lineText(l).length)) * g.cw + 14;
+            const start = marksStart + i * 6;
+            return (
+              <g key={i}>
+                {stroke(underlinePath(r.x, y1, r.w, i * 5 + 2), color, drawProgress(local, start, 6), 3)}
+                <g opacity={0.75}>
+                  {stroke(
+                    `M ${r.x + r.w} ${y1} L ${gx} ${y1} C ${gx + 55} ${y1}, ${gx + 30} ${to.y}, ${gx + 85} ${to.y} L ${to.x} ${to.y}`,
+                    color,
+                    drawProgress(local, start + 3, 9),
+                    2.5,
+                  )}
+                </g>
+              </g>
+            );
+          })}
+        </svg>
       ) : null}
       {step.aside?.image ? (
         <div

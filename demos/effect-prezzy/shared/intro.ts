@@ -148,6 +148,8 @@ export interface CodeStep {
   beside?: CodeStep;
   /** Lines from text in this pane to text in `beside`: how the two are coupled. */
   links?: CodeLink[];
+  /** Arcs from text in the code to what it becomes in `diagram`: a node, or an edge's label. */
+  diagramLinks?: { from: Span; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
   aside?: {
     text: string;
