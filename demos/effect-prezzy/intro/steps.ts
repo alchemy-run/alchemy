@@ -267,10 +267,6 @@ const program = (): StepSpec[] => [
   lang({
     title: "So a cloud program is actually two phases",
     src: { code: VERSIONED },
-    tints: [
-      { from: "const bucket", to: "const queue", tone: "construct" },
-      { from: "const file", to: "queue.send(file)", tone: "runtime" },
-    ],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
@@ -295,10 +291,7 @@ const program = (): StepSpec[] => [
   lang({
     title: "One for runtime, where those resources implement the API",
     src: { code: COLORED_APP },
-    tints: [
-      { from: "const bucket", to: "const queue", tone: "construct" },
-      { from: "const file", to: "queue.send(file)", tone: "runtime" },
-    ],
+    tints: [{ from: "const file", to: "queue.send(file)", tone: "runtime" }],
     diagram: {
       nodes: GRAPH(["versioning: on"], ENV),
       edges: BINDINGS,
@@ -421,10 +414,7 @@ export const steps: StepSpec[] = [
     file: "punchcard · stack.ts",
     title: "First came Punchcard, which added runtime code to the AWS CDK",
     src: { code: PUNCHCARD },
-    tints: [
-      { from: "const topic", to: "depends: topic", tone: "construct" },
-      { from: "async (event", to: "}));", tone: "runtime" },
-    ],
+    tints: [{ from: "async (event", to: "}));", tone: "runtime" }],
     notes:
       "In 2018 and 2019 I built Punchcard on top of the AWS CDK. It modeled the two phases: declare a topic, depend on it from a Function, and get a typed client at runtime with the IAM policy generated for you.",
   },
@@ -434,10 +424,7 @@ export const steps: StepSpec[] = [
     file: "punchcard · stack.ts",
     title: "But its runtime code shipped with the whole CDK",
     src: { code: PUNCHCARD },
-    tints: [
-      { from: "const topic", to: "depends: topic", tone: "construct" },
-      { from: "async (event", to: "}));", tone: "runtime" },
-    ],
+    tints: [{ from: "async (event", to: "}));", tone: "runtime" }],
     marks: [{ kind: "circle", find: "SNS.Topic", label: "brings the CDK with it", side: "right", tone: "bad" }],
     panel: {
       title: "What the Lambda bundle contains",
@@ -456,10 +443,6 @@ export const steps: StepSpec[] = [
     file: "punchcard · stack.ts",
     title: "And every dependency had to be declared up front",
     src: { code: PUNCHCARD },
-    tints: [
-      { from: "const topic", to: "depends: topic", tone: "construct" },
-      { from: "async (event", to: "}));", tone: "runtime" },
-    ],
     marks: [
       { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
       { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
@@ -473,10 +456,6 @@ export const steps: StepSpec[] = [
     file: "punchcard · stack.ts",
     title: "…and carried through every function on the way down",
     src: { code: PUNCHCARD },
-    tints: [
-      { from: "const topic", to: "depends: topic", tone: "construct" },
-      { from: "async (event", to: "}));", tone: "runtime" },
-    ],
     marks: [
       { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
       { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
@@ -623,10 +602,7 @@ export const steps: StepSpec[] = [
   api({
     title: "…and fetch is the runtime phase",
     snippet: "api-01-effect.ts",
-    tints: [
-      { from: "const api = Effect.gen", to: "return {", tone: "construct" },
-      { from: "fetch: Effect.gen", to: "}),", tone: "runtime" },
-    ],
+    tints: [{ from: "fetch: Effect.gen", to: "}),", tone: "runtime" }],
     req: [],
     notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
   }),
@@ -789,10 +765,7 @@ export const steps: StepSpec[] = [
     file: "src/Links.ts",
     title: "…and a Layer that builds its infrastructure",
     src: { snippet: "links.ts", regions: ["layer"] },
-    tints: [
-      { from: "const db = yield*", to: "const sql = yield*", tone: "construct" },
-      { from: "return linksOver", tone: "runtime" },
-    ],
+    tints: [{ from: "const db = yield*", to: "const sql = yield*", tone: "construct" }],
     notes:
       "A Layer implements it, with the same two phases: construction declares a D1 database and a binding to it, and the runtime part is the interface the application calls. That Layer is a component: infrastructure and the code that uses it, together.",
   },
