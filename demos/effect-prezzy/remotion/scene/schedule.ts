@@ -1,6 +1,7 @@
 import type { AppId, Beat, SceneCapture } from "../../shared/types.ts";
 import { highlight } from "./highlight.ts";
 import { patchView, staticView, type PatchView } from "./patch.ts";
+import { splitEdits } from "./split.ts";
 
 /** Frame budget for each kind of beat, at `fps`. */
 export const TIMING = {
@@ -112,7 +113,7 @@ export const schedule = async (
     (b) => b.kind !== "pause" && b.kind !== "step" && b.kind !== "caption" && b.kind !== "slide",
   );
   let app: AppId = firstBeat ? appOf(firstBeat, "editor") : "editor";
-  for (const beat of capture.beats) {
+  for (const beat of splitEdits(capture.beats)) {
     const next = appOf(beat, app);
     // Windows cut straight to the next one: no switch animation.
     const switchFrames = 0;
