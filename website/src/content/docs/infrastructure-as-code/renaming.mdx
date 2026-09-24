@@ -5,12 +5,11 @@ description: Migrate a resource's state across a logical ID change instead of re
 
 Changing a [logical ID](/infrastructure-as-code/resource#logical-id)
 normally plans a
-[**replacement**](/infrastructure-as-code/resource-lifecycle#replace):
-a new resource is created under the new ID and the old one —
-including its physical resource, data, and
-attachments — is deleted. When you actually just renamed the
-resource, declare the rename with `Alchemy.renamedFrom` and alchemy
-migrates the state row instead:
+[**replacement**](/infrastructure-as-code/resource-lifecycle#replace).
+Alchemy creates a new resource under the new ID and deletes the old
+one, including its physical resource, data, and attachments. If you
+only renamed the resource, declare the rename with
+`Alchemy.renamedFrom`. Alchemy then migrates the state row:
 
 ```diff lang="typescript"
 -const bucket = yield* Cloudflare.R2.Bucket("Bucket");
@@ -20,26 +19,26 @@ migrates the state row instead:
 ```
 
 The next deploy finds the state persisted under `Bucket`, moves it to
-`Assets`, and plans a single re-branding **update** — same
-[instance ID](/infrastructure-as-code/resource#physical-name), same
-physical name, nothing created or deleted in the cloud. The
-plan shows what's happening:
+`Assets`, and plans a single re-branding **update**. The
+[instance ID](/infrastructure-as-code/resource#physical-name) and
+physical name stay the same. Nothing is created or deleted in the
+cloud. The plan shows the rename:
 
 ```text
 Plan: 1 to update
 [Assets] update (renamed from Bucket)
 ```
 
-Keep the decoration around; once no state row exists under the old
-ID it does nothing.
+Keep the decoration in place. Once no state row exists under the
+old ID, it does nothing.
 
 ## Namespaces
 
-A bare-string former id behaves exactly like the `id` argument: it
+A bare-string former id behaves exactly like the `id` argument. It
 resolves against the surrounding namespace (`Namespace.push`).
-Declared inside `Namespace.push("Site")`, `renamedFrom("Worker")`
-claims the former FQN `Site/Worker` — write the former id exactly
-as you would have written the `id` in the same position:
+Inside `Namespace.push("Site")`, `renamedFrom("Worker")` claims the
+former FQN `Site/Worker`. Write the former id exactly as you would
+have written the `id` in the same position:
 
 ```typescript
 // this Worker's FQN used to be `<id>/Worker`; now it is `<id>`
@@ -47,9 +46,9 @@ as you would have written the `id` in the same position:
 yield* Worker(id, props).pipe(Alchemy.renamedFrom(`${id}/Worker`));
 ```
 
-When a resource moved **between** namespaces, a relative id can't
-express the old location — pass the absolute form, the full FQN
-exactly as it appears in state:
+When a resource moved between namespaces, a relative id can't
+express the old location. Pass the absolute form, which is the full
+FQN exactly as it appears in state:
 
 ```typescript
 yield* Cloudflare.R2.Bucket("Assets").pipe(
@@ -60,7 +59,7 @@ yield* Cloudflare.R2.Bucket("Assets").pipe(
 
 ## Renamed more than once
 
-List every former id, **most recent first** — alchemy checks them in
+List every former id, most recent first. Alchemy checks them in
 order and migrates from the first matching row:
 
 ```typescript
@@ -71,10 +70,10 @@ yield* Cloudflare.R2.Bucket("Assets").pipe(
 
 ## Reusing the old ID
 
-The old ID can be reused by a **new** resource in the same deploy.
-The rename claim wins the state row — it's an explicit statement
-that the row was the renamed resource's — and the reusing resource
-is created fresh:
+A new resource can reuse the old ID in the same deploy. The rename
+claim wins the state row, because it explicitly states that the row
+belonged to the renamed resource. Alchemy creates the reusing
+resource fresh:
 
 ```typescript
 // `Assets` keeps the physical resource previously known as
@@ -85,18 +84,19 @@ const assets = yield* Cloudflare.R2.Bucket("Assets").pipe(
 const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 ```
 
-The migration deploy plans one **update** for the renamed resource
-(not a noop) — the reconcile re-brands the physical resource's
-ownership tags under the new logical ID, so the reused ID can never
-accidentally adopt the wrong cloud resource.
+The migration deploy plans one **update** for the renamed resource,
+not a noop. The reconcile re-brands the physical resource's
+ownership tags under the new logical ID. This way the reused ID can
+never adopt the wrong cloud resource by accident.
 
 ## Safety semantics
 
 The migration is deliberately conservative.
 
-**Identity is proven, not assumed.** Only a migration ever copies an
-instance ID, so a leftover row from an interrupted move is provably
-a copy — it's dropped state-only, the physical resource untouched:
+**Identity is proven.** Only a migration ever copies an instance ID,
+so a leftover row from an interrupted move is provably a copy.
+Alchemy drops it from state only and leaves the physical resource
+untouched:
 
 ```diff lang="typescript"
 -const bucket = yield* Cloudflare.R2.Bucket("Bucket");
@@ -107,9 +107,10 @@ a copy — it's dropped state-only, the physical resource untouched:
 +);
 ```
 
-A former row with a *different* instance ID is someone else's — the
-old name was reused after the rename shipped — so the alias is
-ignored and the row follows normal lifecycle rules:
+A former row with a different instance ID belongs to another
+resource, because the old name was reused after the rename shipped.
+Alchemy ignores the alias, and the row follows normal lifecycle
+rules:
 
 ```diff lang="typescript"
  // deployed long after the rename: `Bucket` is its own resource now,
@@ -121,7 +122,7 @@ ignored and the row follows normal lifecycle rules:
 ```
 
 **Types must match.** A former row written by a different resource
-type can't be this resource's state, whatever its FQN says — nothing
+type can't be this resource's state, whatever its FQN says. Nothing
 migrates, and the orphaned row follows its own lifecycle:
 
 ```diff lang="typescript"
@@ -133,8 +134,8 @@ migrates, and the orphaned row follows its own lifecycle:
 +);
 ```
 
-And a different-typed row sitting at the *new* ID fails the plan —
-migrating over it would silently abandon its cloud resource:
+A different-typed row at the new ID fails the plan. Migrating over
+it would silently abandon its cloud resource:
 
 ```diff lang="typescript"
 -const cache = yield* Cloudflare.KV.Namespace("Assets");
@@ -146,8 +147,8 @@ migrating over it would silently abandon its cloud resource:
 +);
 ```
 
-**Ambiguity fails loudly.** Two resources claiming the same former
-ID fail instead of racing for the row:
+**Ambiguity fails loudly.** Two resources that claim the same former
+ID fail. They do not race for the row:
 
 ```typescript
 yield* Cloudflare.R2.Bucket("Assets").pipe(Alchemy.renamedFrom("Bucket"));
@@ -155,18 +156,18 @@ yield* Cloudflare.R2.Bucket("Files").pipe(Alchemy.renamedFrom("Bucket"));
 // ✗ 'Assets' and 'Files' both claim former FQN 'Bucket'
 ```
 
-**Shifts work.** Renames may pass through each other in one deploy —
-each row follows its resource, and pending replacement cleanup rides
-along:
+**Shifts work.** Renames may pass through each other in one deploy.
+Each row follows its resource, and pending replacement cleanup moves
+with it:
 
 ```typescript
 yield* Cloudflare.R2.Bucket("B").pipe(Alchemy.renamedFrom("A")); // row at A → B
 yield* Cloudflare.R2.Bucket("C").pipe(Alchemy.renamedFrom("B")); // row at B → C
 ```
 
-**Swaps fail.** Exchanging two live IDs is a rename cycle — the two
-migrations would overwrite each other's rows — so the plan fails;
-rename through a temporary ID across two deploys instead:
+**Swaps fail.** Exchanging two live IDs is a rename cycle. The two
+migrations would overwrite each other's rows, so the plan fails. To
+swap them, rename through a temporary ID across two deploys:
 
 ```typescript
 yield* Cloudflare.R2.Bucket("A").pipe(Alchemy.renamedFrom("B"));
@@ -176,9 +177,9 @@ yield* Cloudflare.R2.Bucket("B").pipe(Alchemy.renamedFrom("A"));
 
 ## Where next
 
-- [Providers](/infrastructure-as-code/provider) — the object that
+- [Providers](/infrastructure-as-code/provider): the object that
   implements a resource type's lifecycle. Next page.
-- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) — the
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle): the
   replacement this decoration avoids.
-- [Resources](/infrastructure-as-code/resource) — logical IDs, instance
+- [Resources](/infrastructure-as-code/resource): logical IDs, instance
   IDs, and physical names.

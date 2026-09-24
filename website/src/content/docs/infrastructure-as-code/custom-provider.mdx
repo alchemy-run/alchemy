@@ -3,15 +3,14 @@ title: Custom Provider
 description: Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
 ---
 
-Providers are Effect `Layer`s — adding support for a new cloud or
-third-party API is "declare a type, implement a Layer". See
+Providers are Effect `Layer`s. To add support for a new cloud or
+third-party API, you declare a type and implement a Layer. See
 [Providers](/infrastructure-as-code/provider) for the operation contract.
 
-This guide walks through building a Stripe `Product` provider
-end-to-end: declaring props and attributes, defining the resource
-type, implementing the lifecycle (`reconcile`, `delete`, `diff`,
-`read`), bundling it into a `providers()` layer, and writing a
-test.
+This guide builds a Stripe `Product` provider end-to-end. It covers
+declaring props and attributes, defining the resource type,
+implementing the lifecycle (`reconcile`, `delete`, `diff`, `read`),
+bundling it into a `providers()` layer, and writing a test.
 
 See [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) for the
 semantics of when each lifecycle method fires.
@@ -20,11 +19,11 @@ semantics of when each lifecycle method fires.
 
 Every resource has two sides:
 
-- **Input properties** — the desired configuration you pass in
-- **Output attributes** — the values the cloud returns after creation
+- **Input properties**: the desired configuration you pass in
+- **Output attributes**: the values the cloud returns after creation
 
 Start with two plain TypeScript types. Both are pure data, so
-they're trivial to share between the provider and call sites.
+you can share them between the provider and call sites.
 
 Create `src/stripe/Product.ts`:
 
@@ -47,7 +46,7 @@ export interface StripeProductAttributes {
 A `Resource<Type, Props, Attributes>` is a phantom type that ties a
 string `Type` to its props and attributes. The string `Type` (here
 `"Stripe.Product"`) is what Alchemy uses to look up the provider at
-plan time — it must be globally unique.
+plan time. It must be globally unique.
 
 ```diff lang="typescript"
 // src/stripe/Product.ts
@@ -73,10 +72,10 @@ export interface StripeProductAttributes {
 
 ## Declare the Resource constructor (the "tag")
 
-`Resource<T>(type)` returns the value users actually call —
-`StripeProduct("Pro", { ... })`. It also doubles as the **tag**
-the provider Layer registers itself against, so by convention the
-type and the value share the same name.
+`Resource<T>(type)` returns the value users call, for example
+`StripeProduct("Pro", { ... })`. It is also the **tag** the
+provider Layer registers itself against. By convention, the type
+and the value share the same name.
 
 ```diff lang="typescript"
 // src/stripe/Product.ts
@@ -93,9 +92,9 @@ export type StripeProduct = Resource<
 +export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
 ```
 
-You can already use this constructor in a stack — but with no
-provider registered, planning will fail with `Provider not found
-for Stripe.Product`. Let's fix that.
+You can already use this constructor in a stack. With no provider
+registered, planning fails with `Provider not found
+for Stripe.Product`. The next step fixes that.
 
 ## Scaffold the provider layer
 
@@ -128,37 +127,37 @@ export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
 +  );
 ```
 
-A few patterns worth knowing:
+Patterns to know:
 
 - **`Provider.succeed`** wraps a `ProviderService` into a
   `Layer<Provider<StripeProduct>>`.
-- **`StripeProduct.Provider.of({...})`** is a typed constructor —
-  it forces every method's input/output to match the resource's
-  props and attributes.
-- **`Provider.effect`** exists for services that need a dependency
-  resolved once at construction (a logger, `FileSystem`) — never a
-  live one; see the caution below.
+- **`StripeProduct.Provider.of({...})`** is a typed constructor.
+  It forces every method's input and output to match the
+  resource's props and attributes.
+- **`Provider.effect`** is for services that need a dependency
+  resolved once at construction, such as a logger or `FileSystem`.
+  Never use it for a live one. See the caution below.
 
 ## Credentials
 
 Handlers that call an authenticated API resolve a lazy credentials
-service — nothing touches the network until an operation actually runs.
+service. Nothing touches the network until an operation runs.
 The [Custom Auth Provider](/environments/custom-auth-provider) guide
-builds the `StripeCredentials` service the snippets below import;
-providers wrapping unauthenticated APIs skip this entirely.
+builds the `StripeCredentials` service that the snippets below import.
+Providers that wrap unauthenticated APIs skip this step.
 
 ## Implement `reconcile`
 
 `reconcile` is the single lifecycle method that converges the cloud's
 actual state to the desired state (`news`). It runs on every apply, so
-one body must handle three situations, distinguished by `output` and
-`olds`:
+one body must handle three situations. The values of `output` and
+`olds` tell them apart:
 
-| `output`    | `olds`      | Situation                                    |
-| ----------- | ----------- | -------------------------------------------- |
-| `undefined` | `undefined` | Greenfield — nothing exists yet              |
-| defined     | defined     | Routine update                               |
-| defined     | `undefined` | Adoption — the engine imported it via `read` |
+| `output`    | `olds`      | Situation                                          |
+| ----------- | ----------- | -------------------------------------------------- |
+| `undefined` | `undefined` | Greenfield, where nothing exists yet               |
+| defined     | defined     | Routine update                                     |
+| defined     | `undefined` | Adoption, where the engine imported it via `read`  |
 
 Every reconciler follows the same shape:
 
@@ -172,11 +171,11 @@ Every reconciler follows the same shape:
 
 :::warning[Don't branch the body on `output === undefined`]
 Writing `if (output === undefined) { /* create */ } else { /* update */ }`
-just renames the old `create`/`update` split. Write one flow that
-converges from any starting point — trust observed cloud state, not `olds`.
+only renames the old `create`/`update` split. Write one flow that
+converges from any starting point. Trust observed cloud state over `olds`.
 :::
 
-Let's build the Stripe reconciler step by step.
+The following steps build the Stripe reconciler.
 
 ### Resolve the client
 
@@ -195,8 +194,8 @@ return StripeProduct.Provider.of({
 });
 ```
 
-The double-yield resolves credentials lazily, inside the handler — the
-provider layer builds without ever touching the auth chain.
+The double-yield resolves credentials lazily, inside the handler. The
+provider layer builds without touching the auth chain.
 
 ### Observe
 
@@ -213,14 +212,14 @@ provider layer builds without ever touching the auth chain.
  }),
 ```
 
-If a previous run cached a `productId`, look up its live state — a failed
-`retrieve` just means "missing". `output` is a cache of identifiers, never
-proof the resource still exists.
+If a previous run cached a `productId`, look up its live state. A failed
+`retrieve` means "missing". `output` is a cache of identifiers. It is
+never proof that the resource still exists.
 
 :::tip[Use `Effect.tryPromise`, not `Effect.promise`]
-`Effect.tryPromise` surfaces SDK errors as Effect failures the lifecycle
-machinery can report cleanly; `Effect.promise` turns rejections into
-defects.
+`Effect.tryPromise` surfaces SDK errors as Effect failures that the
+lifecycle machinery can report cleanly. `Effect.promise` turns
+rejections into defects.
 :::
 
 ### Ensure
@@ -242,8 +241,8 @@ defects.
  }),
 ```
 
-Create only when observation came back empty — greenfield creates and
-"the cached id points at nothing" recover through the same line.
+Create only when observation comes back empty. A greenfield create and
+a cached id that points at nothing both recover through the same line.
 
 ### Sync
 
@@ -268,9 +267,9 @@ Create only when observation came back empty — greenfield creates and
  }),
 ```
 
-Compare each mutable field of the *observed* product against `news` and
-write only when something drifted — a no-drift deploy makes zero write
-calls.
+Compare each mutable field of the *observed* product against `news`.
+Write only when something drifted. A deploy with no drift makes zero
+write calls.
 
 ### Return fresh Attributes
 
@@ -291,15 +290,15 @@ The returned Attributes are persisted to state and become the next run's
 
 ### Why this shape works
 
-The body is idempotent by construction: Alchemy can retry it after a
-failed state write and it re-converges. Adoption needs no special case —
-`retrieve` finds the imported resource and the sync step rewrites whatever
-drifted from `news`.
+The body is idempotent by construction. Alchemy can retry it after a
+failed state write, and it re-converges. Adoption needs no special case.
+`retrieve` finds the imported resource, and the sync step rewrites
+whatever drifted from `news`.
 
 :::note[Bindings]
-`reconcile` also receives `bindings` — data attached by upstream policies
-and event sources (IAM grants, queue subscriptions). Read them here if
-your resource is a binding target; see
+`reconcile` also receives `bindings`, the data attached by upstream
+policies and event sources (IAM grants, queue subscriptions). Read them
+here if your resource is a binding target. See
 [Binding](/infrastructure-as-effects/binding).
 :::
 
@@ -309,9 +308,9 @@ your resource is a binding target; see
 when `alchemy destroy` runs.
 
 :::tip[Treat 404 as success]
-Like `reconcile`, `delete` **must be idempotent**. Alchemy may retry
-it if persistence fails between the cloud call succeeding and state
-being written. Catch "not found" errors and return `Effect.void`.
+Like `reconcile`, `delete` must be idempotent. Alchemy may retry
+it if persistence fails after the cloud call succeeds but before
+state is written. Catch "not found" errors and return `Effect.void`.
 :::
 
 ```diff lang="typescript"
@@ -337,24 +336,24 @@ return StripeProduct.Provider.of({
 ## Implement `diff` (optional)
 
 Some property changes can't be applied in place. For Stripe
-products the `name` is mutable but (hypothetically) the
-`description` is not — changing it requires recreating the
+products, the `name` is mutable but (hypothetically) the
+`description` is not. Changing it requires recreating the
 product. Implement `diff` to tell Alchemy which kind of change to
 plan.
 
-`diff` runs at **plan time**, before `reconcile`, and returns one of:
+`diff` runs at plan time, before `reconcile`, and returns one of:
 
-- `{ action: "noop" }` — change is trivial, skip reconciling
-- `{ action: "update", stables?: [...] }` — apply in place
-- `{ action: "replace", deleteFirst?: boolean }` — destroy and
+- `{ action: "noop" }`: the change is trivial, so skip reconciling
+- `{ action: "update", stables?: [...] }`: apply in place
+- `{ action: "replace", deleteFirst?: boolean }`: destroy and
   recreate
-- `undefined` / `void` — fall back to default (plan an in-place
+- `undefined` / `void`: fall back to the default (plan an in-place
   update)
 
 :::note[`diff` runs during planning]
-Props may still be unresolved `Output`s when `diff` is called —
-they're only fully resolved at apply time. Always guard with
-`isResolved(news)` and return `undefined` to defer to the default
+Props may still be unresolved `Output`s when `diff` is called.
+They are only fully resolved at apply time. Always guard with
+`isResolved(news)`, and return `undefined` to defer to the default
 path when you can't decide.
 :::
 
@@ -376,7 +375,7 @@ return StripeProduct.Provider.of({
 });
 ```
 
-For attributes that are immutable across **all** updates (e.g.
+For attributes that are immutable across all updates (e.g.
 the Stripe `productId`, an ARN), declare them in
 `stables` at the top level:
 
@@ -390,10 +389,11 @@ return StripeProduct.Provider.of({
 
 ## Implement `read` (optional, for recovery and adoption)
 
-The engine calls `read` whenever a resource has no prior state, both
-to recover from interrupted reconciles *and* to import pre-existing
-cloud resources into a fresh state store. Returning `undefined` tells
-Alchemy the resource doesn't exist and should be created.
+The engine calls `read` whenever a resource has no prior state. It
+uses `read` to recover from interrupted reconciles and to import
+pre-existing cloud resources into a fresh state store. Returning
+`undefined` tells Alchemy the resource doesn't exist and should be
+created.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
@@ -416,8 +416,8 @@ return StripeProduct.Provider.of({
 });
 ```
 
-This example only finds resources by an ID we previously saved — without
-a prior `output` it returns `undefined`, and that's a fine default.
+This example only finds resources by an ID that a previous run saved.
+Without a prior `output`, it returns `undefined`. That is a fine default.
 
 ### Ownership-aware reads
 
@@ -434,15 +434,15 @@ read: Effect.fn(function* ({ id, olds }) {
 ```
 
 If your provider can find an existing resource from props alone (tags,
-deterministic naming), brand foreign ones with `Unowned` so the engine
-gates the takeover behind `--adopt`. The full three-way return
+deterministic naming), brand foreign ones with `Unowned`. The engine
+then gates the takeover behind `--adopt`. The full three-way return
 semantics are in [Providers › read](/infrastructure-as-code/provider#read).
 
 ## Implement `list`
 
-`list` enumerates every product in the account, returning the same
-`Attributes` shape as `read` — it powers account-wide operations
-like [`alchemy unsafe nuke`](/cli/nuke) and must paginate
+`list` enumerates every product in the account and returns the same
+`Attributes` shape as `read`. It powers account-wide operations
+like [`alchemy unsafe nuke`](/cli/nuke). It must paginate
 exhaustively (see [Providers › list](/infrastructure-as-code/provider#list)):
 
 ```diff lang="typescript"
@@ -490,13 +490,15 @@ export const providers = () =>
 `Layer.provide` wires each resource provider to the collection
 privately. A provider with no credentials service is done here.
 
-Ours isn't — the handlers' `StripeCredentials` requirement is still
-unmet. The [Custom Auth Provider](/environments/custom-auth-provider)
-guide finishes this bundle by `Layer.provideMerge`-ing in the
+This one is not done yet. The handlers' `StripeCredentials`
+requirement is still unmet. The
+[Custom Auth Provider](/environments/custom-auth-provider) guide
+finishes this bundle. It uses `Layer.provideMerge` to add the
 credential bridge and the auth-provider registration.
 
-Re-export the public surface, dropping the redundant service prefix
-(the namespaced-export convention: callers write `Stripe.Product`):
+Re-export the public surface without the redundant service prefix.
+This follows the namespaced-export convention, where callers write
+`Stripe.Product`:
 
 ```typescript
 // src/stripe/index.ts
@@ -504,8 +506,8 @@ export { StripeProduct as Product } from "./Product.ts";
 export { Providers, providers } from "./Providers.ts";
 ```
 
-Either way, users plug your providers in like any built-in — no
-API key in sight:
+Either way, users plug in your providers like any built-in. The
+stack code contains no API key:
 
 ```typescript
 // alchemy.run.ts
@@ -526,8 +528,8 @@ export default Alchemy.Stack(
 );
 ```
 
-Users connect the provider with `alchemy profile edit --add Stripe` (CI
-reads env vars instead); an unconfigured deploy fails with that exact
+Users connect the provider with `alchemy profile edit --add Stripe`. CI
+reads env vars instead. An unconfigured deploy fails with that exact
 command to run. See [Auth Providers](/environments/auth-providers).
 
 To mix with another cloud, merge the layers:
@@ -540,22 +542,22 @@ providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 
 ## Test the lifecycle
 
-Full `test.provider` reference and patterns: [Testing Providers](/testing/testing-providers).
+See [Testing Providers](/testing/testing-providers) for the full `test.provider` reference and patterns.
 
 Alchemy's test harness (`alchemy/Test/Vitest` or `alchemy/Test/Bun`)
-configures providers + state once at the top of the file, then
+configures providers and state once at the top of the file. It then
 exposes `test.provider(name, (stack) => ...)` for provider-level
 tests. Each `test.provider` body receives a fresh in-memory scratch
 stack with `.deploy(effect)` and `.destroy()` helpers.
 
 :::note[Three things the harness gives you]
-- **`Test.make({ providers })`** — wires your provider Layer into
+- **`Test.make({ providers })`** wires your provider Layer into
   every test in the file so the resource type resolves.
-- **`stack.deploy(effect)`** — runs a sub-stack with an in-memory
+- **`stack.deploy(effect)`** runs a sub-stack with an in-memory
   state store. The same logical ID across two `stack.deploy` calls
   triggers an `update` (or `replace`, depending on `diff`).
-- **`stack.destroy()`** — replans against an empty desired state to
-  tear everything down. Call at the end of the test.
+- **`stack.destroy()`** replans against an empty desired state to
+  tear everything down. Call it at the end of the test.
 :::
 
 Create `test/Product.test.ts`:
@@ -621,26 +623,26 @@ field your `diff` flags as `replace`) and assert that
 
 ## Reference implementations
 
-If you'd rather start from a real provider:
+To start from a real provider, see:
 
-- [`Axiom/VirtualField.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Axiom/VirtualField.ts) — minimal CRUD with `diff` and `read`
-- [`Cloudflare/R2/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/R2/Bucket.ts) — production provider with bindings and replace semantics
+- [`Axiom/VirtualField.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Axiom/VirtualField.ts): minimal CRUD with `diff` and `read`
+- [`Cloudflare/R2/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/R2/Bucket.ts): production provider with bindings and replace semantics
 
 ## Where next
 
-- [Local Providers](/infrastructure-as-code/local-provider) — give your
+- [Local Providers](/infrastructure-as-code/local-provider): give your
   resource a second, dev-mode implementation that emulates it locally
   (`ProviderLayer.dual`, `LocalProvider.make`).
-- [Custom Auth Provider](/environments/custom-auth-provider) — build
+- [Custom Auth Provider](/environments/custom-auth-provider): build
   the `StripeCredentials` service and login flow this guide
   consumes.
-- [Auth Providers](/environments/auth-providers) — how credentials
-  resolve: lazy Effects, Profiles, auto-refresh.
-- [Actions](/infrastructure-as-code/action) — deploy-time work that isn't a
+- [Auth Providers](/environments/auth-providers): how credentials
+  resolve, including lazy Effects, Profiles, and auto-refresh.
+- [Actions](/infrastructure-as-code/action): deploy-time work that isn't a
   resource.
-- [Testing Providers](/testing/testing-providers) — the harness
+- [Testing Providers](/testing/testing-providers): the harness
   patterns behind `test.provider`.
-- [Providers](/infrastructure-as-code/provider) — the operation contract this
+- [Providers](/infrastructure-as-code/provider): the operation contract this
   guide implements.
-- [Bindings](/infrastructure-as-effects/binding) — connecting Resources
+- [Bindings](/infrastructure-as-effects/binding): connecting Resources
   to Functions.

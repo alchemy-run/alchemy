@@ -3,11 +3,11 @@ title: Testing a Stack
 description: Deploy your real Stack once per suite, drive it over HTTP, tear it down.
 ---
 
-This is the end-to-end pattern for integration-testing a deployed Stack against the real cloud: deploy once in `beforeAll`, drive the live URL from Effect-aware tests, destroy (or don't) in `afterAll`. The harness API is documented at [Test harness](/testing/test-harness), the model at [Testing](/testing), and the cloud-specific step-by-steps are [Cloudflare Tutorial Part 3](/cloudflare/tutorial/part-3) and [AWS Tutorial Part 3](/aws/tutorial/part-3).
+This page shows the end-to-end pattern for integration-testing a deployed Stack against the real cloud. You deploy once in `beforeAll`, drive the live URL from Effect-aware tests, and optionally destroy the Stack in `afterAll`. [Test harness](/testing/test-harness) documents the harness API, and [Testing](/testing) explains the model. For cloud-specific step-by-step guides, see [Cloudflare Tutorial Part 3](/cloudflare/tutorial/part-3) and [AWS Tutorial Part 3](/aws/tutorial/part-3).
 
 ## Set up the harness
 
-Configure Providers and state once per file — `Test.make` returns everything the file needs:
+Configure Providers and state once per file. `Test.make` returns everything the file needs:
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -30,7 +30,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 ```
 
-Bun vs Vitest is a two-line import swap — see [Bun vs Vitest](/testing/test-harness#bun-vs-vitest).
+Switching between Bun and Vitest is a two-line import change. See [Bun vs Vitest](/testing/test-harness#bun-vs-vitest).
 
 ## Deploy once with beforeAll
 
@@ -49,7 +49,7 @@ test(
 );
 ```
 
-The default hook timeout is 120s — give slow stacks more room:
+The default hook timeout is 120s. Give slow stacks more time:
 
 ```typescript
 // This stack deploys a Container whose image build + push can take
@@ -57,7 +57,7 @@ The default hook timeout is 120s — give slow stacks more room:
 const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 ```
 
-`beforeAll` accessors compose — seed data in a second `beforeAll` that tests `yield*` alongside the stack; see [Hooks](/testing/test-harness#hooks).
+`beforeAll` accessors compose. You can seed data in a second `beforeAll` that tests `yield*` alongside the stack. See [Hooks](/testing/test-harness#hooks).
 
 ## Run it
 
@@ -67,11 +67,11 @@ Run the suite with your runner:
 bun test test/integ.test.ts
 ```
 
-The first run deploys; re-runs diff and skip unchanged Resources, and tests default to the isolated `test_$USER` [stage](/environments/stages) so they never clobber your `live_$USER` / `dev_$USER` deployments.
+The first run deploys. Re-runs diff and skip unchanged Resources. Tests default to the isolated `test_$USER` [stage](/environments/stages), so they never overwrite your `live_$USER` or `dev_$USER` deployments.
 
 ## Run it locally with dev mode
 
-The same suite can run entirely on your machine. `dev: true` gives the file [`alchemy dev`](/environments/local-development) semantics — Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in workerd, AWS Lambda and its emulated services run in Docker — so `deploy(Stack)` boots local simulators and the `url` output points at `http://localhost:<port>`:
+The same suite can run entirely on your machine. `dev: true` gives the file [`alchemy dev`](/environments/local-development) semantics. Workers, Durable Objects, KV, R2, D1, Queues, and Workflows run in workerd. AWS Lambda and its emulated services run in Docker. `deploy(Stack)` boots local simulators, and the `url` output points at `http://localhost:<port>`:
 
 ```typescript
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -80,7 +80,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 ```
 
-Every assertion below works unchanged against the local stack. To keep one file that runs locally on your laptop and live in CI, omit the flag and set `ALCHEMY_DEV=1` in your shell instead — see [Test harness → dev](/testing/test-harness#dev) for the full semantics and [Tutorial Part 4](/cloudflare/tutorial/part-4) for the walkthrough.
+Every assertion below works unchanged against the local stack. To keep one file that runs locally on your laptop and live in CI, omit the flag and set `ALCHEMY_DEV=1` in your shell. See [Test harness → dev](/testing/test-harness#dev) for the full semantics and [Tutorial Part 4](/cloudflare/tutorial/part-4) for the walkthrough.
 
 ## Drive the live URL
 
@@ -106,11 +106,11 @@ test(
 );
 ```
 
-How the client is wired is covered in [Test harness](/testing/test-harness#httpclient-is-in-scope).
+[Test harness](/testing/test-harness#httpclient-is-in-scope) covers how the client is wired.
 
 ## Retry the first request
 
-Fresh `workers.dev` URLs and Lambda Function URLs transiently 404/5xx while routes, bindings, DNS, and IAM propagate — ride out the cold-start window on the first request of each test:
+Fresh `workers.dev` URLs and Lambda Function URLs briefly return 404 or 5xx while routes, bindings, DNS, and IAM propagate. Retry the first request of each test to wait out this cold-start window:
 
 ```typescript
 const { getWhenReady } = Test;
@@ -126,7 +126,7 @@ test(
 );
 ```
 
-`getWhenReady` (and `executeWhenReady` for arbitrary requests) retries only 404/5xx — 20 attempts by default, exponential from 500ms — so deliberate `400`/`401`/`403` assertions observe those statuses immediately. For arbitrary effects, use a bounded manual retry:
+`getWhenReady` retries only 404 and 5xx responses, and `executeWhenReady` does the same for arbitrary requests. The default is 20 attempts with exponential backoff starting at 500ms. Because only 404 and 5xx are retried, deliberate `400`, `401`, or `403` assertions observe those statuses immediately. For arbitrary effects, use a bounded manual retry:
 
 ```typescript
 import * as Schedule from "effect/Schedule";
@@ -138,7 +138,7 @@ const response = yield* HttpClient.get(`${url}/health`).pipe(
 
 ## Poll async effects
 
-Queues drain, workflows complete, and crons fire asynchronously — poll with a bounded declarative schedule, never a deadline loop:
+Queues drain, workflows complete, and crons fire asynchronously. Never poll them with a deadline loop. Use a bounded declarative schedule:
 
 ```typescript
 const status = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`).pipe(
@@ -152,22 +152,22 @@ const status = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`).pip
 );
 ```
 
-Bounded `times` fails fast instead of leaking into the runner timeout; `while (Date.now() < deadline)` loops ignore interruption.
+A bounded `times` fails fast and does not run into the runner timeout. `while (Date.now() < deadline)` loops ignore interruption.
 
 ## Tear down — or don't
 
-Destroy on CI, keep the Stack alive locally for fast iteration:
+Destroy the Stack on CI. Keep it alive locally for fast iteration:
 
 ```typescript
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack)); // keep alive with NO_DESTROY=1
 afterAll.skipIf(!process.env.CI)(destroy(Stack));          // destroy on CI only
 ```
 
-Locally, the deployed Stack plus cached state make re-runs near-instant. Hook semantics live in [Hooks](/testing/test-harness#hooks).
+Locally, the deployed Stack and cached state make re-runs near-instant. [Hooks](/testing/test-harness#hooks) describes hook semantics.
 
 ## Run against an existing deployment
 
-Already ran `alchemy deploy` and just want to hit the URL? Swap the deploy for a read of the outputs:
+If you already ran `alchemy deploy` and want to hit the URL, replace the deploy with a read of the outputs:
 
 ```typescript
 const stack = beforeAll(
@@ -179,7 +179,7 @@ const stack = beforeAll(
 
 ## Share one Stack across files
 
-Give every file's `Test.make` the same remote state and the same stage — identical state + stage means the second file's `deploy(Stack)` is a no-op diff. The default `test_$USER` stage already does this for a single developer; pin an explicit stage when files must share a stack across users or CI jobs:
+Give every file's `Test.make` the same remote state and the same stage. With identical state and stage, the second file's `deploy(Stack)` is a no-op diff. The default `test_$USER` stage already does this for a single developer. Pin an explicit stage when files must share a stack across users or CI jobs:
 
 ```typescript
 // test/api.integ.test.ts AND test/queue.integ.test.ts
@@ -203,14 +203,14 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 ```
 
-Harness `deploy`/`destroy` never prompt for approval — `--yes` is only for CI workflows invoking the CLI (`alchemy deploy --stage pr-42 --yes`); see [Stage](/testing/test-harness#stage) and the [CI guide](/environments/ci) for full workflow YAML.
+The harness `deploy` and `destroy` never prompt for approval. `--yes` is only for CI workflows that invoke the CLI (`alchemy deploy --stage pr-42 --yes`). See [Stage](/testing/test-harness#stage) and the [CI guide](/environments/ci) for full workflow YAML.
 
 ## Where next
 
-- [Testing](/testing) — the model behind the harness.
-- [Test harness](/testing/test-harness) — every helper, hook, and option on `Test.make`.
-- [Testing Providers](/testing/testing-providers) — lifecycle-testing a custom provider with `test.provider`.
-- [CI](/environments/ci) — running these suites in CI with per-PR stages.
-- [Cloudflare Tutorial Part 3](/cloudflare/tutorial/part-3) / [AWS Tutorial Part 3](/aws/tutorial/part-3) — your first integration test, step by step.
-- [State store](/state-store) — local vs remote state.
-- [Stages](/environments/stages) — isolating deployments per stage.
+- [Testing](/testing): the model behind the harness.
+- [Test harness](/testing/test-harness): every helper, hook, and option on `Test.make`.
+- [Testing Providers](/testing/testing-providers): lifecycle-testing a custom provider with `test.provider`.
+- [CI](/environments/ci): running these suites in CI with per-PR stages.
+- [Cloudflare Tutorial Part 3](/cloudflare/tutorial/part-3) / [AWS Tutorial Part 3](/aws/tutorial/part-3): your first integration test, step by step.
+- [State store](/state-store): local vs remote state.
+- [Stages](/environments/stages): isolating deployments per stage.

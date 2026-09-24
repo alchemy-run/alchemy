@@ -1,22 +1,22 @@
 ---
 title: Stages
-description: Stages are isolated instances of a Stack — live_sam, dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+description: Stages are isolated instances of a Stack, such as live_sam, dev_sam, staging, prod, or pr-42. Each has its own state and physical names.
 sidebar:
   hidden: true
 ---
 
 A **stage** is an isolated instance of a [Stack](/infrastructure-as-code/stack).
-Every deploy targets exactly one stage, and resources from different
-stages never overlap. This is how Alchemy gives every developer their
-own sandbox, every PR its own preview, and production its own
-dedicated environment — all from one program.
+Every deploy targets exactly one stage. Resources from different
+stages never overlap. With one program, Alchemy gives each developer
+their own sandbox, each PR its own preview, and production its own
+dedicated environment.
 
 ## The default stage
 
 If you don't pass `--stage`, **`alchemy deploy`** uses **`live_$USER`**
 (e.g. `live_sam`) and **`alchemy dev`** uses **`dev_$USER`** (e.g.
 `dev_sam`). Each developer gets a personal cloud sandbox and a
-separate local-dev sandbox without any config — so a bare `alchemy
+separate local-dev sandbox with no config, so a bare `alchemy
 dev` cannot replace resources you deployed. Existing default `alchemy
 dev` stacks keep the `dev_$USER` name. **`Test.make`** uses
 **`test_$USER`** the same way, so two people running the suite
@@ -71,12 +71,12 @@ alchemy destroy --stage pr-42
 
 Each stage gets its own:
 
-- **State file** — the persisted record of what's deployed
-- **Physical names** — `myapp-prod-bucket-abc123` vs
+- **State file**: the persisted record of what's deployed
+- **Physical names**: `myapp-prod-bucket-abc123` vs
   `myapp-live_sam-bucket-9b2c`
-- **Logs and metrics** — scoped per deployed function/worker
+- **Logs and metrics**: scoped per deployed function/worker
 
-Because of this, deploying or destroying one stage **never touches**
+As a result, deploying or destroying one stage never touches
 another:
 
 ```sh
@@ -89,8 +89,8 @@ $ alchemy destroy --stage pr-147     # only removes pr-147 resources
 
 ## Per-stage configuration
 
-The current stage is exposed through the `Stack` service, so the
-same program can branch on it:
+The `Stack` service exposes the current stage, so the same program
+can branch on it:
 
 ```typescript
 import { Stack } from "alchemy/Stack";
@@ -119,8 +119,8 @@ export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
 
 ## Pull request previews
 
-A common pattern in CI: spin up a fresh stage for every PR, comment
-the URL on the PR, and tear it down on merge.
+A common CI pattern creates a fresh stage for every PR, comments the
+URL on the PR, and tears the stage down on merge.
 
 ```yaml
 # .github/workflows/preview.yml
@@ -134,11 +134,11 @@ See the [CI guide](/environments/ci) for a complete example.
 
 ## Stage vs profile
 
-Stages isolate **what** is deployed (state, physical names).
-[Profiles](/environments/profiles) isolate **how** alchemy authenticates
-to your cloud providers. They're orthogonal — you can pair a `prod`
-stage with a `prod` profile, or use the same credentials across many
-stages:
+Stages isolate what is deployed (state, physical names).
+[Profiles](/environments/profiles) isolate how alchemy authenticates
+to your cloud providers. The two are independent. You can pair a
+`prod` stage with a `prod` profile, or use the same credentials
+across many stages:
 
 ```sh
 alchemy deploy --stage prod --profile prod
