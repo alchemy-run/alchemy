@@ -1060,7 +1060,7 @@ export const steps: StepSpec[] = [
     notes: "A queue is the same: declare it, ask to write to it, and Req gains Queues.WriteQueue.",
   }),
   api({
-    title: "Each requirement needs an implementation",
+    title: "Then we hand it a Layer for each thing it needs",
     snippet: "api-06-provide.ts",
     req: [met(READ, "ReadBucketBinding"), met(WRITE, "WriteQueueBinding"), WORKER],
     notes:
