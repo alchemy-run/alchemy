@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { PanelItem, Tone } from "../shared/intro.ts";
+import type { MiniGraph, PanelItem, Tone } from "../shared/intro.ts";
 
 /** Where in the code: the first match of `text` (or the `nth`, 1-based). */
 export type Find = string | { text: string; nth?: number };
@@ -38,6 +38,8 @@ export interface CodeSpec {
   /** For `*.error.ts` snippets: which lines of the compiler's message to show. */
   error?: { pick?: (lines: string[]) => string[] };
   panel?: { title: string; items: PanelItem[] };
+  /** A drawing beside the code that evolves with it. */
+  diagram?: MiniGraph;
   frames?: number;
 }
 
@@ -63,19 +65,6 @@ export interface BoardSpec {
 
 export type StepSpec = CodeSpec | SlideSpec | BoardSpec;
 
-const COLORED = `construct storage() {
-  const bucket = Bucket()
-
-  return {
-    runtime get(key) => bucket.get(key)
-  }
-}`;
-
-const colorTints = [
-  { from: "construct storage", to: "return {", tone: "construct" as const },
-  { from: "runtime get", tone: "runtime" as const },
-];
-
 const policy = (action: string) => `{
   "Effect": "Allow",
   "Action": "${action}",
@@ -87,6 +76,189 @@ const requirementLines = (needle: string) => (lines: string[]) => {
   const at = lines.findIndex((line) => line.includes(needle));
   return at < 0 ? lines.slice(0, 2) : lines.slice(Math.max(1, at - 1), at + 1);
 };
+
+
+// ── Act 1 & 2: one program in an imaginary cloud language ────────────────
+// The code on the left grows one idea at a time; the drawing on the right
+// shows what that code means in the cloud.
+const C = {
+  bucket: { id: "bucket", title: "Bucket", color: "#8b7cf6" },
+  queue: { id: "queue", title: "Queue", color: "#e0a86b" },
+  api: { id: "api", title: "Function", color: "#f38020" },
+};
+const ONE = "const bucket = Bucket()";
+const TWO = `const bucket = Bucket()
+const queue = Queue()`;
+const FN = `
+
+const api = Function(async (req) => {
+  const file = await bucket.get(req.key)
+  await queue.send(file)
+})`;
+const APP = TWO + FN;
+const VERSIONED = APP.replace("Bucket()", "Bucket({ versioning: true })");
+const COLORED_APP = `construct app() {
+  const bucket = Bucket({ versioning: true })
+  const queue = Queue()
+
+  return Function(runtime async (req) => {
+    const file = await bucket.get(req.key)
+    await queue.send(file)
+  })
+}`;
+const COLORED_BAD = COLORED_APP.replace(
+  "    const file = await bucket.get(req.key)",
+  "    const other = Bucket()\n    const file = await bucket.get(req.key)",
+);
+
+const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]) => ({
+  ...node,
+  x,
+  y,
+  ...(notes ? { notes } : {}),
+});
+const GRAPH = (notes?: string[]) => [
+  at(C.api, 150, 250),
+  at(C.bucket, 540, 120, notes),
+  at(C.queue, 540, 380),
+];
+const USES = [
+  { from: "api", to: "bucket" },
+  { from: "api", to: "queue" },
+];
+const BINDINGS = [
+  { from: "api", to: "bucket", tone: "construct" as const },
+  { from: "api", to: "queue", tone: "construct" as const },
+];
+const BUCKET_CARDS = [
+  { text: "allow s3:GetObject on bucket" },
+  { text: "env BUCKET_NAME" },
+];
+const QUEUE_CARDS = [
+  { text: "allow sqs:SendMessage on queue" },
+  { text: "env QUEUE_URL" },
+];
+const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize">): CodeSpec => ({
+  kind: "code",
+  group: "lang",
+  pseudo: true,
+  fontSize: 32,
+  ...spec,
+});
+const phaseTints = [
+  { from: "construct app", to: "return Function", tone: "construct" as const },
+  { from: "const file", to: "await queue.send", tone: "runtime" as const },
+];
+
+const program = (): StepSpec[] => [
+  lang({
+    title: "In a cloud language, a variable can be a resource",
+    src: { code: ONE },
+    diagram: { nodes: [at(C.bucket, 360, 250)], edges: [] },
+    notes:
+      "Imagine a programming language for the cloud. Declaring a bucket doesn't allocate memory: it creates a real bucket in the cloud.",
+  }),
+  lang({
+    title: "Resources outlive the program that declares them",
+    src: { code: TWO },
+    diagram: { nodes: [at(C.bucket, 360, 120), at(C.queue, 360, 380)], edges: [] },
+    notes:
+      "An ordinary program runs from start to finish and its state is gone. These don't go away when the program ends: they're a persistent world, and the next run starts from it.",
+  }),
+  lang({
+    title: "Using a resource connects them into a graph",
+    src: { code: APP },
+    diagram: { nodes: GRAPH(), edges: USES },
+    notes: "A function that reads the bucket and writes to the queue: the program describes a graph of interconnected resources.",
+  }),
+  lang({
+    title: "Change the code, and the cloud is reconciled to match",
+    src: { code: VERSIONED },
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: USES },
+    notes:
+      "Resources have configuration that changes over time. Change the code, and the language has to reconcile the real bucket with the new desired state.",
+  }),
+  lang({
+    title: "Each call needs a permission and configuration",
+    src: { code: VERSIONED },
+    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "construct" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"]),
+      edges: [{ from: "api", to: "bucket", tone: "construct" }, USES[1]!],
+      cards: BUCKET_CARDS,
+    },
+    notes:
+      "For the function to call bucket.get, it needs an IAM policy allowing s3:GetObject, and the bucket's name in an environment variable. That connection is what we call a binding.",
+    frames: 75,
+  }),
+  lang({
+    title: "The language infers every binding from the code",
+    src: { code: VERSIONED },
+    marks: [
+      { kind: "circle", find: "bucket.get(req.key)", tone: "construct" },
+      { kind: "circle", find: "queue.send(file)", tone: "construct" },
+    ],
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS, cards: [...BUCKET_CARDS, ...QUEUE_CARDS] },
+    notes:
+      "A cloud language would derive all of this by static analysis: see queue.send, infer sqs:SendMessage and inject the queue's URL. Nobody writes policies or environment variables by hand.",
+    frames: 75,
+  }),
+  lang({
+    title: "The program runs in two phases",
+    src: { code: VERSIONED },
+    tints: [
+      { from: "const bucket", to: "const api = Function", tone: "construct" },
+      { from: "const file", to: "await queue.send", tone: "runtime" },
+    ],
+    diagram: {
+      nodes: GRAPH(["versioning: on"]),
+      edges: BINDINGS,
+      labels: [{ text: "construction builds this", x: 350, y: 20, tone: "construct" }],
+      incoming: { to: "api", label: "runtime: every request", tone: "runtime" },
+    },
+    notes:
+      "So the program doesn't run once from top to bottom. Construction is declarative: it builds the architecture, the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
+    frames: 75,
+  }),
+  lang({
+    title: "Imagine the phases as colored functions",
+    src: { code: COLORED_APP },
+    tints: phaseTints,
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS },
+    notes:
+      "In a real language we could make that explicit with colored functions: a construct function builds resources and returns a runtime function that uses them.",
+  }),
+  lang({
+    title: "The colors are boundaries the compiler enforces",
+    src: { code: COLORED_BAD },
+    tints: [
+      { from: "construct app", to: "return Function", tone: "construct" },
+      { from: "const other", to: "await queue.send", tone: "runtime" },
+    ],
+    marks: [{ kind: "strike", find: "Bucket()", tone: "bad" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"]),
+      edges: BINDINGS,
+      cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
+    },
+    notes: "Construct and runtime can't call each other the wrong way: creating a bucket inside a request is a compile error.",
+  }),
+  lang({
+    title: "Inferring bindings is a kind of type checking",
+    src: { code: COLORED_APP },
+    tints: phaseTints,
+    marks: [{ kind: "circle", find: "bucket.get(req.key)", tone: "runtime" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"]),
+      edges: BINDINGS,
+      labels: [{ text: "for every possible req…", x: 360, y: 455, tone: "runtime" }],
+      cards: [...BUCKET_CARDS, ...QUEUE_CARDS],
+    },
+    notes:
+      "Inferring the bindings is like type checking: analyze what the runtime function can do over every input it accepts, the same way a compiler infers a return type.",
+    frames: 75,
+  }),
+];
 
 export const steps: StepSpec[] = [
   // Act 1: a programming language for the cloud
@@ -101,133 +273,7 @@ export const steps: StepSpec[] = [
       "The idea underneath Alchemy: a programming language for the cloud, without actually building a new language (at least not yet).",
     frames: 75,
   },
-  {
-    kind: "board",
-    board: "world",
-    stage: 0,
-    title: "Cloud code describes a world that outlives the program",
-    notes:
-      "A normal program runs from start to finish and its state is gone. Cloud code is different: it describes Functions, Databases, Queues and Buckets that keep existing after the program that created them has finished. Every deploy starts from the world the last one left behind.",
-  },
-  {
-    kind: "board",
-    board: "world",
-    stage: 1,
-    title: "That world is a graph of resources",
-    notes: "It expresses a graph of interconnected resources: Functions, Databases, Buckets, Queues.",
-  },
-  {
-    kind: "board",
-    board: "world",
-    stage: 2,
-    title: "Resources change over time, so they need reconciling",
-    notes:
-      "Each resource can be configured in many ways, and that configuration changes over time. The cloud's actual state has to be reconciled with the desired state on every deploy.",
-  },
-  {
-    kind: "board",
-    board: "world",
-    stage: 3,
-    title: "Connecting resources means permissions and configuration",
-    notes:
-      "An edge in this graph isn't free. For a Function to read a Bucket it needs an IAM policy and the bucket's name in an environment variable. We call that connection a binding.",
-  },
-  {
-    kind: "code",
-    group: "infer",
-    pseudo: true,
-    title: "A cloud language could infer all of that from the code",
-    src: {
-      code: `function handler(key) {
-  return bucket.get(key)
-}`,
-    },
-    marks: [{ kind: "circle", find: "bucket.get", label: "reads the bucket", side: "below", tone: "construct" }],
-    panel: {
-      title: "Inferred from the code",
-      items: [
-        { title: "IAM policy", mono: policy("s3:GetObject") },
-        { title: "Environment variable", mono: "BUCKET_NAME=uploads-7f3a" },
-      ],
-    },
-    notes:
-      "A hypothetical cloud language would derive those connections by static analysis: see a function call bucket.get, infer the s3:GetObject policy, and inject the bucket's name as an environment variable.",
-  },
-
-  // Act 2: programs that run in phases
-  {
-    kind: "board",
-    board: "phases",
-    stage: 0,
-    title: "Cloud programs run in two phases",
-    notes:
-      "That leads to multi-phase programs. Instead of running from entry point to finish, the program runs in phases. Construction is declarative: it builds the static architecture, all the resources and bindings. Runtime is dynamic and imperative: requests and jobs run, data changes, APIs get called.",
-  },
-  {
-    kind: "board",
-    board: "phases",
-    stage: 1,
-    title: "Runtime is written in terms of construction",
-    notes:
-      "The runtime phase is implemented in reference to the construction phase: it refers to the resources construction declared and uses the bindings to interact with them.",
-  },
-  {
-    kind: "code",
-    group: "colors",
-    pseudo: true,
-    title: "Imagine colored functions",
-    src: { code: COLORED },
-    fontSize: 44,
-    tints: colorTints,
-    notes:
-      "If we were building a language, we might model the phases as colored functions: a construct function builds a bucket and returns a runtime function that uses it.",
-  },
-  {
-    kind: "code",
-    group: "colors",
-    pseudo: true,
-    title: "The colors are enforced boundaries",
-    src: {
-      code: `construct storage() {
-  const bucket = Bucket()
-
-  return {
-    runtime get(key) => {
-      const other = Bucket()
-      return bucket.get(key)
-    }
-  }
-}`,
-    },
-    fontSize: 44,
-    tints: [
-      { from: "construct storage", to: "return {", tone: "construct" },
-      { from: "runtime get", to: "return bucket.get", tone: "runtime" },
-    ],
-    marks: [
-      { kind: "strike", find: "Bucket()", label: "can't construct at runtime", side: "right", tone: "bad" },
-    ],
-    notes:
-      "The colors are strict boundaries the compiler guarantees: you can't call a construct function from runtime, or the other way around.",
-  },
-  {
-    kind: "code",
-    group: "colors",
-    pseudo: true,
-    title: "Inferring bindings is a kind of type checking",
-    src: { code: COLORED },
-    fontSize: 44,
-    tints: colorTints,
-    marks: [
-      { kind: "circle", find: "bucket.get(key)", label: "for every possible key…", side: "below", tone: "runtime" },
-    ],
-    panel: {
-      title: "…this is what get can do",
-      items: [{ title: "Inferred policy", mono: policy("s3:GetObject") }],
-    },
-    notes:
-      "A static analyzer can read this and infer the infrastructure. Inferring the policy is very much like a type checker: analyze what get can do over all of its allowed inputs, the way you'd infer a return type.",
-  },
+  ...program(),
 
   // Act 3: how we tried before
   {
@@ -594,9 +640,9 @@ function get(key: string): Effect<Buffer, NoSuchKey, GetObject>`,
     group: "future",
     pseudo: true,
     title: "Today a DSL in TypeScript. Tomorrow, a syntax",
-    src: { code: COLORED },
-    fontSize: 44,
-    tints: colorTints,
+    src: { code: COLORED_APP },
+    fontSize: 40,
+    tints: phaseTints,
     notes:
       "This all serves the original goal: a cloud programming language without new syntax. The TypeScript and Effect DSL is the foundation that a real syntax, with first-class colored functions, can sit on later. Now let's build something.",
   },

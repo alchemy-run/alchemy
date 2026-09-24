@@ -2,11 +2,14 @@ import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
 import type { CodeStep, Mark, Token } from "../../shared/intro.ts";
 import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
+import { MiniGraphView } from "./MiniGraph.tsx";
 import { boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
 
 /** The code canvas, inside the frame and above the caption band. */
 const AREA = { x: 110, y: 90, width: 1700, height: 820 };
 const PANEL_WIDTH = 560;
+/** Width kept for the drawing when a step has one. */
+export const DIAGRAM_WIDTH = 760;
 const CHAR = 0.6;
 const LINE = 1.55;
 
@@ -14,14 +17,15 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 /** Pixel geometry for the code block, centred in whatever space it gets. */
 const layout = (step: CodeStep) => {
-  const width = AREA.width - (step.panel || step.error ? PANEL_WIDTH + 60 : 0);
+  const width = AREA.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.error ? PANEL_WIDTH + 60 : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
   const longest = Math.max(...step.lines.map((l) => lineText(l).length), 1);
   const blockW = longest * cw;
   const blockH = step.lines.length * lh;
-  const left = AREA.x + Math.max(0, (width - blockW) / 2);
+  // With a drawing, code stays left-aligned so it grows in place.
+  const left = step.diagram ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
   const top = AREA.y + Math.max(0, (AREA.height - blockH) / 2);
   return { size, cw, lh, left, top, blockW, blockH, width };
 };
@@ -215,6 +219,14 @@ export const CodeSlide = ({ step, prev, local }: { step: CodeStep; prev?: CodeSt
           <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={drawProgress(local, marksStart + i * 14)} />
         ))}
       </svg>
+      {step.diagram ? (
+        <MiniGraphView
+          graph={step.diagram}
+          prev={morph ? prev?.diagram : undefined}
+          local={local}
+          delay={marksStart}
+        />
+      ) : null}
       {step.panel ? (
         <Panel step={step} local={local} delay={marksStart + step.marks.length * 14} fps={fps} />
       ) : null}

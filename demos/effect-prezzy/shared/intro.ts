@@ -42,6 +42,29 @@ export interface PanelItem {
   bar?: number;
 }
 
+/** A small architecture drawing beside the code: it evolves with the code. */
+export interface MiniNode {
+  id: string;
+  title: string;
+  color: string;
+  /** Centre, in pixels inside the drawing area. */
+  x: number;
+  y: number;
+  /** Config lines under the node; lines new in this step appear in green. */
+  notes?: string[];
+}
+
+export interface MiniGraph {
+  nodes: MiniNode[];
+  edges: { from: string; to: string; tone?: Tone }[];
+  /** Short facts shown under the drawing (permissions, env vars, errors). */
+  cards?: { text: string; tone?: Tone }[];
+  /** An arrow coming into a node from outside, e.g. requests. */
+  incoming?: { to: string; label: string; tone?: Tone };
+  /** Hand-written labels at a position in the drawing. */
+  labels?: { text: string; x: number; y: number; tone?: Tone }[];
+}
+
 export interface CodeStep {
   kind: "code";
   title: string;
@@ -59,6 +82,7 @@ export interface CodeStep {
   marks: Mark[];
   error?: CodeError;
   panel?: { title: string; items: PanelItem[] };
+  diagram?: MiniGraph;
   frames: number;
 }
 
