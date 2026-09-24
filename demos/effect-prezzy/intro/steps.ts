@@ -431,7 +431,7 @@ export const steps: StepSpec[] = [
     kind: "code",
     group: "functionless",
     file: "functionless · app.ts",
-    title: "So Functionless read the function's code instead",
+    title: "Then came Functionless, which used compiler tricks instead",
     src: { code: FUNCTIONLESS },
     notes:
       "So the next attempt, Functionless, dropped the declarations. Just use the table inside the function, and let static analysis work out what it touches.",

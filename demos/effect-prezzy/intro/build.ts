@@ -241,6 +241,18 @@ for (const spec of steps) {
   }
 }
 
+// One size per sequence: a snippet keeps its size as panels and marks come and go.
+const groupSize = new Map<string, number>();
+steps.forEach((spec, i) => {
+  const step = resolved[i]!;
+  if (spec.kind !== "code" || step.kind !== "code" || spec.fontSize) return;
+  groupSize.set(step.group, Math.min(groupSize.get(step.group) ?? Infinity, step.fontSize));
+});
+steps.forEach((spec, i) => {
+  const step = resolved[i]!;
+  if (spec.kind === "code" && step.kind === "code" && !spec.fontSize) step.fontSize = groupSize.get(step.group)!;
+});
+
 await mkdir(out, { recursive: true });
 const json: IntroJson = { steps: resolved };
 await writeFile(path.join(out, "intro.json"), `${JSON.stringify(json, null, 2)}\n`);

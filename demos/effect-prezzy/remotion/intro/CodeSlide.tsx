@@ -32,8 +32,9 @@ const layout = (step: CodeStep) => {
   const left = step.lines.length > 1 ? AREA.x + 30 : AREA.x + Math.max(0, (width - blockW) / 2);
   // With a drawing the program grows over several steps: pin its first line
   // so new lines extend downward instead of pushing the code up.
-  // Code starts just under the file label; short snippets sit centred in the space.
-  const top = step.diagram ? AREA.y + 90 : AREA.y + 50 + Math.max(0, (AREA.height - 50 - blockH) / 2);
+  // Code always starts at the same spot under its label; only a one-line hero is centred.
+  const top =
+    step.diagram || step.lines.length > 1 ? AREA.y + 90 : AREA.y + 50 + Math.max(0, (AREA.height - 50 - blockH) / 2);
   return { size, cw, lh, left, top, blockW, blockH, width };
 };
 
