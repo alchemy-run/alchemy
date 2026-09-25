@@ -29,6 +29,7 @@ import {
 } from "@distilled.cloud/prisma/management";
 import { Retry } from "@distilled.cloud/prisma";
 import { extractConnectionSecrets } from "./Client.ts";
+import { desiredBranchId } from "./Internal/Branches.ts";
 import type { Project } from "./Project.ts";
 import {
   hasCanonicalConnectionSecrets,
@@ -170,6 +171,14 @@ export interface DatabaseProps {
    */
   branchGitName?: string;
   /**
+   * Stable identity of this declaration on the Prisma platform, unique per
+   * branch. When set, the provider finds the database by it within the
+   * project and branch, never by display name, so lost state or a rename in
+   * the Console does not create a second database. Changing it updates the
+   * database in place. With `branchGitName`, the branch must already exist.
+   */
+  logicalId?: string;
+  /**
    * Local database settings for `alchemy dev`. Set to `false` to keep only
    * placeholder IDs.
    */
@@ -249,6 +258,10 @@ export interface Database extends Resource<
      * Direct database password, redacted in state.
      */
     password: Redacted.Redacted<string> | undefined;
+    /**
+     * Logical ID recorded on the database, or null when none is set.
+     */
+    logicalId: string | null;
   },
   never,
   Providers
@@ -317,12 +330,16 @@ const listProjectDatabases = (projectId: string) =>
     return databases;
   });
 
-const listAllDatabases = () =>
+const listAllDatabases = (
+  filter: { projectId?: string; logicalId?: string; branchId?: string } = {},
+) =>
   Effect.gen(function* () {
     const databases: GetDatabasesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getDatabases(cursor === undefined ? {} : { cursor });
+      const page = yield* getDatabases(
+        cursor === undefined ? filter : { ...filter, cursor },
+      );
       databases.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -351,6 +368,35 @@ const findDatabaseByName = (projectId: string, name: string) =>
           )
         : Effect.succeed(matches[0]);
     }),
+  );
+
+const findDatabaseByLogicalId = Effect.fn(function* (
+  projectId: string,
+  logicalId: string,
+  props: { branchId?: string; branchGitName?: string },
+) {
+  const branch = yield* desiredBranchId(projectId, props);
+  if (!branch.resolved) return undefined;
+  const databases = yield* listAllDatabases({
+    projectId,
+    logicalId,
+    branchId: branch.id,
+  });
+  return databases.find(
+    (database) =>
+      database.logicalId === logicalId && database.branchId === branch.id,
+  );
+});
+
+const logicalIdTaken = (
+  logicalId: string,
+  branchId: string | null,
+  projectId: string,
+  cause: unknown,
+) =>
+  new Error(
+    `Prisma database logical ID '${logicalId}' is already used by another database on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other database.`,
+    { cause },
   );
 
 class GeneratedDatabaseNotVisible extends Error {}
@@ -482,6 +528,7 @@ const attrsFrom = (
   host: secrets.host,
   user: secrets.user,
   password: secrets.password,
+  logicalId: database.logicalId ?? null,
 });
 
 const branchNeedsSync = Effect.fn(function* (
@@ -634,6 +681,13 @@ const ProviderLive = () =>
           ) {
             return { action: "replace" } as const;
           }
+          if (
+            isResolved(news.logicalId) &&
+            news.logicalId !== undefined &&
+            news.logicalId !== (output ? output.logicalId : olds.logicalId)
+          ) {
+            return { action: "update" } as const;
+          }
           if (!isResolved(news.name)) return undefined;
           const desiredName = yield* createName(id, news.name);
           const observedName =
@@ -680,7 +734,13 @@ const ProviderLive = () =>
             : undefined;
           if (!database && databaseId === undefined) {
             const projectId = unresolvedProjectIdOf(olds.project);
-            if (projectId) {
+            if (projectId && olds.logicalId !== undefined) {
+              database = yield* findDatabaseByLogicalId(
+                projectId,
+                olds.logicalId,
+                olds,
+              );
+            } else if (projectId) {
               const name = yield* createName(id, olds.name);
               database = yield* findDatabaseByName(projectId, name);
               generatedIdentityMatch =
@@ -716,7 +776,10 @@ const ProviderLive = () =>
             user: cachedSecrets?.user,
             password: cachedSecrets?.password,
           });
-          return databaseId === undefined && !generatedIdentityMatch
+          // Only a declaration assigns a logical ID, so a match is this database.
+          return databaseId === undefined &&
+            !generatedIdentityMatch &&
+            olds.logicalId === undefined
             ? Unowned(attrs)
             : attrs;
         }),
@@ -734,7 +797,14 @@ const ProviderLive = () =>
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : undefined;
-          if (!database && news.name === undefined) {
+          const logicalId = news.logicalId;
+          if (!database && logicalId !== undefined) {
+            database = yield* findDatabaseByLogicalId(
+              projectId,
+              logicalId,
+              news,
+            );
+          } else if (!database && news.name === undefined) {
             database = yield* findDatabaseByName(projectId, name);
           }
 
@@ -752,14 +822,34 @@ const ProviderLive = () =>
                 ),
               );
             }
+            let createAttach: {
+              branchId: string | undefined;
+              branchGitName: string | undefined;
+            } = attach;
+            // The API refuses logicalId together with branchGitName on create.
+            if (logicalId !== undefined && attach.branchGitName !== undefined) {
+              const branchId = yield* branchIdForGitName(
+                projectId,
+                attach.branchGitName,
+              );
+              if (branchId === undefined) {
+                return yield* Effect.fail(
+                  new Error(
+                    `Prisma project '${projectId}' has no branch named '${attach.branchGitName}'. A database with a logicalId cannot create its branch; create the branch first, for example with Prisma.Branch, or pass branchId.`,
+                  ),
+                );
+              }
+              createAttach = { branchId, branchGitName: undefined };
+            }
             const result = yield* createDatabase({
               projectId,
               name,
               region,
               isDefault: news.isDefault ?? false,
               ...(news.source === undefined ? {} : { source: news.source }),
-              branchId: attach.branchId,
-              branchGitName: attach.branchGitName,
+              branchId: createAttach.branchId,
+              branchGitName: createAttach.branchGitName,
+              ...(logicalId === undefined ? {} : { logicalId }),
             }).pipe(
               // A replayed create would make a second database; the retry
               // policy cannot see the request, so opt out explicitly.
@@ -769,24 +859,49 @@ const ProviderLive = () =>
                 secrets: extractConnectionSecrets(response.data.connections[0]),
                 recoverSecrets: true,
               })),
-              Effect.catchTag("Conflict", () =>
-                news.name === undefined
-                  ? recoverGeneratedDatabaseAfterConflict(projectId, name).pipe(
-                      Effect.map((database) => ({
-                        database,
-                        secrets: {},
-                        // The generated physical name is owned by this
-                        // resource instance. A conflict after the POST can
-                        // be a lost successful response, so recover the
-                        // write-only default credentials below.
-                        recoverSecrets: true,
-                      })),
-                    )
-                  : Effect.fail(
-                      new Error(
-                        `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
+              Effect.catchTag("Conflict", (conflict) =>
+                logicalId !== undefined
+                  ? findDatabaseByLogicalId(
+                      projectId,
+                      logicalId,
+                      createAttach,
+                    ).pipe(
+                      Effect.flatMap((taken) =>
+                        Effect.fail(
+                          taken
+                            ? logicalIdTaken(
+                                logicalId,
+                                taken.branchId,
+                                projectId,
+                                conflict,
+                              )
+                            : new Error(
+                                `A Prisma database named '${name}' already exists in project '${projectId}' without logical ID '${logicalId}'. Refusing to take it over; choose a different name.`,
+                                { cause: conflict },
+                              ),
+                        ),
                       ),
-                    ),
+                    )
+                  : news.name === undefined
+                    ? recoverGeneratedDatabaseAfterConflict(
+                        projectId,
+                        name,
+                      ).pipe(
+                        Effect.map((database) => ({
+                          database,
+                          secrets: {},
+                          // The generated physical name is owned by this
+                          // resource instance. A conflict after the POST can
+                          // be a lost successful response, so recover the
+                          // write-only default credentials below.
+                          recoverSecrets: true,
+                        })),
+                      )
+                    : Effect.fail(
+                        new Error(
+                          `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
+                        ),
+                      ),
               ),
             );
             database = result.database;
@@ -843,6 +958,21 @@ const ProviderLive = () =>
               branchId: attach.branchId,
               branchGitName: attach.branchGitName,
             })).data;
+          }
+          if (logicalId !== undefined && database.logicalId !== logicalId) {
+            const { branchId } = database;
+            // The API refuses logicalId in the same request as a branch
+            // move, so it is set only after the move above.
+            database = (yield* updateDatabase({
+              databaseId: database.id,
+              logicalId,
+            }).pipe(
+              Effect.catchTag("Conflict", (conflict) =>
+                Effect.fail(
+                  logicalIdTaken(logicalId, branchId, projectId, conflict),
+                ),
+              ),
+            )).data;
           }
 
           const persistedSecrets =
@@ -934,6 +1064,7 @@ const ProviderLocal = () =>
         host: local?.host,
         user: local?.user,
         password: local?.password,
+        logicalId: news.logicalId ?? null,
       } satisfies Database["Attributes"];
     }),
     delete: Effect.fn(function* ({ output }) {
