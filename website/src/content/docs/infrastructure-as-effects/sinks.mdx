@@ -1,15 +1,15 @@
 ---
 title: Sinks
-description: A Sink is the write-side dual of an Event Source — a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
+description: A Sink is the write-side dual of an Event Source. It is a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
 ---
 
-A **Sink** is the dual of an [Event Source](/infrastructure-as-effects/event-sources):
-a [Binding](/infrastructure-as-effects/binding) for *writing* that
+A **Sink** is the dual of an [Event Source](/infrastructure-as-effects/event-sources).
+It is a [Binding](/infrastructure-as-effects/binding) for *writing* that
 exposes a resource as an Effect
-[`Sink`](https://effect.website/docs/sink/introduction/). Where an
-Event Source hands you records as a `Stream`, a Sink accepts a
+[`Sink`](https://effect.website/docs/sink/introduction/). An
+Event Source hands you records as a `Stream`. A Sink accepts a
 `Stream` and drains it into the resource's batch API
-(`SendMessageBatch`, `PublishBatch`, `PutRecords`) — emitting the
+(`SendMessageBatch`, `PublishBatch`, `PutRecords`). It also emits the
 minimal IAM to go with it.
 
 ## A Sink in a constructor
@@ -58,15 +58,15 @@ export default class Publisher extends AWS.Lambda.Function<Publisher>()(
 ) {}
 ```
 
-`QueueSink` is the contract; the provided `AWS.SQS.QueueSinkHttp`
-Layer implements it over `SendMessageBatch` — itself a contract,
-satisfied by `SendMessageBatchHttp`. That is why the provide chains a
-`Layer.provideMerge`: implementation Layers can depend on other
-contracts. The Layer attaches the least-privilege policy statements
-to the Function's role; the `yield*` returns a plain Effect `Sink` —
-no `QUEUE_URL` env var to read, no `SendMessageBatchCommand`
-chunking by hand. The contract-and-Layer split is the same rule
-every Binding follows — see
+`QueueSink` is the contract. The provided `AWS.SQS.QueueSinkHttp`
+Layer implements it over `SendMessageBatch`, which is itself a
+contract satisfied by `SendMessageBatchHttp`. Implementation Layers
+can depend on other contracts, so the provide chains a
+`Layer.provideMerge`. The Layer attaches the least-privilege policy
+statements to the Function's role. The `yield*` returns a plain
+Effect `Sink`. You don't read a `QUEUE_URL` env var, and you don't
+chunk `SendMessageBatchCommand` calls by hand. Every Binding follows
+the same contract-and-Layer split. See
 [Bindings › A contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer).
 
 ## Element types
@@ -118,8 +118,8 @@ export default class Ingest extends AWS.Lambda.Function<Ingest>()(
 
 ## Batching
 
-A Sink drains its input chunk by chunk — each chunk of the stream
-becomes **one** call to the underlying batch API. To control batch
+A Sink drains its input chunk by chunk. Each chunk of the stream
+becomes one call to the underlying batch API. To control batch
 size, rechunk the stream before running it into the sink:
 
 ```typescript
@@ -131,11 +131,10 @@ yield* Stream.fromIterable(messages).pipe(
 
 ## Source → transform → sink
 
-Where the model pays off is when you compose a Sink with an
-[Event Source](/infrastructure-as-effects/event-sources). Because
-every step is just `Stream` / `Sink`, the whole
-pipe-and-transform pipeline is one expression inside the
-constructor:
+The model pays off when you compose a Sink with an
+[Event Source](/infrastructure-as-effects/event-sources). Every step
+is a `Stream` or a `Sink`, so the whole pipe-and-transform pipeline
+is one expression inside the constructor:
 
 ```typescript
 export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
@@ -168,19 +167,19 @@ export default class OrderRelay extends AWS.Lambda.Function<OrderRelay>()(
 ) {}
 ```
 
-Two binding calls, one pipeline. The provided Layers attach **both**
-sides of the policy to the Function's role —
-`dynamodb:DescribeStream` / `GetRecords` / `GetShardIterator` on
-`OrdersTable`'s stream, `sqs:SendMessage` / `SendMessageBatch` on
-`OutboundQueue` — and `AWS.Lambda.TableEventSource` wires the
+The pipeline uses two binding calls. The provided Layers attach both
+sides of the policy to the Function's role. These are
+`dynamodb:DescribeStream`, `GetRecords`, and `GetShardIterator` on
+`OrdersTable`'s stream, plus `sqs:SendMessage` and `SendMessageBatch`
+on `OutboundQueue`. `AWS.Lambda.TableEventSource` wires the
 event-source mapping.
 
-Drop in `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
-or `Stream.mapEffect` anywhere along the chain — they're all the
-same `Stream` you'd write in a plain Effect program.
+You can add `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
+or `Stream.mapEffect` anywhere along the chain. They are all the
+same `Stream` code you'd write in a plain Effect program.
 
 ## Where next
 
-- [Event Sources](/infrastructure-as-effects/event-sources) — the read-side dual: resources as `Stream`s.
-- [Bindings](/infrastructure-as-effects/binding) — the deploy-time mechanics every Sink shares.
-- [Layers](/infrastructure-as-effects/layers) — hide Sinks behind a service interface.
+- [Event Sources](/infrastructure-as-effects/event-sources): the read-side dual, which exposes resources as `Stream`s.
+- [Bindings](/infrastructure-as-effects/binding): the deploy-time mechanics every Sink shares.
+- [Layers](/infrastructure-as-effects/layers): hide Sinks behind a service interface.

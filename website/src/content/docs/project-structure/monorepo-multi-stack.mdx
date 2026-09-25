@@ -22,11 +22,11 @@ Each package owns its own `alchemy.run.ts`
         └── main.tsx       # reads import.meta.env.VITE_API_URL
 ```
 
-There is no shared plan and no live connection between the Stacks. The
-backend deploys and persists its outputs to the state store; the frontend's
-plan reads those persisted outputs back through a **typed Stack handle**.
-That one indirection is what buys independent deploys, independent destroys,
-and independent CI — at the cost of a deploy order.
+The Stacks share no plan and have no live connection. The backend deploys
+and persists its outputs to the state store. The frontend's plan reads those
+persisted outputs back through a **typed Stack handle**. This indirection
+lets each Stack deploy, destroy, and run in CI independently. The cost is
+that the Stacks must deploy in order.
 
 Three small files make it work.
 
@@ -44,10 +44,10 @@ export class Backend extends Alchemy.Stack<
 >()("Backend") {}
 ```
 
-The handle is the contract between the two Stacks: it names the Stack
+The handle is the contract between the two Stacks. It names the Stack
 (`"Backend"`) and declares its output shape (`{ url: string }`). Both sides
-import this class — the backend to deploy against it, the frontend to
-reference it — so TypeScript enforces the contract in both directions.
+import this class. The backend deploys against it and the frontend
+references it, so TypeScript enforces the contract in both directions.
 
 ## The backend Stack
 
@@ -72,7 +72,7 @@ export default Backend.make(
 );
 ```
 
-`Backend.make` is `Alchemy.Stack` bound to the handle: if the returned
+`Backend.make` is `Alchemy.Stack` bound to the handle. If the returned
 object doesn't match `{ url: string }`, this file fails to typecheck. On
 deploy, the resolved `url` is persisted to the state store as the Stack's
 output.
@@ -109,13 +109,12 @@ export default Alchemy.Stack(
 ```
 
 `yield* Backend` reads the backend's persisted outputs from the state store
-at plan time and returns them fully typed — `backend.url` is the `string`
-the handle declared. It resolves the **same stage** the frontend is being
-deployed to: the `sam` frontend reads the `sam` backend, `pr-42` reads
-`pr-42`.
+at plan time and returns them typed. `backend.url` is the `string` the
+handle declared. It resolves the same stage the frontend deploys to. The
+`sam` frontend reads the `sam` backend, and `pr-42` reads `pr-42`.
 
 The import works because `frontend/package.json` depends on
-`"backend": "workspace:*"` — the handle travels through the workspace like
+`"backend": "workspace:*"`. The handle travels through the workspace like
 any other export.
 
 ## Deploy in order
@@ -125,20 +124,20 @@ cd backend && alchemy deploy --stage sam
 cd frontend && alchemy deploy --stage sam
 ```
 
-The backend must be deployed to the stage first — if it isn't, the
-frontend's plan fails with `InvalidReferenceError` because there are no
-persisted outputs to read. Destroy in reverse: frontend first, then backend.
+The backend must be deployed to the stage first. Otherwise the frontend's
+plan fails with `InvalidReferenceError` because there are no persisted
+outputs to read. Destroy in reverse order, with the frontend first and then the backend.
 
 Each `alchemy.run.ts` runs from its own package directory, so relative paths
-(`main`, `rootDir`) resolve against the package — the
+(`main`, `rootDir`) resolve against the package. The
 [root-relative path trap](/project-structure/monorepo-single-stack#anchor-every-path)
 of the single-stack layout doesn't apply here.
 
 ## Pin to a specific stage
 
-The bare `yield* Backend` (same stage on both sides) is the right default.
-To break stage symmetry — for example, every frontend preview points at the
-production backend — pin with `Backend.stage.<name>`:
+The bare `yield* Backend` reads the same stage on both sides and is the
+right default. To break stage symmetry, pin with `Backend.stage.<name>`. For
+example, every frontend preview can point at the production backend:
 
 ```diff lang="typescript"
    Effect.gen(function* () {
@@ -148,14 +147,14 @@ production backend — pin with `Backend.stage.<name>`:
    })
 ```
 
-`Backend.stage` is a proxy keyed by stage name — any string works
+`Backend.stage` is a proxy keyed by stage name. Any string works
 (`Backend.stage.staging`, `Backend.stage["pr-42"]`).
 
 ## Where next
 
-- [Monorepo](/project-structure/monorepo) — the high-level chooser.
-- [Single Stack](/project-structure/monorepo-single-stack) — the one-Stack
-  alternative: one plan, one state file, paths anchored to the root.
-- [References](/infrastructure-as-code/references) — when to split Stacks,
+- [Monorepo](/project-structure/monorepo): the high-level chooser.
+- [Single Stack](/project-structure/monorepo-single-stack): the one-Stack
+  alternative with one plan, one state file, paths anchored to the root.
+- [References](/infrastructure-as-code/references): when to split Stacks,
   how a reference resolves (typing, plan-time state reads,
   `InvalidReferenceError`), and stage pinning in depth.

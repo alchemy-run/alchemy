@@ -4,7 +4,7 @@ description: Use profiles to select cloud accounts and credentials for each envi
 ---
 
 A **profile** is a named bundle of provider authentication settings.
-The non-secret manifest lives in `~/.alchemy/profiles.json`; secret
+The non-secret manifest lives in `~/.alchemy/profiles.json`. Secret
 material lives separately under `~/.alchemy/credentials/<profile>/`.
 Profiles let you:
 
@@ -13,27 +13,27 @@ Profiles let you:
 - Rotate or refresh tokens without losing other configurations
 
 Profiles are independent from [Stages](/environments/stages). A stage
-controls **what** is deployed; a profile controls **how alchemy
-authenticates** to deploy it.
+controls what is deployed. A profile controls how Alchemy authenticates
+to deploy it.
 
 ## Profile selection
 
 Alchemy selects a profile in this order:
 
 1. The command's `--profile <name>` option
-2. `$ALCHEMY_PROFILE` from configuration: an explicit `--env-file` first,
-   then the process environment, with `.env` as a fallback when no file is specified
+2. `$ALCHEMY_PROFILE` from configuration. An explicit `--env-file` comes first,
+   then the process environment, then `.env` as a fallback when no file is specified
 3. The built-in `default` profile
 
 Stacks that explicitly declare [secret providers](/environments/secret-providers)
-pin `ALCHEMY_PROFILE` to `--profile` or the process environment, so a secrets
-provider cannot redirect credential selection. Stacks that omit `secrets`
-retain the existing selection above, including injected configuration.
+pin `ALCHEMY_PROFILE` to `--profile` or the process environment. This stops a
+secrets provider from redirecting credential selection. Stacks that omit
+`secrets` keep the selection order above, including injected configuration.
 
-This is the same model as the AWS CLI: a profile named `default` always
-exists, cannot be renamed or deleted, and is what every command uses unless
-you name another profile explicitly. There is no stored "default selection"
-to switch — to use a different profile, pass `--profile` or set
+This is the same model as the AWS CLI. A profile named `default` always
+exists and cannot be renamed or deleted. Every command uses it unless you
+name another profile explicitly. There is no stored "default selection" to
+switch. To use a different profile, pass `--profile` or set
 `ALCHEMY_PROFILE`.
 
 ```sh
@@ -48,8 +48,8 @@ alchemy deploy --profile work
 
 ## How credentials get there
 
-Run `alchemy profile edit`, choose providers to add, reconfigure, or remove,
-then complete each provider's login flow.
+Run `alchemy profile edit` and choose providers to add, reconfigure, or
+remove. Then complete each provider's login flow.
 
 To re-run that flow at any time:
 
@@ -82,15 +82,15 @@ the command tells you which `alchemy profile refresh` command to run.
 Profile commands include Alchemy's built-in providers even outside a project.
 They also import `alchemy.run.ts`, when present, to discover custom providers.
 Use `--config <path>` for another entrypoint. A missing conventional
-`alchemy.run.ts` is ignored, but errors in an existing entrypoint or an explicit
+`alchemy.run.ts` is ignored. Errors in an existing entrypoint or an explicit
 custom path fail the command instead of hiding its providers. Each
 provider's prompts and credential resolution are implemented by its
 [Auth Provider](/environments/auth-providers).
 
 ## Inspecting a profile
 
-Use `alchemy profile show` to see what's stored (credentials are
-redacted):
+Use `alchemy profile show` to see what's stored. Credentials are
+redacted:
 
 ```sh
 alchemy profile show
@@ -130,8 +130,8 @@ export ALCHEMY_PROFILE=work
 alchemy deploy
 ```
 
-Rename a profile without disconnecting its accounts (the built-in `default`
-profile cannot be renamed):
+Rename a profile without disconnecting its accounts. The built-in
+`default` profile cannot be renamed.
 
 ```sh
 alchemy profile rename work company
@@ -142,28 +142,29 @@ This moves the profile's credential directory. It does not rewrite an
 
 ### Environment variables outside CI
 
-Provider credentials in the environment always win. When every required
-variable in a provider's contract is set — in the process environment, a
-`.env` file, or `--env-file` — alchemy resolves that provider from the
-variables and never consults the profile, whether or not `--profile` or
-`ALCHEMY_PROFILE` selected one. It logs which variables it used:
+Provider credentials in the environment always win. The variables can come
+from the process environment, a `.env` file, or `--env-file`. When every
+required variable in a provider's contract is set, Alchemy resolves that
+provider from the variables and never consults the profile. This holds
+whether or not `--profile` or `ALCHEMY_PROFILE` selected one. Alchemy logs
+which variables it used:
 
 ```text
 Cloudflare: using environment variables (CLOUDFLARE_API_TOKEN,
 CLOUDFLARE_ACCOUNT_ID) instead of the profile.
 ```
 
-The decision is per provider, so mixing is fine: a Cloudflare token in
-`.env` overrides only Cloudflare, while AWS, Neon, or any other provider in
-the same run still resolves from the profile. Unset the variables to use the
-profile's stored credentials for that provider too. A partial set (a required
-variable missing) is ignored and the profile applies.
+The decision is per provider, so you can mix sources. A Cloudflare token in
+`.env` overrides only Cloudflare. AWS, Neon, or any other provider in the
+same run still resolves from the profile. Unset the variables to use the
+profile's stored credentials for that provider too. If a required variable
+is missing, Alchemy ignores the partial set and the profile applies.
 
 ### CI
 
-CI does not use profiles. When `CI=true`, provider credentials are resolved
-directly from environment variables and nothing is read from or written to
-`~/.alchemy`. GitHub Actions sets `CI=true` automatically:
+CI does not use profiles. When `CI=true`, Alchemy resolves provider
+credentials directly from environment variables. Nothing is read from or
+written to `~/.alchemy`. GitHub Actions sets `CI=true` automatically:
 
 ```yaml
 - run: bun alchemy deploy --stage prod --yes
@@ -176,9 +177,9 @@ directly from environment variables and nothing is read from or written to
 
 | Provider | Required credentials | Optional configuration |
 | --- | --- | --- |
-| AWS | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` or `AWS_DEFAULT_REGION` | `AWS_SESSION_TOKEN`; `AWS_ACCOUNT_ID` avoids an STS `GetCallerIdentity` lookup |
+| AWS | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` or `AWS_DEFAULT_REGION` | `AWS_SESSION_TOKEN`. `AWS_ACCOUNT_ID` avoids an STS `GetCallerIdentity` lookup |
 | Cloudflare | `CLOUDFLARE_ACCOUNT_ID` and either `CLOUDFLARE_API_TOKEN`, or `CLOUDFLARE_API_KEY` with `CLOUDFLARE_EMAIL`/`CLOUDFLARE_ACCOUNT_EMAIL` | None |
-| GitHub | `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`; enterprise hosts may instead use `GH_ENTERPRISE_TOKEN` or `GITHUB_ENTERPRISE_TOKEN` | `GITHUB_BASE_URL`, `GITHUB_API_URL`, or `GH_HOST` selects a GitHub Enterprise host |
+| GitHub | `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`. Enterprise hosts may use `GH_ENTERPRISE_TOKEN` or `GITHUB_ENTERPRISE_TOKEN` instead | `GITHUB_BASE_URL`, `GITHUB_API_URL`, or `GH_HOST` selects a GitHub Enterprise host |
 | Neon | `NEON_API_KEY` | None |
 | PlanetScale | `PLANETSCALE_API_TOKEN_ID`, `PLANETSCALE_API_TOKEN`, `PLANETSCALE_ORGANIZATION` | `PLANETSCALE_API_BASE_URL` |
 | Prisma | `PRISMA_SERVICE_TOKEN` or `PRISMA_API_TOKEN` | `PRISMA_API_URL` or `PRISMA_MANAGEMENT_API_URL` |
@@ -186,13 +187,13 @@ directly from environment variables and nothing is read from or written to
 | Fly | `FLY_API_TOKEN` | `FLY_API_HOSTNAME` overrides the Machines API root |
 | Hetzner | `HCLOUD_TOKEN` | `HCLOUD_ENDPOINT` overrides the API base URL |
 | Railway | `RAILWAY_API_TOKEN` (account or workspace token) | `RAILWAY_API_URL` overrides the GraphQL host |
-| Doppler | `DOPPLER_TOKEN`, or `DOPPLER_IDENTITY_ID` to log in with the platform's OIDC token | `DOPPLER_OIDC_TOKEN`, `DOPPLER_OIDC_AUDIENCE` — see [Doppler](/environments/doppler) |
-| Infisical | `INFISICAL_TOKEN`, or `INFISICAL_IDENTITY_ID` to log in with the platform's OIDC token | `INFISICAL_OIDC_TOKEN`, `INFISICAL_OIDC_AUDIENCE`, `INFISICAL_API_URL` — see [Infisical](/environments/infisical) |
+| Doppler | `DOPPLER_TOKEN`, or `DOPPLER_IDENTITY_ID` to log in with the platform's OIDC token | `DOPPLER_OIDC_TOKEN`, `DOPPLER_OIDC_AUDIENCE`. See [Doppler](/environments/doppler) |
+| Infisical | `INFISICAL_TOKEN`, or `INFISICAL_IDENTITY_ID` to log in with the platform's OIDC token | `INFISICAL_OIDC_TOKEN`, `INFISICAL_OIDC_AUDIENCE`, `INFISICAL_API_URL`. See [Infisical](/environments/infisical) |
 
-These variables are a CI credential source, not a profile authentication
-method. They are never persisted into `profiles.json` or the credentials
-directory. Each provider declares machine-readable `environment` metadata for
-the variables its CI resolver consumes. See
+These variables are a CI credential source. They are not a profile
+authentication method and are never persisted into `profiles.json` or the
+credentials directory. Each provider declares machine-readable
+`environment` metadata for the variables its CI resolver consumes. See
 [Custom Auth Providers](/environments/custom-auth-provider).
 
 ## Where profiles live
@@ -202,16 +203,16 @@ permission-restricted files under `~/.alchemy/credentials/<profile>/`.
 
 Set `ALCHEMY_HOME` to relocate profile data.
 
-Profile names are portable filesystem-safe identifiers: they must start
-with a letter or number, may contain letters, numbers, `.`, `_`, and
-`-`, and may be at most 64 characters.
+Profile names are portable, filesystem-safe identifiers. They must start
+with a letter or number. They may contain letters, numbers, `.`, `_`, and
+`-`. They may be at most 64 characters.
 
 Use `alchemy profile edit` instead of editing the manifest manually.
 
 ## Where next
 
 - [Auth Providers](/environments/auth-providers) explains lazy credential resolution and refresh.
-- [Stages](/environments/stages) — environment isolation; profiles pick the credentials, stages pick the instance.
-- [Secrets & Config](/environments/secrets) — bind env vars and secrets onto your deploy targets.
+- [Stages](/environments/stages) covers environment isolation. Profiles pick the credentials and stages pick the instance.
+- [Secrets & Config](/environments/secrets) shows how to bind env vars and secrets onto your deploy targets.
 - [CI](/environments/ci) explains deployment with environment credentials and no local profile state.
 - [CLI](/cli) lists every `profile` subcommand and `--profile` flag.

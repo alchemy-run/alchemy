@@ -6,8 +6,8 @@ description: How Alchemy persists resource state between deploys to compute diff
 import StateStoreBootstrap from "../../../components/marketing-islands/StateStoreBootstrap.tsx";
 
 Alchemy persists resource state between deploys so it can compute
-diffs — comparing the desired state in your code against the current
-state of your infrastructure.
+diffs. A diff compares the desired state in your code against the
+current state of your infrastructure.
 
 ## How state is stored
 
@@ -16,16 +16,16 @@ which includes the namespace path and
 [logical ID](/infrastructure-as-code/resource#logical-id). State is
 scoped by [stack name](/infrastructure-as-code/stack) and
 [**stage**](/environments/stages), so different stacks and
-environments are fully isolated.
+environments are isolated from each other.
 
 A resource's persisted state includes:
 
-- **Resource type** — e.g. `Cloudflare.R2.Bucket`
-- **Input properties** — the props you passed when creating it
-- **Output attributes** — the values returned after creation
-- **Instance ID** — a unique identifier for this instance
-- **Lifecycle status** — `created`, `updating`, `deleting`, etc.
-- **[Bindings](/infrastructure-as-effects/binding)** — data attached by policies and event sources
+- **Resource type**: e.g. `Cloudflare.R2.Bucket`
+- **Input properties**: the props you passed when creating it
+- **Output attributes**: the values returned after creation
+- **Instance ID**: a unique identifier for this instance
+- **Lifecycle status**: `created`, `updating`, `deleting`, etc.
+- **[Bindings](/infrastructure-as-effects/binding)**: data attached by policies and event sources
 
 ## Local state
 
@@ -71,50 +71,52 @@ Alchemy.Stack(
 
 `Cloudflare.state()` is the recommended state store for projects
 already running on Cloudflare. It persists state in a Worker backed
-by a Durable Object with embedded SQLite, with the auth token and
-encryption key kept in your account's Secrets Store.
+by a Durable Object with embedded SQLite. The auth token and
+encryption key are kept in your account's Secrets Store.
 
 ### First-run bootstrap
 
 The first time you run `alchemy deploy`, `plan`, or `dev` against a
 stack configured with `Cloudflare.state()`, Alchemy can't find the
-state-store Worker on your account and pauses to ask permission
-before deploying it. Confirming kicks off a one-time deploy of the
-state-store and its supporting resources:
+state-store Worker on your account. It pauses to ask permission
+before deploying it. If you confirm, Alchemy runs a one-time deploy
+of the state-store and its supporting resources:
 
 <StateStoreBootstrap client:visible />
 
 What gets created:
 
-- **`Api`** — the state-store Worker itself (a Durable Object with
+- **`Api`**: the state-store Worker itself (a Durable Object with
   embedded SQLite, enabled on a `workers.dev` subdomain)
-- **`AlchemyStateStoreToken`** — bearer token used by the CLI to
+- **`AlchemyStateStoreToken`**: bearer token used by the CLI to
   authenticate to the Worker, stored in your Secrets Store
-- **`StateStoreEncryptionKey`** — symmetric key used to encrypt
+- **`StateStoreEncryptionKey`**: symmetric key used to encrypt
   resource state at rest inside the Durable Object's SQLite
-- **`StateStoreSecrets`** — the Secrets Store that holds the two
+- **`StateStoreSecrets`**: the Secrets Store that holds the two
   secrets above, scoped to your Cloudflare account
-- **`StateStoreAuthTokenValue` / `StateStoreEncryptionKeyValue`** —
+- **`StateStoreAuthTokenValue` / `StateStoreEncryptionKeyValue`**:
   the generated random values bound into the secrets above
 
 These resources are reused across every stack and stage that uses
-`Cloudflare.state()` on this account — no duplication per project.
-Subsequent runs detect the existing Worker and skip the prompt.
+`Cloudflare.state()` on this account. Alchemy does not duplicate
+them per project. Subsequent runs detect the existing Worker and skip
+the prompt.
 
 ### Where credentials live
 
 After the bootstrap, Alchemy writes the state-store URL and bearer
 token to a credentials file under your Alchemy profile directory
 (`~/.alchemy/<profile>/cloudflare-state-store.json` by default). On
-CI, set `CI=true`; the credentials are resolved from the Secrets
-Store on every run via a short-lived edge-preview Worker, so nothing
-needs to be persisted to disk.
+CI, set `CI=true`. Alchemy then resolves the credentials from the
+Secrets Store on every run via a short-lived edge-preview Worker, so
+nothing needs to be persisted to disk.
 
 ### Customizing the worker name
 
 By default the state-store Worker is named `alchemy-state-store`.
-Pass `workerName` to use a separate state store — for example, when
-you want a dedicated store per Cloudflare account or per team:
+Pass `workerName` to use a separate state store. For example, use
+this when you want a dedicated store per Cloudflare account or per
+team:
 
 ```typescript
 state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
@@ -122,7 +124,7 @@ state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
 
 ## Postgres state store
 
-`postgresState()` persists state in a Postgres database you already run, and it locks: each `(stack, stage)` holds a session advisory lock for the duration of a run, so two concurrent deploys of the same stage cannot interleave.
+`postgresState()` persists state in a Postgres database you already run. It also locks state during a run. Each `(stack, stage)` holds a session advisory lock for the duration of a run, so two concurrent deploys of the same stage cannot interleave.
 
 ```typescript
 import { postgresState } from "alchemy/State/PostgresState";
@@ -140,7 +142,7 @@ Alchemy.Stack(
 );
 ```
 
-It is imported from `alchemy/State/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
+Import it from `alchemy/State/PostgresState`. It is not in the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
 
 ## State and lifecycle
 
@@ -181,15 +183,15 @@ handles state setup automatically.
 
 ## Writing your own state store
 
-A state store is just an Effect `Layer` that provides the `State`
-service — back it with Postgres, S3, Redis, DynamoDB, or any other
-backend. See [Custom State Store](/state-store/custom-state-store) for
-the full walkthrough.
+A state store is an Effect `Layer` that provides the `State`
+service. You can back it with Postgres, S3, Redis, DynamoDB, or any
+other backend. See [Custom State Store](/state-store/custom-state-store)
+for the full walkthrough.
 
 ## Where next
 
-- [Custom State Store](/state-store/custom-state-store) — implement the
+- [Custom State Store](/state-store/custom-state-store): implement the
   `StateService` interface end-to-end.
-- [Testing Providers](/testing/testing-providers) — the in-memory store in practice.
-- [References](/infrastructure-as-code/references) — reading another
+- [Testing Providers](/testing/testing-providers): the in-memory store in practice.
+- [References](/infrastructure-as-code/references): reading another
   stack's outputs.

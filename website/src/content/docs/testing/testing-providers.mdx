@@ -3,13 +3,13 @@ title: Testing Providers
 description: Exercise a provider's create, update, replace, and delete paths with test.provider and a scratch in-memory stack.
 ---
 
-You built a provider — now prove its lifecycle. `test.provider` gives each test a private scratch stack, so create / update / replace / delete runs never touch `.alchemy/` or a shared stage.
+After you build a provider, test its lifecycle. `test.provider` gives each test a private scratch stack. Create, update, replace, and delete runs never touch `.alchemy/` or a shared stage.
 
-Building the provider itself? Start at [Build a custom provider](/infrastructure-as-code/custom-provider).
+If you are building the provider itself, start at [Build a custom provider](/infrastructure-as-code/custom-provider).
 
 ## Scratch stacks with test.provider
 
-`test.provider(name, (stack) => effect)` builds a **scratch stack** with a private in-memory state store, isolated from `.alchemy/` and from sibling tests. Use it to exercise the create / update / replace / delete paths of a provider:
+`test.provider(name, (stack) => effect)` builds a **scratch stack** with a private in-memory state store. The stack is isolated from `.alchemy/` and from sibling tests. Use it to test the create, update, replace, and delete paths of a provider:
 
 ```typescript
 const { test } = Test.make({ providers: MyProvider.providers() });
@@ -42,11 +42,11 @@ For a full walkthrough with a real custom provider, see [Build a custom provider
 
 ## Assert against the real cloud
 
-Inside the test body the configured `providers` Layer is already in scope, so out-of-band SDK calls (`DynamoDB.describeTable`, `stripe.products.retrieve`, …) work without extra setup — assert the cloud actually matches the resource's reported outputs, as in the [Stripe walkthrough](/infrastructure-as-code/custom-provider#test-the-lifecycle).
+Inside the test body, the configured `providers` Layer is already in scope. Out-of-band SDK calls (`DynamoDB.describeTable`, `stripe.products.retrieve`, …) work without extra setup. Use them to assert that the cloud matches the resource's reported outputs, as in the [Stripe walkthrough](/infrastructure-as-code/custom-provider#test-the-lifecycle).
 
 ## Verify replacement
 
-Change a `stables` field (or whatever your `diff` flags as `replace`) between two `stack.deploy` calls with the same logical ID:
+Change a `stables` field, or any field your `diff` flags as `replace`, between two `stack.deploy` calls with the same logical ID:
 
 ```typescript
 expect(v2.id).not.toBe(v1.id);
@@ -64,11 +64,11 @@ For end-to-end tests against a real deployed Stack, see [Testing a Stack](/testi
 
 ## Seed pre-existing resources
 
-`test.provider`'s in-memory state is exposed as the `state` field on `ScratchStack` for advanced cases. For simpler seeds, just call `stack.deploy(...)` once with the seed, then again with the actual test inputs — the second call sees the first call's output as existing state.
+`test.provider`'s in-memory state is exposed as the `state` field on `ScratchStack` for advanced cases. For simpler seeds, call `stack.deploy(...)` once with the seed, then again with the actual test inputs. The second call sees the first call's output as existing state.
 
 ## Where next
 
-- [Build a custom provider](/infrastructure-as-code/custom-provider) — the provider this page tests, end to end.
-- [Providers](/infrastructure-as-code/provider) — the operation contract under test.
-- [Test harness](/testing/test-harness) — everything `Test.make` returns.
-- [Testing](/testing) — the full harness reference.
+- [Build a custom provider](/infrastructure-as-code/custom-provider): the provider this page tests, end to end.
+- [Providers](/infrastructure-as-code/provider): the operation contract under test.
+- [Test harness](/testing/test-harness): everything `Test.make` returns.
+- [Testing](/testing): the full harness reference.

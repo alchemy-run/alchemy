@@ -1,18 +1,18 @@
 ---
 title: Custom State Store
-description: Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
+description: Build a Postgres-backed Alchemy state store step by step. Implement the StateService interface, plug it into a stack, and test it end-to-end.
 ---
 
-A state store is just an Effect `Layer` that provides Alchemy's
+A state store is an Effect `Layer` that provides Alchemy's
 `State` service. The built-in stores (`localState()` on disk,
-`Cloudflare.state()` on Cloudflare) cover most cases — but if you
+`Cloudflare.state()` on Cloudflare) cover most cases. If you
 already run Postgres, S3, Redis, or DynamoDB, you can back state
 with that instead.
 
 This guide builds a Postgres-backed state store from scratch. By the
 end you'll have a `postgresState()` layer you can drop into any
 `Alchemy.Stack`, and a test that round-trips a resource through it.
-(If you just want a Postgres store, use the built-in one from `alchemy/State/PostgresState`, which adds advisory locking — this guide builds a simplified version to teach the interface.)
+If you only need a Postgres store, use the built-in one from `alchemy/State/PostgresState`. It adds advisory locking. This guide builds a simplified version to teach the interface.
 
 See [State Store](/state-store) for an overview of what
 state Alchemy persists and why.
@@ -21,7 +21,7 @@ state Alchemy persists and why.
 
 A state store is a `Layer.Layer<State, never, R>` where `R` is any
 ambient services your implementation needs. The `State` service does
-**not** hold a `StateService` directly — it holds an
+not hold a `StateService` directly. It holds an
 `Effect<StateService>` that lazily builds one:
 
 ```typescript
@@ -30,13 +30,13 @@ class State extends Context.Service<State, Effect.Effect<StateService>>()(
 ) {}
 ```
 
-This indirection matters. Commands like `alchemy profile show` provide the
-state layer but never touch state, so a store must not connect to its
-backend (open a DB connection, deploy a worker, prompt for
-credentials) just because the layer was built. Wrapping the builder
+The indirection exists because commands like `alchemy profile show`
+provide the state layer but never touch state. A store must not
+connect to its backend (open a DB connection, deploy a worker, prompt
+for credentials) only because the layer was built. Wrapping the builder
 in [`Effect.cached`](https://effect.website/docs/getting-started/control-flow/#caching)
-**defers** initialization until the first `yield* State` and **caches**
-it so subsequent accesses reuse the same `StateService`.
+defers initialization until the first `yield* State`. It also caches
+the result so later accesses reuse the same `StateService`.
 
 Start with an empty `StateService` so the types compile, then fill it
 in one method at a time.
@@ -75,21 +75,20 @@ const makePostgresState = (_props: PostgresStateProps) =>
   });
 ```
 
-You now have a layer Alchemy will accept — it just dies on every
-operation. Next we'll wire up the database.
+Alchemy accepts this layer, but it dies on every operation.
+Next, wire up the database.
 
 ## Connect to Postgres
 
-We'll use the [`postgres`](https://github.com/porsager/postgres)
+Use the [`postgres`](https://github.com/porsager/postgres)
 package and create one schema with a single `state` table keyed by
 `(stack, stage, fqn)`. Acquire the connection with `Effect.acquireRelease`
-so it's released when the stack tears down — this requires a `Scope`,
+so it's released when the stack tears down. This requires a `Scope`,
 so the layer becomes `Layer.scoped`.
 
-Because initialization is deferred, capture the scope at layer-build
-time and provide it to the cached initializer, so the connection's
-release is still tied to the stack's lifetime even though it opens
-lazily on first use:
+Initialization is deferred, so capture the scope at layer-build time
+and provide it to the cached initializer. The connection opens lazily
+on first use, and its release is still tied to the stack's lifetime:
 
 ```diff lang="typescript"
 // src/postgres-state.ts
@@ -155,7 +154,7 @@ A few things to know before writing them:
 - **Use `encodeState` / `reviveState`** from `alchemy/State` when
   serializing. They handle `Secret` values, `Date`s, and other
   non-JSON types in `ResourceState`.
-- **Return `undefined` from `get`** for missing rows — don't error.
+- **Return `undefined` from `get`** for missing rows. Don't error.
   `StateStoreError` is for transport failures only.
 - **Map thrown errors** through `StateStoreError` so Alchemy can
   surface them with context.
@@ -236,7 +235,7 @@ const makePostgresState = (props: PostgresStateProps) =>
 ## Implement `list`, `listStacks`, `listStages`
 
 These power `alchemy destroy`, drift detection, and the CLI's
-inspection commands. They're straightforward `select distinct`
+inspection commands. They're plain `select distinct`
 queries:
 
 ```diff lang="typescript"
@@ -271,7 +270,7 @@ const service: StateService = {
 ## Implement `delete` and `deleteStack`
 
 `deleteStack` deletes the entire stack when `stage` is omitted, or
-just one stage when provided:
+only one stage when provided:
 
 ```diff lang="typescript"
 const service: StateService = {
@@ -357,9 +356,9 @@ export default Alchemy.Stack(
 ## Test the round-trip
 
 Spin up a throwaway Postgres (Docker, Testcontainers, or a local
-instance) and verify a resource round-trips through your store. Note
-the double `yield*`: the first resolves the `State` service to its
-`Effect<StateService>` initializer, the second runs it to get the
+instance) and verify a resource round-trips through your store. The
+test uses a double `yield*`. The first resolves the `State` service to
+its `Effect<StateService>` initializer. The second runs it to get the
 `StateService`.
 
 ```typescript
@@ -420,7 +419,7 @@ production:
 - **FQNs are arbitrary strings** containing `/` and other
   characters. Postgres handles them fine as parameterized values,
   but if your backend uses FQNs in keys (filenames, S3 keys, Redis
-  keys) you'll need to escape them — Alchemy ships
+  keys) you'll need to escape them. Alchemy ships
   `encodeFqn` / `decodeFqn` from `alchemy/FQN`.
 - **Concurrent writes happen** during a deploy as Alchemy applies
   resources in parallel. Your backend needs row-level (or
@@ -432,8 +431,8 @@ production:
 
 ## Reference implementations
 
-If you'd rather start from one of the built-ins:
+To start from one of the built-ins:
 
-- [`LocalState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/LocalState.ts) — filesystem-backed, the simplest end-to-end example
-- [`HttpStateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/HttpStateStore.ts) — HTTP client against the Alchemy state API
-- [`InMemoryState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/InMemoryState.ts) — minimal in-process map, useful as a template
+- [`LocalState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/LocalState.ts): filesystem-backed, the simplest end-to-end example
+- [`HttpStateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/HttpStateStore.ts): HTTP client against the Alchemy state API
+- [`InMemoryState.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/State/InMemoryState.ts): minimal in-process map, useful as a template
