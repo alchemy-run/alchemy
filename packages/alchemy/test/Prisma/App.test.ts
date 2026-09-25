@@ -1,6 +1,11 @@
+import { Unowned } from "@/AdoptPolicy";
 import * as Provider from "@/Provider";
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -284,6 +289,7 @@ describe(
             latestDeploymentId: null,
             appEndpointDomain: "app-1.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
+            logicalId: null,
           },
           session: undefined as never,
           bindings: [],
@@ -324,6 +330,7 @@ describe(
             latestDeploymentId: null,
             appEndpointDomain: "app-1.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
+            logicalId: null,
           },
           session: undefined as never,
           bindings: [],
@@ -369,6 +376,7 @@ describe(
                 latestDeploymentId: null,
                 appEndpointDomain: "app-1.prisma.build",
                 createdAt: "2026-01-01T00:00:00Z",
+                logicalId: null,
               },
               session: undefined as never,
               bindings: [],
@@ -387,6 +395,202 @@ describe(
           const regionError = yield* reconcile().pipe(Effect.flip);
           expect((regionError as Error).message).toContain("us-west-2");
           expect((regionError as Error).message).toContain("Refusing to patch");
+        }).pipe(provide(client));
+      },
+    );
+
+    it.effect("creates an App with its logical ID", () => {
+      const calls: Array<[string, unknown]> = [];
+      const client = {
+        listApps: () => Effect.succeed([]),
+        listBranches: () => Effect.succeed([branch("branch-main")]),
+        createApp: (input: { logicalId?: string }) =>
+          Effect.sync(() => {
+            calls.push(["createApp", input]);
+            return { ...app("app-1"), logicalId: input.logicalId };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaApp.Provider;
+        const output = yield* provider.reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: { project: "project-1", displayName: "api", logicalId: "web" },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(calls).toEqual([
+          [
+            "createApp",
+            {
+              projectId: "project-1",
+              displayName: "api",
+              branchId: "branch-main",
+              logicalId: "web",
+            },
+          ],
+        ]);
+        expect(output.logicalId).toBe("web");
+      }).pipe(provide(client));
+    });
+
+    it.effect("converges a logical ID change in place", () => {
+      const updates: unknown[] = [];
+      const client = {
+        getApp: () => Effect.succeed(app("app-1")),
+        listBranches: () => Effect.succeed([branch("branch-main")]),
+        updateApp: (id: string, input: { logicalId?: string }) =>
+          Effect.sync(() => {
+            updates.push(input);
+            return { ...app(id), logicalId: input.logicalId };
+          }),
+      } as unknown as PrismaManagementClient;
+      const output = {
+        appId: "app-1",
+        name: "api",
+        projectId: "project-1",
+        regionId: "us-east-1",
+        branchId: "branch-main",
+        latestDeploymentId: null,
+        appEndpointDomain: "app-1.prisma.build",
+        createdAt: "2026-01-01T00:00:00Z",
+        logicalId: null,
+      };
+      const olds = { project: "project-1", displayName: "api" };
+      const news = { ...olds, logicalId: "web" };
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaApp.Provider;
+        const diff = yield* provider.diff!({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds,
+          news,
+          oldBindings: [],
+          newBindings: [],
+          output,
+        } as never);
+        const result = yield* provider.reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news,
+          olds,
+          output,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(diff).toEqual({ action: "update" });
+        expect(updates).toEqual([{ logicalId: "web" }]);
+        expect(result.appId).toBe("app-1");
+        expect(result.logicalId).toBe("web");
+      }).pipe(provide(client));
+    });
+
+    it.effect(
+      "cold read owns the App with the logical ID and ignores a same-named one",
+      () => {
+        const apps = [
+          app("app-named"),
+          { ...app("app-declared"), name: "renamed", logicalId: "web" },
+        ];
+        const client = {
+          listApps: (query: { logicalId?: string }) =>
+            Effect.succeed(
+              apps.filter(
+                (item) =>
+                  query.logicalId === undefined ||
+                  ("logicalId" in item && item.logicalId === query.logicalId),
+              ),
+            ),
+          listBranches: () => Effect.succeed([branch("branch-main")]),
+        } as unknown as PrismaManagementClient;
+        const read = (logicalId?: string) =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.findProvider(PrismaApp);
+            return yield* provider.read!({
+              id: "App",
+              fqn: "App",
+              instanceId: "00000000000000000000000000000000",
+              olds: {
+                project: "project-1",
+                displayName: "api",
+                ...(logicalId === undefined ? {} : { logicalId }),
+              },
+              output: undefined,
+            });
+          });
+
+        return Effect.gen(function* () {
+          const owned = yield* read("web");
+          expect(Unowned.is(owned)).toBe(false);
+          expect(owned?.appId).toBe("app-declared");
+          expect(owned?.logicalId).toBe("web");
+
+          expect(yield* read("other")).toBeUndefined();
+
+          const byName = yield* read();
+          expect(Unowned.is(byName)).toBe(true);
+          expect(byName?.appId).toBe("app-named");
+        }).pipe(provide(client));
+      },
+    );
+
+    it.effect(
+      "names the logical ID and branch when another App holds it",
+      () => {
+        const client = {
+          getApp: () => Effect.succeed(app("app-1")),
+          listBranches: () => Effect.succeed([branch("branch-main")]),
+          updateApp: () =>
+            Effect.fail(
+              new PrismaApiError({
+                method: "PATCH",
+                path: "/v1/services/app-1",
+                status: 409,
+                message: "HTTP 409",
+              }),
+            ),
+        } as unknown as PrismaManagementClient;
+
+        return Effect.gen(function* () {
+          const provider = yield* PrismaApp.Provider;
+          const error = yield* provider
+            .reconcile({
+              id: "App",
+              fqn: "App",
+              instanceId: "00000000000000000000000000000000",
+              news: {
+                project: "project-1",
+                displayName: "api",
+                logicalId: "web",
+              },
+              olds: { project: "project-1", displayName: "api" },
+              output: {
+                appId: "app-1",
+                name: "api",
+                projectId: "project-1",
+                regionId: "us-east-1",
+                branchId: "branch-main",
+                latestDeploymentId: null,
+                appEndpointDomain: "app-1.prisma.build",
+                createdAt: "2026-01-01T00:00:00Z",
+                logicalId: null,
+              },
+              session: undefined as never,
+              bindings: [],
+            })
+            .pipe(Effect.flip);
+
+          expect((error as Error).message).toContain("logical ID 'web'");
+          expect((error as Error).message).toContain("branch 'branch-main'");
         }).pipe(provide(client));
       },
     );

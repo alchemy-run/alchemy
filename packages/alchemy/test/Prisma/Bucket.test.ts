@@ -1,3 +1,4 @@
+import { Unowned } from "@/AdoptPolicy";
 import * as Provider from "@/Provider";
 import { Bucket, BucketProvider, type BucketProps } from "@/Prisma/Bucket";
 import {
@@ -52,6 +53,7 @@ const bucketAttrs = (id: string, name: string): Bucket["Attributes"] => ({
   name,
   projectId: "project-1",
   createdAt,
+  logicalId: null,
 });
 
 const apiBucketKey = (id: string, name = expectedKeyName): ApiBucketKey => ({
@@ -112,7 +114,11 @@ const bucketApi = (client: any) =>
     if (head !== "buckets") return unhandled(request);
     if (bucketId === undefined) {
       return request.method === "GET"
-        ? call(client.listBuckets, [], list)
+        ? call(
+            client.listBuckets,
+            [Object.fromEntries(new URLSearchParams(request.search))],
+            list,
+          )
         : call(client.createBucket, [body]);
     }
     if (tail === "keys") {
@@ -124,6 +130,9 @@ const bucketApi = (client: any) =>
         : call(client.createBucketKey, [bucketId, body]);
     }
     if (request.method === "GET") return call(client.getBucket, [bucketId]);
+    if (request.method === "PATCH") {
+      return call(client.updateBucket, [bucketId, body]);
+    }
     if (request.method === "DELETE") {
       return callVoid(client.deleteBucket, [bucketId]);
     }
@@ -319,47 +328,246 @@ describe(
       }).pipe(Effect.provide(bucketLayer(client)));
     });
 
-    it.effect("replaces on project, name, or branch changes", () => {
-      const client = {} as unknown as PrismaManagementClient;
-      const olds: BucketProps = { project: "project-1", name: "uploads" };
-      const output = bucketAttrs("bucket-1", "uploads");
+    it.effect(
+      "replaces on a project change and updates name, branch, or logical ID in place",
+      () => {
+        const client = {} as unknown as PrismaManagementClient;
+        const olds: BucketProps = { project: "project-1", name: "uploads" };
+        const output = bucketAttrs("bucket-1", "uploads");
+
+        return Effect.gen(function* () {
+          const provider = yield* Bucket.Provider;
+
+          expect(
+            yield* provider.diff!(
+              diffInput(
+                "Bucket",
+                olds,
+                { project: "project-2", name: "uploads" },
+                output,
+              ),
+            ),
+          ).toEqual({ action: "replace" });
+          expect(
+            yield* provider.diff!(
+              diffInput(
+                "Bucket",
+                olds,
+                { project: "project-1", name: "renamed" },
+                output,
+              ),
+            ),
+          ).toEqual({ action: "update" });
+          expect(
+            yield* provider.diff!(
+              diffInput(
+                "Bucket",
+                olds,
+                { project: "project-1", name: "uploads", branchId: "branch-1" },
+                output,
+              ),
+            ),
+          ).toEqual({ action: "update" });
+          expect(
+            yield* provider.diff!(
+              diffInput(
+                "Bucket",
+                olds,
+                { project: "project-1", name: "uploads", logicalId: "uploads" },
+                output,
+              ),
+            ),
+          ).toEqual({ action: "update" });
+          expect(
+            yield* provider.diff!(diffInput("Bucket", olds, olds, output)),
+          ).toBeUndefined();
+        }).pipe(Effect.provide(bucketLayer(client)));
+      },
+    );
+
+    it.effect("creates a bucket with its logical ID", () => {
+      const inputs: unknown[] = [];
+      const client = {
+        listBuckets: () => Effect.succeed([]),
+        createBucket: (input: { logicalId?: string }) =>
+          Effect.sync(() => {
+            inputs.push(input);
+            return {
+              ...apiBucket("bucket-1", "uploads"),
+              branchId: "branch-1",
+              logicalId: input.logicalId,
+            };
+          }),
+      } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
         const provider = yield* Bucket.Provider;
+        const attrs = yield* provider.reconcile(
+          reconcileInput("Bucket", {
+            project: "project-1",
+            name: "uploads",
+            branchId: "branch-1",
+            logicalId: "uploads",
+          }),
+        );
 
-        expect(
-          yield* provider.diff!(
-            diffInput(
+        expect(inputs).toEqual([
+          {
+            projectId: "project-1",
+            name: "uploads",
+            branchId: "branch-1",
+            logicalId: "uploads",
+          },
+        ]);
+        expect(attrs.logicalId).toBe("uploads");
+      }).pipe(Effect.provide(bucketLayer(client)));
+    });
+
+    it.effect(
+      "cold read owns the bucket with the logical ID and ignores a same-named one",
+      () => {
+        const listed: unknown[] = [];
+        const buckets = [
+          { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1" },
+          {
+            ...apiBucket("bucket-declared", "renamed-in-console"),
+            branchId: "branch-1",
+            logicalId: "uploads",
+          },
+        ];
+        const client = {
+          listBuckets: (query: { logicalId?: string }) =>
+            Effect.sync(() => {
+              listed.push(query);
+              return buckets.filter(
+                (bucket) =>
+                  query.logicalId === undefined ||
+                  ("logicalId" in bucket &&
+                    bucket.logicalId === query.logicalId),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+        const read = (logicalId?: string) =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.findProvider(Bucket);
+            return yield* provider.read!({
+              id: "Bucket",
+              fqn: "Bucket",
+              instanceId,
+              olds: {
+                project: "project-1",
+                name: "uploads",
+                branchId: "branch-1",
+                ...(logicalId === undefined ? {} : { logicalId }),
+              },
+              output: undefined,
+            });
+          });
+
+        return Effect.gen(function* () {
+          const owned = yield* read("uploads");
+          expect(Unowned.is(owned)).toBe(false);
+          expect(owned).toEqual({
+            ...bucketAttrs("bucket-declared", "renamed-in-console"),
+            logicalId: "uploads",
+          });
+          expect(listed).toEqual([
+            {
+              projectId: "project-1",
+              logicalId: "uploads",
+              branchId: "branch-1",
+            },
+          ]);
+
+          expect(yield* read("other")).toBeUndefined();
+          expect(yield* read()).toBeUndefined();
+          expect(listed).toHaveLength(2);
+        }).pipe(Effect.provide(bucketLayer(client)));
+      },
+    );
+
+    it.effect(
+      "moves and renames in place, then sets the logical ID in a second call",
+      () => {
+        const patches: unknown[] = [];
+        let observed: Record<string, unknown> = {
+          ...apiBucket("bucket-1", "uploads"),
+          branchId: "branch-1",
+          logicalId: null,
+        };
+        const client = {
+          getBucket: () => Effect.sync(() => observed),
+          updateBucket: (_id: string, body: Record<string, unknown>) =>
+            Effect.sync(() => {
+              patches.push(body);
+              const { displayName, ...rest } = body;
+              observed = {
+                ...observed,
+                ...rest,
+                ...(displayName === undefined ? {} : { name: displayName }),
+              };
+              return observed;
+            }),
+          createBucket: () => Effect.die("must converge in place"),
+          deleteBucket: () => Effect.die("must converge in place"),
+        } as unknown as PrismaManagementClient;
+
+        return Effect.gen(function* () {
+          const provider = yield* Bucket.Provider;
+          const attrs = yield* provider.reconcile(
+            reconcileInput(
               "Bucket",
-              olds,
-              { project: "project-2", name: "uploads" },
-              output,
-            ),
-          ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(
-            diffInput(
-              "Bucket",
-              olds,
-              { project: "project-1", name: "renamed" },
-              output,
-            ),
-          ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(
-            diffInput(
-              "Bucket",
-              olds,
+              {
+                project: "project-1",
+                name: "renamed",
+                branchId: "branch-2",
+                logicalId: "uploads",
+              },
+              bucketAttrs("bucket-1", "uploads"),
               { project: "project-1", name: "uploads", branchId: "branch-1" },
-              output,
             ),
+          );
+
+          expect(patches).toEqual([
+            { displayName: "renamed", branchId: "branch-2" },
+            { logicalId: "uploads" },
+          ]);
+          expect(attrs).toEqual({
+            ...bucketAttrs("bucket-1", "renamed"),
+            logicalId: "uploads",
+          });
+        }).pipe(Effect.provide(bucketLayer(client)));
+      },
+    );
+
+    it.effect("names the logical ID and branch on a duplicate", () => {
+      const client = {
+        listBuckets: () => Effect.succeed([]),
+        createBucket: () =>
+          Effect.fail(
+            new PrismaApiError({
+              method: "POST",
+              path: "/v1/buckets",
+              status: 409,
+              message: "HTTP 409",
+            }),
           ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(diffInput("Bucket", olds, olds, output)),
-        ).toBeUndefined();
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Bucket.Provider;
+        const error = yield* provider
+          .reconcile(
+            reconcileInput("Bucket", {
+              project: "project-1",
+              branchId: "branch-1",
+              logicalId: "uploads",
+            }),
+          )
+          .pipe(Effect.flip);
+
+        expect(String(error)).toContain("logical ID 'uploads'");
+        expect(String(error)).toContain("branch 'branch-1'");
       }).pipe(Effect.provide(bucketLayer(client)));
     });
 
