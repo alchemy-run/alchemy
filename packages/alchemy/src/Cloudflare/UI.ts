@@ -1,0 +1,202 @@
+import * as Layer from "effect/Layer";
+import * as AIUI from "./AI/ui.ts";
+import * as AccessUI from "./Access/ui.ts";
+import * as AccountUI from "./Account/ui.ts";
+import * as AcmUI from "./Acm/ui.ts";
+import * as AddressingUI from "./Addressing/ui.ts";
+import * as AlertingUI from "./Alerting/ui.ts";
+import * as ApiShieldUI from "./ApiShield/ui.ts";
+import * as ApiTokenUI from "./ApiToken/ui.ts";
+import * as ArgoUI from "./Argo/ui.ts";
+import * as BotManagementUI from "./BotManagement/ui.ts";
+import * as CacheUI from "./Cache/ui.ts";
+import * as CallsUI from "./Calls/ui.ts";
+import * as CertificateAuthoritiesUI from "./CertificateAuthorities/ui.ts";
+import * as ClientCertificateUI from "./ClientCertificate/ui.ts";
+import * as CloudConnectorUI from "./CloudConnector/ui.ts";
+import * as CloudforceOneUI from "./CloudforceOne/ui.ts";
+import * as ConnectivityUI from "./Connectivity/ui.ts";
+import * as ContentScanningUI from "./ContentScanning/ui.ts";
+import * as CustomCertificateUI from "./CustomCertificate/ui.ts";
+import * as CustomHostnameUI from "./CustomHostname/ui.ts";
+import * as CustomNameserverUI from "./CustomNameserver/ui.ts";
+import * as D1UI from "./D1/ui.ts";
+import * as DNSUI from "./DNS/ui.ts";
+import * as DdosProtectionUI from "./DdosProtection/ui.ts";
+import * as DevicesUI from "./Devices/ui.ts";
+import * as DiagnosticsUI from "./Diagnostics/ui.ts";
+import * as DlpUI from "./Dlp/ui.ts";
+import * as EmailUI from "./Email/ui.ts";
+import * as FirewallUI from "./Firewall/ui.ts";
+import * as FlagshipUI from "./Flagship/ui.ts";
+import * as FraudUI from "./Fraud/ui.ts";
+import * as GatewayUI from "./Gateway/ui.ts";
+import * as GoogleTagGatewayUI from "./GoogleTagGateway/ui.ts";
+import * as HealthcheckUI from "./Healthcheck/ui.ts";
+import * as HostnameTlsSettingUI from "./HostnameTlsSetting/ui.ts";
+import * as HyperdriveUI from "./Hyperdrive/ui.ts";
+import * as IamUI from "./Iam/ui.ts";
+import * as ImagesUI from "./Images/ui.ts";
+import * as IntelUI from "./Intel/ui.ts";
+import * as KVUI from "./KV/ui.ts";
+import * as KeylessCertificateUI from "./KeylessCertificate/ui.ts";
+import * as LeakedCredentialCheckUI from "./LeakedCredentialCheck/ui.ts";
+import * as LoadBalancerUI from "./LoadBalancer/ui.ts";
+import * as LogpushUI from "./Logpush/ui.ts";
+import * as LogsControlUI from "./LogsControl/ui.ts";
+import * as MagicCloudNetworkingUI from "./MagicCloudNetworking/ui.ts";
+import * as MagicNetworkMonitoringUI from "./MagicNetworkMonitoring/ui.ts";
+import * as MagicTransitUI from "./MagicTransit/ui.ts";
+import * as ManagedTransformsUI from "./ManagedTransforms/ui.ts";
+import * as MtlsCertificateUI from "./MtlsCertificate/ui.ts";
+import * as NetworkInterconnectsUI from "./NetworkInterconnects/ui.ts";
+import * as OrganizationUI from "./Organization/ui.ts";
+import * as OriginCaCertificateUI from "./OriginCaCertificate/ui.ts";
+import * as OriginPostQuantumEncryptionUI from "./OriginPostQuantumEncryption/ui.ts";
+import * as OriginTlsClientAuthUI from "./OriginTlsClientAuth/ui.ts";
+import * as PageRuleUI from "./PageRule/ui.ts";
+import * as PageShieldUI from "./PageShield/ui.ts";
+import * as PagesUI from "./Pages/ui.ts";
+import * as PipelinesUI from "./Pipelines/ui.ts";
+import * as QueuesUI from "./Queues/ui.ts";
+import * as R2UI from "./R2/ui.ts";
+import * as RealtimeKitUI from "./RealtimeKit/ui.ts";
+import * as RegionalHostnameUI from "./RegionalHostname/ui.ts";
+import * as RegistrarUI from "./Registrar/ui.ts";
+import * as ResourceSharingUI from "./ResourceSharing/ui.ts";
+import * as RiskScoringUI from "./RiskScoring/ui.ts";
+import * as RulesUI from "./Rules/ui.ts";
+import * as RulesetUI from "./Ruleset/ui.ts";
+import * as RumUI from "./Rum/ui.ts";
+import * as SchemaValidationUI from "./SchemaValidation/ui.ts";
+import * as SecretsStoreUI from "./SecretsStore/ui.ts";
+import * as SecurityTxtUI from "./SecurityTxt/ui.ts";
+import * as SnippetsUI from "./Snippets/ui.ts";
+import * as SpectrumUI from "./Spectrum/ui.ts";
+import * as SpeedUI from "./Speed/ui.ts";
+import * as SslUI from "./Ssl/ui.ts";
+import * as StreamUI from "./Stream/ui.ts";
+import * as TagsUI from "./Tags/ui.ts";
+import * as TokenValidationUI from "./TokenValidation/ui.ts";
+import * as TunnelUI from "./Tunnel/ui.ts";
+import * as TurnstileUI from "./Turnstile/ui.ts";
+import * as UrlNormalizationUI from "./UrlNormalization/ui.ts";
+import * as VectorizeUI from "./Vectorize/ui.ts";
+import * as VpcServiceUI from "./VpcService/ui.ts";
+import * as VulnerabilityScannerUI from "./VulnerabilityScanner/ui.ts";
+import * as WaitingRoomUI from "./WaitingRoom/ui.ts";
+import * as Web3UI from "./Web3/ui.ts";
+import * as WorkersUI from "./Workers/ui.ts";
+import * as WorkersForPlatformsUI from "./WorkersForPlatforms/ui.ts";
+import * as WorkflowsUI from "./Workflows/ui.ts";
+import * as ZarazUI from "./Zaraz/ui.ts";
+import * as ZoneUI from "./Zone/ui.ts";
+
+/**
+ * Aggregated dashboard UI providers for every Cloudflare service.
+ *
+ * Generated by scripts (see processes/Dashboard.md). Per-service providers
+ * live in `Cloudflare/{Service}/ui.ts`; keep merge groups nested (≤ 40
+ * entries) to stay under tsc's variadic-inference ceiling.
+ */
+export const ui = () =>
+  Layer.mergeAll(
+    Layer.mergeAll(
+      AIUI.ui(),
+      AccessUI.ui(),
+      AccountUI.ui(),
+      AcmUI.ui(),
+      AddressingUI.ui(),
+      AlertingUI.ui(),
+      ApiShieldUI.ui(),
+      ApiTokenUI.ui(),
+      ArgoUI.ui(),
+      BotManagementUI.ui(),
+      CacheUI.ui(),
+      CallsUI.ui(),
+      CertificateAuthoritiesUI.ui(),
+      ClientCertificateUI.ui(),
+      CloudConnectorUI.ui(),
+      CloudforceOneUI.ui(),
+      ConnectivityUI.ui(),
+      ContentScanningUI.ui(),
+      CustomCertificateUI.ui(),
+      CustomHostnameUI.ui(),
+      CustomNameserverUI.ui(),
+      D1UI.ui(),
+      DNSUI.ui(),
+      DdosProtectionUI.ui(),
+      DevicesUI.ui(),
+      DiagnosticsUI.ui(),
+      DlpUI.ui(),
+      EmailUI.ui(),
+      FirewallUI.ui(),
+      FlagshipUI.ui(),
+      FraudUI.ui(),
+      GatewayUI.ui(),
+      GoogleTagGatewayUI.ui(),
+      HealthcheckUI.ui(),
+      HostnameTlsSettingUI.ui(),
+      HyperdriveUI.ui(),
+      IamUI.ui(),
+      ImagesUI.ui(),
+      IntelUI.ui(),
+      KVUI.ui(),
+    ),
+    Layer.mergeAll(
+      KeylessCertificateUI.ui(),
+      LeakedCredentialCheckUI.ui(),
+      LoadBalancerUI.ui(),
+      LogpushUI.ui(),
+      LogsControlUI.ui(),
+      MagicCloudNetworkingUI.ui(),
+      MagicNetworkMonitoringUI.ui(),
+      MagicTransitUI.ui(),
+      ManagedTransformsUI.ui(),
+      MtlsCertificateUI.ui(),
+      NetworkInterconnectsUI.ui(),
+      OrganizationUI.ui(),
+      OriginCaCertificateUI.ui(),
+      OriginPostQuantumEncryptionUI.ui(),
+      OriginTlsClientAuthUI.ui(),
+      PageRuleUI.ui(),
+      PageShieldUI.ui(),
+      PagesUI.ui(),
+      PipelinesUI.ui(),
+      QueuesUI.ui(),
+      R2UI.ui(),
+      RealtimeKitUI.ui(),
+      RegionalHostnameUI.ui(),
+      RegistrarUI.ui(),
+      ResourceSharingUI.ui(),
+      RiskScoringUI.ui(),
+      RulesUI.ui(),
+      RulesetUI.ui(),
+      RumUI.ui(),
+      SchemaValidationUI.ui(),
+      SecretsStoreUI.ui(),
+      SecurityTxtUI.ui(),
+      SnippetsUI.ui(),
+      SpectrumUI.ui(),
+      SpeedUI.ui(),
+      SslUI.ui(),
+      StreamUI.ui(),
+      TagsUI.ui(),
+      TokenValidationUI.ui(),
+      TunnelUI.ui(),
+    ),
+    Layer.mergeAll(
+      TurnstileUI.ui(),
+      UrlNormalizationUI.ui(),
+      VectorizeUI.ui(),
+      VpcServiceUI.ui(),
+      VulnerabilityScannerUI.ui(),
+      WaitingRoomUI.ui(),
+      Web3UI.ui(),
+      WorkersUI.ui(),
+      WorkersForPlatformsUI.ui(),
+      WorkflowsUI.ui(),
+      ZarazUI.ui(),
+      ZoneUI.ui(),
+    ),
+  );
