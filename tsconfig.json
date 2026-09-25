@@ -401,6 +401,9 @@
       "path": "./examples/fly-redis/tsconfig.json"
     },
     {
+      "path": "./examples/fly-microservices/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-bucket/tsconfig.json"
     },
     {

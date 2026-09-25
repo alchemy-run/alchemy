@@ -1,5 +1,6 @@
 export * from "./App.ts";
 export * from "./AuthProvider.ts";
+export * from "./BindService.ts";
 export * from "./Bucket.ts";
 export * from "./Catalog.ts";
 export * from "./DeleteObject.ts";
@@ -36,6 +37,7 @@ export * from "./ListSecretsHttp.ts";
 export * from "./Machine.ts";
 export * from "./Metadata.ts";
 export * from "./MountVolume.ts";
+export { ServicePortConflict } from "./ports.ts";
 export * from "./Postgres.ts";
 export * from "./ConnectPostgres.ts";
 export * from "./ConnectPostgresHttp.ts";

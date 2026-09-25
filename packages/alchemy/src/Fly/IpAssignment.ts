@@ -385,6 +385,73 @@ const waitUntilGone = (appName: string, ip: string) =>
     }),
   );
 
+/** Whether the App has any address reachable from the internet. */
+export const hasPublicAddress = (appName: string) =>
+  listAssignments(appName).pipe(
+    Effect.map((ips) => ips.some((item) => inferType(item) !== "private_v6")),
+  );
+
+/**
+ * Converge the addresses of an App a {@link Service} owns. Every owned App
+ * gets a Flycast address on its private network (the organization's
+ * default network when `network` is omitted). A public App also gets a
+ * shared IPv4 and an IPv6; a private one has every public address
+ * released. All three types are free.
+ */
+export const syncOwnedAppAddresses = Effect.fn(function* (
+  appName: string,
+  isPublic: boolean,
+  network?: string,
+) {
+  const observed = yield* listAssignments(appName);
+  const isDesiredFlycast = (item: FlyIPAssignment) =>
+    inferType(item) === "private_v6" && networkOf(item) === network;
+  if (!observed.some(isDesiredFlycast)) {
+    yield* machines
+      .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+  }
+  if (isPublic) {
+    for (const type of ["shared_v4", "v6"] as const) {
+      if (observed.some((item) => inferType(item) === type)) continue;
+      yield* machines
+        .createAppIPAssignment({ app_name: appName, type })
+        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    }
+  }
+  // Release public addresses of a private Service and Flycast addresses
+  // on any other network.
+  for (const item of observed) {
+    if (item.ip === undefined || isDesiredFlycast(item)) continue;
+    if (isPublic && inferType(item) !== "private_v6") continue;
+    yield* machines
+      .deleteAppIPAssignment({ app_name: appName, ip: item.ip })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    yield* waitUntilGone(appName, item.ip);
+  }
+});
+
+/**
+ * Add a Flycast address on `network` to an App a {@link Service} shares,
+ * so bound callers can reach it. Only ever adds; the address is removed
+ * with the App.
+ */
+export const ensureFlycastAddress = Effect.fn(function* (
+  appName: string,
+  network?: string,
+) {
+  const observed = yield* listAssignments(appName);
+  if (
+    observed.some(
+      (item) => inferType(item) === "private_v6" && networkOf(item) === network,
+    )
+  )
+    return;
+  yield* machines
+    .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
+    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+});
+
 export const IpAssignmentProvider = () =>
   Provider.succeed(IpAssignment, {
     stables: ["ip", "appName", "type", "region"],

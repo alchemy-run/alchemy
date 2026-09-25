@@ -377,11 +377,6 @@ export type Machine = Resource<
     imageRef: MachineImageRef | undefined;
     /** Observed guest size. */
     guest: MachineGuest | undefined;
-    /**
-     * Public `https://{appName}.fly.dev` URL when this Machine publishes
-     * a proxy service. `undefined` when no services are configured.
-     */
-    url: string | undefined;
     /** Number of Machines in the replica set. */
     count: number;
     /** Disks mounted on replica 0. */
@@ -542,9 +537,9 @@ export type Machine = Resource<
  * ```
  *
  * ### Publish a proxy service
- * `services` publishes ports on Fly's proxy. `{app}.fly.dev` over IPv4
- * still needs an {@link IpAssignment} on the parent App. `url` is
- * `https://{appName}.fly.dev` when a proxy service is configured.
+ * `services` publishes ports on Fly's proxy. The App needs an
+ * {@link IpAssignment} before `{app}.fly.dev` answers. For a public
+ * endpoint without managing Apps and addresses, use a {@link Service}.
  *
  * Handlers are `http`, `tls`, `pg_tls`, and similar. Set `forceHttps`
  * to redirect HTTP to HTTPS. Use `startPort` / `endPort` for a
@@ -1103,7 +1098,6 @@ const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
   privateIp: set.privateIp,
   imageRef: set.imageRef,
   guest: set.guest,
-  url: set.url,
   count: set.count,
   mounts: set.mounts,
   replicas: set.replicas,
