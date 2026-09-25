@@ -202,9 +202,9 @@ safe to call inside the constructor.
 +             title: payload.title,
 +             completed: false,
 +           });
-+           yield* tasks.put(task.id, JSON.stringify(task)).pipe(Effect.orDie);
++           yield* tasks.put(task.id, JSON.stringify(task));
 +           return task;
-+         }),
++         }).pipe(Effect.orDie),
 +       ),
 +   );
 
@@ -345,9 +345,9 @@ export default Cloudflare.Worker(
               title: payload.title,
               completed: false,
             });
-            yield* tasks.put(task.id, JSON.stringify(task)).pipe(Effect.orDie);
+            yield* tasks.put(task.id, JSON.stringify(task));
             return task;
-          }),
+          }).pipe(Effect.orDie),
         ),
     );
 

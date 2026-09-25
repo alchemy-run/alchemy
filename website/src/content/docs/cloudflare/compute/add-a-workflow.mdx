@@ -305,14 +305,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.Workflows.task(
-        "kv-roundtrip",
-        Effect.gen(function* () {
-          const key = `workflow:${roomId}`;
-          yield* kv.put(key, message);
-          return yield* kv.get(key);
-        }).pipe(Effect.orDie),
-      );
+      const stored = yield* Cloudflare.Workflows.task("kv-roundtrip", /* ... */);
 
       const room = rooms.getByName(roomId);
       yield* Cloudflare.Workflows.task(
