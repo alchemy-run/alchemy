@@ -1152,6 +1152,31 @@ const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
 };
 
 /**
+ * The `env` entries no binding row covers, i.e. the values the upload adds
+ * straight from `props.env` (see `appendAlchemyAndEnvBindings`). Returns
+ * `undefined` when there are none so existing metadata hashes stay stable.
+ *
+ * @internal exported for unit testing.
+ */
+export const unboundEnvForHash = (
+  env: WorkerProps["env"],
+  bindings: readonly ResourceBinding<Worker["Binding"]>[],
+): Record<string, unknown> | undefined => {
+  if (!env) return undefined;
+  const bound = new Set<string>();
+  for (const binding of bindings) {
+    for (const wire of binding.data?.bindings ?? []) {
+      if (typeof wire?.name === "string") bound.add(wire.name);
+    }
+    for (const key of Object.keys(binding.data?.env ?? {})) bound.add(key);
+  }
+  const unbound = Object.entries(env).filter(
+    ([key, value]) => value !== undefined && !bound.has(key),
+  );
+  return unbound.length > 0 ? Object.fromEntries(unbound) : undefined;
+};
+
+/**
  * Hash a Worker's deploy-time metadata surface so metadata-only edits are
  * detected by the diff (#745). Previously the update decision compared only
  * the bundle/vite/asset-content hashes, so a change to e.g. a compatibility
@@ -1169,7 +1194,7 @@ const resolveWorkerMetadataHash = ({
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
-    // Every `env` entry is lowered into binding data by
+    // Every declared `env` entry is lowered into binding data by
     // `bindWorkerAsyncBindings`, including literals and VITE_ values. Hash only
     // that canonical wire representation. Resource-backed env values can be
     // materialized as different attribute projections between reconcile and a
@@ -1179,6 +1204,10 @@ const resolveWorkerMetadataHash = ({
       sid: binding.sid,
       data: binding.data,
     })),
+    // `Config` values read in an Effect-native Worker's Init are merged into
+    // `props.env` after `bindWorkerAsyncBindings` runs, so no binding carries
+    // them (#1831). They are plain strings or `Redacted` strings.
+    env: unboundEnvForHash(props.env, bindings),
     assets: workerAssetConfigForHash(props.assets),
     cache: props.cache,
     limits: props.limits,
