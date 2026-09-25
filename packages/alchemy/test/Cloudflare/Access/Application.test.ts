@@ -11,13 +11,7 @@ import * as Provider from "@/Provider";
 import { Provider as ProviderService } from "@/Provider.ts";
 import * as State from "@/State/State";
 import * as Test from "@/Test/Alchemy";
-import {
-  ACCOUNT_ID,
-  notFound,
-  session,
-  stubCloudflare,
-  type StubCall,
-} from "../StubCloudflare.ts";
+import { ACCOUNT_ID, notFound, session, stubCloudflare, type StubCall } from "../StubCloudflare.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -539,9 +533,7 @@ test.provider(
 
       const program = (sessionDuration: string) =>
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
-            AdoptPolicy.adopt(true),
-          );
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           return yield* Cloudflare.Access.Application("AdoptById", {
             applicationId: existing.id!,
             type: "self_hosted",
@@ -561,9 +553,7 @@ test.provider(
         appId: existing.id!,
       })) as unknown as Record<string, any>;
       expect(live.sessionDuration).toEqual("12h");
-      expect(live.corsHeaders?.allowedOrigins).toEqual([
-        "https://app.example.com",
-      ]);
+      expect(live.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
       expect(live.corsHeaders?.allowCredentials).toBe(true);
       expect(live.sameSiteCookieAttribute).toEqual("lax");
       expect(live.httpOnlyCookieAttribute).toBe(true);
@@ -576,19 +566,12 @@ test.provider(
         .getAccessApplicationForAccount({ accountId, appId: existing.id! })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("AccessApplicationNotFound", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -602,22 +585,17 @@ test.provider(
 
       const program = (props: Partial<Cloudflare.Access.ApplicationProps>) =>
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
-            AdoptPolicy.adopt(true),
-          );
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const cors = yield* Cloudflare.Access.Application("CorsApp", {
             type: "self_hosted",
             domain: `alchemy-test-cors.${zoneName}`,
             ...props,
           });
-          const preflight = yield* Cloudflare.Access.Application(
-            "PreflightApp",
-            {
-              type: "self_hosted",
-              domain: `alchemy-test-preflight.${zoneName}`,
-              optionsPreflightBypass: true,
-            },
-          );
+          const preflight = yield* Cloudflare.Access.Application("PreflightApp", {
+            type: "self_hosted",
+            domain: `alchemy-test-preflight.${zoneName}`,
+            optionsPreflightBypass: true,
+          });
           return { cors, preflight };
         });
       const getLive = (appId: string) =>
@@ -637,16 +615,12 @@ test.provider(
         }),
       );
       const live1 = yield* getLive(cors.applicationId);
-      expect(live1.corsHeaders?.allowedOrigins).toEqual([
-        "https://app.example.com",
-      ]);
+      expect(live1.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
       expect(live1.corsHeaders?.allowedMethods).toEqual(["GET"]);
       expect(live1.sameSiteCookieAttribute).toEqual("strict");
       expect(live1.httpOnlyCookieAttribute).toBe(true);
       expect(live1.enableBindingCookie).toBe(true);
-      expect(
-        (yield* getLive(preflight.applicationId)).optionsPreflightBypass,
-      ).toBe(true);
+      expect((yield* getLive(preflight.applicationId)).optionsPreflightBypass).toBe(true);
 
       // Settings dropped from the props are left as they are live.
       yield* stack.deploy(
@@ -656,9 +630,7 @@ test.provider(
         }),
       );
       const live2 = yield* getLive(cors.applicationId);
-      expect(live2.corsHeaders?.allowedOrigins).toEqual([
-        "https://app.example.com",
-      ]);
+      expect(live2.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
       expect(live2.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
       expect(live2.sameSiteCookieAttribute).toEqual("lax");
       expect(live2.httpOnlyCookieAttribute).toBe(true);
@@ -667,12 +639,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -719,17 +686,13 @@ test.provider(
       expect(oidcApp.clientId).toBeDefined();
       expect(oidcApp.clientSecret).toBeUndefined();
 
-      const second = yield* stack.deploy(
-        program("https://oidc.example.com/callback"),
-      );
+      const second = yield* stack.deploy(program("https://oidc.example.com/callback"));
       expect(second.oidc.applicationId).toEqual(first.oidc.applicationId);
       const live = (yield* zeroTrust.getAccessApplicationForAccount({
         accountId,
         appId: second.oidc.applicationId,
       })) as unknown as { saasApp?: Record<string, any> };
-      expect(live.saasApp?.redirectUris).toEqual([
-        "https://oidc.example.com/callback",
-      ]);
+      expect(live.saasApp?.redirectUris).toEqual(["https://oidc.example.com/callback"]);
       // The client id survives the update — clients stay configured.
       expect(live.saasApp?.clientId).toEqual(oidcApp.clientId);
 
@@ -773,20 +736,34 @@ const liveSelfHosted = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const liveSaml = (overrides: Record<string, unknown> = {}) => ({
+// Real SaaS responses also carry the self-hosted-looking `domain` and
+// `session_duration` keys.
+const saasCommon = {
   id: APP_ID,
-  aud: "aud-saml",
+  uid: APP_ID,
   type: "saas",
-  name: "Looker",
+  domain: "team.cloudflareaccess.com/cdn-cgi/access/sso/saml/x",
+  session_duration: "24h",
+  allowed_idps: [],
+  app_launcher_visible: true,
+  auto_redirect_to_identity: false,
+  tags: [],
   policies: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const liveSaml = (overrides: Record<string, unknown> = {}) => ({
+  ...saasCommon,
+  aud: "aud-saml",
+  name: "Looker",
   saas_app: {
     auth_type: "saml",
     sp_entity_id: "https://example.looker.com",
     consumer_service_url: "https://example.looker.com/saml/acs",
     name_id_format: "email",
     sso_endpoint: "https://team.cloudflareaccess.com/cdn-cgi/access/sso/saml/x",
-    idp_entity_id:
-      "https://team.cloudflareaccess.com/cdn-cgi/access/sso/saml/x",
+    idp_entity_id: "https://team.cloudflareaccess.com/cdn-cgi/access/sso/saml/x",
     public_key: "PUBLIC-KEY",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
@@ -795,11 +772,9 @@ const liveSaml = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const liveOidc = (saasApp: Record<string, unknown> = {}) => ({
-  id: APP_ID,
+  ...saasCommon,
   aud: "aud-oidc",
-  type: "saas",
   name: "Coder",
-  policies: [],
   saas_app: {
     auth_type: "oidc",
     client_id: "client-1",
@@ -841,10 +816,7 @@ const withProvider = <A, E, R>(
         "Cloudflare.Access.Application",
       );
       return yield* use(provider);
-    }).pipe(
-      Effect.provide(Cloudflare.Access.ApplicationProvider()),
-      Effect.provide(stub.layer),
-    );
+    }).pipe(Effect.provide(Cloudflare.Access.ApplicationProvider()), Effect.provide(stub.layer));
     return { result, calls: stub.calls };
   });
 
@@ -867,9 +839,8 @@ const reconcileApp = (
   );
 
 /** GET answers with `live`; PUT/POST echo the request over it. */
-const echo =
-  (live: (overrides?: Record<string, unknown>) => object) => (call: StubCall) =>
-    call.method === "GET" ? live() : live(call.body);
+const echo = (live: (overrides?: Record<string, unknown>) => object) => (call: StubCall) =>
+  call.method === "GET" ? live() : live(call.body);
 
 const putOf = (calls: StubCall[]) => calls.find((c) => c.method === "PUT");
 
@@ -882,51 +853,42 @@ const selfHostedNews: Cloudflare.Access.ApplicationProps = {
 describe(
   "Application reconcile (offline)",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:access", "local"],
   },
   () => {
-    it.effect(
-      "update keeps live CORS, cookie and preflight settings it does not manage",
-      () =>
-        Effect.gen(function* () {
-          const { calls } = yield* reconcileApp(
-            { ...selfHostedNews, sessionDuration: "12h" },
-            existingOutput(),
-            echo(liveSelfHosted),
-          );
+    it.effect("update keeps live CORS, cookie and preflight settings it does not manage", () =>
+      Effect.gen(function* () {
+        const { calls } = yield* reconcileApp(
+          { ...selfHostedNews, sessionDuration: "12h" },
+          existingOutput(),
+          echo(liveSelfHosted),
+        );
 
-          const put = putOf(calls);
-          expect(put?.path).toEqual(
-            `/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}`,
-          );
-          expect(put?.body).toMatchObject({
-            session_duration: "12h",
-            allowed_idps: ["idp-1"],
-            auto_redirect_to_identity: true,
-            cors_headers: {
-              allowed_origins: ["https://app.example.com"],
-              allowed_methods: ["GET", "POST"],
-              allow_credentials: true,
-            },
-            same_site_cookie_attribute: "lax",
-            http_only_cookie_attribute: true,
-            enable_binding_cookie: false,
-            path_cookie_attribute: true,
-            options_preflight_bypass: false,
-            skip_interstitial: true,
-            service_auth_401_redirect: true,
-            custom_deny_url: "https://deny.example.com",
-          });
-          expect(put?.body.cors_headers).not.toHaveProperty("max_age");
-          for (const readOnly of ["id", "aud", "created_at", "updated_at"]) {
-            expect(put?.body).not.toHaveProperty(readOnly);
-          }
-        }),
+        const put = putOf(calls);
+        expect(put?.path).toEqual(`/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}`);
+        expect(put?.body).toMatchObject({
+          session_duration: "12h",
+          allowed_idps: ["idp-1"],
+          auto_redirect_to_identity: true,
+          cors_headers: {
+            allowed_origins: ["https://app.example.com"],
+            allowed_methods: ["GET", "POST"],
+            allow_credentials: true,
+          },
+          same_site_cookie_attribute: "lax",
+          http_only_cookie_attribute: true,
+          enable_binding_cookie: false,
+          path_cookie_attribute: true,
+          options_preflight_bypass: false,
+          skip_interstitial: true,
+          service_auth_401_redirect: true,
+          custom_deny_url: "https://deny.example.com",
+        });
+        expect(put?.body.cors_headers).not.toHaveProperty("max_age");
+        for (const readOnly of ["id", "aud", "created_at", "updated_at"]) {
+          expect(put?.body).not.toHaveProperty(readOnly);
+        }
+      }),
     );
 
     it.effect("no update when declared settings already match", () =>
@@ -1062,32 +1024,27 @@ describe(
 
     it.effect("read finds an application by its declared id as owned", () =>
       Effect.gen(function* () {
-        const { result, calls } = yield* withProvider(
-          echo(liveSelfHosted),
-          (provider) =>
-            provider.read!({
-              id: "App",
-              fqn: "App",
-              instanceId: "0123456789abcdef0123456789abcdef",
-              olds: { ...selfHostedNews, applicationId: APP_ID },
-              output: undefined,
-            }),
+        const { result, calls } = yield* withProvider(echo(liveSelfHosted), (provider) =>
+          provider.read!({
+            id: "App",
+            fqn: "App",
+            instanceId: "0123456789abcdef0123456789abcdef",
+            olds: { ...selfHostedNews, applicationId: APP_ID },
+            output: undefined,
+          }),
         );
 
         expect(result?.applicationId).toEqual(APP_ID);
         expect(result?.aud).toEqual("aud-1");
         expect(AdoptPolicy.Unowned.is(result)).toBe(false);
-        expect(calls.map((c) => c.path)).toEqual([
-          `/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}`,
-        ]);
+        expect(calls.map((c) => c.path)).toEqual([`/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}`]);
       }),
     );
 
     it.effect("read of a domain match stays unowned", () =>
       Effect.gen(function* () {
         const { result } = yield* withProvider(
-          (call) =>
-            (call.query.get("page") ?? "1") === "1" ? [liveSelfHosted()] : [],
+          (call) => ((call.query.get("page") ?? "1") === "1" ? [liveSelfHosted()] : []),
           (provider) =>
             provider.read!({
               id: "App",
@@ -1137,8 +1094,7 @@ describe(
           customAttributes: [
             {
               name: "email",
-              nameFormat:
-                "urn:oasis:names:tc:SAML:2.0:attrname-format:basic" as const,
+              nameFormat: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic" as const,
               source: { name: "email" },
             },
           ],
@@ -1167,8 +1123,7 @@ describe(
             custom_attributes: [
               {
                 name: "email",
-                name_format:
-                  "urn:oasis:names:tc:SAML:2.0:attrname-format:basic",
+                name_format: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic",
                 source: { name: "email" },
               },
             ],
@@ -1177,7 +1132,7 @@ describe(
         expect(create?.body).not.toHaveProperty("domain");
         expect(calls.some((c) => c.method === "PUT")).toBe(false);
         expect(result.type).toEqual("saas");
-        expect(result.domain).toEqual("");
+        expect(result.domain).toEqual(saasCommon.domain);
         expect(result.saasApp).toMatchObject({
           ssoEndpoint: liveSaml().saas_app.sso_endpoint,
           idpEntityId: liveSaml().saas_app.idp_entity_id,
@@ -1198,8 +1153,7 @@ describe(
             },
           },
           existingOutput({ type: "saas", aud: "aud-oidc", domain: "" }),
-          (call) =>
-            call.method === "GET" ? liveOidc() : liveOidc(call.body.saas_app),
+          (call) => (call.method === "GET" ? liveOidc() : liveOidc(call.body.saas_app)),
         );
 
         expect(putOf(calls)?.body.saas_app).toMatchObject({
