@@ -14,6 +14,7 @@ import type { FrameworkBuildOptions } from "../core/Framework.ts";
 import {
   make as makeNode,
   makeNodeTarget,
+  NEXT_PRODUCTION_APP_SOURCE,
   type NextjsNodeOptions,
 } from "./node.ts";
 
@@ -34,13 +35,9 @@ export const target = (config?: Parameters<typeof makeNodeTarget>[0]) => {
           handler: {
             kind: "fetch" as const,
             imports: [
-              'import next from "next";',
               'import requestMeta from "next/dist/server/request-meta.js";',
               'import { toFetchHandler } from "./neon-node-adapter.mjs";',
-              "const dir = path.dirname(fileURLToPath(import.meta.url));",
-              'process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(JSON.parse(fs.readFileSync(path.join(dir, ".next/required-server-files.json"), "utf8")).config);',
-              "const app = next({ dev: false, dir });",
-              "await app.prepare();",
+              NEXT_PRODUCTION_APP_SOURCE,
               "const nextHandler = app.getRequestHandler();",
               "const fetchNext = request => {",
               "  const url = new URL(request.url);",
