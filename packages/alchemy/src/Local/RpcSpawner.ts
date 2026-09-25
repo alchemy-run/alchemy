@@ -171,8 +171,11 @@ export const make = Effect.fn(function* ({
     // This scope is the child handle's sole owner. Graceful shutdown runs this
     // finalizer; abrupt parent loss closes the RPC parent connection and the
     // child self-terminates (both paths are covered by RpcSpawnerCleanup).
-    // Command cleanup allows 1s for TERM and 1s for KILL; reserve 1s for sidecar teardown.
-    const kill = handle.kill({ forceKillAfter: "3 seconds" });
+    // Command cleanup allows 1s for TERM and 1s for KILL, and the sidecar
+    // handles SIGTERM only once its event loop is free: synchronous work in
+    // the sidecar has held it for over 4s during `alchemy dev` startup. A
+    // hard kill before then leaves `Command.Dev` process groups running.
+    const kill = handle.kill({ forceKillAfter: "10 seconds" });
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) =>
       publish({ channel: "stdout", line }),

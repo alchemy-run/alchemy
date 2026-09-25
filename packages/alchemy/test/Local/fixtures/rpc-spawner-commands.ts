@@ -22,6 +22,7 @@ const program = Effect.gen(function* () {
         home: string;
         ready: string;
         commands: Array<{ command: string; env: Record<string, string> }>;
+        busy?: boolean;
       },
   );
   const spawner = yield* RpcSpawner;
@@ -60,6 +61,14 @@ const program = Effect.gen(function* () {
       ) as ReturnType<RpcProxyApi["getProvider"]>,
   );
   const provider = unwrapRpcHandlers(wrapped, []);
+  if (input.busy) {
+    yield* Effect.promise(() =>
+      session.getProvider(
+        "Test.Busy",
+        new URL("./busy-sidecar-group.ts", import.meta.url).href,
+      ),
+    );
+  }
   yield* Effect.forEach(
     input.commands,
     (news, index) =>
