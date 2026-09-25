@@ -26,6 +26,8 @@
     "!bin/register-dev-mode.js",
     "lib",
     "src",
+    "AGENTS.md",
+    "CLAUDE.md",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
