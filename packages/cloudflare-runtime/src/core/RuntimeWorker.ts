@@ -77,6 +77,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cf?: Record<string, unknown>;
   /**
+   * Serve Miniflare's Local Explorer at `/cdn-cgi/explorer`: a UI + REST API
+   * for browsing and editing this worker's local KV namespaces, D1
+   * databases, R2 buckets, Durable Objects and Workflows. Explorers of local
+   * workers running in other dev processes are aggregated via the dev
+   * registry. Only reachable through `localhost` Host/Origin headers.
+   */
+  readonly explorer?: boolean;
+  /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *
    * By default, workerd does not log uncaught exceptions thrown by the

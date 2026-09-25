@@ -6835,6 +6835,9 @@ importers:
       itty-time:
         specifier: 'catalog:'
         version: 2.0.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260722.0
       mysql2:
         specifier: 3.24.2
         version: 3.24.2(@types/node@26.2.0)
