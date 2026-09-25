@@ -118,12 +118,15 @@ export const renderHelmChart = Effect.fn(function* (
         { concurrency: "unbounded" },
       ),
     ),
+    // Scope the child to this render so it isn't tied to (and killed by)
+    // an enclosing scope that closes before helm exits.
+    Effect.scoped,
     // A spawn failure (almost always ENOENT) means the helm CLI itself is
     // missing — a machine-setup problem, not a resource error.
     Effect.catchCause((cause) =>
       Effect.die(
         new Error(
-          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI — install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
+          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI; if it isn't installed, install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
         ),
       ),
     ),
