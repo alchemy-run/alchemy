@@ -274,11 +274,12 @@ export const ManifestProvider = () =>
             ),
           );
           if (!transport) return;
-          yield* deleteObject({ transport, object: output.ref }).pipe(
-            // Tolerate any residual API failure so delete stays idempotent
-            // (e.g. the CRD backing an object was removed before the object).
-            Effect.catch(() => Effect.void),
-          );
+          // `deleteObject` already treats a 404 as deleted — including the
+          // CRD backing the object having been removed first (discovery no
+          // longer lists the kind). Every other failure (401/403, 5xx,
+          // network) must surface rather than drop the state row while the
+          // object is still live.
+          yield* deleteObject({ transport, object: output.ref });
         }),
       };
     }),

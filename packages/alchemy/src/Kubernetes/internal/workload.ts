@@ -82,18 +82,39 @@ const sortKeysDeep = (value: unknown): unknown => {
 };
 
 /**
- * A stable identity string for a connection's *target cluster* — the auth
- * descriptor (which names the cluster for managed clouds and the
- * kubeconfig context otherwise). Changing it means the workload moves
- * clusters, which is a replacement. Deliberately excludes `endpoint` /
- * CA: managed clusters can rotate those in place.
+ * Auth kinds whose descriptor is only a credential (or a recipe for
+ * minting one) against an explicit, required `endpoint`. The descriptor
+ * says nothing about *which* cluster is targeted, so rotating it must not
+ * read as a cluster move.
+ */
+const endpointIdentifiedKinds: ReadonlySet<ConnectionAuth["kind"]> = new Set([
+  "token",
+  "client-cert",
+  "exec",
+]);
+
+/**
+ * A stable identity string for a connection's *target cluster*. Changing
+ * it means the workload moves clusters, which is a replacement.
+ *
+ * - Kinds that name the cluster (a managed cloud's cluster name, a
+ *   kubeconfig path/context) are identified by their auth descriptor, and
+ *   deliberately exclude `endpoint` / CA: managed clusters can rotate
+ *   those in place.
+ * - Credential-only kinds (`token`, `client-cert`, `exec`) are identified
+ *   by `endpoint` alone: their descriptor is credential material, and
+ *   rotating it in place must stay an update — a replacement deletes the
+ *   old generation, which for a `Manifest`, a Helm release, or an
+ *   explicitly named workload is the same live object.
  */
 export const connectionIdentity = (
   connection: Connection | undefined,
 ): string | undefined =>
   connection === undefined
     ? undefined
-    : JSON.stringify(sortKeysDeep(connection.auth));
+    : endpointIdentifiedKinds.has(connection.auth.kind)
+      ? JSON.stringify({ endpoint: connection.endpoint })
+      : JSON.stringify(sortKeysDeep(connection.auth));
 
 /**
  * The persisted connection of a workload's attributes, tolerating legacy
