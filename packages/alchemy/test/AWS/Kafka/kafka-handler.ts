@@ -154,4 +154,7 @@ export default KafkaTestFunction.make(
       ),
     ),
   ),
-);
+  // Re-merge so the deploying Stack can `yield* FixtureCluster` and expose the
+  // cluster attributes as deploy-time outputs. Reusing the same
+  // `FixtureClusterLive` reference keeps it a single shared cluster.
+).pipe(Layer.provideMerge(FixtureClusterLive));

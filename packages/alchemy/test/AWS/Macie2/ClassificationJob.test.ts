@@ -84,14 +84,23 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(live.tags?.["env"]).toBe("test");
       expect(live.tags?.["alchemy::id"]).toBe("Scan");
 
-      // Destroy — the job is cancelled, the bucket removed, and Macie disabled.
-      yield* stack.destroy();
+      // Phase 3 — remove the job while Macie stays enabled. Disabling Macie
+      // deletes every job, so the cancellation must be observed before the
+      // session is destroyed.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Session("Macie", { status: "ENABLED" });
+        }),
+      );
       const after = yield* macie2.describeClassificationJob({
         jobId: created.jobId,
       });
       // A cancelled/terminal job reports CANCELLED (or COMPLETE if it finished
       // scanning the empty bucket first).
       expect(["CANCELLED", "COMPLETE"]).toContain(after.jobStatus);
+
+      // Destroy — Macie is disabled.
+      yield* stack.destroy();
       const session = yield* getSession;
       expect(session).toBeUndefined();
     }),

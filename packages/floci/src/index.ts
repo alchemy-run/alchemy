@@ -4,7 +4,8 @@
  *
  * alchemy's AWS local dev points its providers at a floci endpoint. This
  * package owns the emulator lifecycle with a strict resolution order that
- * keeps every local loop registry-free:
+ * keeps every local loop registry-free. `ALCHEMY_FLOCI_EXTERNAL=1` requires an
+ * existing server and disables Docker fallback, for source development:
  *
  * 1. **Already serving** — if anything answers on the endpoint (e.g.
  *    `bun floci:dev` running `mvn quarkus:dev` from a floci checkout, or a
@@ -128,6 +129,11 @@ export class FlociError extends Data.TaggedError("FlociError")<{
 }> {}
 
 export interface FlociConfig {
+  /**
+   * Use an existing server without starting or replacing Docker containers.
+   * Also enabled by `ALCHEMY_FLOCI_EXTERNAL=1` for source development.
+   */
+  readonly external?: boolean | undefined;
   /**
    * Image to run when the emulator is not already serving.
    * Resolution order: `ALCHEMY_FLOCI_IMAGE` env var, this field,
@@ -388,6 +394,20 @@ const ensureFlociUnsynchronized = (
   Effect.gen(function* () {
     const port = config?.port ?? DEFAULT_FLOCI_PORT;
     const endpoint = `http://localhost:${port}`;
+    if (config?.external || process.env.ALCHEMY_FLOCI_EXTERNAL === "1") {
+      yield* checkHealth(endpoint).pipe(
+        Effect.timeout("5 seconds"),
+        Effect.mapError(
+          (cause) =>
+            new FlociError({
+              message: `external floci server unavailable at ${endpoint}`,
+              cause,
+            }),
+        ),
+      );
+      yield* syncCaBundle(endpoint);
+      return { endpoint, managed: false };
+    }
     const containerName = config?.containerName ?? DEFAULT_CONTAINER_NAME;
     const published = yield* publishedPorts(containerName);
     const elbPorts = yield* resolvePublishablePorts(

@@ -39,12 +39,21 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
+import {
+  diffBindings,
+  havePropsChanged,
+  isResolved,
+  stripEffects,
+} from "../../Diff.ts";
 import { canonicalHash } from "../../Local/LocalProvider.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ProviderService } from "../../Provider.ts";
-import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
+import type {
+  ResourceBinding,
+  ResourceClassLike,
+  ResourceLike,
+} from "../../Resource.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
 import { moduleExtension } from "../../Util/Node.ts";
@@ -381,11 +390,15 @@ export const makeDevWatchProvider = <
           olds,
           news: rawNews,
           output,
+          oldBindings = [],
+          newBindings = [],
         }: {
           id: string;
           olds: Props;
           news: Props;
           output: Attrs | undefined;
+          oldBindings?: ResourceBinding[];
+          newBindings?: ResourceBinding[];
         }) {
           // Runtime props (an Effect-native Function's handler, a Layer)
           // arrive as Effects, which `isResolved` classifies as unresolved.
@@ -426,6 +439,17 @@ export const makeDevWatchProvider = <
           const persistedHash = yield* canonicalHash(output as object);
           const watcherHash = yield* canonicalHash(entry.attrs as object);
           if (persistedHash !== watcherHash) {
+            return { action: "update" as const };
+          }
+          // Binding data (env vars, policy statements) is applied by
+          // reconcile, not the watch loop. An explicit `noop` is final — the
+          // engine does not re-check bindings after it — so a binding-only
+          // change must plan an update here.
+          if (
+            diffBindings(oldBindings, newBindings).some(
+              (b) => b.action !== "noop",
+            )
+          ) {
             return { action: "update" as const };
           }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {

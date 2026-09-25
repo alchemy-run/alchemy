@@ -58,6 +58,7 @@ const indent = (text: string, prefix = "  "): string =>
 /** Mutable per-run reporter state. */
 interface ReporterState {
   readonly hookLogs: Map<string, ReadonlyArray<LogEntry>>;
+  readonly failedFiles: Set<string>;
   /**
    * Currently-executing work items: tests AND file-level hooks. Hooks must
    * be tracked too — a `beforeAll` deploy can legitimately run for many
@@ -272,6 +273,7 @@ const onEvent = (
         case "pass":
           return write(`${count} ${green("✓")} ${title} ${duration}${retries}`);
         case "fail": {
+          state.failedFiles.add(event.test.file);
           // Show the failure's details immediately so it can be inspected
           // while the run continues (passed tests stay silent). The end-of-run
           // Failures section repeats them consolidated, with file hook logs.
@@ -299,7 +301,10 @@ const onEvent = (
       }
     }
     case "FileEnd": {
-      if (event.logs.length > 0) {
+      if (
+        event.logs.length > 0 &&
+        (event.error !== undefined || state.failedFiles.has(event.file))
+      ) {
         state.hookLogs.set(event.file, event.logs);
       }
       if (event.error !== undefined) {
@@ -391,6 +396,7 @@ export const PlainReporterLive: Layer.Layer<Reporter> = Layer.sync(Reporter)(
   () => {
     const state: ReporterState = {
       hookLogs: new Map(),
+      failedFiles: new Set(),
       running: new Map(),
       total: 0,
       completed: 0,

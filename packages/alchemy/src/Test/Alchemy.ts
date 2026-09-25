@@ -11,6 +11,7 @@
 import {
   currentFile,
   exclusiveOf,
+  registerFileCleanup,
   registerHook,
   registerTest,
   retryOf,
@@ -132,15 +133,15 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // children) must outlive a single test boundary, otherwise the proxy is
   // killed the moment `beforeAll(deploy(Stack))` resolves and every later
   // `HttpClient.get(workerUrl)` hits a dead port. The scope is closed by
-  // `destroy(...)` (or by the fallback afterAll below).
-  const sharedScope = Scope.makeUnsafe("sequential");
-  // In dev mode, run local providers behind one file-scoped RPC sidecar
-  // (the `alchemy dev` topology). Lives in its own scope — NOT sharedScope,
-  // which `destroy(Stack)` closes mid-file in self-contained tests — and is
-  // closed by the fallback afterAll below.
-  const sidecar = Core.makeSidecarHandle(options);
+  // `destroy(...)` (or by file cleanup below).
+  let sharedScope: Scope.Closeable | undefined = Scope.makeUnsafe("sequential");
+  // Session ownership outlives a mid-file destroy, but not file cleanup.
+  let sidecar = Core.makeSidecarHandle(options);
+  const clearResults = new Set<() => void>();
   const wrap = <A>(eff: TestEffect<A>) =>
-    Core.toEffect(eff, options, sharedScope, sidecar);
+    sharedScope === undefined
+      ? Effect.die("Test runtime is closed")
+      : Core.toEffect(eff, options, sharedScope, sidecar);
 
   const addTest = (
     name: string,
@@ -174,6 +175,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     file: string | undefined,
   ) => {
+    if (sharedScope === undefined) return Effect.die("Test runtime is closed");
     // Durable, file-namespaced scratch state (`.alchemy/state`). A run that
     // dies mid-delete — e.g. the runner abandons teardown 10s after a test
     // timeout while a CloudFront disable-wait is still in flight — leaves
@@ -233,18 +235,21 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     eff: TestEffect<A>,
     hookOptions?: TestOptions,
   ) => {
-    let result: A;
+    let result: A | undefined;
+    clearResults.add(() => {
+      result = undefined;
+    });
     registerHook("beforeAll", {
       body: () =>
         wrap(eff).pipe(
           Effect.map((value) => {
-            result = value;
+            if (sharedScope !== undefined) result = value;
           }),
         ),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
       exclusive: exclusiveOf(hookOptions),
     });
-    return Effect.sync(() => result);
+    return Effect.sync(() => result as A);
   };
 
   const beforeEach: BeforeEachFn = (eff, hookOptions) => {
@@ -282,26 +287,27 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
   const closeScope = Effect.suspend(() =>
-    Scope.close(sharedScope, Exit.void),
+    sharedScope === undefined
+      ? Effect.void
+      : Scope.close(sharedScope, Exit.void),
   ).pipe(Effect.ignore);
 
-  // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
-  // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test run. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); the runner executes afterAll
-  // hooks in registration order, and file collection flushes microtasks
-  // before sealing the file's suite tree and advancing to the next file.
-  const closeAll = sidecar
-    ? Effect.andThen(closeScope, sidecar.close)
-    : closeScope;
-  queueMicrotask(() => {
-    registerHook("afterAll", {
-      body: () => closeAll,
-      timeout: DEFAULT_TIMEOUT,
-    });
+  // File cleanup runs after user afterAll, including skipped/failed imports.
+  // Interactive retries retain the runtime until the runner releases the file.
+  registerFileCleanup({
+    body: () =>
+      closeScope.pipe(
+        Effect.ensuring(Effect.suspend(() => sidecar?.close ?? Effect.void)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            sharedScope = undefined;
+            sidecar = undefined;
+            for (const clear of clearResults) clear();
+            clearResults.clear();
+          }),
+        ),
+      ),
+    timeout: DEFAULT_TIMEOUT,
   });
 
   return {

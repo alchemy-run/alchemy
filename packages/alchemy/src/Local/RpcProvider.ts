@@ -223,9 +223,59 @@ export const effect = <
           },
         });
       }
-      return withDefaultList(yield* client.value.get(providersUrl, cls.Type));
+      const remote = withDefaultList(
+        yield* client.value.get(providersUrl, cls.Type),
+      );
+      // The sidecar session is keyed by the Stack seen when it was opened, and
+      // derives stack-scoped state (e.g. ownership tags) from it. A memoized
+      // provider layer can be reused by a different stack (a test's shared
+      // scratch stack), so resolve the remote provider for the calling stack.
+      const byStack = new Map<string, typeof remote>([
+        [stackKey(stack), remote],
+      ]);
+      const forStack = (current: Stack) =>
+        Effect.suspend(() => {
+          const cached = byStack.get(stackKey(current));
+          if (cached !== undefined) return Effect.succeed(cached);
+          return client.value.get(providersUrl, cls.Type).pipe(
+            Effect.map((provider) => {
+              const resolved = withDefaultList(provider);
+              byStack.set(stackKey(current), resolved);
+              return resolved;
+            }),
+            // The calling Stack must shadow the one captured in `context`.
+            Effect.provideService(Stack, current),
+            Effect.provide(Layer.succeedContext(context)),
+          );
+        });
+      const callingProvider = Effect.serviceOption(Stack).pipe(
+        Effect.flatMap((current) =>
+          Option.isNone(current) || stackKey(current.value) === stackKey(stack)
+            ? Effect.succeed(remote)
+            : forStack(current.value),
+        ),
+      );
+      return new Proxy(remote, {
+        get: (target, prop) => {
+          const value = (target as any)[prop];
+          if (!Predicate.isFunction(value)) return value;
+          return (...args: any[]) =>
+            prop === "tail"
+              ? Stream.unwrap(
+                  Effect.map(callingProvider, (provider) =>
+                    (provider as any)[prop](...args),
+                  ),
+                )
+              : Effect.flatMap(callingProvider, (provider) =>
+                  (provider as any)[prop](...args),
+                );
+        },
+      });
     }),
   );
+
+const stackKey = (stack: { readonly name: string; readonly stage: string }) =>
+  `${stack.name}\u0000${stack.stage}`;
 
 const layerFallback = <I, S>(
   service: Context.Key<I, S>,
