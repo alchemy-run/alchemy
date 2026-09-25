@@ -543,6 +543,21 @@ describe("Output.evaluate", { tags: ["unit", "local"] }, () => {
         }),
       ),
     );
+
+    it.effect("types a spread array of outputs as an array output", () =>
+      provideState(
+        Effect.gen(function* () {
+          const outs: Output.Output<number>[] = [
+            Output.literal(1),
+            Output.literal(2),
+          ];
+          // Compile-time contract: a non-tuple spread evaluates to an array.
+          const expr: Output.Output<number[]> = Output.all(...outs);
+          const result: number[] = yield* Output.evaluate(expr, {});
+          expect(result).toEqual([1, 2]);
+        }),
+      ),
+    );
   });
 
   describe("RefExpr", () => {
