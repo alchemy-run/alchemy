@@ -392,19 +392,27 @@ export const CertificateProvider = () =>
         hostedZoneId: string,
         certificate: acm.CertificateDetail,
       ) {
-        const changes = (certificate.DomainValidationOptions ?? [])
-          .flatMap((option) =>
-            option.ResourceRecord ? [option.ResourceRecord] : [],
-          )
-          .map((record) => ({
-            Action: "UPSERT" as const,
-            ResourceRecordSet: {
-              Name: record.Name,
-              Type: record.Type,
-              TTL: 60,
-              ResourceRecords: [{ Value: record.Value }],
-            },
-          }));
+        // A name and its wildcard (`example.com` + `*.example.com`) share one
+        // validation record. Route 53 rejects a batch that changes the same
+        // record twice, so keep one change per name and type.
+        const records = new Map(
+          (certificate.DomainValidationOptions ?? [])
+            .flatMap((option) =>
+              option.ResourceRecord ? [option.ResourceRecord] : [],
+            )
+            .map(
+              (record) => [`${record.Name} ${record.Type}`, record] as const,
+            ),
+        );
+        const changes = [...records.values()].map((record) => ({
+          Action: "UPSERT" as const,
+          ResourceRecordSet: {
+            Name: record.Name,
+            Type: record.Type,
+            TTL: 60,
+            ResourceRecords: [{ Value: record.Value }],
+          },
+        }));
 
         if (changes.length === 0) {
           return;
