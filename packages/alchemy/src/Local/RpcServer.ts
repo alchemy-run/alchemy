@@ -4,7 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -118,7 +118,11 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
   Layer.effect(
     SessionProviders,
     Effect.gen(function* () {
-      const scope = yield* Effect.scope;
+      // Groups are independent, so close them concurrently: a group that
+      // is slow to stop (workerd) must not hold another group's finalizers
+      // (`Command.Dev` processes, which run in their own process groups)
+      // past the spawner's kill deadline.
+      const scope = yield* Scope.fork(yield* Effect.scope, "parallel");
       // Capture the ambient platform context (PlatformServices, HttpClient,
       // ArtifactStore — provided by `launch`) so deferred per-session builds
       // can run inside a capnweb promise callback.
