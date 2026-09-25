@@ -3,15 +3,22 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { Provider as ProviderService } from "@/Provider.ts";
 import * as RemovalPolicy from "@/RemovalPolicy";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import { describe, expect } from "alchemy-test";
+import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { MinimumLogLevel } from "effect/References";
+import {
+  notFound,
+  session,
+  stubCloudflare,
+  type StubCall,
+} from "../StubCloudflare.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Cloudflare intermittently blocks *all* zone creation on an account with
@@ -156,6 +163,65 @@ describe.sequential(
           // Confirm the phase entrypoint was emptied in Cloudflare on destroy.
           const actualRules = yield* getPhaseRules(initial.zoneId, phase);
           expect(actualRules).toEqual([]);
+        }).pipe(logLevel),
+    );
+
+    test.provider(
+      "destroy removes only its own rules and keeps the entrypoint",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const zone = yield* Cloudflare.Zone.Zone("TestZone", {
+                name: zoneName,
+              }).pipe(AdoptPolicy.adopt(true));
+              return yield* Cloudflare.Ruleset.Ruleset("OwnedRules", {
+                zone,
+                phase,
+                rules: [
+                  {
+                    description: "Alchemy owned rule",
+                    expression:
+                      'http.request.uri.path eq "/__alchemy_ruleset_owned__"',
+                    action: "block",
+                  },
+                ],
+              });
+            }),
+          );
+
+          // A rule added outside this stack after the deploy.
+          yield* rulesets.createRuleForZone({
+            zoneId: deployed.zoneId,
+            rulesetId: deployed.rulesetId,
+            body: {
+              description: "Foreign rule",
+              expression:
+                'http.request.uri.path eq "/__alchemy_ruleset_foreign__"',
+              action: "block",
+            },
+          });
+
+          yield* stack.destroy();
+
+          const entrypoint = yield* rulesets.getPhasForZone({
+            zoneId: deployed.zoneId,
+            rulesetPhase: phase,
+          });
+          expect(entrypoint.id).toEqual(deployed.rulesetId);
+          expect(entrypoint.rules.map((r) => r.description)).toEqual([
+            "Foreign rule",
+          ]);
+
+          yield* Effect.forEach(entrypoint.rules, (rule) =>
+            rulesets.deleteRuleForZone({
+              zoneId: deployed.zoneId,
+              rulesetId: entrypoint.id,
+              ruleId: rule.id!,
+            }),
+          );
         }).pipe(logLevel),
     );
 
@@ -410,3 +476,154 @@ const getPhaseRules = Effect.fn(function* (
       Effect.catchTag("RulesetNotFound", () => Effect.succeed([])),
     );
 });
+
+const ZONE_ID = "zone-1";
+const RULESET_ID = "entrypoint-1";
+
+const rule = (id: string, description: string) => ({
+  id,
+  description,
+  expression: `http.request.uri.path eq "/${id}"`,
+  action: "block",
+  enabled: true,
+  version: "1",
+  last_updated: "2026-01-01T00:00:00Z",
+});
+
+const entrypoint = (rules: ReturnType<typeof rule>[]) => ({
+  id: RULESET_ID,
+  kind: "zone",
+  name: "zone entrypoint",
+  phase,
+  rules,
+  version: "3",
+  last_updated: "2026-01-01T00:00:00Z",
+});
+
+const deployedOutput = (
+  rules: ReturnType<typeof rule>[],
+): Cloudflare.Ruleset.Ruleset["Attributes"] => ({
+  rulesetId: RULESET_ID,
+  zoneId: ZONE_ID,
+  kind: "zone",
+  name: "zone entrypoint",
+  phase,
+  description: undefined,
+  rules: rules.map(({ id, description, expression, action, enabled }) => ({
+    id,
+    description,
+    expression,
+    action,
+    enabled,
+  })) as Cloudflare.Ruleset.Ruleset["Attributes"]["rules"],
+  lastUpdated: "2026-01-01T00:00:00Z",
+  version: "2",
+});
+
+/** Run the real provider delete against a stubbed API; return its requests. */
+const recordDelete = (
+  output: Cloudflare.Ruleset.Ruleset["Attributes"],
+  respond: (call: StubCall) => unknown,
+) =>
+  Effect.gen(function* () {
+    const stub = stubCloudflare(respond);
+    yield* Effect.gen(function* () {
+      const provider = yield* ProviderService<Cloudflare.Ruleset.Ruleset>(
+        "Cloudflare.Ruleset.Ruleset",
+      );
+      yield* provider.delete({
+        id: "WafRules",
+        fqn: "WafRules",
+        instanceId: "0123456789abcdef0123456789abcdef",
+        olds: {
+          zone: undefined as never,
+          phase,
+          rules: [],
+        },
+        output,
+        bindings: [] as never,
+        session,
+      });
+    }).pipe(
+      Effect.provide(Cloudflare.Ruleset.RulesetProvider()),
+      Effect.provide(stub.layer),
+    );
+    return stub.calls;
+  });
+
+const mutations = (calls: StubCall[]) =>
+  calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`);
+
+describe(
+  "Ruleset delete (offline)",
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:ruleset",
+      "local",
+    ],
+  },
+  () => {
+    it.effect(
+      "removes only the rules it deployed and keeps the entrypoint",
+      () =>
+        Effect.gen(function* () {
+          const ours = [rule("ours-1", "a"), rule("ours-2", "b")];
+          const calls = yield* recordDelete(deployedOutput(ours), (call) =>
+            call.method === "GET"
+              ? entrypoint([ours[0], rule("foreign-1", "dashboard"), ours[1]])
+              : entrypoint([rule("foreign-1", "dashboard")]),
+          );
+
+          expect(mutations(calls)).toEqual([
+            `DELETE /zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/ours-1`,
+            `DELETE /zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/ours-2`,
+          ]);
+        }),
+    );
+
+    it.effect("never deletes the entrypoint ruleset itself", () =>
+      Effect.gen(function* () {
+        const ours = [rule("ours-1", "a")];
+        const calls = yield* recordDelete(deployedOutput(ours), (call) =>
+          call.method === "GET" ? entrypoint(ours) : entrypoint([]),
+        );
+
+        expect(mutations(calls)).toEqual([
+          `DELETE /zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/ours-1`,
+        ]);
+        expect(
+          calls.some(
+            (c) =>
+              c.method === "DELETE" &&
+              c.path === `/zones/${ZONE_ID}/rulesets/${RULESET_ID}`,
+          ),
+        ).toBe(false);
+        expect(calls.some((c) => c.method === "PUT")).toBe(false);
+      }),
+    );
+
+    it.effect("skips rules that were already removed", () =>
+      Effect.gen(function* () {
+        const calls = yield* recordDelete(
+          deployedOutput([rule("ours-1", "a")]),
+          () => entrypoint([rule("foreign-1", "dashboard")]),
+        );
+
+        expect(mutations(calls)).toEqual([]);
+      }),
+    );
+
+    it.effect("is a no-op when the entrypoint does not exist", () =>
+      Effect.gen(function* () {
+        const calls = yield* recordDelete(
+          deployedOutput([rule("ours-1", "a")]),
+          () => notFound(10003, "Could not find entrypoint ruleset"),
+        );
+
+        expect(calls.map((c) => c.method)).toEqual(["GET"]);
+      }),
+    );
+  },
+);

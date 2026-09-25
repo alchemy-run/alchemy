@@ -77,7 +77,9 @@ export type Ruleset = Resource<
  * A Cloudflare Ruleset phase entrypoint for a zone.
  *
  * This resource owns the entire ruleset for a phase entrypoint. Rules managed
- * elsewhere in the same phase can be overwritten on deploy.
+ * elsewhere in the same phase can be overwritten on deploy. Destroying it
+ * removes only the rules it deployed; the entrypoint and any rules added
+ * since stay in place.
  * ### WAF Rules
  * **Example:** Block probes in the custom firewall phase
  * ```typescript
@@ -157,10 +159,8 @@ export const RulesetProvider = () =>
       return toRulesetAttributes(zoneId, ruleset);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
-      // This resource owns the entire phase entrypoint, so destroy removes
-      // the entrypoint ruleset itself (emptying the rules would leave an
-      // inert-but-listed entrypoint behind on the zone forever). Observe
-      // first so the delete is idempotent and never acts on a stale id.
+      // Remove only the rules this resource deployed. The entrypoint is the
+      // zone's shared WAF phase — rules added elsewhere must survive.
       const entrypoint = yield* rulesets
         .getPhasForZone({
           zoneId: output.zoneId,
@@ -170,12 +170,19 @@ export const RulesetProvider = () =>
           Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
         );
       if (entrypoint === undefined) return;
-      yield* rulesets
-        .deleteRulesetForZone({
-          zoneId: output.zoneId,
-          rulesetId: entrypoint.id,
-        })
-        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.void));
+      const owned = new Set(output.rules.map((rule) => rule.id));
+      yield* Effect.forEach(
+        (entrypoint.rules ?? []).filter(
+          (rule) => rule.id != null && owned.has(rule.id),
+        ),
+        (rule) =>
+          rulesets.deleteRuleForZone({
+            zoneId: output.zoneId,
+            rulesetId: entrypoint.id,
+            ruleId: rule.id!,
+          }),
+        { discard: true },
+      );
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds.zone);
