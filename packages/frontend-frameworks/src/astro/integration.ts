@@ -5,7 +5,7 @@
  * (v14.1.3, `src/index.ts`) with:
  *
  * - `@cloudflare/vite-plugin` swapped for `@alchemy.run/cloudflare-runtime/vite`
- *   (main = this package's vendored server entrypoint, entry env `ssr`,
+ *   (main defaults to this package's vendored server entrypoint, entry env `ssr`,
  *   Astro's node-side `astro`/`prerender` environments in `skipEnvironments`).
  * - `loadWranglerEnv`, wrangler config watchers, `previewEntrypoint`, and the
  *   output-wrangler.json patch dropped.
@@ -69,8 +69,10 @@ export interface DistilledCloudflareOptions {
   /**
    * Options forwarded to `@alchemy.run/cloudflare-runtime/vite`
    * (compatibility date/flags, worker name/bindings/assets, runtime context).
-   * `main`, `viteEnvironments`, and the Astro node environments in
-   * `skipEnvironments` are managed by the integration.
+   * `viteEnvironments` and the Astro node environments in `skipEnvironments`
+   * are managed by the integration. `main` defaults to the vendored server
+   * entrypoint ({@link SERVER_ENTRYPOINT}); set it to deploy a custom Worker
+   * entry that wraps that entrypoint's handler.
    */
   readonly vite?: CloudflareVitePluginOptions | undefined;
   /**
@@ -269,9 +271,16 @@ export const withPrerenderSessionKv = (
 
 /**
  * The `@alchemy.run/cloudflare-runtime/vite` options for an Astro project:
- * user options with `main` pinned to the vendored server entrypoint, the
+ * user options with `main` defaulted to the vendored server entrypoint, the
  * worker pinned to Astro's `ssr` environment, and Astro's node-side
  * environments merged into `skipEnvironments` (exported for testing).
+ *
+ * A user `main` (the deploy target's user-entry seam) takes precedence: a
+ * Worker entry that wraps the vendored entrypoint's handler (imported from
+ * {@link SERVER_ENTRYPOINT}) and adds exports of its own — Durable Object
+ * classes, a `scheduled` handler. The vite plugin resolves it against the
+ * Astro root. The workerd `prerender` environment keeps building the vendored
+ * entrypoint: prerendering only needs Astro's handler.
  *
  * During a `build` with `prerenderEnvironment: "workerd"`, the `prerender`
  * environment stops being a skipped node environment and becomes a child
@@ -296,7 +305,7 @@ export const makeIntegrationPluginOptions = (
     prerenderEnvironment === "workerd" && command === "build";
   return {
     ...viteOptions,
-    main: SERVER_ENTRYPOINT,
+    main: viteOptions.main ?? SERVER_ENTRYPOINT,
     viteEnvironments: workerdPrerender
       ? { entry: "ssr", children: ["prerender"] }
       : { entry: "ssr" },
