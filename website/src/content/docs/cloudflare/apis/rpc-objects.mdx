@@ -1,0 +1,262 @@
+---
+title: RPC objects
+description: Return a stateful object from a Worker or Durable Object and call its Effect and Stream methods.
+sidebar:
+  order: 3
+---
+
+Return an object from a Worker or Durable Object. Its state stays on the server; the caller gets typed methods.
+
+## Return a counter
+
+```typescript title="counter-service.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
+
+export default class CounterService extends Cloudflare.Worker<CounterService>()(
+  "CounterService",
+  { main: import.meta.url },
+  Effect.succeed({
+    openCounter: Effect.fn(function* () {
+      const value = yield* Ref.make(0);
+      return {
+        echo: <A>(input: A) => Effect.succeed(input),
+        increment: () => Ref.updateAndGet(value, (n) => n + 1),
+        increments: (count: number) =>
+          Stream.range(1, count).pipe(
+            Stream.mapEffect(() => Ref.updateAndGet(value, (n) => n + 1)),
+          ),
+      } satisfies RpcObject;
+    }),
+  }),
+) {}
+```
+
+Each call creates a new counter. The optional `satisfies RpcObject` checks the methods without losing their inferred types, including generics.
+
+## Call the counter
+
+```typescript title="caller.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import CounterService from "./counter-service.ts";
+
+export default class Caller extends Cloudflare.Worker<Caller>()(
+  "Caller",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const service = yield* Cloudflare.Workers.bindWorker(CounterService);
+    return {
+      fetch: Effect.gen(function* () {
+        const counter = yield* service.openCounter();
+        const first = yield* counter.increment();
+        const rest = yield* counter.increments(3).pipe(Stream.runCollect);
+        return yield* HttpServerResponse.json({ first, rest });
+      }).pipe(Effect.scoped),
+    };
+  }),
+) {}
+```
+
+```json title="Response"
+{ "first": 1, "rest": [2, 3, 4] }
+```
+
+## Return a session from a Durable Object
+
+```typescript title="rooms.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+
+export class Rooms extends Cloudflare.DurableObject<Rooms>()(
+  "Rooms",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const total = yield* Ref.make(0);
+      return {
+        openSession: Effect.fn(function* () {
+          const mine = yield* Ref.make(0);
+          return {
+            visit: () =>
+              Effect.all({
+                mine: Ref.updateAndGet(mine, (n) => n + 1),
+                total: Ref.updateAndGet(total, (n) => n + 1),
+              }),
+          } satisfies RpcObject;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+```typescript title="caller.ts"
+const rooms = yield* Rooms;
+
+// inside fetch
+const session = yield* rooms.getByName("lobby").openSession();
+yield* session.visit();
+const visits = yield* session.visit();
+// { mine: 2, total: 2 } on the first request
+```
+
+The session lives inside the `lobby` instance. `mine` starts at zero for each session; `total` is shared by every session on the instance.
+
+## Data and streams
+
+### Native values
+
+```typescript
+const data = yield* counter.echo({
+  count: 42n,
+  createdAt: new Date(),
+  labels: new Map([["name", "counter"]]),
+  selected: new Set([1, 2]),
+  buffer: new ArrayBuffer(8),
+  bytes: new Uint8Array([1, 2, 3]),
+});
+
+const cycle: { self?: unknown } = {};
+cycle.self = cycle;
+const copy = yield* counter.echo(cycle);
+copy.self === copy; // true
+```
+
+Values keep their native types, including cyclic references.
+
+### Value streams
+
+Add a stream method to the returned object:
+
+```typescript
+snapshots: () => Stream.make(
+  { value: 1n, at: new Date() },
+  { value: 2n, at: new Date() },
+),
+```
+
+```typescript
+const snapshots = yield* counter.snapshots().pipe(Stream.runCollect);
+snapshots[0].value; // 1n
+snapshots[0].at instanceof Date; // true
+```
+
+Streamed values travel in native RPC batches, without JSON conversion.
+
+### Byte streams
+
+```typescript
+bytes: () => Stream.make(
+  new Uint8Array([1, 2]),
+  new Uint8Array([3, 4]),
+),
+```
+
+Byte streams use native readable-stream transport. Every chunk must be a `Uint8Array`.
+
+### Stream failures
+
+```typescript
+updates: () => Stream.make(1, 2).pipe(
+  Stream.concat(Stream.fail({ _tag: "CounterClosed" as const })),
+),
+```
+
+```typescript
+const values = yield* counter.updates().pipe(
+  Stream.catchTag("CounterClosed", () => Stream.empty),
+  Stream.runCollect,
+);
+// [1, 2]
+```
+
+Catch typed failures without losing values already emitted.
+
+### Child objects
+
+```typescript
+child: () => Effect.succeed({
+  echo: <A>(input: A) => Effect.succeed(input),
+} satisfies RpcObject),
+```
+
+```typescript
+const child = yield* counter.child();
+const greeting = yield* child.echo("hello");
+```
+
+Return child objects directly. RPC objects contain only methods, not `{ child: { echo: ... } }` data records.
+
+## Lifetime
+
+```typescript
+yield* Effect.gen(function* () {
+  const counter = yield* service.openCounter();
+
+  yield* counter.increments(10).pipe(
+    Stream.take(2),
+    Stream.runDrain,
+  );
+
+  yield* counter.increment(); // Still usable after the stream stops.
+}).pipe(Effect.scoped);
+// The counter, its child objects, and factory resources are released.
+```
+
+Workers and Durable Objects already provide an event scope. Use `Effect.scoped` for earlier release, keeping calls and stream consumption inside it.
+
+### Factory cleanup
+
+```typescript
+import * as Console from "effect/Console";
+
+openCounter: Effect.fn(function* () {
+  const value = yield* Ref.make(0);
+  yield* Effect.addFinalizer(() => Console.log("Counter released"));
+
+  return {
+    increment: () => Ref.updateAndGet(value, (n) => n + 1),
+  } satisfies RpcObject;
+}),
+```
+
+The factory's finalizers run when the caller's scope closes, not when `openCounter()` returns.
+
+### Use bindings in methods
+
+```typescript title="notes-service.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
+
+const Notes = Cloudflare.KV.Namespace("Notes");
+
+export default class NotesService extends Cloudflare.Worker<NotesService>()(
+  "NotesService",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return {
+      openNotebook: (user: string) =>
+        Effect.succeed({
+          read: (key: string) => kv.get(`${user}/${key}`),
+          write: (key: string, value: string) =>
+            kv.put(`${user}/${key}`, value),
+        } satisfies RpcObject),
+    };
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+) {}
+```
+
+Returned methods may require `Scope` and `RuntimeContext`, so binding clients like `kv.get` work directly. Resolve any other service in the Worker's init or the factory and close over it.
+
+:::note
+RPC objects are temporary: they do not survive an isolate restart or Durable Object eviction. They work through native Worker and Durable Object bindings, not Container HTTP RPC, schema-based Effect RPC, or browser WebSocket clients.
+:::

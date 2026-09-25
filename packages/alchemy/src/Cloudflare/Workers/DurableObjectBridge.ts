@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/unstable/http";
 import {
@@ -28,6 +27,12 @@ import {
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
+import {
+  invokeNativeRpc,
+  invokeRpcMethod,
+  isRpcMethodName,
+  NativeInvocation,
+} from "./RpcObjectBridge.ts";
 
 /**
  * Create a DurableObjectBridge class that proxies RPC method calls through
@@ -114,34 +119,40 @@ export const makeDurableObjectBridge =
           ),
         );
 
+        const methods = new Map<PropertyKey, unknown>();
         return new Proxy(this, {
           get: (target, prop) => {
-            const bind = (f: any) =>
-              typeof f === "function" ? f.bind(target) : f;
-            if (typeof prop !== "string") return bind((target as any)[prop]);
-            if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            if (typeof prop === "string" && !isRpcMethodName(prop))
+              return undefined;
+            if (methods.has(prop)) return methods.get(prop);
+            if (prop in target) {
+              const value = (target as any)[prop];
+              const bound =
+                typeof value === "function" ? value.bind(target) : value;
+              methods.set(prop, bound);
+              return bound;
+            }
+            if (typeof prop !== "string") return undefined;
+            const method = (...args: any[]) =>
+              this.#execute(
+                (instance) =>
+                  Effect.suspend(() => {
+                    if (prop === NativeInvocation)
+                      return invokeNativeRpc(instance, prop, args);
+                    const field = Object.getOwnPropertyDescriptor(
+                      instance,
+                      prop,
+                    );
+                    if (typeof field?.value === "function")
+                      return invokeRpcMethod(instance, prop, args);
+                    return Effect.isEffect(field?.value)
+                      ? field.value
+                      : Effect.succeed(field?.value);
+                  }),
+                handleRpcExit,
+              );
+            if (prop === NativeInvocation) methods.set(prop, method);
+            return method;
           },
         });
       }
@@ -151,14 +162,22 @@ export const makeDurableObjectBridge =
         onExit?: (
           exit: Exit.Exit<any, any>,
           scope: Scope.Closeable,
+          context: Context.Context<any>,
         ) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
 
         const { instance, services, context, telemetry } = await this.#instance;
 
-        return fn(instance)
+        let executionContext: Context.Context<any> = Context.makeUnsafe(
+          new Map(),
+        );
+        return Effect.context<any>()
           .pipe(
+            Effect.flatMap((current) => {
+              executionContext = current;
+              return fn(instance);
+            }),
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(
@@ -182,7 +201,7 @@ export const makeDurableObjectBridge =
           )
           .then((exit) =>
             onExit
-              ? onExit(exit, scope)
+              ? onExit(exit, scope, executionContext)
               : exit._tag === "Success"
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),

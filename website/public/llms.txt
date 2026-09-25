@@ -158,6 +158,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 
 - [Schemaless RPC](https://alchemy.run/cloudflare/apis/schemaless-rpc) — Typed RPC between Workers, Durable Objects, and Containers with no schema — bind the class, get the client.
 - [Effect HTTP API](https://alchemy.run/cloudflare/apis/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
+- [RPC objects](https://alchemy.run/cloudflare/apis/rpc-objects) — Return a stateful object from a Worker or Durable Object and call its Effect and Stream methods.
 - [Effect RPC](https://alchemy.run/cloudflare/apis/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as a Cloudflare Worker.
 
 ## Cloudflare — Data
@@ -585,4 +586,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~131 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~132 KB) — only fetch it when you need to locate a specific resource's reference page.

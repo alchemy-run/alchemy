@@ -12,6 +12,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "./Http.ts";
 
+export type { RpcObject, ValidateRpcObject } from "./RpcObject.ts";
+
 export type Rpc<Shape> = {
   "~alchemy/rpc": Shape;
 };
@@ -540,6 +542,26 @@ export const makeFetchRpcStub = <Shape>(options: {
   }) as Shape;
 };
 
+const containsRpcObject = (
+  value: unknown,
+  seen = new WeakSet<object>(),
+): boolean => {
+  if (value === null || typeof value !== "object" || seen.has(value))
+    return false;
+  seen.add(value);
+  if (Array.isArray(value))
+    return value.some((item) => containsRpcObject(item, seen));
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.values(Object.getOwnPropertyDescriptors(value)).some(
+    (property) =>
+      property.enumerable &&
+      "value" in property &&
+      (typeof property.value === "function" ||
+        containsRpcObject(property.value, seen)),
+  );
+};
+
 /**
  * Serve the RPC methods on `shape` over the {@link RPC_PATH_PREFIX} route,
  * delegating every other request to `fallback`. The mirror of {@link
@@ -614,6 +636,21 @@ export const serveRpc = <Req = never>(
       invoked as Effect.Effect<unknown, unknown>,
     );
     if (Result.isSuccess(result)) {
+      if (
+        !Stream.isStream(result.success) &&
+        containsRpcObject(result.success)
+      ) {
+        return yield* HttpServerResponse.json({
+          _tag: ErrorTag,
+          error: encodeRpcError(
+            new RpcCallError({
+              method: name,
+              cause:
+                "Returned RPC objects require a native Cloudflare binding; the HTTP transport cannot transfer remote method references.",
+            }),
+          ),
+        } satisfies RpcErrorEnvelope);
+      }
       // The resolved value may itself be a `Stream` (e.g. a forwarded nested
       // *streaming* RPC, where the inner call resolves to a `Stream`) — encode
       // that as a stream body too.

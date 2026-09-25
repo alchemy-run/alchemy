@@ -273,5 +273,5 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   const stubEff = WorkerEnvironment.pipe(
     Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
-  return makeRpcStub<Shape>(stubEff);
+  return makeRpcStub<Shape>(stubEff, { invocations: true });
 });

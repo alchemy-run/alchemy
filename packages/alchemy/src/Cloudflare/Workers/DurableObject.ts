@@ -12,6 +12,7 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
+import type { ValidateRpcShape } from "../../RpcObject.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
@@ -313,7 +314,8 @@ export interface DurableObjectClass extends Effect.Effect<
           >,
           never,
           Req
-        >,
+        > &
+          ValidateRpcShape<Shape>,
         // `Exclude` (rather than `DurableObjectServices | Req` inference)
         // so ambient DO services resolved in the outer init effect never
         // leak into the host Worker's requirements — mirrors Worker.make's
@@ -335,7 +337,8 @@ export interface DurableObjectClass extends Effect.Effect<
         >,
         never,
         Req
-      >,
+      > &
+        ValidateRpcShape<NoInfer<Shape>>,
     ): Effect.Effect<
       DurableObject<Self>,
       never,
@@ -347,7 +350,8 @@ export interface DurableObjectClass extends Effect.Effect<
   <Shape>(name: string, props?: DurableObjectProps): DurableObjectLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
-    impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq>,
+    impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq> &
+      ValidateRpcShape<NoInfer<Shape>>,
   ): Effect.Effect<
     DurableObject<Shape>,
     never,
@@ -1261,6 +1265,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         | DurableObjectTransferSource
         | DurableObjectTransferSource[],
       errors?: ReadonlyArray<RpcErrorClass>,
+      invocations = true,
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1315,7 +1320,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           getByName: (
             name: string,
             options?: DurableObjectGetDurableObjectOptions,
-          ) => makeRpcStub(binding.getByName(name, options), { errors }),
+          ) =>
+            makeRpcStub(binding.getByName(name, options), {
+              errors,
+              invocations,
+            }),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
@@ -1450,6 +1459,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                 typeof w === "string" ? w : w.workerName,
                 undefined,
                 classProps?.errors,
+                typeof w !== "string",
               ),
             ),
           );

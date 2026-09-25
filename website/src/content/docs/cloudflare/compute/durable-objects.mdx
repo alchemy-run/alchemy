@@ -405,6 +405,10 @@ mechanism works across Workers: one Worker can host the DO while
 others bind to it by class — see
 [Bind to another Worker's Durable Object](/cloudflare/compute/cross-worker-durable-object).
 
+A method can also return an object whose methods keep running inside the
+instance, such as a per-caller session. See
+[RPC objects](/cloudflare/apis/rpc-objects#return-a-session-from-a-durable-object).
+
 Alchemy also ships a schema-based `RpcDurableObject` that serves an
 Effect RPC group on the DO's `fetch`. It is no longer the suggested
 path for DO method calls — the schemaless bridge covers typed

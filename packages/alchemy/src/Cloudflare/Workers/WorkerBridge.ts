@@ -10,9 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import {
   makeEntrypointLayer,
   reifyBoundConfigProvider,
@@ -25,12 +23,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
 import {
-  ErrorTag,
-  type RpcErrorEnvelope,
-  type RpcStreamEnvelope,
-  encodeRpcError,
-  toRpcStream,
-} from "./Rpc.ts";
+  handleNativeRpcExit,
+  invokeNativeRpc,
+  isRpcMethodName,
+} from "./RpcObjectBridge.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -87,14 +83,20 @@ export const makeWorkerBridge = (
     onExit: (
       exit: Exit.Exit<any, any>,
       scope: Scope.Closeable,
+      context: Context.Context<any>,
     ) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    let context: Context.Context<any> = Context.makeUnsafe(new Map());
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          return eff.pipe(
+          return Effect.context<any>().pipe(
+            Effect.flatMap((current) => {
+              context = current;
+              return eff;
+            }),
             // Per-event services take precedence over the captured services
             // and the built isolate context: the isolate context carries the
             // *deferred* WorkerExecutionContext (yieldable in the top-level
@@ -132,7 +134,7 @@ export const makeWorkerBridge = (
         // path can envelope-encode it like any other handler defect.
         (error) => Exit.die(error),
       )
-      .then((exit) => onExit(exit, scope))
+      .then((exit) => onExit(exit, scope, context))
       .finally(() =>
         isScopeEjected(scope)
           ? undefined
@@ -172,45 +174,27 @@ export const makeWorkerBridge = (
           );
       }
 
+      const methods = new Map<string, (...args: unknown[]) => Promise<any>>();
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
+          if (!isRpcMethodName(prop)) return undefined;
           if (prop in target) return (target as any)[prop];
-          return (...args: unknown[]) =>
-            processEvent(
-              (built) => {
-                const dispatcher = built.shape()?.[prop];
-                if (typeof dispatcher !== "function") {
-                  return [
-                    Effect.die(
-                      new Error(
-                        `Method "${prop}" not found on worker. ` +
-                          `Make sure it's returned from the worker's default export.`,
-                      ),
-                    ),
-                    Context.empty(),
-                  ] as const;
-                }
-                const result = dispatcher(...args);
-                // Effects (including nested-RPC values built by
-                // `asEffectOrStream`, which are Effects *branded* as Streams)
-                // must be run as effects — their resolved value may itself be
-                // a `Stream`, which `handleRpcExit` then encodes. Only a
-                // *genuine* `Stream` (not an Effect) is lifted into the
-                // success channel so `handleRpcExit` encodes it directly.
-                return [
-                  Effect.isEffect(result)
-                    ? (result as Effect.Effect<any>)
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : (result as Effect.Effect<any>),
+          let method = methods.get(prop);
+          if (method === undefined) {
+            method = (...args: unknown[]) =>
+              processEvent(
+                (built) => [
+                  invokeNativeRpc(built.shape() ?? {}, prop, args),
                   Context.empty(),
-                ] as const;
-              },
-              this.ctx,
-              this.env,
-              handleRpcExit,
-            );
+                ],
+                this.ctx,
+                this.env,
+                handleRpcExit,
+              );
+            methods.set(prop, method);
+          }
+          return method;
         },
       });
     }
@@ -446,78 +430,41 @@ export const makeRpcProxy = (
   self: any,
   userShape: Effect.Effect<any>,
   processEvent: (
-    eff: Effect.Effect<[Effect.Effect<any>, Context.Context<never>]>,
-  ) => Promise<any>,
-) =>
-  new Proxy(self, {
+    eff: Effect.Effect<any, any, any>,
+  ) => Promise<Exit.Exit<any, any>>,
+) => {
+  const methods = new Map<string, (...args: unknown[]) => Promise<any>>();
+  return new Proxy(self, {
     get: (target, prop) => {
       if (typeof prop !== "string") return (target as any)[prop];
+      if (!isRpcMethodName(prop)) return undefined;
       if (prop in target) return (target as any)[prop];
-      return (...args: unknown[]) =>
-        userShape
-          .pipe(
-            Effect.map((shape) => shape[prop]),
-            Effect.flatMap((dispatcher) => {
-              if (typeof dispatcher !== "function") {
-                return Effect.die(
-                  new Error(
-                    `Method "${prop}" not found on worker. ` +
-                      `Make sure it's returned from the worker's default export.`,
-                  ),
+      let method = methods.get(prop);
+      if (method === undefined) {
+        method = async (...args: unknown[]) => {
+          const scope = Scope.makeUnsafe();
+          let context: Context.Context<any> = Context.makeUnsafe(new Map());
+          try {
+            const exit = await processEvent(
+              Effect.gen(function* () {
+                context =
+                  (yield* Effect.context<never>()) as Context.Context<any>;
+                return yield* userShape.pipe(
+                  Effect.flatMap((shape) => invokeNativeRpc(shape, prop, args)),
                 );
-              }
-              const result = dispatcher(...args);
-              // Effects (including nested-RPC values built by
-              // `asEffectOrStream`, which are Effects *branded* as Streams)
-              // must be run as effects — their resolved value may itself be a
-              // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
-              // `Stream` (not an Effect) is lifted into the success channel so
-              // `handleRpcExit` encodes it directly.
-              return Effect.isEffect(result)
-                ? (result as Effect.Effect<any>)
-                : Stream.isStream(result)
-                  ? Effect.succeed(result)
-                  : (result as Effect.Effect<any>);
-            }),
-            processEvent,
-          )
-          .then((exit) => handleRpcExit(exit));
+              }).pipe(Effect.provideService(Scope.Scope, scope)),
+            );
+            return await handleRpcExit(exit, scope, context);
+          } finally {
+            if (!isScopeEjected(scope))
+              await Effect.runPromise(Scope.close(scope, Exit.void));
+          }
+        };
+        methods.set(prop, method);
+      }
+      return method;
     },
   });
-
-export const handleRpcExit = async (
-  exit: Exit.Exit<any, any>,
-  scope?: Scope.Closeable,
-) => {
-  if (exit._tag === "Success") {
-    if (Stream.isStream(exit.value)) {
-      let stream = exit.value as Stream.Stream<any, any, any>;
-      if (scope !== undefined && !isScopeEjected(scope)) {
-        // The RPC transport drains the encoded ReadableStream *after* this
-        // function returns, so the request scope must outlive the handler:
-        // eject it from the bridge's close-on-return path and close it when
-        // the stream settles instead — mirroring `scopeTransferToStream` on
-        // the fetch path.
-        EffectHttp.scopeDisableClose(scope);
-        stream = stream.pipe(
-          Stream.onExit((streamExit) => Scope.close(scope, streamExit)),
-        );
-      }
-      return await Effect.runPromise(
-        toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>,
-      );
-    }
-    return exit.value;
-  }
-  const failReason = exit.cause.reasons.find(Cause.isFailReason);
-  if (failReason) {
-    return {
-      _tag: ErrorTag,
-      error: encodeRpcError(failReason.error),
-    } satisfies RpcErrorEnvelope;
-  }
-  const dieReason = exit.cause.reasons.find(Cause.isDieReason);
-  throw (
-    dieReason?.defect ?? new Error("RPC method failed with an unexpected cause")
-  );
 };
+
+export const handleRpcExit = handleNativeRpcExit;
