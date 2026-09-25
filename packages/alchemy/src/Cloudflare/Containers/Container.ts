@@ -11,7 +11,7 @@ import type * as HttpServerResponse from "effect/unstable/http/HttpServerRespons
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
-import type { ResourceClassLike } from "../../Resource.ts";
+import type { ResourceClass, ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass } from "../../Util/effect.ts";
@@ -643,23 +643,28 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @product Containers
  * @category Workers & Compute
  */
-export const Container: ResourceClassLike<ContainerApplication> & {
-  <DOShape = unknown, const Id extends string = string, PropsReq = never>(
-    id: Id,
-    props: ImageContainerProps<PropsReq>,
-  ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
-  <Self>(): {
-    <const Id extends string, PropsReq = never>(
+export const Container: ResourceClassLike<ContainerApplication> &
+  Pick<ResourceClass<ContainerApplication>, "ref"> & {
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<ContainerApplication>;
+    <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
-    ): Container.Decl<Self, {}, Id, PropsReq>;
-  };
-  <Self, Shape>(): {
-    <const Id extends string>(
-      id: Id,
-    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
-  };
-} = Object.assign(
+    ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
+    <Self>(): {
+      <const Id extends string, PropsReq = never>(
+        id: Id,
+        props: ImageContainerProps<PropsReq>,
+      ): Container.Decl<Self, {}, Id, PropsReq>;
+    };
+    <Self, Shape>(): {
+      <const Id extends string>(
+        id: Id,
+      ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
+    };
+  } = Object.assign(
   (...args: any[]) => {
     if (args.length === 0) {
       return (...args: any[]) => {
@@ -711,9 +716,16 @@ export const Container: ResourceClassLike<ContainerApplication> & {
       });
     }
   },
-  {
-    Type: ContainerTypeId,
-  },
+  // Spread `ContainerPlatform` so `Container` inherits its static fields —
+  // `ref`, `Type`, `Provider`, `Self`, `Aliases` come from the `ResourceClass`
+  // `Platform` builds internally (Platform.ts:691-704); `bind` and `Platform`
+  // come from `methods`. This is the same shape `Worker` gets by being
+  // `Platform(...)` directly, but `Container` keeps its own dispatcher because
+  // the per-id return values carry Container-specific markers
+  // (`~alchemy/Container/Binding`, `~alchemy/Container/ClassName`,
+  // `~alchemy/Container/Shape`, `Application`) that `Platform`'s generic
+  // constructor doesn't add.
+  ContainerPlatform,
 ) as any;
 
 export declare namespace Container {
