@@ -171,6 +171,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+- [R2 presigned URLs](https://alchemy.run/cloudflare/data/r2-presigned-urls) — Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 
 ## Cloudflare — Messaging & events
@@ -351,6 +352,17 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 - [Custom domains with Route53 + ACM](https://alchemy.run/aws/networking/custom-domains) — Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 alias records, and the domain prop on Website resources.
 - [VPC & networking](https://alchemy.run/aws/networking) — The Network helper for a production-shaped VPC in one call, and the full set of EC2 networking primitives — VPCs, subnets, gateways, routes, security groups, and endpoints — for explicit control.
+
+## GCP
+
+Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.
+
+- [GCP](https://alchemy.run/gcp) — Google Cloud in one Effect program — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, and Memorystore, with IAM granted by the bindings themselves.
+- [Setup](https://alchemy.run/gcp/setup) — Connect alchemy to Google Cloud — project, service-account key, the APIs to enable, and Docker.
+- [Serve an API on Cloud Run](https://alchemy.run/gcp/guides/cloud-run-api) — A link shortener on one Cloud Run service — Firestore for state, Secret Manager for the API key, and IAM granted by the bindings themselves.
+- [Ingest events into BigQuery](https://alchemy.run/gcp/guides/event-pipeline) — A Cloud Run service publishes to Pub/Sub, a Cloud Run Job drains the subscription into BigQuery, and one host triggers the other.
+- [Cache with Memorystore](https://alchemy.run/gcp/guides/memorystore) — Bind a Memorystore Redis instance to a Cloud Run service over Direct VPC egress, and what to expect from create and destroy times.
+- [How bindings grant IAM](https://alchemy.run/gcp/guides/bindings) — What a yield* of a GCP binding actually does — the per-host service account, the role it grants, and how removing a binding revokes it.
 
 ## Fly — start here
 
@@ -585,4 +597,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~131 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~157 KB) — only fetch it when you need to locate a specific resource's reference page.

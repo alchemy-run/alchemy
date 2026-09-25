@@ -71,7 +71,13 @@ jobs:
           install: true
           require-lockfile: true
 
+      # Cold-building the alchemy package peaks near 17 GB of heap, which
+      # starves the runner agent on a 32 GB machine and drops the job. A soft
+      # limit holds the peak near 11 GB for roughly twice the compile time.
       - name: Build packages
+        env:
+          GOMEMLIMIT: 6GiB
+          GOGC: "40"
         run: pnpm build:pkg
 
       # The @distilled.cloud list is alchemy's dependency set, which `build:pkg`

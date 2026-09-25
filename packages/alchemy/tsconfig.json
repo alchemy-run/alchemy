@@ -68,6 +68,9 @@
       "path": "../../submodules/distilled/packages/railway/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/gcp/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/stripe/tsconfig.json"
     },
     {

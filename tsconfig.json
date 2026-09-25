@@ -30,6 +30,9 @@
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/gcp/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/stripe/tsconfig.json"
     },
     {
@@ -90,6 +93,12 @@
     },
     {
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-cloud-run-api/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-event-pipeline/tsconfig.json"
     },
     {
       "path": "./examples/aws-ec2/tsconfig.json"
