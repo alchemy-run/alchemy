@@ -6,11 +6,17 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { fileURLToPath } from "node:url";
+import {
+  SourceChangeFunction,
+  SourceChangeFunctionLive,
+} from "./fixtures/function-source-change.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = fileURLToPath(
@@ -101,6 +107,67 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
     timeout: 180_000,
+  },
+);
+
+test.provider(
+  "Effect-native function updates when its source changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      const sourceChangeFunctionPath = yield* path.fromFileUrl(
+        new URL("./fixtures/function-source-change.ts", import.meta.url),
+      );
+      const source = yield* fs.readFileString(sourceChangeFunctionPath);
+      const declaration = SourceChangeFunction.pipe(
+        Effect.provide(SourceChangeFunctionLive),
+      );
+
+      const created = yield* Effect.gen(function* () {
+        const created = yield* stack.deploy(declaration);
+        expect(yield* invokeHttpFunction(created.functionName)).toBe(
+          "source-v1",
+        );
+
+        const unchanged = yield* stack.plan(declaration);
+        expect(unchanged.resources.SourceChangeFunction).toMatchObject({
+          action: "noop",
+        });
+
+        yield* fs.writeFileString(
+          sourceChangeFunctionPath,
+          source.replace('"source-v1"', '"source-v2"'),
+        );
+
+        const changed = yield* stack.plan(declaration);
+        expect(changed.resources.SourceChangeFunction).toMatchObject({
+          action: "update",
+        });
+
+        const updated = yield* stack.deploy(declaration);
+        expect(updated.functionName).toBe(created.functionName);
+        expect(yield* invokeHttpFunction(updated.functionName)).toBe(
+          "source-v2",
+        );
+        return created;
+      }).pipe(
+        Effect.ensuring(
+          fs
+            .writeFileString(sourceChangeFunctionPath, source)
+            .pipe(Effect.orDie),
+        ),
+      );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(created.functionName);
+      yield* assertRoleDeleted(created.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
   },
 );
 
@@ -515,17 +582,24 @@ const assertFunctionReady = Effect.fn(function* (
     Redacted.isRedacted(observed) ? Redacted.value(observed) : observed,
   ).toBe(marker);
 
+  expect(yield* invokeHttpFunction(functionName, "/readiness")).toBe(marker);
+});
+
+const invokeHttpFunction = Effect.fn(function* (
+  functionName: string,
+  path = "/",
+) {
   const response = yield* Lambda.invoke({
     FunctionName: functionName,
     Payload: JSON.stringify({
       version: "2.0",
-      rawPath: "/readiness",
+      rawPath: path,
       rawQueryString: "",
       headers: { host: "localhost" },
       requestContext: {
         http: {
           method: "GET",
-          path: "/readiness",
+          path,
           protocol: "HTTP/1.1",
           sourceIp: "127.0.0.1",
           userAgent: "alchemy-test",
@@ -540,7 +614,7 @@ const assertFunctionReady = Effect.fn(function* (
     : "";
   const body = yield* Effect.try(() => JSON.parse(payload));
   expect(body.statusCode).toBe(200);
-  expect(body.body).toBe(marker);
+  return body.body as string;
 });
 
 // Out-of-band proof that the trailing destroy actually removed the function
