@@ -11,6 +11,7 @@ import * as Test from "@/Test/Alchemy";
 import { initialCwd } from "@/Util/Node.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -29,6 +30,7 @@ import {
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
+import InitConfigWorker from "./fixtures/init-config-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -1385,6 +1387,66 @@ describe.concurrent(
           );
           const resettled = yield* stack.plan(program("v2"));
           expect(actionOf(resettled, "EffectEnvValueWorker")).toBe("noop");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
+    );
+
+    // #1831 regression: a `Config` value read in an Effect-native Worker's
+    // Init lands in `props.env` only (no binding row carries it), so the
+    // metadata hash must cover it. Changing the value must plan an update and
+    // reach the deployed Worker; an unchanged value must stay a noop.
+    test.provider(
+      "changing a Config value read in Init plans an update",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          // Layer the value over the ambient provider: the harness snapshots
+          // `process.env` when the test starts.
+          const program = (mode: string) =>
+            Effect.gen(function* () {
+              const ambient = yield* ConfigProvider.ConfigProvider;
+              return yield* InitConfigWorker.pipe(
+                Effect.provideService(
+                  ConfigProvider.ConfigProvider,
+                  ConfigProvider.orElse(
+                    ConfigProvider.fromUnknown({
+                      INIT_CONFIG_WORKER_MODE: mode,
+                    }),
+                    ambient,
+                  ),
+                ),
+              );
+            });
+
+          const actionOf = (plan: any, logicalId: string) =>
+            (Object.values(plan.resources) as any[]).find(
+              (node: any) => node.resource.LogicalId === logicalId,
+            )?.action;
+
+          const deployed = yield* stack.deploy(program("init-config-v1"));
+          yield* expectUrlContains(deployed.url!, "init-config-v1", {
+            timeout: "60 seconds",
+            label: "initial Init config value",
+          });
+
+          const samePlan = yield* stack.plan(program("init-config-v1"));
+          expect(actionOf(samePlan, "InitConfigWorker")).toBe("noop");
+          const changedPlan = yield* stack.plan(program("init-config-v2"));
+          expect(actionOf(changedPlan, "InitConfigWorker")).toBe("update");
+
+          const redeployed = yield* stack.deploy(program("init-config-v2"));
+          yield* expectUrlContains(redeployed.url!, "init-config-v2", {
+            timeout: "60 seconds",
+            label: "updated Init config value",
+          });
+          const resettled = yield* stack.plan(program("init-config-v2"));
+          expect(actionOf(resettled, "InitConfigWorker")).toBe("noop");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);

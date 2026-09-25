@@ -11,9 +11,11 @@ import {
   shouldObserveWorkerRoutes,
   stateCustomDomains,
   stateWorkerDomain,
+  unboundEnvForHash,
 } from "@/Cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
 describe(
@@ -553,6 +555,40 @@ describe(
         expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(
           true,
         );
+      });
+    });
+
+    // #1831: Init-captured `Config` values live only in `props.env`, so the
+    // metadata hash must see the env entries no binding row covers.
+    describe("unboundEnvForHash", () => {
+      const binding = (data: Record<string, unknown>) =>
+        ({ sid: "sid", data }) as any;
+
+      test("keeps env entries that no binding carries", () => {
+        const secret = Redacted.make("rotated");
+        expect(
+          unboundEnvForHash(
+            { STATIC: "a", BOUND: "b", MODE: "init", SECRET: secret },
+            [
+              binding({
+                bindings: [{ type: "plain_text", name: "STATIC", text: "a" }],
+              }),
+              binding({ env: { BOUND: "b" } }),
+            ],
+          ),
+        ).toEqual({ MODE: "init", SECRET: secret });
+      });
+
+      test("returns undefined when every entry is bound", () => {
+        expect(
+          unboundEnvForHash({ STATIC: "a" }, [
+            binding({
+              bindings: [{ type: "plain_text", name: "STATIC", text: "a" }],
+            }),
+          ]),
+        ).toBeUndefined();
+        expect(unboundEnvForHash(undefined, [])).toBeUndefined();
+        expect(unboundEnvForHash({ SKIPPED: undefined }, [])).toBeUndefined();
       });
     });
   },
