@@ -17,6 +17,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -28,6 +30,11 @@ import {
   getWorkerTags,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
+import ClassNameHostLive, {
+  ClassNameHost,
+} from "./fixtures/do-class-name/host.ts";
+import ClassNameReader from "./fixtures/do-class-name/reader.ts";
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
 
@@ -46,6 +53,10 @@ const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 const doMain = pathe.resolve(
   import.meta.dirname,
   "fixtures/do-counter-worker.ts",
+);
+const classNameAsyncMain = pathe.resolve(
+  import.meta.dirname,
+  "fixtures/do-class-name/async-host.ts",
 );
 
 describe.concurrent(
@@ -1966,6 +1977,121 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:alerting", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
+      "class-form Durable Object with a distinct className converts in place from the async form",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          // Both fixtures answer `{ form, value }`; a fresh connection per
+          // request avoids an edge still pinned to the previous deployment.
+          const lens = (request: HttpClientRequest.HttpClientRequest) =>
+            requestWorker(
+              request.pipe(HttpClientRequest.setHeader("connection", "close")),
+            ).pipe(
+              Effect.flatMap((response) => response.json),
+              Effect.map(
+                (body) => body as { form: string; value: string | null },
+              ),
+            );
+
+          const actionOf = (plan: any, logicalId: string) =>
+            (Object.values(plan.resources) as any[]).find(
+              (node: any) => node.resource.LogicalId === logicalId,
+            )?.action;
+
+          // Async form: the `LENS_DO` binding's physical class is `LensServer`.
+          const asyncForm = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("ClassNameHost", {
+                main: classNameAsyncMain,
+                env: {
+                  LENS_DO: Cloudflare.DurableObject("LENS_DO", {
+                    className: "LensServer",
+                  }),
+                },
+              });
+            }),
+          );
+          const namespaceId = asyncForm.durableObjectNamespaces.LensServer;
+          expect(namespaceId).toBeDefined();
+          expect(
+            yield* lens(HttpClientRequest.post(`${asyncForm.url!}?value=kept`)),
+          ).toEqual({ form: "async", value: "kept" });
+
+          // Class form with the same logical id and className, plus a
+          // cross-script reader bound through `LensObject.from(ClassNameHost)`.
+          const classForm = () =>
+            Effect.gen(function* () {
+              const host = yield* ClassNameHost;
+              const reader = yield* ClassNameReader;
+              return { host, reader };
+            }).pipe(Effect.provide(ClassNameHostLive));
+
+          const conversionPlan = yield* stack.plan(classForm());
+          expect(actionOf(conversionPlan, "ClassNameHost")).toBe("update");
+          expect(actionOf(conversionPlan, "ClassNameReader")).toBe("create");
+
+          const { host, reader } = yield* stack.deploy(classForm());
+
+          // Same script, same class, same namespace: a delete plus create, or a
+          // rename to the logical id, would change this map.
+          expect(host.workerName).toBe(asyncForm.workerName);
+          expect(host.durableObjectNamespaces).toEqual({
+            LensServer: namespaceId,
+          });
+
+          // Both the local and the cross-script binding carry the physical
+          // class.
+          const hostSettings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: host.workerName,
+          });
+          expect(hostSettings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "durable_object_namespace",
+              name: "LENS_DO",
+              className: "LensServer",
+            }),
+          );
+          const readerSettings =
+            yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName: reader.workerName,
+            });
+          expect(readerSettings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "durable_object_namespace",
+              name: "LENS_DO",
+              className: "LensServer",
+              scriptName: host.workerName,
+            }),
+          );
+
+          // Real requests through both workers reach the object and read the
+          // value the async form stored before the conversion.
+          const viaHost = yield* lens(HttpClientRequest.get(host.url!)).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 30,
+              until: (body) => body.form === "class",
+            }),
+          );
+          expect(viaHost).toEqual({ form: "class", value: "kept" });
+          expect(yield* lens(HttpClientRequest.get(reader.url!))).toEqual({
+            form: "class",
+            value: "kept",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(reader.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(host.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
     );
 
     test.provider(
