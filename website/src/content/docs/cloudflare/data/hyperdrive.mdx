@@ -673,7 +673,7 @@ import { Hyperdrive } from "./Db.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  { main: import.meta.url, compatibilityFlags: ["nodejs_compat"] },
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
     const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const sql = yield* SQL.Postgres({ url: connection.connectionString });

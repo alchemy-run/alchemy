@@ -255,12 +255,14 @@ binding on the workflow at plantime and hands back a
  import * as Cloudflare from "alchemy/Cloudflare";
 +import * as Config from "effect/Config";
  import * as Effect from "effect/Effect";
+ import { KV } from "./KV.ts";
  import Room from "./room.ts";
 
  export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
    "Notifier",
    Effect.gen(function* () {
      const rooms = yield* Room;
+     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 +    const apiKey = yield* Config.Redacted("API_KEY");
 ```
 
@@ -283,31 +285,33 @@ body. Unwrap with `Redacted.value` only at the call
 site that needs it (here, an `Authorization` header):
 
 ```diff lang="typescript"
+// src/NotifyWorkflow.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
 +import * as HttpClient from "effect/unstable/http/HttpClient";
 +import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { KV } from "./KV.ts";
+import Room from "./room.ts";
 
- export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
-   "Notifier",
-   Effect.gen(function* () {
-     const rooms = yield* Room;
-     const apiKey = yield* Config.Redacted("API_KEY");
+export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
+  "Notifier",
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
+    const apiKey = yield* Config.Redacted("API_KEY");
 
-     return Effect.gen(function* () {
-       const env = yield* Cloudflare.Workers.WorkerEnvironment;
-       const event = yield* Cloudflare.Workflows.WorkflowEvent;
-       const { roomId, message } = event.payload as {
-         roomId: string;
-         message: string;
-       };
+    return Effect.fn(function* (input: { roomId: string; message: string }) {
+      const { roomId, message } = input;
 
-       const stored = yield* Cloudflare.Workflows.task("kv-roundtrip", /* ... */);
+      const stored = yield* Cloudflare.Workflows.task("kv-roundtrip", /* ... */);
 
-       const room = rooms.getByName(roomId);
-       yield* Cloudflare.Workflows.task(
-         "broadcast",
-         room.broadcast(`[workflow] ${stored}`),
-       );
+      const room = rooms.getByName(roomId);
+      yield* Cloudflare.Workflows.task(
+        "broadcast",
+        room.broadcast(`[workflow] ${stored}`),
+      );
 
 +      yield* Cloudflare.Workflows.task(
 +        "fetch-with-auth",
@@ -318,10 +322,17 @@ site that needs it (here, an `Authorization` header):
 +        ),
 +      );
 
-       return { roomId, message: stored };
-     });
-   }),
- ) {}
+      yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
+
+      yield* Cloudflare.Workflows.task(
+        "finalize",
+        room.broadcast(`[workflow] complete for ${roomId}`),
+      );
+
+      return { roomId, message: stored };
+    });
+  }),
+) {}
 ```
 
 `HttpClient.execute` runs inside

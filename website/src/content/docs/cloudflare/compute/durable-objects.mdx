@@ -47,10 +47,11 @@ export default class Counter extends Cloudflare.DurableObject<Counter>()(
 ) {}
 ```
 
-:::tip[Why `Counter<Counter>()(...)` ?]
-The empty `()` after `Counter<Counter>` lets TypeScript capture the
-class identity for the typed RPC stub. It's a one-time bit of
-ceremony — the rest of your DO code looks completely normal.
+:::tip[Why `Cloudflare.DurableObject<Counter>()(...)` ?]
+The empty `()` after `Cloudflare.DurableObject<Counter>` lets
+TypeScript capture the class identity for the typed RPC stub. It's a
+one-time bit of ceremony — the rest of your DO code looks completely
+normal.
 :::
 
 ## Persist the count

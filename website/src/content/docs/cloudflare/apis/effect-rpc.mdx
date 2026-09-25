@@ -114,10 +114,10 @@ an incoming request.
 
 ### 3a. Bind an R2 bucket for storage
 
-Tasks need durable storage. Declare an `Bucket` resource and bind
-it inside the constructor — `bind()` returns a typed handle whose `get` /
-`put` / `delete` / `list` methods we'll call from the handlers
-below.
+Tasks need durable storage. Declare a `Bucket` resource and bind
+it inside the constructor — `Cloudflare.R2.ReadWriteBucket(Tasks)`
+returns a typed handle whose `get` / `put` / `delete` / `list` methods
+we'll call from the handlers below.
 
 ```typescript
 // src/bucket.ts
@@ -162,12 +162,14 @@ is pure construction — it builds a value, it doesn't run the server.
 +   const handlersLayer = TaskRpcs.toLayer({
 +     getTask: ({ id }) =>
 +       Effect.gen(function* () {
-+         const object = yield* tasks.get(id);
++         const object = yield* tasks.get(id).pipe(Effect.orDie);
 +         if (!object) {
 +           return yield* Effect.fail(new TaskNotFound({ id }));
 +         }
-+         return Schema.decodeUnknownSync(Task)(JSON.parse(yield* object.text()));
-+       }).pipe(Effect.orDie),
++         return Schema.decodeUnknownSync(Task)(
++           JSON.parse(yield* object.text().pipe(Effect.orDie)),
++         );
++       }),
 +     createTask: ({ title }) =>
 +       Effect.gen(function* () {
 +         const task = new Task({
@@ -243,14 +245,14 @@ export default Cloudflare.Worker(
     const handlersLayer = TaskRpcs.toLayer({
       getTask: ({ id }) =>
         Effect.gen(function* () {
-          const object = yield* tasks.get(id);
+          const object = yield* tasks.get(id).pipe(Effect.orDie);
           if (!object) {
             return yield* Effect.fail(new TaskNotFound({ id }));
           }
           return Schema.decodeUnknownSync(Task)(
-            JSON.parse(yield* object.text()),
+            JSON.parse(yield* object.text().pipe(Effect.orDie)),
           );
-        }).pipe(Effect.orDie),
+        }),
       createTask: ({ title }) =>
         Effect.gen(function* () {
           const task = new Task({
@@ -852,6 +854,15 @@ whole Worker — the R2-backed handlers are unchanged, the new
 
 ```typescript
 // src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { RpcClient, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { Tasks } from "./bucket.ts";
+import { InnerRpcs, TaskRpcs } from "./rpcs.ts";
+import TasksObject from "./object.ts";
+
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
