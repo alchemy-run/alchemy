@@ -61,6 +61,18 @@ export interface PriceRecurring {
   trialPeriodDays?: number;
 }
 
+export interface PriceCurrencyOption {
+  /**
+   * Amount in this currency's minor units (e.g. cents).
+   */
+  unitAmount?: number;
+  /**
+   * Decimal amount in this currency's minor units, at most 12 decimal
+   * places. Mutually exclusive with `unitAmount`.
+   */
+  unitAmountDecimal?: string;
+}
+
 export interface PriceProps {
   /**
    * Stripe Product this price belongs to — the resource, or a `prod_…`
@@ -88,6 +100,12 @@ export interface PriceProps {
    * Create-only — changing it replaces the price.
    */
   recurring?: PriceRecurring;
+  /**
+   * Amounts in currencies other than `currency`, keyed by lowercase
+   * three-letter ISO currency code (e.g. `{ eur: { unitAmount: 1400 } }`).
+   * Updates in place.
+   */
+  currencyOptions?: Record<string, PriceCurrencyOption>;
   /**
    * Brief description of the price, hidden from customers.
    */
@@ -134,6 +152,8 @@ export type Price = Resource<
     type: PriceType;
     /** Recurring billing configuration, if this is a recurring price. */
     recurring: PriceRecurring | undefined;
+    /** Amounts in currencies other than `currency`, keyed by currency code. */
+    currencyOptions: Record<string, PriceCurrencyOption>;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the price was created. */
@@ -148,8 +168,8 @@ export type Price = Resource<
 /**
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
  * product, and recurring interval are immutable (changing them replaces
- * the price). Nickname, metadata, lookup key, and `active` update in
- * place. Prices cannot be deleted; destroy deactivates them
+ * the price). Nickname, metadata, lookup key, currency options, and
+ * `active` update in place. Prices cannot be deleted; destroy deactivates them
  * (`active=false`).
  *
  * @see https://docs.stripe.com/api/prices
@@ -173,6 +193,20 @@ export type Price = Resource<
  *   unitAmount: 1500,
  *   recurring: { interval: "month" },
  *   nickname: "Pro monthly",
+ * });
+ * ```
+ *
+ * **Example:** Price in several currencies
+ * ```typescript
+ * const price = yield* Stripe.Price("pro-monthly", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1500,
+ *   recurring: { interval: "month" },
+ *   currencyOptions: {
+ *     eur: { unitAmount: 1400 },
+ *     brl: { unitAmount: 7900 },
+ *   },
  * });
  * ```
  *
@@ -240,6 +274,78 @@ const toRecurring = (
   };
 };
 
+// Stripe returns `currency_options` only when expanded, and the expanded map
+// also holds the price's own `currency`.
+const EXPAND_CURRENCY_OPTIONS = ["currency_options"];
+
+const toCurrencyOptions = (
+  price: StripePrice,
+): Record<string, PriceCurrencyOption> =>
+  Object.fromEntries(
+    Object.entries(price.currency_options ?? {}).flatMap(
+      ([currency, option]) =>
+        currency === price.currency || option == null
+          ? []
+          : [
+              [
+                currency,
+                {
+                  ...(option.unit_amount != null
+                    ? { unitAmount: option.unit_amount }
+                    : {}),
+                  ...(option.unit_amount_decimal != null
+                    ? { unitAmountDecimal: option.unit_amount_decimal }
+                    : {}),
+                },
+              ],
+            ],
+    ),
+  );
+
+const toCurrencyOptionsRequest = (
+  options: Record<string, PriceCurrencyOption>,
+) =>
+  Object.fromEntries(
+    Object.entries(options).map(([currency, option]) => [
+      currency,
+      {
+        ...(option.unitAmount !== undefined
+          ? { unit_amount: option.unitAmount }
+          : {}),
+        ...(option.unitAmountDecimal !== undefined
+          ? { unit_amount_decimal: option.unitAmountDecimal }
+          : {}),
+      },
+    ]),
+  );
+
+/**
+ * Whether the observed currency options match the desired ones. Only the
+ * amount fields the user set are compared, since Stripe fills in
+ * `unit_amount_decimal` next to `unit_amount`.
+ *
+ * @internal exported for unit testing.
+ */
+export const currencyOptionsEqual = (
+  desired: Record<string, PriceCurrencyOption>,
+  observed: Record<string, PriceCurrencyOption>,
+): boolean => {
+  const currencies = Object.keys(desired);
+  if (currencies.length !== Object.keys(observed).length) return false;
+  return currencies.every((currency) => {
+    const want = desired[currency]!;
+    const have = observed[currency];
+    if (have === undefined) return false;
+    if (want.unitAmount !== undefined && want.unitAmount !== have.unitAmount) {
+      return false;
+    }
+    return (
+      want.unitAmountDecimal === undefined ||
+      want.unitAmountDecimal === have.unitAmountDecimal
+    );
+  });
+};
+
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
   product: productIdOf(price.product),
@@ -251,6 +357,7 @@ const toAttrs = (price: StripePrice) => ({
   lookupKey: price.lookup_key ?? undefined,
   type: price.type as PriceType,
   recurring: toRecurring(price.recurring),
+  currencyOptions: toCurrencyOptions(price),
   metadata: userMetadata(price.metadata),
   created: price.created,
   livemode: price.livemode,
@@ -259,7 +366,7 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPrice({ price }).pipe(
+  GetPrice({ price, expand: EXPAND_CURRENCY_OPTIONS }).pipe(
     Effect.catchIf(isMissingPrice, () => Effect.succeed(undefined)),
   );
 
@@ -270,6 +377,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
     const response = yield* GetPrices({
       active,
       limit: LIST_PAGE_SIZE,
+      expand: ["data.currency_options"],
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
     });
     prices.push(...response.data);
@@ -415,6 +523,7 @@ export const PriceProvider = () =>
       const desiredActive = news.active ?? true;
       const desiredNickname = news.nickname ?? "";
       const desiredLookupKey = news.lookupKey ?? "";
+      const desiredCurrencyOptions = news.currencyOptions ?? {};
 
       let current: StripePrice | undefined = yield* observe({
         id: output?.id,
@@ -458,6 +567,14 @@ export const PriceProvider = () =>
                 },
               }
             : {}),
+          ...(Object.keys(desiredCurrencyOptions).length > 0
+            ? {
+                currency_options: toCurrencyOptionsRequest(
+                  desiredCurrencyOptions,
+                ),
+              }
+            : {}),
+          expand: EXPAND_CURRENCY_OPTIONS,
           ...(desiredNickname.length > 0 ? { nickname: desiredNickname } : {}),
           ...(desiredLookupKey.length > 0
             ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
@@ -482,19 +599,34 @@ export const PriceProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
+      const currencyOptionsChanged = !currencyOptionsEqual(
+        desiredCurrencyOptions,
+        toCurrencyOptions(current),
+      );
 
       if (
         !activeChanged &&
         !nicknameChanged &&
         !lookupKeyChanged &&
-        !metadataChanged
+        !metadataChanged &&
+        !currencyOptionsChanged
       ) {
         return toAttrs(current);
       }
 
       const updated = yield* UpdatePrice({
         price: current.id,
+        expand: EXPAND_CURRENCY_OPTIONS,
         ...(activeChanged ? { active: desiredActive } : {}),
+        // Send the whole desired map; `""` clears every option.
+        ...(currencyOptionsChanged
+          ? {
+              currency_options:
+                Object.keys(desiredCurrencyOptions).length > 0
+                  ? toCurrencyOptionsRequest(desiredCurrencyOptions)
+                  : "",
+            }
+          : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(lookupKeyChanged
           ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }

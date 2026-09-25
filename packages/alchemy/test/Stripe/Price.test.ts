@@ -234,3 +234,81 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "update currency options in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Currency Options Product",
+      });
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("CurrencyOptionsPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 1500,
+            currencyOptions: { eur: { unitAmount: 1400 } },
+          });
+        }),
+      );
+
+      expect(created.currencyOptions).toMatchObject({
+        eur: { unitAmount: 1400 },
+      });
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("CurrencyOptionsPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 1500,
+            currencyOptions: {
+              eur: { unitAmount: 1300 },
+              gbp: { unitAmount: 1200 },
+            },
+          });
+        }),
+      );
+
+      expect(updated.id).toEqual(created.id);
+      expect(updated.currencyOptions).toMatchObject({
+        eur: { unitAmount: 1300 },
+        gbp: { unitAmount: 1200 },
+      });
+
+      const fetched = yield* GetPrice({
+        price: created.id,
+        expand: ["currency_options"],
+      });
+      expect(fetched.currency_options?.eur?.unit_amount).toEqual(1300);
+      expect(fetched.currency_options?.gbp?.unit_amount).toEqual(1200);
+
+      const cleared = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("CurrencyOptionsPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 1500,
+          });
+        }),
+      );
+
+      expect(cleared.id).toEqual(created.id);
+      expect(cleared.currencyOptions).toEqual({});
+
+      yield* stack.destroy();
+
+      const deactivated = yield* waitUntilDeactivated(created.id);
+      expect(deactivated).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
