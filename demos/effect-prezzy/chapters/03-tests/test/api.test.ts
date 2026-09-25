@@ -1,0 +1,65 @@
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import Stack from "../alchemy.run.ts";
+import { ShortyApi } from "../src/ShortyApi.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Alchemy.localState(),
+});
+
+// Deploy a full copy of the stack to stage test_$USER, and tear it down after.
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+// The same typed client the dashboard uses, pointed at the test deployment.
+const client = Effect.gen(function* () {
+  const { api } = yield* stack;
+  yield* Test.getWhenReady(`${api}/links`); // fresh workers.dev URLs take a moment
+  return yield* HttpApiClient.make(ShortyApi, { baseUrl: api });
+});
+
+test(
+  "creates and reads back a link",
+  Effect.gen(function* () {
+    const shorty = yield* client;
+    const link = yield* shorty.links.create({ payload: { url: "https://effect.website" } });
+
+    const found = yield* shorty.links.get({ params: { code: link.code } });
+    expect(found.url).toBe("https://effect.website");
+
+    const all = yield* shorty.links.list();
+    expect(all.map((l) => l.code)).toContain(link.code);
+  }),
+);
+
+test(
+  "a missing link is a typed LinkNotFound",
+  Effect.gen(function* () {
+    const shorty = yield* client;
+    const error = yield* shorty.links.get({ params: { code: "nope" } }).pipe(Effect.flip);
+    expect(error._tag).toBe("LinkNotFound");
+  }),
+);
+
+test(
+  "a short link redirects to its URL",
+  Effect.gen(function* () {
+    const { api } = yield* stack;
+    const shorty = yield* client;
+    const link = yield* shorty.links.create({ payload: { url: "https://alchemy.run/" } });
+
+    // Retries cold-start 404/5xx responses while a fresh deploy rolls out.
+    const response = yield* Test.executeWhenReady(HttpClientRequest.get(`${api}/${link.code}`)).pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("https://alchemy.run/");
+  }),
+);

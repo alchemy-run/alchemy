@@ -88,6 +88,11 @@ catalog:
   "@puppeteer/browsers": "^3.2.0"
   "@react-router/dev": "^7.16.0"
   "@react-router/node": "^7.16.0"
+  "@remotion/bundler": "4.0.526"
+  "@remotion/cli": "4.0.526"
+  "@remotion/google-fonts": "4.0.526"
+  "@remotion/player": "4.0.526"
+  "@remotion/renderer": "4.0.526"
   "@smithy/shared-ini-file-loader": "^4.7.0"
   "@smithy/types": "^4.17.2"
   "@smithy/util-base64": "^4.6.0"
@@ -133,6 +138,7 @@ catalog:
   cuelume: "^0.2.2"
   dedent: "^1.7.2"
   devalue: "5.8.1"
+  diff: "^9.0.0"
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5-ab785fc"
   drizzle-orm: "1.0.0-rc.5-ab785fc"
@@ -173,9 +179,11 @@ catalog:
   react-dom: "^19.3.0"
   react-router: "^7.16.0"
   react-server-dom-webpack: "~19.3.0"
+  remotion: "4.0.526"
   rolldown: "1.2.5"
   satteri: "^0.10.5"
   sharp: "^0.35.3"
+  shiki: "^4.4.3"
   solid-devtools: "^0.34.3"
   solid-js: "^1.9.12"
   srvx: "1.0.5"
@@ -249,6 +257,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
+  - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1
   - "@alchemy.run/sigil@0.1.0-alpha.1"
   - "@effect/atom-react@4.0.0-rc.117"
   - "@effect/platform-bun@4.0.0-rc.117"
@@ -270,14 +279,13 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260918.1"
   - "@cloudflare/workerd-windows-64@1.20260918.1"
   - workerd@1.20260918.1
-  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1"
-  - typescript@7.1.0-dev.20260905.1
+  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-linux-arm@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-linux-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
+  - '@typescript/typescript-win32-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1'
   - "@neon/config-runtime@1.6.1"
   - "@neon/config@1.7.1"
   - neon@4.21.1

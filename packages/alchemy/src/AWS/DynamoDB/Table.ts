@@ -218,6 +218,8 @@ export interface Table extends Resource<
     tableName: TableName;
     /** The ARN of the table. */
     tableArn: TableArn;
+    /** The AWS region the table lives in. */
+    region: RegionID;
     /** The partition (hash) key attribute name. */
     partitionKey: string;
     /** The sort (range) key attribute name, if defined. */
@@ -366,6 +368,39 @@ export interface Table extends Resource<
  *     return yield* HttpServerResponse.json(result.Item);
  *   }),
  * };
+ * ```
+ *
+ * **Example:** Read and write items from a Cloudflare Worker
+ *
+ * The `*Http` layers also run on a Cloudflare Worker. Alchemy creates an
+ * IAM user, access key, and least-privilege role for the Worker, binds the
+ * key onto it, and signs each request with the assumed role in the table's
+ * region. The Stack needs both provider sets:
+ * `Layer.mergeAll(Cloudflare.providers(), AWS.providers())`.
+ * ```typescript
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const table = yield* AWS.DynamoDB.Table("Links", {
+ *       partitionKey: "id",
+ *       attributes: { id: "S" },
+ *     });
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
+ *     const putItem = yield* AWS.DynamoDB.PutItem(table);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* putItem({ Item: { id: { S: "a" }, url: { S: "https://alchemy.run" } } });
+ *         const { Item } = yield* getItem({ Key: { id: { S: "a" } } });
+ *         return yield* HttpServerResponse.json(Item);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  *
  * ### Table Features
@@ -1350,6 +1385,7 @@ export const TableProvider = () =>
         tableId: state.table.TableId!,
         tableName: state.table.TableName!,
         tableArn: state.table.TableArn! as TableArn,
+        region: state.table.TableArn!.split(":")[3] as RegionID,
         partitionKey:
           state.table.KeySchema?.find((key) => key.KeyType === "HASH")
             ?.AttributeName ?? "",
@@ -1550,7 +1586,7 @@ export const TableProvider = () =>
       };
 
       return Table.Provider.of({
-        stables: ["tableName", "tableId", "tableArn"],
+        stables: ["tableName", "tableId", "tableArn", "region"],
         // Enumerate every table in the ambient account/region. `listTables`
         // returns only names, so each is hydrated to the full Attributes shape
         // via the same multi-API read helper (`readTableState`) `read` uses.
