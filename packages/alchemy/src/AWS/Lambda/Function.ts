@@ -1,5 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Endpoint } from "@distilled.cloud/aws/Endpoint";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
@@ -565,6 +567,16 @@ export interface Function extends Resource<
 
 export type FunctionServices = Credentials | Region | AWSEnvironment;
 
+/** Services supplied by the Lambda bootstrap during deferred initialization. */
+export type FunctionInitServices =
+  | Scope.Scope
+  | NodeServices
+  | HttpClient
+  | FunctionServices
+  | Endpoint
+  | Stack
+  | Stage;
+
 export type FunctionShape = Main<FunctionServices>;
 
 export interface NormalizedFunctionUrlConfig {
@@ -745,6 +757,74 @@ export const normalizeFunctionUrl = (
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Sandbox-Scoped Initialization
+ * Returning a `fetch` shape covers the common case. When a handler needs
+ * services that are expensive to construct, such as fetched configuration
+ * or an SDK client, register a *deferred listener* instead: pass
+ * `host.listen` an Effect that returns the handler. The outer Effect runs
+ * once per Lambda sandbox (cold start) and the handler it returns serves
+ * every invocation on that sandbox.
+ *
+ * Application services provided around `host.listen` or `host.serve` remain
+ * available when the listener executes. Use `Layer.build` inside the deferred
+ * initializer for sandbox-scoped layers; acquire request-scoped resources
+ * inside the handler. Instance cleanup is best-effort within Lambda's 500 ms
+ * shutdown window.
+ *
+ * Deferred initialization provides Node platform services, HTTP, AWS
+ * credentials and region, `AWSEnvironment`, `Stack`, `Stage`, and `Scope`.
+ * `AWSEnvironment.current` resolves the account identity lazily, once per
+ * sandbox. Deployment-only providers are not runtime services.
+ *
+ * Wrap an `HttpEffect` in `makeFunctionHttpHandler` to keep Effect HTTP
+ * semantics on a Function URL.
+ *
+ * **Example:** Build a layer once per sandbox
+ * ```typescript
+ * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
+ *   "ApiFunction",
+ *   { main: import.meta.url, functionUrl: true },
+ *   Effect.gen(function* () {
+ *     const host = yield* AWS.Lambda.Function;
+ *
+ *     yield* host.listen(
+ *       Effect.gen(function* () {
+ *         // Built once, at cold start. `Scope` is supplied by Lambda, so
+ *         // the layer lives for the sandbox rather than a single request.
+ *         const services = yield* Layer.build(ConfigLive);
+ *
+ *         // Reused for every invocation this sandbox serves.
+ *         return AWS.Lambda.makeFunctionHttpHandler(
+ *           Effect.gen(function* () {
+ *             const config = yield* Config;
+ *             return yield* HttpServerResponse.json({ region: config.region });
+ *           }).pipe(Effect.provide(services)),
+ *         );
+ *       }),
+ *     );
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Requirements Lambda already provides
+ * ```typescript
+ * // Lambda declares what it supplies at each phase, so neither `Scope` nor
+ * // `HandlerContext` leaks into the Function's requirements — only genuine
+ * // application dependencies do.
+ * yield* host.listen(
+ *   Effect.gen(function* () {
+ *     yield* Scope.Scope; // provided during initialization
+ *
+ *     return () =>
+ *       Effect.gen(function* () {
+ *         yield* Scope.Scope; // fresh per invocation
+ *         const context = yield* AWS.Lambda.HandlerContext;
+ *         yield* Effect.log(context.awsRequestId);
+ *       });
+ *   }),
+ * );
  * ```
  *
  * ### Configuration
@@ -1000,12 +1080,23 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  Serverless.FunctionContext,
+  Serverless.FunctionContext<
+    FunctionInitServices,
+    Scope.Scope | HandlerContext
+  >,
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
-  createRuntimeContext: (id: string): Serverless.FunctionContext => {
-    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  createRuntimeContext: (
+    id: string,
+  ): Serverless.FunctionContext<
+    FunctionInitServices,
+    Scope.Scope | HandlerContext
+  > => {
+    const listeners: {
+      init: Effect.Effect<Serverless.FunctionListener>;
+      services: Context.Context<never>;
+    }[] = [];
     const env: Record<string, any> = {};
 
     const ctx = {
@@ -1034,18 +1125,38 @@ export const Function: Platform<
           | Serverless.FunctionListener
           | Effect.Effect<Serverless.FunctionListener>,
       ) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as Serverless.FunctionContext["listen"],
+        Effect.contextWith((context) =>
+          Effect.sync(() => {
+            // Scope, invocation metadata, and layer memoization belong to execution.
+            const services = Context.omit(
+              Scope.Scope,
+              HandlerContext,
+              Layer.CurrentMemoMap,
+            )(context);
+            listeners.push({
+              init: Effect.isEffect(handler)
+                ? handler
+                : Effect.succeed(handler),
+              services,
+            });
+          }),
+        )) as any as Serverless.FunctionContext<
+        FunctionInitServices,
+        Scope.Scope | HandlerContext
+      >["listen"],
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
         handler: Effect.gen(function* () {
-          const handlers = yield* Effect.all(listeners, {
-            concurrency: "unbounded",
-          });
+          const handlers = yield* Effect.forEach(
+            listeners,
+            ({ init, services }) =>
+              init.pipe(
+                Effect.provideContext(services),
+                Effect.map((handler) => ({ handler, services })),
+              ),
+            { concurrency: "unbounded" },
+          );
           // Sandbox-lifetime services, captured so each invocation can
           // build its telemetry exporters and run the handler effect
           // against the same context the init phase saw (mirrors
@@ -1055,7 +1166,11 @@ export const Function: Platform<
             yield* Effect.context<never>(),
           );
           return async (event: any, context: lambda.Context): Promise<any> => {
-            for (const handler of handlers) {
+            for (const { handler, services: registeredServices } of handlers) {
+              const handlerServices = Context.merge(
+                services,
+                registeredServices,
+              );
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 // Each invocation gets a fresh request scope, matching the
@@ -1079,12 +1194,14 @@ export const Function: Platform<
                       // below.
                       Layer.effectContext(
                         buildEventTelemetry(
-                          services,
+                          handlerServices,
                           scope,
                           (ctx as Serverless.FunctionContext).telemetry,
                         ),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ).pipe(
+                      Layer.provideMerge(Layer.succeedContext(handlerServices)),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
                   Effect.runPromiseExit,
