@@ -1,38 +1,44 @@
-import { currencyOptionsEqual } from "@/Stripe/Price";
+import {
+  addedCurrencyOptions,
+  currencyOptionsNeedReplace,
+} from "@/Stripe/Price";
 import { describe, expect, test } from "alchemy-test";
 
 describe(
   "Stripe.Price currencyOptions",
   { tags: ["unit", "provider:stripe", "provider:stripe:price", "local"] },
   () => {
-    test("ignores the unit_amount_decimal Stripe fills in", () => {
+    test("adding a currency does not replace the price", () => {
+      const observed = { eur: { unitAmount: 1400, unitAmountDecimal: "1400" } };
+      const desired = {
+        eur: { unitAmount: 1400 },
+        gbp: { unitAmount: 1200 },
+      };
+      expect(currencyOptionsNeedReplace(desired, observed)).toBe(false);
+      expect(addedCurrencyOptions(desired, observed)).toEqual({
+        gbp: { unitAmount: 1200 },
+      });
+    });
+
+    test("changing an existing amount replaces the price", () => {
       expect(
-        currencyOptionsEqual(
-          { eur: { unitAmount: 1400 } },
+        currencyOptionsNeedReplace(
+          { eur: { unitAmount: 1300 } },
           { eur: { unitAmount: 1400, unitAmountDecimal: "1400" } },
         ),
       ).toBe(true);
     });
 
-    test("detects a changed amount", () => {
+    test("removing a currency replaces the price", () => {
       expect(
-        currencyOptionsEqual(
-          { eur: { unitAmount: 1300 } },
-          { eur: { unitAmount: 1400, unitAmountDecimal: "1400" } },
-        ),
-      ).toBe(false);
-    });
-
-    test("detects added and removed currencies", () => {
-      expect(
-        currencyOptionsEqual(
+        currencyOptionsNeedReplace(
+          { gbp: { unitAmount: 1200 } },
           { eur: { unitAmount: 1400 }, gbp: { unitAmount: 1200 } },
-          { eur: { unitAmount: 1400 } },
         ),
-      ).toBe(false);
-      expect(currencyOptionsEqual({}, { eur: { unitAmount: 1400 } })).toBe(
-        false,
-      );
+      ).toBe(true);
+      expect(
+        currencyOptionsNeedReplace({}, { eur: { unitAmount: 1400 } }),
+      ).toBe(true);
     });
   },
 );

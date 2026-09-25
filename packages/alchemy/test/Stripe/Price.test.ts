@@ -236,7 +236,7 @@ test.provider(
 );
 
 test.provider(
-  "update currency options in place",
+  "add currency options in place and replace on change",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -260,7 +260,34 @@ test.provider(
         eur: { unitAmount: 1400 },
       });
 
-      const updated = yield* stack.deploy(
+      const added = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("CurrencyOptionsPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 1500,
+            currencyOptions: {
+              eur: { unitAmount: 1400 },
+              gbp: { unitAmount: 1200 },
+            },
+          });
+        }),
+      );
+
+      expect(added.id).toEqual(created.id);
+      expect(added.currencyOptions).toMatchObject({
+        eur: { unitAmount: 1400 },
+        gbp: { unitAmount: 1200 },
+      });
+
+      const fetched = yield* GetPrice({
+        price: created.id,
+        expand: ["currency_options"],
+      });
+      expect(fetched.currency_options?.eur?.unit_amount).toEqual(1400);
+      expect(fetched.currency_options?.gbp?.unit_amount).toEqual(1200);
+
+      const changed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stripe.Price("CurrencyOptionsPrice", {
             product: product.id,
@@ -274,35 +301,31 @@ test.provider(
         }),
       );
 
-      expect(updated.id).toEqual(created.id);
-      expect(updated.currencyOptions).toMatchObject({
+      expect(changed.id).not.toEqual(created.id);
+      expect(changed.currencyOptions).toMatchObject({
         eur: { unitAmount: 1300 },
         gbp: { unitAmount: 1200 },
       });
+      expect((yield* GetPrice({ price: created.id })).active).toEqual(false);
 
-      const fetched = yield* GetPrice({
-        price: created.id,
-        expand: ["currency_options"],
-      });
-      expect(fetched.currency_options?.eur?.unit_amount).toEqual(1300);
-      expect(fetched.currency_options?.gbp?.unit_amount).toEqual(1200);
-
-      const cleared = yield* stack.deploy(
+      const removed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stripe.Price("CurrencyOptionsPrice", {
             product: product.id,
             currency: "usd",
             unitAmount: 1500,
+            currencyOptions: { gbp: { unitAmount: 1200 } },
           });
         }),
       );
 
-      expect(cleared.id).toEqual(created.id);
-      expect(cleared.currencyOptions).toEqual({});
+      expect(removed.id).not.toEqual(changed.id);
+      expect(Object.keys(removed.currencyOptions)).toEqual(["gbp"]);
+      expect((yield* GetPrice({ price: changed.id })).active).toEqual(false);
 
       yield* stack.destroy();
 
-      const deactivated = yield* waitUntilDeactivated(created.id);
+      const deactivated = yield* waitUntilDeactivated(removed.id);
       expect(deactivated).toEqual("inactive");
 
       yield* archiveProduct(product.id);

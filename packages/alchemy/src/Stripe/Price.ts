@@ -103,7 +103,8 @@ export interface PriceProps {
   /**
    * Amounts in currencies other than `currency`, keyed by lowercase
    * three-letter ISO currency code (e.g. `{ eur: { unitAmount: 1400 } }`).
-   * Updates in place.
+   * Adding a currency updates in place. Stripe cannot change or remove an
+   * existing currency's amount, so that replaces the price.
    */
   currencyOptions?: Record<string, PriceCurrencyOption>;
   /**
@@ -168,8 +169,8 @@ export type Price = Resource<
 /**
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
  * product, and recurring interval are immutable (changing them replaces
- * the price). Nickname, metadata, lookup key, currency options, and
- * `active` update in place. Prices cannot be deleted; destroy deactivates them
+ * the price). Nickname, metadata, lookup key, `active`, and added
+ * currency options update in place. Prices cannot be deleted; destroy deactivates them
  * (`active=false`).
  *
  * @see https://docs.stripe.com/api/prices
@@ -319,32 +320,46 @@ const toCurrencyOptionsRequest = (
     ]),
   );
 
+// Stripe fills in `unit_amount_decimal` next to `unit_amount`, so only the
+// amount the user set is compared.
+const currencyOptionMatches = (
+  desired: PriceCurrencyOption,
+  observed: PriceCurrencyOption,
+): boolean =>
+  (desired.unitAmount === undefined ||
+    desired.unitAmount === observed.unitAmount) &&
+  (desired.unitAmountDecimal === undefined ||
+    desired.unitAmountDecimal === observed.unitAmountDecimal);
+
 /**
- * Whether the observed currency options match the desired ones. Only the
- * amount fields the user set are compared, since Stripe fills in
- * `unit_amount_decimal` next to `unit_amount`.
+ * Whether the desired currency options change or drop a currency the price
+ * already has. Stripe rejects both on update ("immutable field for an
+ * existing currency", "cannot unset currency_options") and merges a partial
+ * map, so either one needs a new price.
  *
  * @internal exported for unit testing.
  */
-export const currencyOptionsEqual = (
+export const currencyOptionsNeedReplace = (
   desired: Record<string, PriceCurrencyOption>,
   observed: Record<string, PriceCurrencyOption>,
-): boolean => {
-  const currencies = Object.keys(desired);
-  if (currencies.length !== Object.keys(observed).length) return false;
-  return currencies.every((currency) => {
-    const want = desired[currency]!;
-    const have = observed[currency];
-    if (have === undefined) return false;
-    if (want.unitAmount !== undefined && want.unitAmount !== have.unitAmount) {
-      return false;
-    }
-    return (
-      want.unitAmountDecimal === undefined ||
-      want.unitAmountDecimal === have.unitAmountDecimal
-    );
+): boolean =>
+  Object.entries(observed).some(([currency, have]) => {
+    const want = desired[currency];
+    return want === undefined || !currencyOptionMatches(want, have);
   });
-};
+
+/**
+ * The desired currency options the price does not have yet.
+ *
+ * @internal exported for unit testing.
+ */
+export const addedCurrencyOptions = (
+  desired: Record<string, PriceCurrencyOption>,
+  observed: Record<string, PriceCurrencyOption>,
+): Record<string, PriceCurrencyOption> =>
+  Object.fromEntries(
+    Object.entries(desired).filter(([currency]) => !(currency in observed)),
+  );
 
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
@@ -478,6 +493,15 @@ const shouldReplace = (
     return true;
   }
   if (!recurringEqual(news.recurring, output.recurring)) return true;
+  if (
+    currencyOptionsNeedReplace(
+      news.currencyOptions ?? {},
+      // State written before `currencyOptions` existed has no value here.
+      output.currencyOptions ?? {},
+    )
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -531,7 +555,8 @@ export const PriceProvider = () =>
       });
       // A previous generation (same logical id, different immutable
       // fields) must not be reused — Stripe prices cannot change amount,
-      // currency, product, or recurring interval.
+      // currency, product, recurring interval, or an existing currency
+      // option.
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
         current = undefined;
       }
@@ -599,10 +624,11 @@ export const PriceProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
-      const currencyOptionsChanged = !currencyOptionsEqual(
+      const addedOptions = addedCurrencyOptions(
         desiredCurrencyOptions,
         toCurrencyOptions(current),
       );
+      const currencyOptionsChanged = Object.keys(addedOptions).length > 0;
 
       if (
         !activeChanged &&
@@ -618,14 +644,8 @@ export const PriceProvider = () =>
         price: current.id,
         expand: EXPAND_CURRENCY_OPTIONS,
         ...(activeChanged ? { active: desiredActive } : {}),
-        // Send the whole desired map; `""` clears every option.
         ...(currencyOptionsChanged
-          ? {
-              currency_options:
-                Object.keys(desiredCurrencyOptions).length > 0
-                  ? toCurrencyOptionsRequest(desiredCurrencyOptions)
-                  : "",
-            }
+          ? { currency_options: toCurrencyOptionsRequest(addedOptions) }
           : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(lookupKeyChanged
