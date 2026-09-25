@@ -138,7 +138,7 @@ describe("makeIntegrationPluginOptions", () => {
     expect(options.skipEnvironments).toEqual([...NODE_ENVIRONMENTS]);
   });
 
-  it("preserves user cloudflare options but overrides the structural ones", () => {
+  it("preserves user cloudflare options, including a custom worker main, but overrides the structural ones", () => {
     const options = makeIntegrationPluginOptions({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: ["nodejs_compat"],
@@ -150,9 +150,10 @@ describe("makeIntegrationPluginOptions", () => {
     expect(options.compatibilityDate).toBe("2026-03-10");
     expect(options.compatibilityFlags).toEqual(["nodejs_compat"]);
     expect(options.worker?.name).toBe("fixtures-astro");
-    // Astro-structural options always win: the worker entry is the vendored
-    // server entrypoint and Astro pins the worker environment name to "ssr".
-    expect(options.main).toBe(SERVER_ENTRYPOINT);
+    // A user `main` is the custom Worker entry that wraps the vendored
+    // server entrypoint's handler; it is kept. Astro still pins the worker
+    // environment name to "ssr".
+    expect(options.main).toBe("/somewhere/else.ts");
     expect(options.viteEnvironments).toEqual({ entry: "ssr" });
     expect(options.skipEnvironments).toEqual(["astro", "prerender", "custom"]);
   });
