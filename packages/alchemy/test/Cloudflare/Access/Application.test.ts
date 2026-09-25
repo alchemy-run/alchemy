@@ -872,12 +872,27 @@ const liveSelfHosted = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const liveSaml = (overrides: Record<string, unknown> = {}) => ({
+// Real SaaS responses also carry the self-hosted-looking `domain` and
+// `session_duration` keys.
+const saasCommon = {
   id: APP_ID,
-  aud: "aud-saml",
+  uid: APP_ID,
   type: "saas",
-  name: "Looker",
+  domain: "team.cloudflareaccess.com/cdn-cgi/access/sso/saml/x",
+  session_duration: "24h",
+  allowed_idps: [],
+  app_launcher_visible: true,
+  auto_redirect_to_identity: false,
+  tags: [],
   policies: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const liveSaml = (overrides: Record<string, unknown> = {}) => ({
+  ...saasCommon,
+  aud: "aud-saml",
+  name: "Looker",
   saas_app: {
     auth_type: "saml",
     sp_entity_id: "https://example.looker.com",
@@ -894,11 +909,9 @@ const liveSaml = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const liveOidc = (saasApp: Record<string, unknown> = {}) => ({
-  id: APP_ID,
+  ...saasCommon,
   aud: "aud-oidc",
-  type: "saas",
   name: "Coder",
-  policies: [],
   saas_app: {
     auth_type: "oidc",
     client_id: "client-1",
@@ -1276,7 +1289,7 @@ describe(
         expect(create?.body).not.toHaveProperty("domain");
         expect(calls.some((c) => c.method === "PUT")).toBe(false);
         expect(result.type).toEqual("saas");
-        expect(result.domain).toEqual("");
+        expect(result.domain).toEqual(saasCommon.domain);
         expect(result.saasApp).toMatchObject({
           ssoEndpoint: liveSaml().saas_app.sso_endpoint,
           idpEntityId: liveSaml().saas_app.idp_entity_id,
