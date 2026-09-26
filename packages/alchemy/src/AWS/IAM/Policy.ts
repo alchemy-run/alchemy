@@ -37,8 +37,8 @@ export interface PolicyStatement {
   Action?: IamAction[] | string[];
   Resource?: string | string[];
   Condition?: Record<string, Record<string, string | string[]>>;
-  Principal?: Record<string, string | string[]>;
-  NotPrincipal?: Record<string, string | string[]>;
+  Principal?: "*" | Record<string, string | string[]>;
+  NotPrincipal?: "*" | Record<string, string | string[]>;
   NotAction?: string[];
   NotResource?: string[];
 }
