@@ -49,6 +49,7 @@ import {
   makeServerBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
+  withProbePort,
   workloadImageHash,
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
@@ -61,6 +62,74 @@ export const isDeployment = (value: any): value is Deployment => {
     value.Type === "Kubernetes.Deployment"
   );
 };
+
+/**
+ * A Kubernetes container probe (`core/v1` `Probe`). Set exactly one handler
+ * (`httpGet`, `tcpSocket`, `grpc`, or `exec`) plus optional timing fields.
+ * A handler `port` defaults to the Deployment's container `port`.
+ */
+export interface DeploymentProbe {
+  /** Probe with an HTTP GET; any status in 200-399 is a success. */
+  httpGet?: {
+    /** Request path, e.g. `"/healthz"`. */
+    path?: string;
+    /**
+     * Container port number or named port.
+     * @default the Deployment `port`
+     */
+    port?: number | string;
+    /** Host to connect to. @default the pod IP */
+    host?: string;
+    /** Connection scheme. @default "HTTP" */
+    scheme?: "HTTP" | "HTTPS";
+    /** Custom request headers. */
+    httpHeaders?: { name: string; value: string }[];
+  };
+  /** Probe by opening a TCP connection. */
+  tcpSocket?: {
+    /**
+     * Container port number or named port.
+     * @default the Deployment `port`
+     */
+    port?: number | string;
+    /** Host to connect to. @default the pod IP */
+    host?: string;
+  };
+  /** Probe with the gRPC health checking protocol. */
+  grpc?: {
+    /**
+     * Container port number.
+     * @default the Deployment `port`
+     */
+    port?: number;
+    /** Service name sent in the gRPC `HealthCheckRequest`. */
+    service?: string;
+  };
+  /** Probe by running a command in the container; exit code 0 is a success. */
+  exec?: {
+    /** Command and arguments; not run in a shell. */
+    command: string[];
+  };
+  /** Seconds after container start before the first probe. @default 0 */
+  initialDelaySeconds?: number;
+  /** Seconds between probes. @default 10 */
+  periodSeconds?: number;
+  /** Seconds before a probe times out. @default 1 */
+  timeoutSeconds?: number;
+  /**
+   * Consecutive successes after a failure to count as healthy. Must be 1
+   * for liveness and startup probes.
+   * @default 1
+   */
+  successThreshold?: number;
+  /** Consecutive failures to count as unhealthy. @default 3 */
+  failureThreshold?: number;
+  /**
+   * Pod termination grace period (seconds) after a liveness or startup
+   * probe failure. Overrides the pod's `terminationGracePeriodSeconds`.
+   */
+  terminationGracePeriodSeconds?: number;
+}
 
 /**
  * The image-source props shared by the workload platforms. Exactly one of
@@ -128,6 +197,24 @@ export interface DeploymentPropsBase extends PlatformProps {
    * Additional environment variables for the container.
    */
   env?: Record<string, any>;
+  /**
+   * Readiness probe for the container. Kubernetes sends Service traffic to
+   * a pod only while this probe succeeds, and rolling updates wait for new
+   * pods to become ready. The handler `port` defaults to `port`.
+   */
+  readinessProbe?: DeploymentProbe;
+  /**
+   * Liveness probe for the container. Kubernetes restarts the container
+   * when this probe fails `failureThreshold` times in a row. The handler
+   * `port` defaults to `port`.
+   */
+  livenessProbe?: DeploymentProbe;
+  /**
+   * Startup probe for the container. Readiness and liveness probes start
+   * only after this probe succeeds, so a slow-starting container is not
+   * restarted before it boots. The handler `port` defaults to `port`.
+   */
+  startupProbe?: DeploymentProbe;
   /**
    * Container image build architecture.
    * @default "amd64"
@@ -377,6 +464,34 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
+ * ```
+ *
+ * ### Health Probes
+ * **Example:** Readiness, liveness, and startup probes
+ * Omit a handler `port` to probe the container `port`.
+ * ```typescript
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   main: import.meta.url,
+ *   port: 3000,
+ *   readinessProbe: {
+ *     httpGet: { path: "/healthz" },
+ *     initialDelaySeconds: 3,
+ *     periodSeconds: 10,
+ *     failureThreshold: 3,
+ *   },
+ *   livenessProbe: {
+ *     httpGet: { path: "/healthz" },
+ *     initialDelaySeconds: 10,
+ *     periodSeconds: 15,
+ *     failureThreshold: 3,
+ *   },
+ *   startupProbe: {
+ *     tcpSocket: {},
+ *     periodSeconds: 5,
+ *     failureThreshold: 30,
+ *   },
+ * });
  * ```
  *
  * ### Kubernetes Escape Hatch
@@ -702,6 +817,9 @@ export const DeploymentProvider = () =>
                           : JSON.stringify(value),
                     })),
                     resources: news.resources,
+                    readinessProbe: withProbePort(news.readinessProbe, port),
+                    livenessProbe: withProbePort(news.livenessProbe, port),
+                    startupProbe: withProbePort(news.startupProbe, port),
                   },
                 ],
               },

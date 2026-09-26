@@ -20,6 +20,7 @@ import type {
   WorkloadImageSource,
 } from "../ClusterAdapter.ts";
 import type { ClusterLike, Connection, ConnectionAuth } from "../Connection.ts";
+import type { DeploymentProbe } from "../Deployment.ts";
 
 /**
  * Structural deep merge: objects merge recursively; arrays and primitives
@@ -48,6 +49,31 @@ export const deepMerge = <T>(base: T, override: unknown): T => {
         : value;
   }
   return out as T;
+};
+
+/**
+ * Fill each omitted probe handler `port` (`httpGet`, `tcpSocket`, `grpc`)
+ * with the container port.
+ */
+export const withProbePort = (
+  probe: DeploymentProbe | undefined,
+  port: number,
+): DeploymentProbe | undefined => {
+  if (probe === undefined) return undefined;
+  return {
+    ...probe,
+    ...(probe.httpGet
+      ? { httpGet: { ...probe.httpGet, port: probe.httpGet.port ?? port } }
+      : {}),
+    ...(probe.tcpSocket
+      ? {
+          tcpSocket: { ...probe.tcpSocket, port: probe.tcpSocket.port ?? port },
+        }
+      : {}),
+    ...(probe.grpc
+      ? { grpc: { ...probe.grpc, port: probe.grpc.port ?? port } }
+      : {}),
+  };
 };
 
 export const imagePlatformOf = (
