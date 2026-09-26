@@ -168,6 +168,9 @@ export const ImageProvider = () =>
           "cache-to": props.build.cacheTo,
           args: props.build.options,
           engineContext,
+          // Base images and registry caches may live in the same registry;
+          // the push itself stays in `reconcile`.
+          credentials: props.registry,
         });
 
         // Read the freshly built image's id and creation time straight from
