@@ -199,11 +199,17 @@ export const InvalidationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // An invalidation is an immutable ledger entry, not a mutable
-          // resource. If we already issued one for this logical id and
-          // version, return its attributes unchanged. The `diff` above
-          // forces a `replace` whenever `distributionId` or `version`
-          // changes, so the engine creates a fresh invalidation that way.
-          if (output?.invalidationId) {
+          // resource. If we already issued one for this distribution and
+          // version, return its attributes unchanged. `diff` only sees a
+          // version change when it is resolved at plan time; a version taken
+          // from an upstream output (e.g. `AssetDeployment.version`) is
+          // unresolved whenever that upstream changes, so the engine plans an
+          // update instead of a replace and lands here with the old output.
+          if (
+            output?.invalidationId &&
+            output.distributionId === news.distributionId &&
+            output.version === news.version
+          ) {
             yield* session.note(output.invalidationId);
             return output;
           }
