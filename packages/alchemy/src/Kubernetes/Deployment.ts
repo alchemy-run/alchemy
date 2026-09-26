@@ -49,6 +49,7 @@ import {
   makeServerBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
+  withProbePort,
   workloadImageHash,
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
@@ -552,72 +553,6 @@ const retryUntilServiceReady = <A, E, R>(
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
 
-/**
- * Fill each omitted probe handler `port` with the container port.
- * Exported for tests.
- */
-export const withProbePort = (
-  probe: DeploymentProbe | undefined,
-  port: number,
-): DeploymentProbe | undefined => {
-  if (probe === undefined) return undefined;
-  return {
-    ...probe,
-    ...(probe.httpGet
-      ? { httpGet: { ...probe.httpGet, port: probe.httpGet.port ?? port } }
-      : {}),
-    ...(probe.tcpSocket
-      ? {
-          tcpSocket: { ...probe.tcpSocket, port: probe.tcpSocket.port ?? port },
-        }
-      : {}),
-    ...(probe.grpc
-      ? { grpc: { ...probe.grpc, port: probe.grpc.port ?? port } }
-      : {}),
-  };
-};
-
-/**
- * Synthesize the Deployment's single container. Omitted optional props
- * stay `undefined` and are dropped from the applied JSON.
- * Exported for tests.
- */
-export const makeDeploymentContainer = ({
-  name,
-  image,
-  port,
-  env,
-  props,
-}: {
-  name: string;
-  image: string;
-  port: number;
-  env: Record<string, unknown>;
-  props: Pick<
-    DeploymentPropsBase,
-    | "command"
-    | "args"
-    | "resources"
-    | "readinessProbe"
-    | "livenessProbe"
-    | "startupProbe"
-  >;
-}) => ({
-  name,
-  image,
-  command: props.command,
-  args: props.args,
-  ports: [{ containerPort: port }],
-  env: Object.entries(env).map(([name, value]) => ({
-    name,
-    value: typeof value === "string" ? value : JSON.stringify(value),
-  })),
-  resources: props.resources,
-  readinessProbe: withProbePort(props.readinessProbe, port),
-  livenessProbe: withProbePort(props.livenessProbe, port),
-  startupProbe: withProbePort(props.startupProbe, port),
-});
-
 export const DeploymentProvider = () =>
   Provider.effect(
     Deployment,
@@ -868,13 +803,24 @@ export const DeploymentProvider = () =>
               spec: {
                 serviceAccountName,
                 containers: [
-                  makeDeploymentContainer({
+                  {
                     name: baseName,
                     image: resolved.imageUri,
-                    port,
-                    env: containerEnv,
-                    props: news,
-                  }),
+                    command: news.command,
+                    args: news.args,
+                    ports: [{ containerPort: port }],
+                    env: Object.entries(containerEnv).map(([name, value]) => ({
+                      name,
+                      value:
+                        typeof value === "string"
+                          ? value
+                          : JSON.stringify(value),
+                    })),
+                    resources: news.resources,
+                    readinessProbe: withProbePort(news.readinessProbe, port),
+                    livenessProbe: withProbePort(news.livenessProbe, port),
+                    startupProbe: withProbePort(news.startupProbe, port),
+                  },
                 ],
               },
             },
