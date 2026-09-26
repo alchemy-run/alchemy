@@ -324,5 +324,67 @@ describe(
         expect(output.deletionProtection).toBe(true);
       }),
     );
+
+    // A replacement is created before the old database is deleted. With an
+    // unchanged explicit name both generations resolve to one database, so
+    // reconcile would converge onto (and unprotect) the old database and the
+    // old generation's cleanup would then delete it.
+    for (const { kind, provider: findProvider } of engines) {
+      const diffRegionChange = (name: { olds?: string; news?: string }) => {
+        const fake = fakePlanetscale({ kind, deletionProtected: true });
+        return Effect.gen(function* () {
+          const provider = yield* findProvider;
+          const props = (slug: string, name: string | undefined) =>
+            ({
+              name,
+              clusterSize: "PS_10",
+              region: { slug },
+              deletionProtection: false,
+            }) as any;
+          return yield* Effect.exit(
+            provider.diff!({
+              id: "Db",
+              fqn: "Db",
+              instanceId: "instance",
+              olds: props("us-east", name.olds),
+              news: props("eu-west", name.news),
+              oldBindings: [],
+              newBindings: [],
+              output: {
+                ...attrs(true),
+                name: name.olds ?? DB,
+                region: { slug: "us-east" },
+              },
+            }),
+          );
+        }).pipe(Effect.provide(fake.layer));
+      };
+
+      it.live(
+        `${kind}: a replacement that keeps an explicit name is rejected`,
+        () =>
+          Effect.gen(function* () {
+            const exit = yield* diffRegionChange({ olds: DB, news: DB });
+            expect(Exit.isFailure(exit)).toBe(true);
+            if (Exit.isFailure(exit)) {
+              const error = exit.cause.reasons.find((r) => r._tag === "Fail");
+              expect(error?._tag === "Fail" && error.error).toMatchObject({
+                _tag: "Planetscale::Conflict",
+              });
+            }
+          }),
+      );
+
+      it.live(`${kind}: a replacement under a new name is planned`, () =>
+        Effect.gen(function* () {
+          expect(
+            yield* diffRegionChange({ olds: DB, news: `${DB}-eu` }),
+          ).toEqual(Exit.succeed({ action: "replace" }));
+          expect(yield* diffRegionChange({})).toEqual(
+            Exit.succeed({ action: "replace" }),
+          );
+        }),
+      );
+    }
   },
 );

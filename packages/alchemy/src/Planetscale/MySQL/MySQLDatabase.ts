@@ -19,6 +19,7 @@ import type { Providers } from "../Providers.ts";
 import {
   deleteUnprotectedDatabase,
   PlanetscaleConflict,
+  replaceDatabase,
   waitForBranchReady,
   waitForDatabaseReady,
 } from "../Util.ts";
@@ -217,7 +218,7 @@ export const MySQLDatabaseProvider = () =>
         output?.region?.slug !== undefined &&
         news.region.slug !== output.region.slug
       ) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "region");
       }
       // Replicas reconcile in place via a keyspace resize — never a
       // replacement. Diff against the observed keyspace replica count so

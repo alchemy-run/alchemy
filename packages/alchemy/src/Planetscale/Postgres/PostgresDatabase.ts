@@ -19,6 +19,7 @@ import type { Providers } from "../Providers.ts";
 import {
   deleteUnprotectedDatabase,
   PlanetscaleConflict,
+  replaceDatabase,
   waitForBranchReady,
   waitForDatabaseReady,
 } from "../Util.ts";
@@ -163,16 +164,16 @@ export const PostgresDatabaseProvider = () =>
         output?.region?.slug &&
         news.region.slug !== output.region.slug
       ) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "region");
       }
 
       if (news.replicas !== olds.replicas) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "replicas");
       }
 
       const oldArch = output?.arch ?? olds.arch ?? "x86";
       if (news.arch && news.arch !== oldArch) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "arch");
       }
 
       if (yield* diffMigrations({ news, output })) {

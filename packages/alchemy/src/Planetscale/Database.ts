@@ -19,7 +19,9 @@ export interface DatabaseRegion {
 export interface BaseDatabaseProps {
   /**
    * Database name. Must be lowercase. If omitted, a unique name will be
-   * generated from the stack/stage/logical-id.
+   * generated from the stack/stage/logical-id. A change that replaces the
+   * database needs a new name, so it fails while an explicit name stays
+   * the same.
    */
   name?: string;
 
@@ -59,6 +61,11 @@ export interface BaseDatabaseProps {
    * `PlanetscaleDeletionProtected` error; set it to `false` and deploy
    * before deleting. If omitted, Alchemy leaves the database's current
    * setting unchanged.
+   *
+   * A replacement (e.g. a region change) creates the new database first,
+   * so deleting the protected old one fails afterwards. The resource then
+   * manages the new database, so turn protection off on the old one in
+   * PlanetScale directly and deploy again.
    */
   deletionProtection?: boolean;
 

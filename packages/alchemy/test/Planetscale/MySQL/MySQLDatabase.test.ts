@@ -504,6 +504,9 @@ describe
         "deletionProtection blocks destroy until it is turned off",
         (stack) =>
           Effect.gen(function* () {
+            const name = "alchemy-test-mysql-deletion-protection";
+            const { organization } = yield* yield* Planetscale.Credentials;
+
             yield* stack.destroy();
 
             const deploy = (deletionProtection: boolean) =>
@@ -512,6 +515,7 @@ describe
                   const database = yield* Planetscale.MySQLDatabase(
                     "MySQLDatabaseDeletionProtection",
                     {
+                      name,
                       clusterSize: "PS_10",
                       deletionProtection,
                     },
@@ -520,13 +524,13 @@ describe
                 }),
               );
 
-            const { database } = yield* deploy(true);
-            expect(database.deletionProtection).toBe(true);
-
             yield* Effect.gen(function* () {
+              const { database } = yield* deploy(true);
+              expect(database.deletionProtection).toBe(true);
+
               const live = yield* ps.getDatabase({
-                organization: database.organization,
-                database: database.name,
+                organization,
+                database: name,
               });
               expect(live.deletion_protected).toBe(true);
 
@@ -539,31 +543,24 @@ describe
               }
 
               const stillThere = yield* ps.getDatabase({
-                organization: database.organization,
-                database: database.name,
+                organization,
+                database: name,
               });
-              expect(stillThere.name).toEqual(database.name);
+              expect(stillThere.id).toEqual(database.id);
 
               const { database: unprotected } = yield* deploy(false);
               expect(unprotected.deletionProtection).toBe(false);
+
+              yield* stack.destroy();
+
+              yield* waitForDatabaseToBeDeleted(name, organization);
             }).pipe(
-              // Never leak a protected database when an assertion fails.
+              // Registered before the first deploy so a failed run never
+              // leaves a protected database behind; a failed cleanup fails
+              // the test.
               Effect.ensuring(
-                ps
-                  .updateDatabaseSettings({
-                    organization: database.organization,
-                    database: database.name,
-                    deletion_protected: false,
-                  })
-                  .pipe(Effect.ignore),
+                deleteTestDatabase(organization, name).pipe(Effect.orDie),
               ),
-            );
-
-            yield* stack.destroy();
-
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
             );
           }).pipe(logLevel),
         5_000_000,
@@ -592,3 +589,28 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}
+
+/**
+ * Turns deletion protection off and deletes a test database by name, then
+ * waits until it is gone. A database that does not exist is a no-op.
+ */
+const deleteTestDatabase = Effect.fn(function* (
+  organization: string,
+  database: string,
+) {
+  const live = yield* ps
+    .getDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  if (!live) return;
+  if (live.deletion_protected) {
+    yield* ps.updateDatabaseSettings({
+      organization,
+      database,
+      deletion_protected: false,
+    });
+  }
+  yield* ps
+    .deleteDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
+  yield* waitForDatabaseToBeDeleted(database, organization);
+});

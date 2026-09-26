@@ -56,7 +56,10 @@ export const deleteUnprotectedDatabase = Effect.fn(function* (
     return yield* new PlanetscaleDeletionProtected({
       message:
         `Planetscale database "${database}" has deletion protection enabled. ` +
-        "Set `deletionProtection: false` and deploy before deleting it.",
+        "Set `deletionProtection: false` and deploy before deleting it. " +
+        "If it is the old database of a replacement, the resource now " +
+        "manages the new database, so turn protection off on this one in " +
+        "PlanetScale directly, then deploy again.",
       organization,
       database,
     });
@@ -65,6 +68,30 @@ export const deleteUnprotectedDatabase = Effect.fn(function* (
     .deleteDatabase({ organization, database })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 });
+
+/**
+ * Plans a database replacement. A replacement creates the new database
+ * before deleting the old one, so an explicit `name` that stays the same
+ * would make both generations the same database: reconcile would converge
+ * onto the old database and the cleanup of the old generation would then
+ * delete it. That plan fails with {@link PlanetscaleConflict} instead.
+ */
+export const replaceDatabase = (
+  news: { name?: string },
+  output: { name: string } | undefined,
+  change: string,
+) =>
+  news.name !== undefined && news.name === output?.name
+    ? Effect.fail(
+        new PlanetscaleConflict({
+          message:
+            `Changing the ${change} of Planetscale database "${news.name}" ` +
+            "requires a new database, but its explicit `name` is unchanged. " +
+            "Give the replacement a different `name`, or omit `name` to let " +
+            "Alchemy generate one.",
+        }),
+      )
+    : Effect.succeed({ action: "replace" } as const);
 
 /**
  * Default polling schedule: 5s spaced retries with a 30-minute total
