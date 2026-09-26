@@ -270,8 +270,9 @@ const destinationsOutput = (
  * headers onto the host Function/Worker (Redacted values as secret
  * bindings) — url and header values accept resource Outputs, so exporter
  * config is wired from resources like any other binding. At runtime the
- * exporter reads the bound values back and ships traces, logs, and metrics
- * over OTLP/HTTP JSON, flushed as each event's scope closes.
+ * exporter reads the bound values back and ships traces and logs over
+ * OTLP/HTTP JSON and metrics over OTLP/HTTP protobuf, flushed as each
+ * event's scope closes.
  *
  * Exporters COMPOSE: merge several `otlp` layers (or vendor sugar like
  * `Axiom.Telemetry`) and every destination receives the telemetry — spans
