@@ -130,6 +130,7 @@ export const makeAwsTarget = (
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "solidstart",
       config: {
         rootDir: context.root,
