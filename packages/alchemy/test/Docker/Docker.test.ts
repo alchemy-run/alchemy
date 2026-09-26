@@ -330,6 +330,42 @@ describe("Docker.image", (it) => {
     { tags: ["unit", "provider:docker", "local"] },
   );
 
+  // A private base image or `type=registry` cache needs the registry's
+  // credentials during a build that must not publish (e.g. at plan time).
+  it.effect(
+    "authenticates a local build with credentials without publishing",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeDocker("v0.26.1");
+        yield* Effect.gen(function* () {
+          const docker = yield* Docker;
+          yield* docker.image.build({
+            context: "/ctx",
+            tag: "local/app:1",
+            "cache-from": ["type=registry,ref=registry.invalid/app:buildcache"],
+            credentials: registry,
+          });
+        }).pipe(Effect.provide(fake.layer));
+        expect(fake.calls).toHaveLength(1);
+        const [build] = fake.calls;
+        expect(build!.args.slice(0, 2)).toEqual(["image", "build"]);
+        expect(build!.args).not.toContain("--push");
+        expect(build!.args.join(" ")).not.toContain("credentials");
+        expect(build!.args.join(" ")).not.toContain(
+          "DESTINATION_SECRET_SENTINEL",
+        );
+        const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
+          auths: Record<string, { auth: string }>;
+        };
+        expect(auth.auths["registry.invalid"]!.auth).toBe(
+          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString(
+            "base64",
+          ),
+        );
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
   for (const [name, auth] of [
     [
       "invalid JSON",
