@@ -1,14 +1,19 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
-import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as Binding from "../Binding.ts";
+import { connect } from "../Ssh/Client.ts";
+import type {
+  ExecError as SshTransportError,
+  TransferError,
+} from "../Ssh/Errors.ts";
 import type { Server } from "./Server.ts";
 
 export class SshError extends Data.TaggedError("Hetzner.SshError")<{
@@ -94,96 +99,40 @@ const ipv4Of = (server: Server): string | undefined => {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 };
 
-const sshArgs = (keyPath: string): string[] => [
-  "-i",
-  keyPath,
-  "-o",
-  "StrictHostKeyChecking=no",
-  "-o",
-  "UserKnownHostsFile=/dev/null",
-  "-o",
-  "IdentitiesOnly=yes",
-  "-o",
-  "BatchMode=yes",
-  "-o",
-  "ConnectTimeout=10",
-  "-o",
-  "LogLevel=ERROR",
-];
-
-const runCommand = Effect.fn(function* (input: {
-  bin: string;
-  args: string[];
-  host: string;
-  command?: string;
-}) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const result = yield* ChildProcess.make(input.bin, input.args, {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    detached: false,
-  }).pipe(
-    spawner.spawn,
-    Effect.flatMap((child) =>
-      Effect.all(
-        {
-          exitCode: child.exitCode,
-          stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
-          stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
-        },
-        { concurrency: "unbounded" },
-      ),
-    ),
-    Effect.mapError(
-      (error) =>
-        new SshError({
-          message: `ssh spawn failed: ${String(error)}`,
-          host: input.host,
-          command: input.command,
-        }),
-    ),
-  );
-  return {
-    code: Number(result.exitCode),
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
-});
+const toSshError =
+  (host: string) =>
+  (error: SshTransportError | TransferError | PlatformError) =>
+    new SshError({
+      message: error.message,
+      host,
+      command: "command" in error ? error.command : undefined,
+      stderr: "stderr" in error ? error.stderr : undefined,
+    });
 
 /**
- * Open an SSH session against `host` with the given private key. Writes
- * the key to a temp file (mode 0600) for `ssh`/`scp`.
+ * Open an SSH session against `host` with the given private key, over
+ * {@link connect}. Commands run under bash and fail on a non-zero exit.
  */
 export const openSshClient = Effect.fn(function* (input: {
   host: string;
   privateKey: string;
   user?: string;
 }) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const user = input.user ?? "root";
-  const dest = `${user}@${input.host}`;
-  const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-hetzner-ssh-" });
-  const keyPath = path.join(dir, "id");
-  yield* fs.writeFileString(keyPath, input.privateKey);
-  yield* fs.chmod(keyPath, 0o600);
-  yield* runCommand({
-    bin: "chmod",
-    args: ["600", keyPath],
+  const scope = yield* Scope.make();
+  const client = yield* connect({
     host: input.host,
-    command: `chmod 600 ${keyPath}`,
-  }).pipe(Effect.ignore);
-
-  const close = fs.remove(dir, { recursive: true }).pipe(Effect.ignore);
+    user: input.user ?? "root",
+    privateKey: Redacted.make(input.privateKey),
+    hostKeyPolicy: "off",
+  }).pipe(
+    Scope.provide(scope),
+    Effect.onError(() => Scope.close(scope, Exit.void)),
+    Effect.mapError(toSshError(input.host)),
+  );
 
   const exec = (command: string) =>
-    runCommand({
-      bin: "ssh",
-      args: [...sshArgs(keyPath), dest, command],
-      host: input.host,
-      command,
-    }).pipe(
+    client.exec(command, { shell: "bash" }).pipe(
+      Effect.mapError(toSshError(input.host)),
       Effect.flatMap((result) =>
         result.code === 0
           ? Effect.succeed(result)
@@ -204,54 +153,14 @@ export const openSshClient = Effect.fn(function* (input: {
       ),
     );
 
-  const toSshError = (error: unknown) =>
-    error instanceof SshError
-      ? error
-      : new SshError({
-          message: `ssh failed: ${String(error)}`,
-          host: input.host,
-        });
-
   const scp = (local: string | Uint8Array<ArrayBufferLike>, remote: string) =>
-    Effect.gen(function* () {
-      let localPath: string;
-      let staged: string | undefined;
-      if (typeof local === "string") {
-        localPath = local;
-      } else {
-        const stamp = yield* Effect.sync(() => crypto.randomUUID());
-        staged = path.join(dir, `payload-${stamp}`);
-        yield* fs.writeFile(staged, local);
-        localPath = staged;
-      }
-      const slash = remote.lastIndexOf("/");
-      if (slash > 0) {
-        const remoteDir = remote.slice(0, slash);
-        yield* exec(`mkdir -p ${JSON.stringify(remoteDir)}`);
-      }
-      const result = yield* runCommand({
-        bin: "scp",
-        args: [...sshArgs(keyPath), localPath, `${dest}:${remote}`],
-        host: input.host,
-        command: `scp ${localPath} ${remote}`,
-      });
-      if (staged !== undefined) {
-        yield* fs.remove(staged, { force: true }).pipe(Effect.ignore);
-      }
-      if (result.code !== 0) {
-        return yield* new SshError({
-          message: `scp exited ${result.code}`,
-          host: input.host,
-          command: `scp ${remote}`,
-          code: result.code,
-          stderr: result.stderr,
-        });
-      }
-    }).pipe(Effect.mapError(toSshError));
+    client.upload(local, remote).pipe(Effect.mapError(toSshError(input.host)));
 
-  return { exec, scp, close } satisfies SshClient & {
-    close: Effect.Effect<void>;
-  };
+  return {
+    exec,
+    scp,
+    close: Scope.close(scope, Exit.void),
+  } satisfies SshClient & { close: Effect.Effect<void> };
 });
 
 export const sshClientForServer = Effect.fn(function* (
@@ -294,6 +203,7 @@ export const SshLive = Layer.effect(
   Effect.succeed(
     Effect.fn(function* (server: Server, options?: SshOptions) {
       const session = yield* sshClientForServer(server, options);
+      yield* Effect.addFinalizer(() => session.close);
       return {
         exec: session.exec,
         scp: session.scp,
