@@ -210,8 +210,8 @@ export interface DeploymentPropsBase extends PlatformProps {
   livenessProbe?: DeploymentProbe;
   /**
    * Startup probe for the container. Readiness and liveness probes start
-   * only after this probe succeeds, which protects slow-starting
-   * containers. The handler `port` defaults to `port`.
+   * only after this probe succeeds, so a slow-starting container is not
+   * restarted before it boots. The handler `port` defaults to `port`.
    */
   startupProbe?: DeploymentProbe;
   /**

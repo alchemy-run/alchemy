@@ -7,8 +7,8 @@ import {
 } from "@/Kubernetes/Deployment.ts";
 import { describe, expect, it } from "alchemy-test";
 
-// The container is serialized with `JSON.stringify` before server-side
-// apply, so compare the applied shape (undefined fields dropped).
+// The apply request JSON-encodes the container, so compare the shape the API
+// server receives (`undefined` fields dropped).
 const applied = (container: ReturnType<typeof makeDeploymentContainer>) =>
   JSON.parse(JSON.stringify(container));
 

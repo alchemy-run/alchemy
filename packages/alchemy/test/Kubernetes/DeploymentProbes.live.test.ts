@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-// Behavioral proof that Kubernetes acts on the generated probes, against any
-// kubeconfig context (e.g. a local OrbStack / kind cluster). Each claim runs
-// a control that must succeed next to a negative case that must fail, so a
-// probe that is silently dropped or mis-ported fails the suite.
+// Checks that Kubernetes enforces the generated probes on a live cluster
+// reached through any kubeconfig context (e.g. local OrbStack or kind). Each
+// test deploys a control that must pass next to a negative case that must
+// fail, so a dropped probe or a wrong default port fails the suite.
 //
 // Gated: set KUBERNETES_TEST_CONTEXT to a kubeconfig context. The namespace
 // (KUBERNETES_TEST_NAMESPACE, default "alchemy-probes-test") must exist.
@@ -63,8 +63,8 @@ interface Observed {
   pods: PodStatus[];
 }
 
-// Observe the live cluster: the Deployment, the Service's Endpoints (the
-// traffic decision), and every pod the Endpoints reference.
+// Read the Deployment, the Service's Endpoints (which pods get traffic), and
+// every pod those Endpoints reference.
 const observe = (output: Attributes) =>
   Effect.gen(function* () {
     const transport = yield* connectCluster(output.connection);
@@ -139,8 +139,8 @@ const waitFor = (output: Attributes, until: (o: Observed) => boolean) =>
     }),
   );
 
-// Hold a negative state for a window, proving it is stable and not a
-// transient before the pod converges.
+// Assert the invariant on every sample over a window (~16s by default), so a
+// transient state before the pod converges cannot pass.
 const holds = (
   output: Attributes,
   invariant: (o: Observed) => boolean,
@@ -246,7 +246,8 @@ describe.skipIf(!context)("Kubernetes.Deployment probes (live cluster)", () => {
         yield* log("liveness negative", negative);
         expect(negative.container.livenessProbe.tcpSocket.port).toBe(81);
 
-        // The defaulted port (80) is healthy: no restarts over the window.
+        // The defaulted port (80) is healthy, so the container never restarts
+        // over the window.
         yield* waitFor(pass, podReady);
         const control = yield* holds(
           pass,
@@ -289,9 +290,9 @@ describe.skipIf(!context)("Kubernetes.Deployment probes (live cluster)", () => {
         const control = yield* waitFor(pass, podReady);
         yield* log("startup control", control);
 
-        // nginx serves "/" (readiness would pass), yet the pod never turns
-        // ready because the failing startup probe blocks readiness and
-        // restarts the container.
+        // nginx serves "/", so readiness alone would pass. The failing startup
+        // probe blocks readiness and restarts the container, so the pod never
+        // turns ready.
         const negative = yield* waitFor(fail, (o) =>
           o.pods.some((pod) => pod.restartCount >= 1),
         );
