@@ -157,6 +157,7 @@ const runOpenNextBuild = (options: {
   readonly cli: string;
   readonly configPath: string;
   readonly extraArgs: ReadonlyArray<string>;
+  readonly env: Record<string, string> | undefined;
 }) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -164,6 +165,10 @@ const runOpenNextBuild = (options: {
       // mutates its own process.env (NEXT_PRIVATE_STANDALONE,
       // NEXT_PRIVATE_OUTPUT_TRACE_ROOT) before exec'ing `next build`, and
       // those mutations do not reliably reach execSync children under bun.
+      const env = yield* Effect.sync(() => ({
+        ...process.env,
+        ...options.env,
+      }));
       const child = yield* ChildProcess.make(
         "node",
         [
@@ -178,6 +183,7 @@ const runOpenNextBuild = (options: {
           stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
+          env,
         },
       ).pipe(
         Effect.mapError(
@@ -441,6 +447,7 @@ export const make: (
         cli,
         configPath,
         extraArgs: options?.buildArgs ?? [],
+        env: buildOptions?.env,
       }).pipe(Effect.provide(spawnerLayer));
 
       const distDirectory = path.join(root, ".open-next");

@@ -241,6 +241,7 @@ export const makeAwsTarget = (
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "tanstack-start",
       config: {
         rootDir: context.root,

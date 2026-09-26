@@ -135,6 +135,7 @@ export const makeAwsTarget = (
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "nuxt",
       config: {
         rootDir: context.root,
