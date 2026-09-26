@@ -97,6 +97,7 @@
     "./TUI": "./src/TUI/index.ts",
     "./Secrets": "./src/Secrets/index.ts",
     "./Server": "./src/Server/index.ts",
+    "./Ssh": "./src/Ssh/index.ts",
     "./State": "./src/State/index.ts",
     "./Util": "./src/Util/index.ts",
     "./bin/alchemy.js": "./bin/alchemy.js",
@@ -348,6 +349,11 @@
         "types": "./lib/Server/index.d.ts",
         "bun": "./src/Server/index.ts",
         "default": "./lib/Server/index.js"
+      },
+      "./Ssh": {
+        "types": "./lib/Ssh/index.d.ts",
+        "bun": "./src/Ssh/index.ts",
+        "default": "./lib/Ssh/index.js"
       },
       "./State": {
         "types": "./lib/State/index.d.ts",
