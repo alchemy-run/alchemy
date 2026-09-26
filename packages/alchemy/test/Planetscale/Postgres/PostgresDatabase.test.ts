@@ -558,8 +558,6 @@ describe
             const name = "alchemy-test-postgresql-deletion-protection";
             const { organization } = yield* yield* Planetscale.Credentials;
 
-            yield* stack.destroy();
-
             const deploy = (deletionProtection: boolean) =>
               stack.deploy(
                 Effect.gen(function* () {
@@ -576,6 +574,11 @@ describe
               );
 
             yield* Effect.gen(function* () {
+              // Inside the cleanup scope: state left by an interrupted run
+              // can still point at a protected database, which makes this
+              // destroy fail.
+              yield* stack.destroy();
+
               const { database } = yield* deploy(true);
               expect(database.deletionProtection).toBe(true);
 
@@ -606,9 +609,9 @@ describe
 
               yield* waitForDatabaseToBeDeleted(name, organization);
             }).pipe(
-              // Registered before the first deploy so a failed run never
-              // leaves a protected database behind; a failed cleanup fails
-              // the test.
+              // Registered before the first destroy and deploy so a failed
+              // run never leaves a protected database behind; a failed
+              // cleanup fails the test.
               Effect.ensuring(
                 deleteTestDatabase(organization, name).pipe(Effect.orDie),
               ),
@@ -633,7 +636,10 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
       Effect.retry({
         while: (e): e is DatabaseStillExists =>
           e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
+        // Bounded so a database that never disappears fails the wait
+        // (after about 90 seconds) instead of hanging test cleanup.
+        schedule: Schedule.spaced("2 seconds"),
+        times: 45,
       }),
       Effect.catchTag("NotFound", () => Effect.void),
     );
