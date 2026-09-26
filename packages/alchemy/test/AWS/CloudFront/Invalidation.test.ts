@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
 import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
+import { AssetDeployment } from "@/AWS/Website/AssetDeployment.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -9,6 +10,7 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -118,6 +120,94 @@ test.provider.skipIf(!!process.env.FAST)(
       "provider:aws:cloudfront",
       "provider:aws:iam",
       "provider:aws:s3",
+      "live",
+    ],
+    timeout: 600_000,
+  },
+);
+
+test.provider.skipIf(!!process.env.FAST)(
+  "issues a new invalidation when an upstream content version changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const site = (version: "v1" | "v2") =>
+        path.join(
+          import.meta.dirname,
+          "fixtures",
+          `invalidation-site-${version}`,
+        );
+
+      // `version` comes from an AssetDeployment, so on a content change it is
+      // unresolved at plan time and the Invalidation plans as an update rather
+      // than a replace — the documented "invalidate on content change" setup.
+      const deploySite = (sourcePath: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Bucket("SiteBucket", { forceDestroy: true });
+            const distribution = yield* Distribution("SiteDistribution", {
+              origins: [
+                {
+                  id: "site",
+                  domainName: bucket.bucketRegionalDomainName,
+                  s3Origin: true,
+                },
+              ],
+              defaultCacheBehavior: {
+                targetOriginId: "site",
+                viewerProtocolPolicy: "redirect-to-https",
+                allowedMethods: ["GET", "HEAD"],
+                cachedMethods: ["GET", "HEAD"],
+                forwardedValues: {
+                  QueryString: false,
+                  Cookies: { Forward: "none" },
+                },
+              },
+            });
+            const files = yield* AssetDeployment("SiteFiles", {
+              bucket,
+              sourcePath,
+            });
+            const invalidation = yield* AWS.CloudFront.Invalidation(
+              "SiteInvalidation",
+              {
+                distributionId: distribution.distributionId,
+                version: files.version,
+              },
+            );
+            return { distribution, files, invalidation };
+          }),
+        );
+
+      yield* stack.destroy();
+
+      const first = yield* deploySite(site("v1"));
+      expect(first.invalidation.version).toEqual(first.files.version);
+
+      const second = yield* deploySite(site("v2"));
+      expect(second.files.version).not.toEqual(first.files.version);
+      expect(second.invalidation.version).toEqual(second.files.version);
+      expect(second.invalidation.invalidationId).not.toEqual(
+        first.invalidation.invalidationId,
+      );
+
+      const issued = yield* cloudfront.getInvalidation({
+        DistributionId: second.distribution.distributionId,
+        Id: second.invalidation.invalidationId,
+      });
+      expect(issued.Invalidation?.InvalidationBatch?.CallerReference).toEqual(
+        second.files.version,
+      );
+
+      yield* stack.destroy();
+      yield* assertDistributionDeleted(second.distribution.distributionId);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudfront",
+      "provider:aws:s3",
+      "provider:aws:website",
       "live",
     ],
     timeout: 600_000,
