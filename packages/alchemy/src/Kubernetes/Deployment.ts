@@ -93,8 +93,10 @@ export interface DeploymentPropsBase extends PlatformProps {
    */
   port?: number;
   /**
-   * Replica count for the Deployment.
-   * @default 1
+   * Replica count for the Deployment. When unset, `spec.replicas` is not
+   * applied, so an autoscaler (or `kubectl scale`) owns the count and
+   * deploys don't reset it. New Deployments start at 1. Removing an explicit
+   * value resets the count to 1 unless something else scaled it since.
    */
   replicas?: number;
   /**
@@ -377,6 +379,37 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
+ * ```
+ *
+ * ### Autoscaling
+ * **Example:** HorizontalPodAutoscaler
+ * ```typescript
+ * // No `replicas`, so redeploys leave the HPA's count alone. The HPA's
+ * // default CPU target needs a CPU request.
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   image: "ghcr.io/acme/api:v3",
+ *   port: 8080,
+ *   resources: { requests: { cpu: "250m" } },
+ * });
+ *
+ * yield* Kubernetes.Manifest("ApiAutoscaler", {
+ *   cluster,
+ *   manifest: {
+ *     apiVersion: "autoscaling/v2",
+ *     kind: "HorizontalPodAutoscaler",
+ *     metadata: { name: "api", namespace: api.namespace },
+ *     spec: {
+ *       scaleTargetRef: {
+ *         apiVersion: "apps/v1",
+ *         kind: "Deployment",
+ *         name: api.deploymentName,
+ *       },
+ *       minReplicas: 2,
+ *       maxReplicas: 5,
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Kubernetes Escape Hatch
@@ -713,7 +746,9 @@ export const DeploymentProvider = () =>
             kind: "Deployment",
             metadata: { name: baseName, namespace, labels },
             spec: {
-              replicas: news.replicas ?? 1,
+              ...(news.replicas !== undefined
+                ? { replicas: news.replicas }
+                : {}),
               selector: { matchLabels: labels },
               template: podTemplate,
             },
