@@ -499,6 +499,75 @@ describe
           }).pipe(logLevel),
         5_000_000,
       );
+
+      test.provider(
+        "deletionProtection blocks destroy until it is turned off",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const deploy = (deletionProtection: boolean) =>
+              stack.deploy(
+                Effect.gen(function* () {
+                  const database = yield* Planetscale.MySQLDatabase(
+                    "MySQLDatabaseDeletionProtection",
+                    {
+                      clusterSize: "PS_10",
+                      deletionProtection,
+                    },
+                  );
+                  return { database };
+                }),
+              );
+
+            const { database } = yield* deploy(true);
+            expect(database.deletionProtection).toBe(true);
+
+            yield* Effect.gen(function* () {
+              const live = yield* ps.getDatabase({
+                organization: database.organization,
+                database: database.name,
+              });
+              expect(live.deletion_protected).toBe(true);
+
+              const exit = yield* Effect.exit(stack.destroy());
+              expect(Exit.isFailure(exit)).toBe(true);
+              if (Exit.isFailure(exit)) {
+                expect(Cause.pretty(exit.cause)).toContain(
+                  "deletionProtection: false",
+                );
+              }
+
+              const stillThere = yield* ps.getDatabase({
+                organization: database.organization,
+                database: database.name,
+              });
+              expect(stillThere.name).toEqual(database.name);
+
+              const { database: unprotected } = yield* deploy(false);
+              expect(unprotected.deletionProtection).toBe(false);
+            }).pipe(
+              // Never leak a protected database when an assertion fails.
+              Effect.ensuring(
+                ps
+                  .updateDatabaseSettings({
+                    organization: database.organization,
+                    database: database.name,
+                    deletion_protected: false,
+                  })
+                  .pipe(Effect.ignore),
+              ),
+            );
+
+            yield* stack.destroy();
+
+            yield* waitForDatabaseToBeDeleted(
+              database.name,
+              database.organization,
+            );
+          }).pipe(logLevel),
+        5_000_000,
+      );
     },
   );
 

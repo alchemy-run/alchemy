@@ -54,6 +54,15 @@ export interface BaseDatabaseProps {
   productionBranchWebConsole?: boolean;
 
   /**
+   * Whether PlanetScale refuses to delete the database. While enabled,
+   * destroying or replacing the database fails with a
+   * `PlanetscaleDeletionProtected` error; set it to `false` and deploy
+   * before deleting. If omitted, Alchemy leaves the database's current
+   * setting unchanged.
+   */
+  deletionProtection?: boolean;
+
+  /**
    * The default branch of the database.
    * @default "main"
    */
@@ -128,4 +137,9 @@ export interface BaseDatabaseAttributes {
    * Whether the web console can be used on the production branch.
    */
   productionBranchWebConsole: boolean;
+
+  /**
+   * Whether deletion protection is enabled for the database.
+   */
+  deletionProtection: boolean;
 }

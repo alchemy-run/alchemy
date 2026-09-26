@@ -17,6 +17,7 @@ import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  deleteUnprotectedDatabase,
   PlanetscaleConflict,
   waitForBranchReady,
   waitForDatabaseReady,
@@ -96,6 +97,15 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  *   clusterSize: "PS_10",
  *   migrationsDir: "./migrations/postgres",
  *   importFiles: ["./seed/postgres.sql"],
+ * });
+ * ```
+ *
+ * ### Deletion protection
+ * **Example:** Refuse deletes of a production database
+ * ```typescript
+ * const db = yield* Planetscale.PostgresDatabase("MyDb", {
+ *   clusterSize: "PS_10",
+ *   deletionProtection: true,
  * });
  * ```
  *
@@ -251,6 +261,7 @@ export const PostgresDatabaseProvider = () =>
         requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
         restrictBranchRegion: data.restrict_branch_region ?? false,
         productionBranchWebConsole: data.production_branch_web_console ?? false,
+        deletionProtection: data.deletion_protected ?? false,
       };
     }),
 
@@ -348,6 +359,7 @@ export const PostgresDatabaseProvider = () =>
         require_approval_for_deploy: news.requireApprovalForDeploy,
         restrict_branch_region: news.restrictBranchRegion,
         production_branch_web_console: news.productionBranchWebConsole,
+        deletion_protected: news.deletionProtection,
         default_branch: news.defaultBranch,
       });
 
@@ -404,16 +416,12 @@ export const PostgresDatabaseProvider = () =>
         restrictBranchRegion: updated.restrict_branch_region ?? false,
         productionBranchWebConsole:
           updated.production_branch_web_console ?? false,
+        deletionProtection: updated.deletion_protected ?? false,
       } satisfies PostgresDatabaseAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* planetscale
-        .deleteDatabase({
-          organization: output.organization,
-          database: output.name,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* deleteUnprotectedDatabase(output.organization, output.name);
     }),
 
     list: Effect.fn(function* () {
@@ -471,6 +479,7 @@ export const PostgresDatabaseProvider = () =>
               restrictBranchRegion: data.restrict_branch_region ?? false,
               productionBranchWebConsole:
                 data.production_branch_web_console ?? false,
+              deletionProtection: data.deletion_protected ?? false,
             };
             return attrs;
           }),

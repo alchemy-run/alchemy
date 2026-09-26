@@ -17,6 +17,7 @@ import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  deleteUnprotectedDatabase,
   PlanetscaleConflict,
   waitForBranchReady,
   waitForDatabaseReady,
@@ -150,6 +151,15 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  *   clusterSize: "PS_10",
  *   migrationsDir: "./migrations/mysql",
  *   importFiles: ["./seed/mysql.sql"],
+ * });
+ * ```
+ *
+ * ### Deletion protection
+ * **Example:** Refuse deletes of a production database
+ * ```typescript
+ * const db = yield* Planetscale.MySQLDatabase("MyDb", {
+ *   clusterSize: "PS_10",
+ *   deletionProtection: true,
  * });
  * ```
  *
@@ -296,6 +306,7 @@ export const MySQLDatabaseProvider = () =>
                 insightsRawQueries: data.insights_raw_queries ?? false,
                 productionBranchWebConsole:
                   data.production_branch_web_console ?? false,
+                deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
                 migrationTableName: data.migration_table_name ?? undefined,
@@ -404,6 +415,7 @@ export const MySQLDatabaseProvider = () =>
         restrict_branch_region: news.restrictBranchRegion,
         insights_raw_queries: news.insightsRawQueries,
         production_branch_web_console: news.productionBranchWebConsole,
+        deletion_protected: news.deletionProtection,
         default_branch: news.defaultBranch,
       });
 
@@ -464,6 +476,7 @@ export const MySQLDatabaseProvider = () =>
         insightsRawQueries: updated.insights_raw_queries ?? false,
         productionBranchWebConsole:
           updated.production_branch_web_console ?? false,
+        deletionProtection: updated.deletion_protected ?? false,
         automaticMigrations: updated.automatic_migrations ?? false,
         migrationFramework: updated.migration_framework ?? undefined,
         migrationTableName: updated.migration_table_name ?? undefined,
@@ -473,12 +486,7 @@ export const MySQLDatabaseProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* planetscale
-        .deleteDatabase({
-          organization: output.organization,
-          database: output.name,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* deleteUnprotectedDatabase(output.organization, output.name);
     }),
 
     list: Effect.fn(function* () {
@@ -513,6 +521,7 @@ export const MySQLDatabaseProvider = () =>
                 insightsRawQueries: data.insights_raw_queries ?? false,
                 productionBranchWebConsole:
                   data.production_branch_web_console ?? false,
+                deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
                 migrationTableName: data.migration_table_name ?? undefined,
