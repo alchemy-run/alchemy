@@ -563,7 +563,8 @@ describe
                   const database = yield* Planetscale.PostgresDatabase(
                     "PostgresDatabaseDeletionProtection",
                     {
-                      clusterSize: "PS_10",
+                      name: "alchemy-test-postgresql-deletion-protection",
+                      clusterSize: "PS_5",
                       deletionProtection,
                     },
                   );
