@@ -63,6 +63,74 @@ export const isDeployment = (value: any): value is Deployment => {
 };
 
 /**
+ * A Kubernetes container probe (`core/v1` `Probe`). Set exactly one handler
+ * (`httpGet`, `tcpSocket`, `grpc`, or `exec`) plus optional timing fields.
+ * A handler `port` defaults to the Deployment's container `port`.
+ */
+export interface DeploymentProbe {
+  /** Probe with an HTTP GET; any status in 200-399 is a success. */
+  httpGet?: {
+    /** Request path, e.g. `"/healthz"`. */
+    path?: string;
+    /**
+     * Container port number or named port.
+     * @default the Deployment `port`
+     */
+    port?: number | string;
+    /** Host to connect to. @default the pod IP */
+    host?: string;
+    /** Connection scheme. @default "HTTP" */
+    scheme?: "HTTP" | "HTTPS";
+    /** Custom request headers. */
+    httpHeaders?: { name: string; value: string }[];
+  };
+  /** Probe by opening a TCP connection. */
+  tcpSocket?: {
+    /**
+     * Container port number or named port.
+     * @default the Deployment `port`
+     */
+    port?: number | string;
+    /** Host to connect to. @default the pod IP */
+    host?: string;
+  };
+  /** Probe with the gRPC health checking protocol. */
+  grpc?: {
+    /**
+     * Container port number.
+     * @default the Deployment `port`
+     */
+    port?: number;
+    /** Service name sent in the gRPC `HealthCheckRequest`. */
+    service?: string;
+  };
+  /** Probe by running a command in the container; exit code 0 is a success. */
+  exec?: {
+    /** Command and arguments; not run in a shell. */
+    command: string[];
+  };
+  /** Seconds after container start before the first probe. @default 0 */
+  initialDelaySeconds?: number;
+  /** Seconds between probes. @default 10 */
+  periodSeconds?: number;
+  /** Seconds before a probe times out. @default 1 */
+  timeoutSeconds?: number;
+  /**
+   * Consecutive successes after a failure to count as healthy. Must be 1
+   * for liveness and startup probes.
+   * @default 1
+   */
+  successThreshold?: number;
+  /** Consecutive failures to count as unhealthy. @default 3 */
+  failureThreshold?: number;
+  /**
+   * Pod termination grace period (seconds) after a liveness or startup
+   * probe failure. Overrides the pod's `terminationGracePeriodSeconds`.
+   */
+  terminationGracePeriodSeconds?: number;
+}
+
+/**
  * The image-source props shared by the workload platforms. Exactly one of
  * `main` (bundle an inline Effect program), `context`/`dockerfile` (build
  * the user's own Dockerfile), or `image` (a pre-built registry reference).
@@ -128,6 +196,24 @@ export interface DeploymentPropsBase extends PlatformProps {
    * Additional environment variables for the container.
    */
   env?: Record<string, any>;
+  /**
+   * Readiness probe for the container. Kubernetes sends Service traffic to
+   * a pod only while this probe succeeds, and rolling updates wait for new
+   * pods to become ready. The handler `port` defaults to `port`.
+   */
+  readinessProbe?: DeploymentProbe;
+  /**
+   * Liveness probe for the container. Kubernetes restarts the container
+   * when this probe fails `failureThreshold` times in a row. The handler
+   * `port` defaults to `port`.
+   */
+  livenessProbe?: DeploymentProbe;
+  /**
+   * Startup probe for the container. Readiness and liveness probes start
+   * only after this probe succeeds, which protects slow-starting
+   * containers. The handler `port` defaults to `port`.
+   */
+  startupProbe?: DeploymentProbe;
   /**
    * Container image build architecture.
    * @default "amd64"
@@ -379,6 +465,34 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
+ * ### Health Probes
+ * **Example:** Readiness, liveness, and startup probes
+ * Omit a handler `port` to probe the container `port`.
+ * ```typescript
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   main: import.meta.url,
+ *   port: 3000,
+ *   readinessProbe: {
+ *     httpGet: { path: "/healthz" },
+ *     initialDelaySeconds: 3,
+ *     periodSeconds: 10,
+ *     failureThreshold: 3,
+ *   },
+ *   livenessProbe: {
+ *     httpGet: { path: "/healthz" },
+ *     initialDelaySeconds: 10,
+ *     periodSeconds: 15,
+ *     failureThreshold: 3,
+ *   },
+ *   startupProbe: {
+ *     tcpSocket: {},
+ *     periodSeconds: 5,
+ *     failureThreshold: 30,
+ *   },
+ * });
+ * ```
+ *
  * ### Kubernetes Escape Hatch
  * **Example:** Tune the synthesized pod template
  * ```typescript
@@ -437,6 +551,72 @@ const retryUntilServiceReady = <A, E, R>(
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
+
+/**
+ * Fill each omitted probe handler `port` with the container port.
+ * Exported for tests.
+ */
+export const withProbePort = (
+  probe: DeploymentProbe | undefined,
+  port: number,
+): DeploymentProbe | undefined => {
+  if (probe === undefined) return undefined;
+  return {
+    ...probe,
+    ...(probe.httpGet
+      ? { httpGet: { ...probe.httpGet, port: probe.httpGet.port ?? port } }
+      : {}),
+    ...(probe.tcpSocket
+      ? {
+          tcpSocket: { ...probe.tcpSocket, port: probe.tcpSocket.port ?? port },
+        }
+      : {}),
+    ...(probe.grpc
+      ? { grpc: { ...probe.grpc, port: probe.grpc.port ?? port } }
+      : {}),
+  };
+};
+
+/**
+ * Synthesize the Deployment's single container. Omitted optional props
+ * stay `undefined` and are dropped from the applied JSON.
+ * Exported for tests.
+ */
+export const makeDeploymentContainer = ({
+  name,
+  image,
+  port,
+  env,
+  props,
+}: {
+  name: string;
+  image: string;
+  port: number;
+  env: Record<string, unknown>;
+  props: Pick<
+    DeploymentPropsBase,
+    | "command"
+    | "args"
+    | "resources"
+    | "readinessProbe"
+    | "livenessProbe"
+    | "startupProbe"
+  >;
+}) => ({
+  name,
+  image,
+  command: props.command,
+  args: props.args,
+  ports: [{ containerPort: port }],
+  env: Object.entries(env).map(([name, value]) => ({
+    name,
+    value: typeof value === "string" ? value : JSON.stringify(value),
+  })),
+  resources: props.resources,
+  readinessProbe: withProbePort(props.readinessProbe, port),
+  livenessProbe: withProbePort(props.livenessProbe, port),
+  startupProbe: withProbePort(props.startupProbe, port),
+});
 
 export const DeploymentProvider = () =>
   Provider.effect(
@@ -688,21 +868,13 @@ export const DeploymentProvider = () =>
               spec: {
                 serviceAccountName,
                 containers: [
-                  {
+                  makeDeploymentContainer({
                     name: baseName,
                     image: resolved.imageUri,
-                    command: news.command,
-                    args: news.args,
-                    ports: [{ containerPort: port }],
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value:
-                        typeof value === "string"
-                          ? value
-                          : JSON.stringify(value),
-                    })),
-                    resources: news.resources,
-                  },
+                    port,
+                    env: containerEnv,
+                    props: news,
+                  }),
                 ],
               },
             },
