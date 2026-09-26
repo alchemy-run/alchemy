@@ -16,7 +16,8 @@ const isDev = !(
   binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
 );
 
-const execpath = (process.env.npm_execpath ?? "").toLowerCase();
+// Only the file name: a directory can contain "bun" too (`/home/ubuntu/`).
+const execpath = path.basename(process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
 
 const runningInBun =
@@ -24,7 +25,7 @@ const runningInBun =
   "Bun" in globalThis && typeof globalThis.Bun !== "undefined";
 
 const runtime =
-  runningInBun || execpath.includes("bun") || userAgent.startsWith("bun/")
+  runningInBun || execpath.startsWith("bun") || userAgent.startsWith("bun/")
     ? "bun"
     : "node";
 
