@@ -550,6 +550,75 @@ describe
           }).pipe(logLevel),
         5_000_000,
       );
+
+      test.provider(
+        "deletionProtection blocks destroy until it is turned off",
+        (stack) =>
+          Effect.gen(function* () {
+            const name = "alchemy-test-postgresql-deletion-protection";
+            const { organization } = yield* yield* Planetscale.Credentials;
+
+            const deploy = (deletionProtection: boolean) =>
+              stack.deploy(
+                Effect.gen(function* () {
+                  const database = yield* Planetscale.PostgresDatabase(
+                    "PostgresDatabaseDeletionProtection",
+                    {
+                      name,
+                      clusterSize: "PS_5",
+                      deletionProtection,
+                    },
+                  );
+                  return { database };
+                }),
+              );
+
+            yield* Effect.gen(function* () {
+              // Inside the cleanup scope: state left by an interrupted run
+              // can still point at a protected database, which makes this
+              // destroy fail.
+              yield* stack.destroy();
+
+              const { database } = yield* deploy(true);
+              expect(database.deletionProtection).toBe(true);
+
+              const live = yield* ps.getDatabase({
+                organization,
+                database: name,
+              });
+              expect(live.deletion_protected).toBe(true);
+
+              const exit = yield* Effect.exit(stack.destroy());
+              expect(Exit.isFailure(exit)).toBe(true);
+              if (Exit.isFailure(exit)) {
+                expect(Cause.pretty(exit.cause)).toContain(
+                  "deletionProtection: false",
+                );
+              }
+
+              const stillThere = yield* ps.getDatabase({
+                organization,
+                database: name,
+              });
+              expect(stillThere.id).toEqual(database.id);
+
+              const { database: unprotected } = yield* deploy(false);
+              expect(unprotected.deletionProtection).toBe(false);
+
+              yield* stack.destroy();
+
+              yield* waitForDatabaseToBeDeleted(name, organization);
+            }).pipe(
+              // Registered before the first destroy and deploy so a failed
+              // run never leaves a protected database behind; a failed
+              // cleanup fails the test.
+              Effect.ensuring(
+                deleteTestDatabase(organization, name).pipe(Effect.orDie),
+              ),
+            );
+          }).pipe(logLevel),
+        5_000_000,
+      );
     },
   );
 
@@ -567,10 +636,38 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
       Effect.retry({
         while: (e): e is DatabaseStillExists =>
           e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
+        // Bounded so a database that never disappears fails the wait
+        // (after about 90 seconds) instead of hanging test cleanup.
+        schedule: Schedule.spaced("2 seconds"),
+        times: 45,
       }),
       Effect.catchTag("NotFound", () => Effect.void),
     );
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}
+
+/**
+ * Turns deletion protection off and deletes a test database by name, then
+ * waits until it is gone. A database that does not exist is a no-op.
+ */
+const deleteTestDatabase = Effect.fn(function* (
+  organization: string,
+  database: string,
+) {
+  const live = yield* ps
+    .getDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  if (!live) return;
+  if (live.deletion_protected) {
+    yield* ps.updateDatabaseSettings({
+      organization,
+      database,
+      deletion_protected: false,
+    });
+  }
+  yield* ps
+    .deleteDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
+  yield* waitForDatabaseToBeDeleted(database, organization);
+});
