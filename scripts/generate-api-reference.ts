@@ -3,6 +3,14 @@ import * as path from "node:path";
 
 import * as ts from "typescript-api/unstable/ast";
 import type { Node, SourceFile } from "typescript-api/unstable/ast";
+import {
+  docCommentLines,
+  jsdocCopyId,
+  LINK_TAG_RE,
+  markDocLines,
+  normalizeLinkTarget,
+  parseLinkTag,
+} from "./jsdoc-blocks.ts";
 import { createSyntaxProject } from "./typescript-source.ts";
 
 const websiteRoot = path.join(import.meta.dir, "../website");
@@ -20,8 +28,18 @@ interface SourceRoot {
   sourceDisplayPrefix: string;
 }
 
+const repoRoot = path.join(import.meta.dir, "..");
+
 const config = {
   outRoot: path.join(websiteRoot, "src/content/docs/providers"),
+  /**
+   * Emit `<!--copy:jsdoc:...-->` markers after each prose block so the
+   * website's dev-time copy editor can map rendered text back to the JSDoc
+   * it came from. Dev only — production builds never set this.
+   */
+  copyMarkers:
+    process.env.API_REFERENCE_COPY_MARKERS === "1" ||
+    process.argv.includes("--copy-markers"),
   roots: [
     {
       srcRoot: path.join(import.meta.dir, "../packages/alchemy/src"),
@@ -157,7 +175,33 @@ interface ParsedJSDoc {
   product: string;
 }
 
-function parseJSDoc(node: Node): ParsedJSDoc {
+/** Where a declaration's JSDoc lives, for copy markers. */
+interface MarkerContext {
+  /** Repo-relative path of the source file. */
+  file: string;
+  /** Full source text (JSDoc offsets index into it). */
+  text: string;
+}
+
+function docLines(node: Node, raw: string, markers?: MarkerContext): string[] {
+  const docs = node.jsDoc ?? [];
+  // Markers need one comment per declaration to map blocks to source.
+  const start = docs[0]?.getStart();
+  // `getStart()` can land on leading `//` trivia; only map clean comments.
+  if (
+    markers &&
+    docs.length === 1 &&
+    start !== undefined &&
+    markers.text.startsWith("/**", start)
+  ) {
+    return markDocLines(docCommentLines(markers.text, start), (block) =>
+      jsdocCopyId(markers.file, start, block),
+    );
+  }
+  return cleanDocComment(raw).split("\n");
+}
+
+function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   const raw = getJsDocText(node);
   if (!raw) {
     return {
@@ -173,7 +217,7 @@ function parseJSDoc(node: Node): ParsedJSDoc {
     };
   }
 
-  const lines = cleanDocComment(raw).split("\n");
+  const lines = docLines(node, raw, markers);
 
   const summaryLines: string[] = [];
   const sections: ExampleSection[] = [];
@@ -443,7 +487,10 @@ function localNameForExport(
  * When the tagged declaration itself has no content, pull it from that related
  * declaration so the page isn't dropped as empty.
  */
-export function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
+export function findTaggedPrimary(
+  sourceFile: SourceFile,
+  markers?: MarkerContext,
+): Primary | undefined {
   const candidates: Node[] = [
     ...sourceFile.statements
       .filter(ts.isVariableStatement)
@@ -457,7 +504,7 @@ export function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
   ];
 
   for (const node of candidates) {
-    const doc = parseJSDoc(node);
+    const doc = parseJSDoc(node, markers);
     if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag) {
       continue;
     }
@@ -483,7 +530,7 @@ export function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
 
     let best: ParsedJSDoc | undefined;
     for (const d of related) {
-      const pd = parseJSDoc(d);
+      const pd = parseJSDoc(d, markers);
       if (pd.sections.length > 0) {
         best = pd;
         break;
@@ -502,38 +549,6 @@ export function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
     return { name, doc: merged, category, product };
   }
   return undefined;
-}
-
-const LINK_TAG_RE = /\{@link\s+([^}]+)\}/g;
-
-/** Split a `{@link ...}` tag's inner text into target + optional label. */
-function parseLinkTag(inner: string): { target: string; label?: string } {
-  const trimmed = inner.trim();
-  const pipe = trimmed.indexOf("|");
-  if (pipe !== -1) {
-    return {
-      target: trimmed.slice(0, pipe).trim(),
-      label: trimmed.slice(pipe + 1).trim() || undefined,
-    };
-  }
-  const space = trimmed.search(/\s/);
-  if (space !== -1) {
-    return {
-      target: trimmed.slice(0, space).trim(),
-      label: trimmed.slice(space + 1).trim() || undefined,
-    };
-  }
-  return { target: trimmed };
-}
-
-/**
- * Reduce a typedoc-style `import("./Secrets.ts").Secrets` target to the bare
- * symbol name — resolution (same-directory first) and display both want the
- * name, not the module expression.
- */
-function normalizeLinkTarget(target: string): string {
-  const match = target.match(/^import\((["'])[^"']+\1\)\.(.+)$/);
-  return match ? match[2] : target;
 }
 
 /** Resolves a `{@link}` symbol target to a generated page URL, if any. */
@@ -919,9 +934,38 @@ function assertNoDuplicateSiblings(items: SidebarItem[], path: string[]) {
   }
 }
 
+/**
+ * Writes `content` only when it differs from what's on disk, so a dev server
+ * watching the output reloads just the pages that changed.
+ */
+async function writeIfChanged(file: string, content: string): Promise<boolean> {
+  const current = await fs.readFile(file, "utf8").catch(() => undefined);
+  if (current === content) return false;
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, content, "utf8");
+  return true;
+}
+
+/** Deletes files under `dir` not in `keep`, then any directories left empty. */
+async function pruneOutput(dir: string, keep: Set<string>): Promise<void> {
+  const entries = await fs
+    .readdir(dir, { withFileTypes: true })
+    .catch(() => []);
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await pruneOutput(full, keep);
+      const left = await fs.readdir(full).catch(() => []);
+      if (left.length === 0) await fs.rmdir(full).catch(() => {});
+    } else if (!keep.has(full)) {
+      await fs.rm(full, { force: true });
+    }
+  }
+}
+
 async function main() {
-  await fs.rm(config.outRoot, { recursive: true, force: true });
   await fs.mkdir(config.outRoot, { recursive: true });
+  const outputs = new Set<string>();
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
@@ -952,7 +996,17 @@ async function main() {
         throw new Error(`Missing source file ${entry.absolutePath}`);
       }
 
-      const primary = findTaggedPrimary(sourceFile);
+      const primary = findTaggedPrimary(
+        sourceFile,
+        config.copyMarkers
+          ? {
+              file: normalizeSlashes(
+                path.relative(repoRoot, entry.absolutePath),
+              ),
+              text: sourceFile.text,
+            }
+          : undefined,
+      );
       if (!primary) {
         skipped++;
         continue;
@@ -1032,13 +1086,15 @@ async function main() {
   }
   for (const [relative, group] of groups) {
     const outputPath = path.join(config.outRoot, relative);
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(
-      outputPath,
-      `${renderReferenceFrontmatter(group.title)}\n\n${group.sections.join("\n\n")}\n`,
-      "utf8",
-    );
-    written++;
+    outputs.add(outputPath);
+    if (
+      await writeIfChanged(
+        outputPath,
+        `${renderReferenceFrontmatter(group.title)}\n\n${group.sections.join("\n\n")}\n`,
+      )
+    ) {
+      written++;
+    }
   }
 
   const sidebar = buildProvidersSidebar(pageEntries);
@@ -1063,30 +1119,26 @@ async function main() {
     "<ProviderDirectory />",
     "",
   ].join("\n");
-  await fs.rm(path.join(config.outRoot, "index.md"), { force: true });
-  await fs.writeFile(
-    path.join(config.outRoot, "index.mdx"),
-    referenceIndex,
-    "utf8",
-  );
+  const indexPath = path.join(config.outRoot, "index.mdx");
+  outputs.add(indexPath);
+  await writeIfChanged(indexPath, referenceIndex);
+  await pruneOutput(config.outRoot, outputs);
 
   const sidebarPath = path.join(
     websiteRoot,
     "src/generated/providers-sidebar.json",
   );
-  await fs.mkdir(path.dirname(sidebarPath), { recursive: true });
-  await fs.writeFile(
+  await writeIfChanged(
     path.join(websiteRoot, "src/generated/reference-redirects.json"),
     `${JSON.stringify(redirects, null, 2)}\n`,
   );
-  await fs.writeFile(
-    sidebarPath,
-    `${JSON.stringify(sidebar, null, 2)}\n`,
-    "utf8",
-  );
+  // astro.config imports the sidebar, so rewriting it restarts a dev server.
+  await writeIfChanged(sidebarPath, `${JSON.stringify(sidebar, null, 2)}\n`);
 
   console.log(
-    `Done. Wrote ${written} reference pages containing ${pending.length} resources (skipped ${skipped} untagged) to ${normalizeSlashes(
+    `Done. Wrote ${written} changed reference pages containing ${pending.length} resources (skipped ${skipped} untagged${
+      config.copyMarkers ? ", with copy markers" : ""
+    }) to ${normalizeSlashes(
       path.relative(path.join(import.meta.dir, ".."), config.outRoot),
     )}.`,
   );
