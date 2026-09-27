@@ -26,10 +26,11 @@ import {
   isInlineDockerfile,
   type InlineDockerfile,
 } from "../../Docker/Dockerfile.ts";
+import { tagRecord } from "../../Tags.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { Credentials } from "../Credentials.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels, toLabels } from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 
 export interface BundledImageSource {
   main: string;
@@ -338,20 +339,28 @@ export const destroyImageRepository = Effect.fn(function* (name: string) {
 /**
  * Delete the image repository an Effect-native host built into on
  * reconcile (`{hostId}-src`, normalized by the host's `rfc1035`).
+ *
+ * Not gated on `output.codeHash`: an update that failed after creating the
+ * repository leaves state without a hash. The repository is deleted only
+ * when it carries this logical id's ownership labels, so a same-named
+ * foreign repository is never touched.
  */
-export const destroyHostImageRepository = (
+export const destroyHostImageRepository = Effect.fn(function* (
+  id: string,
   output: {
     project: string;
     location: string;
-    codeHash: string | undefined;
   },
   repositoryId: string,
-) =>
-  output.codeHash === undefined
-    ? Effect.void
-    : destroyImageRepository(
-        resourceName(output.project, output.location, repositoryId),
-      );
+) {
+  const name = resourceName(output.project, output.location, repositoryId);
+  const repository = yield* artifactregistry
+    .getProjectsLocationsRepositories({ name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  if (repository === undefined) return;
+  if (!(yield* hasAlchemyLabels(id, tagRecord(repository.labels)))) return;
+  yield* destroyImageRepository(name);
+});
 
 export const makeImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
@@ -515,6 +524,7 @@ export const makeImageSource = Effect.gen(function* () {
     if (existing?.name) {
       return {
         name: existing.name,
+        created: false,
         repositoryUri:
           existing.registryUri !== undefined && existing.registryUri.length > 0
             ? `${existing.registryUri.replace(/\/+$/, "")}/${IMAGE_NAME}`
@@ -550,6 +560,8 @@ export const makeImageSource = Effect.gen(function* () {
       );
     return {
       name: observed.name ?? name,
+      // Created by THIS call (a lost create race reports Conflict).
+      created: created !== undefined,
       repositoryUri:
         observed.registryUri !== undefined && observed.registryUri.length > 0
           ? `${observed.registryUri.replace(/\/+$/, "")}/${IMAGE_NAME}`
@@ -592,14 +604,32 @@ export const makeImageSource = Effect.gen(function* () {
     }
     yield* validateImageSource(id, source);
 
-    const env = yield* GcpEnvironment.current;
     const ensured = yield* ensureRepository({
       id,
       repositoryId: repositoryName,
       location,
       tags: options.tags,
     });
-    const repositoryUri = options.repositoryUri ?? ensured.repositoryUri;
+    // A failed first build/push never reaches state, so destroy could not
+    // find a repository created here. Remove it before surfacing the error.
+    return yield* buildImage(options, ensured.repositoryUri).pipe(
+      Effect.onError(() =>
+        ensured.created
+          ? destroyImageRepository(ensured.name).pipe(Effect.ignore)
+          : Effect.void,
+      ),
+    );
+  });
+
+  const buildImage = Effect.fn(function* (
+    options: ArtifactRegistryResolveOptions,
+    ensuredRepositoryUri: string,
+  ) {
+    const { id, source, repositoryName, session, location } = options;
+    const platform = options.platform ?? "linux/amd64";
+    const kind = imageSourceKind(source);
+    const env = yield* GcpEnvironment.current;
+    const repositoryUri = options.repositoryUri ?? ensuredRepositoryUri;
 
     if (kind === "main") {
       const df = source.dockerfile;

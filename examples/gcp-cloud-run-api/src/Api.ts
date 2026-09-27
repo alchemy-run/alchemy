@@ -66,42 +66,28 @@ export default class Api extends GCP.Function<Api>()(
     const links = yield* Links;
     const apiKey = yield* ApiKey;
 
-    // Each binding grants one role on the runtime service account:
-    // datastore.viewer / datastore.user for the document calls, and
-    // secretmanager.secretAccessor on the API key secret only.
-    const getDocument = yield* GCP.Firestore.GetDocument(links);
-    const patchDocument = yield* GCP.Firestore.PatchDocument(links);
-    const deleteDocument = yield* GCP.Firestore.DeleteDocument(links);
-    const accessApiKey = yield* GCP.SecretManager.AccessSecretVersion(apiKey);
+    // Each binding grants the runtime service account one role:
+    // datastore.user on the project, under an IAM Condition naming only
+    // this database, and secretmanager.secretAccessor on the API key
+    // secret only.
+    const db = yield* GCP.Firestore.ReadWriteDatabase(links);
+    const key = yield* GCP.SecretManager.ReadSecret(apiKey);
 
     const readLink = (code: string) =>
-      getDocument({ documentPath: `links/${code}` }).pipe(
+      db.get(`links/${code}`).pipe(
         Effect.map((document): Link | undefined => {
-          const fields = document.fields ?? {};
-          const url = fields.url?.stringValue;
-          if (url === undefined) return undefined;
+          // `get` answers `undefined` for a missing document, and fields
+          // come back as plain JavaScript values.
+          const { url, clicks, createdAt } = document?.fields ?? {};
+          if (typeof url !== "string") return undefined;
           return {
             url,
-            clicks: Number(fields.clicks?.integerValue ?? "0"),
-            createdAt: fields.createdAt?.timestampValue ?? "",
+            clicks: typeof clicks === "number" ? clicks : 0,
+            createdAt: createdAt instanceof Date ? createdAt.toISOString() : "",
           };
         }),
-        // A missing document is a 404 here, not a failure.
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         Effect.orDie,
       );
-
-    const writeLink = (code: string, link: Link) =>
-      patchDocument({
-        documentPath: `links/${code}`,
-        body: {
-          fields: {
-            url: { stringValue: link.url },
-            clicks: { integerValue: String(link.clicks) },
-            createdAt: { timestampValue: link.createdAt },
-          },
-        },
-      }).pipe(Effect.orDie);
 
     /**
      * Secret Manager holds the key; the container reads the `latest`
@@ -109,17 +95,13 @@ export default class Api extends GCP.Function<Api>()(
      * authenticate anyone, so say so instead of failing open.
      */
     const authorize = (request: HttpServerRequest) =>
-      accessApiKey().pipe(
-        Effect.map((version) => {
-          const data = version.payload?.data;
-          if (data === undefined) return "unconfigured" as const;
-          return sameKey(atob(data), request.headers["x-api-key"])
+      key.access().pipe(
+        Effect.map((expected) => {
+          if (expected === undefined) return "unconfigured" as const;
+          return sameKey(expected, request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed("unconfigured" as const),
-        ),
         Effect.orDie,
       );
 
@@ -133,9 +115,8 @@ export default class Api extends GCP.Function<Api>()(
           return HttpServerResponse.text("ok");
         }
 
-        // Mint a code. 62^7 keeps collisions negligible; a shortener that
-        // cannot tolerate one at all wants a Firestore transaction with a
-        // `currentDocument.exists: false` precondition instead.
+        // Mint a code. 62^7 keeps collisions rare, and `create` makes
+        // them harmless.
         if (request.method === "POST" && url.pathname === "/links") {
           const auth = yield* authorize(request);
           if (auth !== "ok") {
@@ -158,12 +139,25 @@ export default class Api extends GCP.Function<Api>()(
             );
           }
 
-          const code = newCode();
-          yield* writeLink(code, {
-            url: body.url,
-            clicks: 0,
-            createdAt: new Date().toISOString(),
-          });
+          // `create` fails with DocumentAlreadyExists instead of
+          // overwriting, so a collision just mints another code.
+          const code = yield* Effect.suspend(() => {
+            const code = newCode();
+            return db
+              .create(`links/${code}`, {
+                url: body.url,
+                clicks: 0,
+                createdAt: new Date(),
+              })
+              .pipe(Effect.as(code));
+          }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.Firestore.DocumentAlreadyExists",
+              times: 3,
+            }),
+            Effect.orDie,
+          );
 
           return yield* HttpServerResponse.json(
             { code, shortUrl: `${publicOrigin(request)}/l/${code}` },
@@ -183,10 +177,10 @@ export default class Api extends GCP.Function<Api>()(
             );
           }
 
-          yield* writeLink(segments[1], {
-            ...link,
-            clicks: link.clicks + 1,
-          });
+          // `update` writes only the keys it is given.
+          yield* db
+            .update(`links/${segments[1]}`, { clicks: link.clicks + 1 })
+            .pipe(Effect.orDie);
 
           return HttpServerResponse.empty({
             status: 302,
@@ -221,10 +215,8 @@ export default class Api extends GCP.Function<Api>()(
               { status: 401 },
             );
           }
-          yield* deleteDocument({ documentPath: `links/${segments[1]}` }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.orDie,
-          );
+          // Deleting a missing document succeeds.
+          yield* db.delete(`links/${segments[1]}`).pipe(Effect.orDie);
           return HttpServerResponse.empty({ status: 204 });
         }
 
@@ -236,10 +228,8 @@ export default class Api extends GCP.Function<Api>()(
     };
   }).pipe(
     Effect.provide([
-      GCP.Firestore.GetDocumentHttp,
-      GCP.Firestore.PatchDocumentHttp,
-      GCP.Firestore.DeleteDocumentHttp,
-      GCP.SecretManager.AccessSecretVersionHttp,
+      GCP.Firestore.ReadWriteDatabaseHttp,
+      GCP.SecretManager.ReadSecretHttp,
     ]),
   ),
 ) {}

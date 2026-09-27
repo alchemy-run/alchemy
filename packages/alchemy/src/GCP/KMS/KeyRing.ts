@@ -2,22 +2,22 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { deterministicKmsId } from "./internal.ts";
 
 const DEFAULT_LOCATION = "us-central1";
-const MAX_NAME_LENGTH = 63;
 
 export type KeyRingProps = {
   /**
    * Key ring id (the `{keyRing}` segment of
    * `projects/{project}/locations/{location}/keyRings/{keyRing}`).
-   * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it
-   * replaces the key ring.
+   * If omitted, a deterministic name `{stack}-{id}-{stage}` is derived
+   * (no random suffix), so a redeploy after destroy reuses the same ring
+   * instead of leaking a new one. Must match `[a-zA-Z0-9_-]{1,63}`.
+   * Immutable — changing it replaces the key ring.
    */
   keyRingId?: string;
   /**
@@ -55,6 +55,10 @@ export type KeyRing = Resource<
  * identity; Cloud KMS also has no delete API, so destroy removes the
  * resource from state only. Account-wide nuke skips this type for the
  * same reason.
+ *
+ * Because the ring outlives destroy, the default `keyRingId` is
+ * deterministic per stack, stage, and logical id: deploying again after a
+ * destroy adopts the ring left behind rather than creating another one.
  *
  * ### Creating a KeyRing
  * **Example:** Generated name
@@ -114,15 +118,7 @@ const parseName = (name: string) => {
 
 const toId = (id: string, keyRingId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      keyRingId ??
-      existing ??
-      (yield* createPhysicalName({
-        id,
-        maxLength: MAX_NAME_LENGTH,
-        lowercase: true,
-      }))
-    );
+    return keyRingId ?? existing ?? (yield* deterministicKmsId(id));
   });
 
 const toAttrs = (keyRing: kms.KeyRing, project: string) => {
@@ -199,8 +195,11 @@ export const KeyRingProvider = () =>
         output?.name ?? resourceName(env.project, location, keyRingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      // KeyRings have no labels/description, so existence at the computed
-      // name is ownership. Adopting an empty namespace is harmless.
+      // KeyRings have no labels, so ownership cannot be checked. A ring at
+      // the deterministic `{stack}-{id}-{stage}` name can only come from an
+      // earlier deploy of this same logical resource (rings are never
+      // deleted, so destroy leaves it behind); adopt it. A ring is an empty
+      // namespace — the keys inside carry their own ownership labels.
       return toAttrs(existing, env.project);
     }),
 
@@ -240,6 +239,7 @@ export const KeyRingProvider = () =>
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, keyRingId);
 
+      // A ring already at this name is adopted as ours (see `read`).
       let current = yield* getByName(name);
 
       if (current === undefined) {

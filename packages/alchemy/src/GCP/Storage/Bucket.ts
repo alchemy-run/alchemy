@@ -64,7 +64,24 @@ export type BucketProps = {
    * @default false
    */
   hierarchicalNamespace?: boolean;
+  /**
+   * Static website configuration. Cloud Storage applies it when the bucket
+   * is served through a CNAME or an external HTTPS load balancer (backend
+   * bucket) — not on `storage.googleapis.com/{bucket}/…` path-style URLs.
+   * Omitting it removes the configuration.
+   */
+  website?: BucketWebsite;
 };
+
+export interface BucketWebsite {
+  /**
+   * Object suffix appended to directory-style requests, e.g. `index.html`
+   * so `/docs/` serves `docs/index.html`.
+   */
+  mainPageSuffix?: string;
+  /** Object served (with status 404) when a requested object is missing. */
+  notFoundPage?: string;
+}
 
 export type Bucket = Resource<
   "GCP.Storage.Bucket",
@@ -92,6 +109,8 @@ export type Bucket = Resource<
     uniformBucketLevelAccess: boolean;
     /** Whether hierarchical namespace is enabled. */
     hierarchicalNamespace: boolean;
+    /** Static website configuration, if set. */
+    website: BucketWebsite | undefined;
   },
   never,
   Providers
@@ -126,6 +145,21 @@ export type Bucket = Resource<
  *   hierarchicalNamespace: true,
  *   uniformBucketLevelAccess: true,
  *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * **Example:** Static website bucket with public read
+ * ```typescript
+ * const site = yield* GCP.Storage.Bucket("site", {
+ *   uniformBucketLevelAccess: true,
+ *   website: { mainPageSuffix: "index.html", notFoundPage: "404.html" },
+ *   forceDestroy: true,
+ * });
+ * yield* GCP.IAM.Member("PublicRead", {
+ *   kind: "storage.bucket",
+ *   name: site.bucketName,
+ *   role: "roles/storage.objectViewer",
+ *   member: "allUsers",
  * });
  * ```
  *
@@ -211,7 +245,19 @@ const toAttrs = (bucket: storage.Bucket) => ({
   uniformBucketLevelAccess:
     bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true,
   hierarchicalNamespace: bucket.hierarchicalNamespace?.enabled === true,
+  website: toWebsite(bucket.website),
 });
+
+const toWebsite = (
+  website: storage.BucketWebsite | undefined,
+): BucketWebsite | undefined =>
+  website === undefined ||
+  (website.mainPageSuffix === undefined && website.notFoundPage === undefined)
+    ? undefined
+    : {
+        mainPageSuffix: website.mainPageSuffix,
+        notFoundPage: website.notFoundPage,
+      };
 
 const getByName = (bucketName: string) =>
   storage
@@ -372,6 +418,7 @@ export const BucketProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
+      const desiredWebsite = toWebsite(news.website);
 
       let current = yield* getByName(bucketName);
 
@@ -389,6 +436,7 @@ export const BucketProvider = () =>
               hierarchicalNamespace: hierarchicalNamespace
                 ? { enabled: true }
                 : undefined,
+              website: desiredWebsite,
               iamConfiguration: configureIam
                 ? {
                     uniformBucketLevelAccess: {
@@ -418,12 +466,17 @@ export const BucketProvider = () =>
         (current.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
           true) !==
           uniformBucketLevelAccess;
+      const observedWebsite = toWebsite(current.website);
+      const websiteChanged =
+        observedWebsite?.mainPageSuffix !== desiredWebsite?.mainPageSuffix ||
+        observedWebsite?.notFoundPage !== desiredWebsite?.notFoundPage;
 
       if (
         labelsChanged ||
         storageClassChanged ||
         versioningChanged ||
-        ublChanged
+        ublChanged ||
+        websiteChanged
       ) {
         const nextLabels: Record<string, string | null> = { ...desiredLabels };
         for (const key of removed) {
@@ -442,6 +495,16 @@ export const BucketProvider = () =>
                     enabled: uniformBucketLevelAccess,
                   },
                 }
+              : undefined,
+            // PATCH merges nested objects and clears a field only when it
+            // is sent as JSON null.
+            website: websiteChanged
+              ? ((desiredWebsite === undefined
+                  ? null
+                  : {
+                      mainPageSuffix: desiredWebsite.mainPageSuffix ?? null,
+                      notFoundPage: desiredWebsite.notFoundPage ?? null,
+                    }) as unknown as storage.BucketWebsite)
               : undefined,
           },
         });

@@ -69,8 +69,9 @@ export interface WriteDatabaseClient {
 
 /**
  * Write access to a Firestore {@link Database}: `set`, `update`, `delete`,
- * `create`. Grants `roles/datastore.user` on the project (Firestore
- * databases have no resource-level IAM policy).
+ * `create`. Grants `roles/datastore.user` on the project under an IAM
+ * Condition naming this database (Firestore databases have no
+ * resource-level IAM policy).
  *
  * ### Writing documents
  * **Example:** Create, update, and delete

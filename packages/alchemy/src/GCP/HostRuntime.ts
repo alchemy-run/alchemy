@@ -198,6 +198,66 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
   );
 };
 
+/** Volume name and mount path Cloud Run uses for Cloud SQL Unix sockets. */
+export const CLOUD_SQL_VOLUME = "cloudsql";
+export const CLOUD_SQL_MOUNT_PATH = "/cloudsql";
+
+type CloudSqlTemplate = {
+  volumes?: Array<{
+    name?: string;
+    cloudSqlInstance?: { instances?: string[] };
+  }>;
+  containers?: Array<{
+    volumeMounts?: Array<{ name?: string; mountPath?: string }>;
+  }>;
+};
+
+/**
+ * Mount the Cloud SQL instances requested by bindings (`cloudSqlInstances`)
+ * as the `cloudsql` volume on the first container, so each instance's
+ * socket appears at `/cloudsql/{connectionName}`. Instances the user
+ * already declared on a `cloudsql` volume are kept.
+ */
+export const mountCloudSqlInstances = <T extends CloudSqlTemplate>(
+  template: T,
+  bindings: readonly ResourceBinding<GcpHostBinding>[],
+): T => {
+  const requested = bindings.flatMap(
+    (binding) => binding.data?.cloudSqlInstances ?? [],
+  );
+  if (requested.length === 0) return template;
+  const existing = template.volumes?.find(
+    (volume) => volume.name === CLOUD_SQL_VOLUME,
+  );
+  const instances = [
+    ...new Set([
+      ...(existing?.cloudSqlInstance?.instances ?? []),
+      ...requested,
+    ]),
+  ].sort();
+  const volumes = [
+    ...(template.volumes ?? []).filter(
+      (volume) => volume.name !== CLOUD_SQL_VOLUME,
+    ),
+    { name: CLOUD_SQL_VOLUME, cloudSqlInstance: { instances } },
+  ];
+  const containers = (template.containers ?? []).map((container, index) =>
+    index === 0 &&
+    !(container.volumeMounts ?? []).some(
+      (mount) => mount.name === CLOUD_SQL_VOLUME,
+    )
+      ? {
+          ...container,
+          volumeMounts: [
+            ...(container.volumeMounts ?? []),
+            { name: CLOUD_SQL_VOLUME, mountPath: CLOUD_SQL_MOUNT_PATH },
+          ],
+        }
+      : container,
+  );
+  return { ...template, volumes, containers };
+};
+
 /**
  * Generated entry for an Effect-native GCP container: imports only
  * `alchemy/Runtime/Bootstrap/<module>` plus the user's `main`. The runtime

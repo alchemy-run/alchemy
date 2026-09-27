@@ -62,6 +62,11 @@ export type GcpIamGrant = {
 export type GcpHostBinding = {
   env?: Record<string, any>;
   iam?: GcpIamGrant[];
+  /**
+   * Cloud SQL connection names (`project:region:instance`) to mount as
+   * Unix sockets under `/cloudsql` (Cloud Run services only).
+   */
+  cloudSqlInstances?: string[];
 };
 
 /**
@@ -475,6 +480,7 @@ export const bindGcpHost = (options: {
   resource: { readonly LogicalId: string };
   iam: Input<GcpIamGrant>[];
   env?: Record<string, any>;
+  cloudSqlInstances?: Input<string>[];
 }): Effect.Effect<void> =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
@@ -483,5 +489,8 @@ export const bindGcpHost = (options: {
     yield* host.bind`Allow(${host}, ${options.tag}(${options.resource}))`({
       iam: options.iam,
       env: options.env,
+      ...(options.cloudSqlInstances
+        ? { cloudSqlInstances: options.cloudSqlInstances }
+        : {}),
     });
   }) as Effect.Effect<void>;

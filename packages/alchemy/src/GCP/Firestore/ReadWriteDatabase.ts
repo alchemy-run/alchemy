@@ -9,8 +9,8 @@ export interface ReadWriteDatabaseClient
 
 /**
  * Read and write access to a Firestore {@link Database}. Grants
- * `roles/datastore.user` on the project (Firestore databases have no
- * resource-level IAM policy).
+ * `roles/datastore.user` on the project under an IAM Condition naming
+ * this database (Firestore databases have no resource-level IAM policy).
  *
  * ### Reading and writing
  * **Example:** Increment a counter

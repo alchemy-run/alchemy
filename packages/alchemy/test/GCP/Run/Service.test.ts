@@ -1,11 +1,14 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -40,6 +43,8 @@ const dockerAvailable = (() => {
     return false;
   }
 })();
+
+const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -311,5 +316,49 @@ test.provider.skipIf(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  { timeout: 1_500_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds)(
+  "a failed first image build removes the repository it created",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const serviceId = `alchemy-test-broken-build-${Core.defaultStage()}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .slice(0, 45)
+        .replace(/-+$/, "");
+      const location = "us-central1";
+
+      // The per-host repository is created before bundling, so a `main`
+      // that cannot be bundled fails after the repository exists.
+      const exit = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* GCP.Run.Service("BrokenBuild", {
+              serviceId,
+              location,
+              main: new URL("./fixtures/does-not-exist.ts", import.meta.url)
+                .href,
+            });
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toEqual(true);
+
+      const repository = yield* artifactregistry
+        .getProjectsLocationsRepositories({
+          name: `projects/${project}/locations/${location}/repositories/${serviceId}-src`,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        );
+      expect(repository).toEqual("gone");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

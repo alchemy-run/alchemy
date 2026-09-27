@@ -1,6 +1,7 @@
 export * from "./AuthProvider.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
+export * from "./HttpClient.ts";
 export * from "./Labels.ts";
 export * from "./Providers.ts";
 export * as AIPlatform from "./AIPlatform/index.ts";

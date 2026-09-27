@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
@@ -17,6 +16,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { deterministicKmsId } from "./internal.ts";
 
 const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_PURPOSE: kms.CryptoKeyPurposeEnum = "ENCRYPT_DECRYPT";
@@ -24,7 +24,6 @@ const DEFAULT_ALGORITHM: kms.CryptoKeyVersionTemplateAlgorithmEnum =
   "GOOGLE_SYMMETRIC_ENCRYPTION";
 const DEFAULT_PROTECTION: kms.CryptoKeyVersionTemplateProtectionLevelEnum =
   "SOFTWARE";
-const MAX_NAME_LENGTH = 63;
 const DELETABLE_VERSION_STATES = new Set([
   "DESTROYED",
   "IMPORT_FAILED",
@@ -35,12 +34,13 @@ const USABLE_VERSION_STATES = new Set(["ENABLED", "PENDING_GENERATION"]);
 
 /**
  * Cloud KMS never deletes a key while any version is merely
- * `DESTROY_SCHEDULED` (at least 24h), and a key ring never at all. On
- * delete Alchemy destroys every version and replaces its ownership labels
- * with this marker. A released key holds no usable key material, so any
- * stack may reclaim it on create: reconcile re-stamps ownership and mints a
- * fresh primary. Without this, a fixed `cryptoKeyId` is unusable for at
- * least a day after destroy, and forever by any other stack.
+ * `DESTROY_SCHEDULED` (at least 24h), never deletes a key ring, and
+ * retires a deleted key's name forever. On delete Alchemy therefore never
+ * deletes the key: it destroys every version and replaces the ownership
+ * labels with this marker. A released key holds no usable key material, so
+ * any stack may reclaim it on create: reconcile re-stamps ownership and
+ * mints a fresh primary. This keeps both fixed and default (deterministic)
+ * `cryptoKeyId`s reusable across destroy/redeploy cycles.
  */
 export const RELEASED_LABEL = "alchemy-released";
 
@@ -79,10 +79,14 @@ export type CryptoKeyProps = {
    */
   location?: string;
   /**
-   * CryptoKey id (the last path segment). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Must match
-   * `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the key.
-   * Deleted ids cannot be reused in the same project.
+   * CryptoKey id (the last path segment). If omitted, a deterministic
+   * name `{stack}-{id}-{stage}` is derived (no random suffix), plus a short
+   * hash of `purpose`, `versionTemplate.protectionLevel`, `importOnly`,
+   * `destroyScheduledDuration`, and `cryptoKeyBackend` when any differ
+   * from their defaults — so a redeploy after destroy reclaims the same
+   * key, and a replacement caused by those settings gets a distinct name.
+   * Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the
+   * key.
    */
   cryptoKeyId?: string;
   /**
@@ -116,8 +120,9 @@ export type CryptoKeyProps = {
    */
   destroyScheduledDuration?: string;
   /**
-   * Create the key with no versions so it can be deleted immediately.
-   * Create-only — ignored on update.
+   * Create the key with no versions (and keep it version-less when a
+   * released key is reclaimed), e.g. for import-only or externally
+   * managed material.
    * @default false
    */
   skipInitialVersionCreation?: boolean;
@@ -182,17 +187,17 @@ export type CryptoKey = Resource<
  * `versionTemplate.algorithm` update in place.
  *
  * Cloud KMS only permanently deletes a CryptoKey after every version is
- * gone. Versions must first be scheduled for destruction (minimum 24h)
- * and then deleted. Keys created with `skipInitialVersionCreation: true`
- * have no versions and can be deleted immediately. Deleted CryptoKey
- * names cannot be reused.
+ * gone, and a deleted CryptoKey's name is retired forever — it can never
+ * be created again in the project.
  *
- * Until then, destroying a key *releases* it: every version is scheduled
- * for destruction and the ownership labels are replaced by
- * `alchemy-released`. A later deploy with the same `cryptoKeyId` — from
- * this stack or any other — reclaims the released key and mints a fresh
- * primary version, so a fixed key id survives destroy/redeploy cycles.
- * Ciphertext encrypted under the old versions is not recoverable.
+ * Destroying a key therefore *releases* it instead of deleting it: every
+ * version is scheduled for destruction and the ownership labels are
+ * replaced by `alchemy-released`. A later deploy with the same
+ * `cryptoKeyId` — from this stack or any other — reclaims the released key
+ * and mints a fresh primary version. The default `cryptoKeyId` is
+ * deterministic per stack, stage, and logical id, so destroy/redeploy
+ * cycles reuse one key rather than leaving a new released key behind each
+ * time. Ciphertext encrypted under the old versions is not recoverable.
  *
  * ### Creating a CryptoKey
  * **Example:** Generated name on an existing KeyRing
@@ -326,16 +331,56 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (id: string, cryptoKeyId: string | undefined, existing?: string) =>
+type ImmutableKeyProps = Pick<
+  CryptoKeyProps,
+  | "purpose"
+  | "versionTemplate"
+  | "importOnly"
+  | "destroyScheduledDuration"
+  | "cryptoKeyBackend"
+>;
+
+/**
+ * The replacement-triggering settings (besides id and parent) folded into
+ * the generated id, or `undefined` when all are defaults so the common
+ * case keeps the plain `{stack}-{id}-{stage}` name.
+ */
+const immutableVariant = (props: ImmutableKeyProps | undefined) => {
+  const purpose = props?.purpose ?? DEFAULT_PURPOSE;
+  const protectionLevel = normalizeProtection(
+    props?.versionTemplate?.protectionLevel,
+  );
+  const importOnly = props?.importOnly === true;
+  const destroyScheduledDuration = props?.destroyScheduledDuration;
+  const cryptoKeyBackend = props?.cryptoKeyBackend || undefined;
+  if (
+    purpose === DEFAULT_PURPOSE &&
+    protectionLevel === DEFAULT_PROTECTION &&
+    !importOnly &&
+    destroyScheduledDuration === undefined &&
+    cryptoKeyBackend === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    purpose,
+    protectionLevel,
+    importOnly,
+    destroyScheduledDuration,
+    cryptoKeyBackend,
+  };
+};
+
+const toId = (
+  id: string,
+  props: (ImmutableKeyProps & { cryptoKeyId?: string }) | undefined,
+  existing?: string,
+) =>
   Effect.gen(function* () {
     return (
-      cryptoKeyId ??
+      props?.cryptoKeyId ??
       existing ??
-      (yield* createPhysicalName({
-        id,
-        maxLength: MAX_NAME_LENGTH,
-        lowercase: true,
-      }))
+      (yield* deterministicKmsId(id, immutableVariant(props)))
     );
   });
 
@@ -793,18 +838,21 @@ export const CryptoKeyProvider = () =>
       if (!replace) return undefined;
       return {
         action: "replace" as const,
+        // A generated id folds every replacement trigger except the parent
+        // into its hash, and a parent change moves rings, so the new
+        // generation never collides with the old one. Only a fixed id
+        // reused in the same ring must release the old key first.
         deleteFirst:
-          previousId !== undefined && nextId === previousId && !parentChanged,
+          news.cryptoKeyId !== undefined &&
+          previousId !== undefined &&
+          nextId === previousId &&
+          !parentChanged,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const cryptoKeyId = yield* toId(
-        id,
-        olds?.cryptoKeyId,
-        output?.cryptoKeyId,
-      );
+      const cryptoKeyId = yield* toId(id, olds, output?.cryptoKeyId);
       const name =
         output?.name ??
         (olds?.keyRing || output?.keyRing
@@ -859,11 +907,7 @@ export const CryptoKeyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const cryptoKeyId = yield* toId(
-        id,
-        news.cryptoKeyId,
-        output?.cryptoKeyId,
-      );
+      const cryptoKeyId = yield* toId(id, news, output?.cryptoKeyId);
       const parent = resolveParent(
         env.project,
         news.keyRing,
@@ -994,36 +1038,8 @@ export const CryptoKeyProvider = () =>
         { concurrency: 4 },
       );
 
-      const remaining = yield* listVersions(name);
-      const stillDeletable = remaining.filter((version) =>
-        DELETABLE_VERSION_STATES.has(version.state ?? ""),
-      );
-      yield* Effect.forEach(
-        stillDeletable,
-        (version) => (version.name ? deleteVersion(version.name) : Effect.void),
-        { concurrency: 4 },
-      );
-
-      const leftover = yield* listVersions(name);
-      if (leftover.length > 0) {
-        // DESTROY_SCHEDULED versions cannot be removed until the
-        // destroyScheduledDuration (min 24h) elapses. Leave the key;
-        // nuke will retry after versions reach DESTROYED.
-        return;
-      }
-
-      const deleted = yield* kms
-        .deleteProjectsLocationsKeyRingsCryptoKeys({ name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          // Versions can appear between the list and delete, or the name
-          // may already be retired. Either way the key is gone or stuck
-          // until versions reach DESTROYED — not a delete failure.
-          Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-        );
-      if (deleted !== undefined) {
-        yield* waitOperation(deleted);
-      }
+      // The key itself is never deleted: KMS retires a deleted key's name
+      // forever, which would make this id (fixed or the deterministic
+      // default) undeployable. The released key is reclaimed on redeploy.
     }),
   });

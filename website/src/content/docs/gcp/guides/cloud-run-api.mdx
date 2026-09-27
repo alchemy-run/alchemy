@@ -75,84 +75,69 @@ which is the right default for an internal service.
 ## Bindings are the IAM
 
 Each `yield*` of a binding does three things: grants the matching role
-on the service's runtime service account, injects whatever the call
-needs into the revision, and hands back a callable.
+on the service's runtime service account, injects whatever the calls
+need into the revision, and hands back a typed client.
 
 ```typescript
-    const getDocument = yield* GCP.Firestore.GetDocument(links);
-    const patchDocument = yield* GCP.Firestore.PatchDocument(links);
-    const deleteDocument = yield* GCP.Firestore.DeleteDocument(links);
-    const accessApiKey = yield* GCP.SecretManager.AccessSecretVersion(apiKey);
+    const db = yield* GCP.Firestore.ReadWriteDatabase(links);
+    const key = yield* GCP.SecretManager.ReadSecret(apiKey);
 ```
 
-Those four lines are the entire IAM configuration of this service:
-`roles/datastore.viewer` and `roles/datastore.user` on the project for
-the document calls (Firestore has no per-database IAM), and
-`roles/secretmanager.secretAccessor` on the one secret for the key. Delete a binding and
-the role is revoked on the next deploy. See
+Those two lines are the entire IAM configuration of this service.
+`ReadWriteDatabase` grants `roles/datastore.user`. Firestore databases
+have no IAM policy of their own, so the grant is a project binding
+under an IAM Condition naming this one database — the service cannot
+touch any other database in the project. `ReadSecret` grants
+`roles/secretmanager.secretAccessor` on the API key secret itself.
+Delete a binding and the role is revoked on the next deploy. See
 [How bindings grant IAM](/gcp/guides/bindings) for the mechanism.
 
-## Reading and writing documents
+Each resource has a `Read`, `Write`, and `ReadWrite` client. The
+service reads and writes links but only ever reads the key, so that is
+exactly what it asks for.
 
-Firestore's REST shape is typed values, so a small pair of helpers
-keeps the routes readable:
+## Reading documents
+
+The client speaks plain JavaScript: `get` answers `undefined` for a
+missing document, and fields come back decoded (integers as `number`,
+timestamps as `Date`).
 
 ```typescript
     const readLink = (code: string) =>
-      getDocument({ documentPath: `links/${code}` }).pipe(
+      db.get(`links/${code}`).pipe(
         Effect.map((document): Link | undefined => {
-          const fields = document.fields ?? {};
-          const url = fields.url?.stringValue;
-          if (url === undefined) return undefined;
+          // `get` answers `undefined` for a missing document, and fields
+          // come back as plain JavaScript values.
+          const { url, clicks, createdAt } = document?.fields ?? {};
+          if (typeof url !== "string") return undefined;
           return {
             url,
-            clicks: Number(fields.clicks?.integerValue ?? "0"),
-            createdAt: fields.createdAt?.timestampValue ?? "",
+            clicks: typeof clicks === "number" ? clicks : 0,
+            createdAt: createdAt instanceof Date ? createdAt.toISOString() : "",
           };
         }),
-        // A missing document is a 404 here, not a failure.
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         Effect.orDie,
       );
-
-    const writeLink = (code: string, link: Link) =>
-      patchDocument({
-        documentPath: `links/${code}`,
-        body: {
-          fields: {
-            url: { stringValue: link.url },
-            clicks: { integerValue: String(link.clicks) },
-            createdAt: { timestampValue: link.createdAt },
-          },
-        },
-      }).pipe(Effect.orDie);
 ```
-
-`NotFound` is a member of the error union the binding returns, so
-`Effect.catchTag` is exhaustive — there is no string matching on error
-messages.
 
 ## Reading the key on demand
 
-`AccessSecretVersion` takes no arguments; it reads the `latest`
-version of the bound secret. The container fetches it per request
-rather than caching it in the revision, so rotating the secret takes
-effect without a redeploy. `sameKey` compares in constant time so the
-response timing does not leak the key.
+`access()` reads the `latest` version of the bound secret as a UTF-8
+string, or `undefined` when there is no version yet. The container
+fetches it per request rather than caching it in the revision, so
+rotating the secret takes effect without a redeploy. `sameKey`
+compares in constant time so the response timing does not leak the
+key.
 
 ```typescript
     const authorize = (request: HttpServerRequest) =>
-      accessApiKey().pipe(
-        Effect.map((version) => {
-          const data = version.payload?.data;
-          if (data === undefined) return "unconfigured" as const;
-          return sameKey(atob(data), request.headers["x-api-key"])
+      key.access().pipe(
+        Effect.map((expected) => {
+          if (expected === undefined) return "unconfigured" as const;
+          return sameKey(expected, request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed("unconfigured" as const),
-        ),
         Effect.orDie,
       );
 ```
@@ -191,12 +176,25 @@ deploy scripts and tests straightforward.
             );
           }
 
-          const code = newCode();
-          yield* writeLink(code, {
-            url: body.url,
-            clicks: 0,
-            createdAt: new Date().toISOString(),
-          });
+          // `create` fails with DocumentAlreadyExists instead of
+          // overwriting, so a collision just mints another code.
+          const code = yield* Effect.suspend(() => {
+            const code = newCode();
+            return db
+              .create(`links/${code}`, {
+                url: body.url,
+                clicks: 0,
+                createdAt: new Date(),
+              })
+              .pipe(Effect.as(code));
+          }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.Firestore.DocumentAlreadyExists",
+              times: 3,
+            }),
+            Effect.orDie,
+          );
 
           return yield* HttpServerResponse.json(
             { code, shortUrl: `${publicOrigin(request)}/l/${code}` },
@@ -204,6 +202,10 @@ deploy scripts and tests straightforward.
           );
         }
 ```
+
+`create` fails with `DocumentAlreadyExists` instead of overwriting, so
+a code collision retries with a fresh code rather than clobbering
+someone else's link.
 
 ### `GET /l/:code` — redirect and count
 
@@ -217,10 +219,10 @@ deploy scripts and tests straightforward.
             );
           }
 
-          yield* writeLink(segments[1], {
-            ...link,
-            clicks: link.clicks + 1,
-          });
+          // `update` writes only the keys it is given.
+          yield* db
+            .update(`links/${segments[1]}`, { clicks: link.clicks + 1 })
+            .pipe(Effect.orDie);
 
           return HttpServerResponse.empty({
             status: 302,
@@ -229,8 +231,9 @@ deploy scripts and tests straightforward.
         }
 ```
 
-The click counter is a read-modify-write. That is fine for a number
-nobody bills on; a count that has to be exact wants a Firestore
+`update` sends an update mask of the keys it is given, so bumping
+`clicks` leaves `url` and `createdAt` alone. The counter is still a
+read-modify-write; a count that has to be exact wants a Firestore
 transaction.
 
 `GET /links/:code` returns the same record as JSON, and
@@ -238,15 +241,13 @@ transaction.
 
 ## Provide the implementations
 
-The service Effect closes by providing one layer per binding:
+The service Effect closes by providing one layer per client:
 
 ```typescript
   }).pipe(
     Effect.provide([
-      GCP.Firestore.GetDocumentHttp,
-      GCP.Firestore.PatchDocumentHttp,
-      GCP.Firestore.DeleteDocumentHttp,
-      GCP.SecretManager.AccessSecretVersionHttp,
+      GCP.Firestore.ReadWriteDatabaseHttp,
+      GCP.SecretManager.ReadSecretHttp,
     ]),
   ),
 ) {}
@@ -385,42 +386,28 @@ export default class Api extends GCP.Function<Api>()(
     const links = yield* Links;
     const apiKey = yield* ApiKey;
 
-    // Each binding grants one role on the runtime service account:
-    // datastore.viewer / datastore.user for the document calls, and
-    // secretmanager.secretAccessor on the API key secret only.
-    const getDocument = yield* GCP.Firestore.GetDocument(links);
-    const patchDocument = yield* GCP.Firestore.PatchDocument(links);
-    const deleteDocument = yield* GCP.Firestore.DeleteDocument(links);
-    const accessApiKey = yield* GCP.SecretManager.AccessSecretVersion(apiKey);
+    // Each binding grants the runtime service account one role:
+    // datastore.user on the project, under an IAM Condition naming only
+    // this database, and secretmanager.secretAccessor on the API key
+    // secret only.
+    const db = yield* GCP.Firestore.ReadWriteDatabase(links);
+    const key = yield* GCP.SecretManager.ReadSecret(apiKey);
 
     const readLink = (code: string) =>
-      getDocument({ documentPath: `links/${code}` }).pipe(
+      db.get(`links/${code}`).pipe(
         Effect.map((document): Link | undefined => {
-          const fields = document.fields ?? {};
-          const url = fields.url?.stringValue;
-          if (url === undefined) return undefined;
+          // `get` answers `undefined` for a missing document, and fields
+          // come back as plain JavaScript values.
+          const { url, clicks, createdAt } = document?.fields ?? {};
+          if (typeof url !== "string") return undefined;
           return {
             url,
-            clicks: Number(fields.clicks?.integerValue ?? "0"),
-            createdAt: fields.createdAt?.timestampValue ?? "",
+            clicks: typeof clicks === "number" ? clicks : 0,
+            createdAt: createdAt instanceof Date ? createdAt.toISOString() : "",
           };
         }),
-        // A missing document is a 404 here, not a failure.
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         Effect.orDie,
       );
-
-    const writeLink = (code: string, link: Link) =>
-      patchDocument({
-        documentPath: `links/${code}`,
-        body: {
-          fields: {
-            url: { stringValue: link.url },
-            clicks: { integerValue: String(link.clicks) },
-            createdAt: { timestampValue: link.createdAt },
-          },
-        },
-      }).pipe(Effect.orDie);
 
     /**
      * Secret Manager holds the key; the container reads the `latest`
@@ -428,17 +415,13 @@ export default class Api extends GCP.Function<Api>()(
      * authenticate anyone, so say so instead of failing open.
      */
     const authorize = (request: HttpServerRequest) =>
-      accessApiKey().pipe(
-        Effect.map((version) => {
-          const data = version.payload?.data;
-          if (data === undefined) return "unconfigured" as const;
-          return sameKey(atob(data), request.headers["x-api-key"])
+      key.access().pipe(
+        Effect.map((expected) => {
+          if (expected === undefined) return "unconfigured" as const;
+          return sameKey(expected, request.headers["x-api-key"])
             ? ("ok" as const)
             : ("denied" as const);
         }),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed("unconfigured" as const),
-        ),
         Effect.orDie,
       );
 
@@ -452,9 +435,8 @@ export default class Api extends GCP.Function<Api>()(
           return HttpServerResponse.text("ok");
         }
 
-        // Mint a code. 62^7 keeps collisions negligible; a shortener that
-        // cannot tolerate one at all wants a Firestore transaction with a
-        // `currentDocument.exists: false` precondition instead.
+        // Mint a code. 62^7 keeps collisions rare, and `create` makes
+        // them harmless.
         if (request.method === "POST" && url.pathname === "/links") {
           const auth = yield* authorize(request);
           if (auth !== "ok") {
@@ -477,12 +459,25 @@ export default class Api extends GCP.Function<Api>()(
             );
           }
 
-          const code = newCode();
-          yield* writeLink(code, {
-            url: body.url,
-            clicks: 0,
-            createdAt: new Date().toISOString(),
-          });
+          // `create` fails with DocumentAlreadyExists instead of
+          // overwriting, so a collision just mints another code.
+          const code = yield* Effect.suspend(() => {
+            const code = newCode();
+            return db
+              .create(`links/${code}`, {
+                url: body.url,
+                clicks: 0,
+                createdAt: new Date(),
+              })
+              .pipe(Effect.as(code));
+          }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.Firestore.DocumentAlreadyExists",
+              times: 3,
+            }),
+            Effect.orDie,
+          );
 
           return yield* HttpServerResponse.json(
             { code, shortUrl: `${publicOrigin(request)}/l/${code}` },
@@ -502,10 +497,10 @@ export default class Api extends GCP.Function<Api>()(
             );
           }
 
-          yield* writeLink(segments[1], {
-            ...link,
-            clicks: link.clicks + 1,
-          });
+          // `update` writes only the keys it is given.
+          yield* db
+            .update(`links/${segments[1]}`, { clicks: link.clicks + 1 })
+            .pipe(Effect.orDie);
 
           return HttpServerResponse.empty({
             status: 302,
@@ -540,10 +535,8 @@ export default class Api extends GCP.Function<Api>()(
               { status: 401 },
             );
           }
-          yield* deleteDocument({ documentPath: `links/${segments[1]}` }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.orDie,
-          );
+          // Deleting a missing document succeeds.
+          yield* db.delete(`links/${segments[1]}`).pipe(Effect.orDie);
           return HttpServerResponse.empty({ status: 204 });
         }
 
@@ -555,10 +548,8 @@ export default class Api extends GCP.Function<Api>()(
     };
   }).pipe(
     Effect.provide([
-      GCP.Firestore.GetDocumentHttp,
-      GCP.Firestore.PatchDocumentHttp,
-      GCP.Firestore.DeleteDocumentHttp,
-      GCP.SecretManager.AccessSecretVersionHttp,
+      GCP.Firestore.ReadWriteDatabaseHttp,
+      GCP.SecretManager.ReadSecretHttp,
     ]),
   ),
 ) {}

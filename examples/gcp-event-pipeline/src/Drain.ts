@@ -1,7 +1,7 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Analytics, EventsTable, Inbox, type EventRow } from "./resources.ts";
+import { EventsTable, Inbox, type EventRow } from "./resources.ts";
 
 /** One pull returns at most this many messages. */
 const BATCH = 100;
@@ -25,15 +25,12 @@ export default class Drain extends GCP.Run.Job<Drain>()(
   },
   Effect.gen(function* () {
     const inbox = yield* Inbox;
-    const dataset = yield* Analytics;
     const table = yield* EventsTable;
 
-    const pull = yield* GCP.PubSub.Pull(inbox);
-    const acknowledge = yield* GCP.PubSub.Acknowledge(inbox);
-    const insertAll = yield* GCP.BigQuery.InsertAll(table);
-
-    // Forces the job to wait for the dataset before its first run.
-    yield* dataset.datasetId;
+    // pubsub.subscriber on the subscription, and bigquery.dataEditor on
+    // the table — nothing on the project.
+    const subscription = yield* GCP.PubSub.ReadSubscription(inbox);
+    const warehouse = yield* GCP.BigQuery.WriteTable(table);
 
     return {
       // A pull may return fewer messages than are waiting, so drain
@@ -41,34 +38,26 @@ export default class Drain extends GCP.Run.Job<Drain>()(
       run: Effect.gen(function* () {
         // A pull waits for messages; an empty subscription answers
         // nothing, so a quiet 10 seconds means the backlog is drained.
-        const received = yield* pull({ body: { maxMessages: BATCH } }).pipe(
-          Effect.timeoutOption("10 seconds"),
-        );
-        const messages =
-          Option.getOrUndefined(received)?.receivedMessages ?? [];
+        const received = yield* subscription
+          .pull({ maxMessages: BATCH })
+          .pipe(Effect.timeoutOption("10 seconds"));
+        const messages = Option.getOrElse(received, () => []);
         if (messages.length === 0) {
           yield* Effect.log("drain: nothing left");
           return 0;
         }
 
-        const rows = messages.flatMap((message) => {
-          const data = message.message?.data;
-          if (data === undefined) return [];
-          const row = JSON.parse(atob(data)) as EventRow;
-          // insertId makes the streaming insert idempotent inside
-          // BigQuery's dedup window, so a redelivered batch collapses.
-          return [{ insertId: row.id, json: row }];
-        });
+        const rows = messages.map(
+          (message) => JSON.parse(message.text) as EventRow,
+        );
 
-        yield* insertAll({ body: { rows } });
+        // insertIds make the streaming insert idempotent inside
+        // BigQuery's dedup window, so a redelivered batch collapses.
+        yield* warehouse.insert(rows, { insertIds: rows.map((row) => row.id) });
 
-        yield* acknowledge({
-          body: {
-            ackIds: messages.flatMap((message) =>
-              message.ackId === undefined ? [] : [message.ackId],
-            ),
-          },
-        });
+        yield* subscription.acknowledge(
+          messages.map((message) => message.ackId),
+        );
 
         yield* Effect.log(`drain: wrote ${rows.length} row(s)`);
         return messages.length;
@@ -80,9 +69,8 @@ export default class Drain extends GCP.Run.Job<Drain>()(
     };
   }).pipe(
     Effect.provide([
-      GCP.PubSub.PullHttp,
-      GCP.PubSub.AcknowledgeHttp,
-      GCP.BigQuery.InsertAllHttp,
+      GCP.PubSub.ReadSubscriptionHttp,
+      GCP.BigQuery.WriteTableHttp,
     ]),
   ),
 ) {}

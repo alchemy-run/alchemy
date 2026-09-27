@@ -5,6 +5,8 @@ export * from "./Folder.ts";
 export * from "./HmacKey.ts";
 export * from "./Managed.ts";
 export * from "./Notification.ts";
+export * from "./Object.ts";
+export * from "./Files.ts";
 export * from "./ObjectAccessControl.ts";
 export * from "./DeleteObject.ts";
 export * from "./DeleteObjectHttp.ts";

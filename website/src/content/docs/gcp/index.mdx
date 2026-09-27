@@ -46,26 +46,17 @@ export default class Api extends GCP.Function<Api>()(
       type: "FIRESTORE_NATIVE",
     });
 
-    // Bindings — each grants its role on the runtime service account.
-    const getDocument = yield* GCP.Firestore.GetDocument(links);
-    const patchDocument = yield* GCP.Firestore.PatchDocument(links);
+    // A binding grants its role on the runtime service account.
+    const db = yield* GCP.Firestore.ReadWriteDatabase(links);
 
     return {
       fetch: Effect.gen(function* () {
-        yield* patchDocument({
-          documentPath: "links/demo",
-          body: { fields: { url: { stringValue: "https://alchemy.run" } } },
-        });
-        const document = yield* getDocument({ documentPath: "links/demo" });
-        return yield* HttpServerResponse.json(document.fields ?? {});
+        yield* db.set("links/demo", { url: "https://alchemy.run" });
+        const link = yield* db.get("links/demo");
+        return yield* HttpServerResponse.json(link?.fields ?? {});
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide([
-      GCP.Firestore.GetDocumentHttp,
-      GCP.Firestore.PatchDocumentHttp,
-    ]),
-  ),
+  }).pipe(Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp)),
 ) {}
 ```
 
@@ -74,8 +65,8 @@ Three ideas carry the whole provider:
 - **Resources** (`Firestore.Database`, `PubSub.Topic`,
   `BigQuery.Table`, `SecretManager.Secret`, `Redis.Instance`, …) are
   Stack-managed. Alchemy creates, updates, and deletes them.
-- **Bindings** (`GetDocument`, `Publish`, `Query`,
-  `AccessSecretVersion`, `RunJob`, …) are what the container calls at
+- **Bindings** (`ReadWriteDatabase`, `WriteTopic`, `ReadTable`,
+  `ReadSecret`, `RunJob`, …) are what the container calls at
   runtime. Yielding one grants the IAM role it needs on a per-host
   service account and returns a callable. Provide the matching `*Http`
   layer once at the end.
@@ -90,10 +81,40 @@ Three ideas carry the whole provider:
 | `GCP.Function` (= `GCP.Run.Service`) | `fetch` | HTTP services that scale to zero |
 | `GCP.Run.Job` | `run` | batch work that starts, finishes, and exits |
 | `GCP.Run.WorkerPool` | `run` | always-on consumers with no request path |
-| `GCP.CloudFunctions.Function` | — | zip-source gen2 functions (no `main`) |
+| `GCP.CloudFunctions.Function` | `fetch` | gen2 functions built in the cloud (Node.js) |
 
-The first three build a container image locally, so Docker has to be
-running to deploy them.
+The Run hosts build a container image locally, so Docker has to be
+running to deploy them. Cloud Functions build from an uploaded archive.
+
+## Event sources
+
+Google calls your code through an event source: `consumeTopicMessages`
+(Pub/Sub push or pull), `consumeBucketEvents` (Cloud Storage),
+`consumeSchedule` (Cloud Scheduler), and `consumeEvents` (Eventarc).
+See [How bindings grant IAM](/gcp/guides/bindings#event-sources).
+
+## Examples
+
+Every example deploys, is exercised by a live integration test, and
+tears itself down.
+
+| Example | What it shows |
+| --- | --- |
+| `gcp-cloud-run-api` | HTTP API on Cloud Run with Firestore and Secret Manager |
+| `gcp-cloud-function` | Effect-native Cloud Function (Node 22) over Firestore |
+| `gcp-event-pipeline` | Service → Pub/Sub → Cloud Run Job → BigQuery |
+| `gcp-pubsub-worker` | Job queue: API publishes, a WorkerPool pulls |
+| `gcp-pubsub-fanout` | Push fan-out to two services, attribute filter, dead-letter topic |
+| `gcp-storage-uploads` | Upload API plus a bucket-event indexer |
+| `gcp-cron` | Two Cloud Scheduler crons on one service, rows in BigQuery |
+| `gcp-scheduled-job` | Nightly Cloud Run Job from Cloud Scheduler and an admin route |
+| `gcp-eventarc-firestore` | Eventarc reacting to Firestore document creation |
+| `gcp-secrets-kms` | Encryption API with KMS and a Secret Manager API key |
+| `gcp-service-to-service` | Private service called with Google-signed identity (`InvokeService`) |
+| `gcp-cloud-sql-drizzle` | Drizzle over Cloud SQL Postgres via the Cloud Run socket |
+| `gcp-memorystore-redis` | Rate limiter on Memorystore over Direct VPC |
+| `gcp-vertex-ai` | Gemini on Vertex AI (`GenerateContent`) |
+| `gcp-static-site` | Static site from a public Cloud Storage bucket |
 
 ## Reference
 

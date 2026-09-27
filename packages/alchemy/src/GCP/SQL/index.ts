@@ -1,5 +1,7 @@
 export * from "./BackupBackup.ts";
 export * from "./BackupRun.ts";
+export * from "./Connect.ts";
+export * from "./ConnectHttp.ts";
 export * from "./Database.ts";
 export * from "./ExecuteSql.ts";
 export * from "./ExecuteSqlHttp.ts";

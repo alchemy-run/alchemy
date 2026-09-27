@@ -32,6 +32,7 @@ import {
   isManagedServiceAccount,
   makeGcpBootstrap,
   mergeContainerEnv,
+  mountCloudSqlInstances,
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
@@ -99,6 +100,8 @@ export type Container = {
   resources?: ResourceRequirements;
   /** Working directory. */
   workingDir?: string;
+  /** Volume mounts. Names must match the template's `volumes`. */
+  volumeMounts?: cloudrun.GoogleCloudRunV2VolumeMountList;
 };
 
 export type RevisionScaling = {
@@ -646,6 +649,23 @@ const containerNeedsSync = (
     ) {
       return true;
     }
+    if (
+      container.volumeMounts !== undefined &&
+      JSON.stringify(
+        container.volumeMounts.map((mount) => ({
+          name: mount.name ?? "",
+          mountPath: mount.mountPath ?? "",
+        })),
+      ) !==
+        JSON.stringify(
+          (current.volumeMounts ?? []).map((mount) => ({
+            name: mount.name ?? "",
+            mountPath: mount.mountPath ?? "",
+          })),
+        )
+    ) {
+      return true;
+    }
     return false;
   });
 };
@@ -1115,6 +1135,13 @@ export const ServiceProvider = () =>
         }
       }
 
+      const mounted = mountCloudSqlInstances(
+        template,
+        bindings as ResourceBinding<GcpHostBinding>[],
+      );
+      template.volumes = mounted.volumes;
+      template.containers = mounted.containers;
+
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {
         yield* waitUntilGone(name);
@@ -1238,7 +1265,7 @@ export const ServiceProvider = () =>
       });
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ id, output }) {
       const operation = yield* cloudrun
         .deleteProjectsLocationsServices({ name: output.name })
         .pipe(
@@ -1255,6 +1282,7 @@ export const ServiceProvider = () =>
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
       yield* destroyHostImageRepository(
+        id,
         output,
         rfc1035(`${output.serviceId}-src`),
       );

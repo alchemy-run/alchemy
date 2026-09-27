@@ -20,6 +20,8 @@ export * from "./FeatureOnlineStoresFeatureView.ts";
 export * from "./Featurestore.ts";
 export * from "./FeaturestoresEntityType.ts";
 export * from "./FeaturestoresEntityTypesFeature.ts";
+export * from "./GenerateContent.ts";
+export * from "./GenerateContentHttp.ts";
 export * from "./GetReasoningEngine.ts";
 export * from "./GetReasoningEngineHttp.ts";
 export * from "./GetSandboxEnvironment.ts";

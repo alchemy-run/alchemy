@@ -12,7 +12,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { GcpHttpClient } from "../../GCP/HttpClient.ts";
 import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import {
@@ -25,7 +25,7 @@ import {
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(
     BunServices.layer,
-    FetchHttpClient.layer,
+    GcpHttpClient,
     Logger.layer([Logger.consolePretty()]),
   );
 

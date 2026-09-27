@@ -3689,6 +3689,31 @@ importers:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
 
+  examples/gcp-cloud-sql-drizzle:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      drizzle-orm:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260918.1)(@effect/sql-d1@4.0.0-rc.117(effect@4.0.0-rc.117))(@effect/sql-mysql2@4.0.0-rc.117(@types/node@26.2.0)(effect@4.0.0-rc.117))(@effect/sql-pg@4.0.0-rc.117(effect@4.0.0-rc.117))(@effect/sql-sqlite-do@4.0.0-rc.117(effect@4.0.0-rc.117))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.3)(bun-types@1.3.14)(effect@4.0.0-rc.117)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+    devDependencies:
+      drizzle-kit:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc
+
   examples/gcp-cron:
     dependencies:
       '@distilled.cloud/gcp':
@@ -3734,7 +3759,52 @@ importers:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
 
+  examples/gcp-memorystore-redis:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
+  examples/gcp-pubsub-fanout:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
   examples/gcp-pubsub-worker:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
+  examples/gcp-scheduled-job:
     dependencies:
       '@distilled.cloud/gcp':
         specifier: workspace:*
@@ -3779,7 +3849,37 @@ importers:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
 
+  examples/gcp-static-site:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
   examples/gcp-storage-uploads:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
+  examples/gcp-vertex-ai:
     dependencies:
       '@distilled.cloud/gcp':
         specifier: workspace:*

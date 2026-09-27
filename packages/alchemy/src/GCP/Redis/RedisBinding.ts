@@ -105,10 +105,16 @@ export const makeRedisBinding = <Client>(options: {
       // string, so the runtime service account needs no IAM role.
       // The auth-string lookup is a deploy-time Output; its requirements
       // are satisfied by the engine, never at runtime.
-      const fromContext = yield* redisUrlFromInstance(
-        instance,
-        getAuthString,
-      ) as Output.Output<string, never>;
+      // A composed Output's binding key is its inspect string, which embeds
+      // the mapping functions' source — and that differs between the
+      // deploy-time source and the bundled runtime. Name it per instance.
+      const fromContext = yield* Output.named(
+        redisUrlFromInstance(instance, getAuthString) as Output.Output<
+          string,
+          never
+        >,
+        `GCP_REDIS_URL_${instance.FQN}`,
+      );
       const missing = new RedisUrlMissing({ name: instance.LogicalId });
       const url: Url = Effect.gen(function* () {
         const value = yield* fromContext;

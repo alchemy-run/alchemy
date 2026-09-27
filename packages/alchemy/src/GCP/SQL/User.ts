@@ -1,6 +1,7 @@
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -104,9 +105,10 @@ export type UserProps = {
   /**
    * Password for `BUILT_IN` users. Write-only — never returned by the
    * API. Required for PostgreSQL built-in users. Omit for IAM user
-   * types. Updating this value rotates the password.
+   * types. Updating this value rotates the password. Accepts a
+   * `Redacted` value (e.g. `Alchemy.Random`'s `text`).
    */
-  password?: string;
+  password?: string | Redacted.Redacted<string>;
   /**
    * Authentication type (`BUILT_IN`, `CLOUD_IAM_USER`,
    * `CLOUD_IAM_SERVICE_ACCOUNT`, `CLOUD_IAM_GROUP`, …). Immutable —
@@ -555,6 +557,9 @@ const waitUntilGone = (
     }),
   );
 
+const passwordValue = (password: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(password) ? Redacted.value(password) : password;
+
 const toBody = (
   news: UserProps,
   userName: string,
@@ -574,8 +579,13 @@ const toBody = (
     project,
     host: news.host ?? current?.host,
     type,
-    password: includePassword ? news.password : undefined,
-    databaseRoles: news.databaseRoles ?? current?.databaseRoles,
+    password:
+      includePassword && news.password !== undefined
+        ? passwordValue(news.password)
+        : undefined,
+    // Echoing the observed roles back is rejected ("Invalid request to
+    // update database roles"); send roles only when they are declared.
+    databaseRoles: news.databaseRoles,
     passwordPolicy: toPasswordPolicy(
       news.passwordPolicy ?? current?.passwordPolicy,
     ),
@@ -746,7 +756,8 @@ export const UserProvider = () =>
         news.password !== undefined &&
         !inserted &&
         !isIamType(news.type ?? current.type) &&
-        (olds === undefined || olds.password !== news.password);
+        (olds?.password === undefined ||
+          passwordValue(olds.password) !== passwordValue(news.password));
       const rolesChanged =
         news.databaseRoles !== undefined &&
         rolesKey(current.databaseRoles) !== rolesKey(news.databaseRoles);

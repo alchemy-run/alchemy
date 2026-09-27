@@ -36,6 +36,40 @@ export interface TopicEventSourceProps {
    * @default 10
    */
   maxMessages?: number;
+  /**
+   * Forward messages the handler keeps failing on to another topic instead
+   * of redelivering them forever. The Pub/Sub service agent is granted
+   * `roles/pubsub.publisher` on `topic` and `roles/pubsub.subscriber` on
+   * the event source's subscription. Give `topic` its own subscription, or
+   * dead-lettered messages are dropped.
+   */
+  deadLetter?: TopicDeadLetter;
+  /**
+   * Backoff between redeliveries of a failed message. Without one, Pub/Sub
+   * redelivers almost immediately, so a `deadLetter` policy would spend
+   * every attempt within seconds of a transient failure (e.g. a fresh
+   * deploy's IAM grants still propagating).
+   * @default { minimumBackoff: "10s", maximumBackoff: "600s" } with `deadLetter`, otherwise Pub/Sub's immediate redelivery
+   */
+  retryPolicy?: TopicRetryPolicy;
+}
+
+export interface TopicRetryPolicy {
+  /** Minimum delay before redelivering a failed message, e.g. `"10s"` (0–600s). */
+  minimumBackoff?: string;
+  /** Maximum delay before redelivering a failed message, e.g. `"600s"` (0–600s). */
+  maximumBackoff?: string;
+}
+
+export interface TopicDeadLetter {
+  /** Topic that receives dead-lettered messages. */
+  topic: Topic;
+  /**
+   * Delivery attempts before a message is dead-lettered. Between 5 and
+   * 100; approximate, since Pub/Sub counts attempts best-effort.
+   * @default 5
+   */
+  maxDeliveryAttempts?: number;
 }
 
 export type TopicMessagesHandler<Req> = (
@@ -84,6 +118,16 @@ export type TopicEventSourceService = <Req = never>(
  *     );
  *   }).pipe(Effect.provide(GCP.Run.TopicEventSource)),
  * ) {}
+ * ```
+ *
+ * **Example:** Dead-letter messages the handler keeps failing on
+ * ```typescript
+ * const failed = yield* GCP.PubSub.Topic("FailedOrders", {});
+ * yield* GCP.PubSub.consumeTopicMessages(
+ *   orders,
+ *   { deadLetter: { topic: failed, maxDeliveryAttempts: 5 } },
+ *   (messages) => messages.pipe(Stream.runForEach(handle)),
+ * );
  * ```
  *
  * **Example:** Pull from a worker pool

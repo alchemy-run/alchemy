@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Drain from "./Drain.ts";
-import { Analytics, Events, EventsTable, type EventRow } from "./resources.ts";
+import { Events, EventsTable, type EventRow } from "./resources.ts";
 
 /**
  * The front door of an analytics pipeline.
@@ -26,14 +26,16 @@ export default class Ingest extends GCP.Function<Ingest>()(
   },
   Effect.gen(function* () {
     const topic = yield* Events;
-    const dataset = yield* Analytics;
     const table = yield* EventsTable;
     const drain = yield* Drain;
 
-    const publish = yield* GCP.PubSub.Publish(topic);
-    const query = yield* GCP.BigQuery.Query(dataset);
-    // Binding a Job to a Service grants run.jobs.run on the job — this is
-    // how one host triggers another.
+    // pubsub.publisher on the topic only.
+    const publisher = yield* GCP.PubSub.WriteTopic(topic);
+    // bigquery.dataViewer on the table, plus bigquery.jobUser on the
+    // project — BigQuery only grants running query jobs there.
+    const warehouse = yield* GCP.BigQuery.ReadTable(table);
+    // Binding a Job to a Service grants run.jobsExecutorWithOverrides on
+    // the job — this is how one host triggers another.
     const runDrain = yield* GCP.Run.RunJob(drain);
 
     // An accessor: the table id is bound at deploy time and read back
@@ -68,18 +70,14 @@ export default class Ingest extends GCP.Function<Ingest>()(
             payload: JSON.stringify(body.payload ?? {}),
           };
 
-          yield* publish({
-            body: {
-              messages: [
-                {
-                  data: btoa(JSON.stringify(event)),
-                  // Attributes are queryable without decoding the body,
-                  // which lets a filtered subscription fan out by type.
-                  attributes: { type: event.type },
-                },
-              ],
-            },
-          }).pipe(Effect.orDie);
+          yield* publisher
+            .publish({
+              data: JSON.stringify(event),
+              // Attributes are queryable without decoding the body,
+              // which lets a filtered subscription fan out by type.
+              attributes: { type: event.type },
+            })
+            .pipe(Effect.orDie);
 
           return yield* HttpServerResponse.json(
             { id: event.id },
@@ -100,26 +98,19 @@ export default class Ingest extends GCP.Function<Ingest>()(
         if (request.method === "GET" && url.pathname === "/events/count") {
           const type = url.searchParams.get("type");
           const events = yield* tableId;
-          // The dataset is implied by the binding, so the table name
-          // alone qualifies it.
-          const rows = yield* query({
-            query: type
-              ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
-              : `SELECT COUNT(*) AS n FROM \`${events}\``,
-            parameterMode: type ? "NAMED" : undefined,
-            queryParameters: type
-              ? [
-                  {
-                    name: "type",
-                    parameterType: { type: "STRING" },
-                    parameterValue: { value: type },
-                  },
-                ]
-              : undefined,
-          }).pipe(Effect.orDie);
+          // Unqualified table names resolve against the bound table's
+          // dataset; `params` become named `@type` parameters.
+          const rows = yield* warehouse
+            .query(
+              type
+                ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
+                : `SELECT COUNT(*) AS n FROM \`${events}\``,
+              type ? { type } : undefined,
+            )
+            .pipe(Effect.orDie);
 
           return yield* HttpServerResponse.json({
-            count: Number(rows.rows?.[0]?.f?.[0]?.v ?? 0),
+            count: Number(rows[0]?.n ?? 0),
           });
         }
 
@@ -131,8 +122,8 @@ export default class Ingest extends GCP.Function<Ingest>()(
     };
   }).pipe(
     Effect.provide([
-      GCP.PubSub.PublishHttp,
-      GCP.BigQuery.QueryHttp,
+      GCP.PubSub.WriteTopicHttp,
+      GCP.BigQuery.ReadTableHttp,
       GCP.Run.RunJobHttp,
     ]),
   ),

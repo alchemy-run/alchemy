@@ -24,6 +24,12 @@ const DEFAULT_TIER = "BASIC";
 const DEFAULT_CONNECT_MODE = "DIRECT_PEERING";
 const DEFAULT_TRANSIT_ENCRYPTION = "DISABLED";
 const DEFAULT_MEMORY_SIZE_GB = 1;
+
+/**
+ * Memorystore create, delete, and resize operations take minutes (a BASIC
+ * 1 GiB create is ~4 minutes). Poll every 10s for up to 12 minutes.
+ */
+const LONG_POLL = { times: 72, schedule: Schedule.spaced("10 seconds") };
 const MAX_NAME_LENGTH = 40;
 
 export type RedisTimeOfDay = {
@@ -627,8 +633,7 @@ const waitForOperation = (
       }),
       Effect.retry({
         while: (error) => error._tag === "GCP.Redis.InstanceOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        ...LONG_POLL,
       }),
     );
   });
@@ -665,8 +670,7 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Redis.InstanceNotReady" ||
         error._tag === "GCP.Redis.InstanceNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      ...LONG_POLL,
     }),
   );
 
@@ -679,8 +683,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.InstanceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      ...LONG_POLL,
     }),
   );
 
@@ -985,8 +988,7 @@ export const InstanceProvider = () =>
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.Redis.InstanceOperationPending",
-          times: 36,
-          schedule: Schedule.spaced("8 seconds"),
+          ...LONG_POLL,
         }),
       );
       const operation = yield* redis

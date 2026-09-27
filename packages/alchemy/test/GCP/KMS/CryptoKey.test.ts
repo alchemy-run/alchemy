@@ -5,7 +5,6 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -27,17 +26,6 @@ const project = process.env.GOOGLE_PROJECT_ID ?? "";
 // this key is reused across runs (names cannot be reused after delete).
 const ENCRYPT_KEY_ID = kmsTestId("cryptokey");
 
-const waitUntilGone = (name: string) =>
-  kms.getProjectsLocationsKeyRingsCryptoKeys({ name }).pipe(
-    Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 test.provider.skipIf(!hasGcpCreds)(
   "getProjectsLocationsKeyRingsCryptoKeys on a missing key fails with NotFound",
   () =>
@@ -52,7 +40,7 @@ test.provider.skipIf(!hasGcpCreds)(
 );
 
 test.provider.skipIf(!hasGcpCreds)(
-  "create, update, and delete a crypto key",
+  "create, update, and release a crypto key",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -113,8 +101,12 @@ test.provider.skipIf(!hasGcpCreds)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(created.name);
-      expect(gone).toEqual("gone");
+      // Deleting would retire the name forever; destroy releases instead.
+      const released = yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
+        name: created.name,
+      });
+      expect(released.labels?.["alchemy-released"]).toEqual("true");
+      expect(released.labels?.["alchemy-id"]).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
@@ -191,4 +183,63 @@ test.provider.skipIf(!hasGcpCreds)(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds)(
+  "redeploy after destroy reuses the default ring and key ids",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = stack.deploy(
+        Effect.gen(function* () {
+          const ring = yield* GCP.KMS.KeyRing("RedeployKeys", {
+            location: "us-central1",
+          });
+          const key = yield* GCP.KMS.CryptoKey("RedeployData", {
+            keyRing: ring.name,
+          });
+          return { ring, key };
+        }),
+      );
+
+      // Only this test creates rings with generated ids in this file.
+      const generatedRings = kms
+        .listProjectsLocationsKeyRings({
+          parent: `projects/${project}/locations/us-central1`,
+          pageSize: 1000,
+        })
+        .pipe(
+          Effect.map((response) =>
+            (response.keyRings ?? [])
+              .map((ring) => ring.name ?? "")
+              .filter((name) => name.includes("/keyRings/gcp-kms-cryptokey-")),
+          ),
+        );
+      const before = new Set(yield* generatedRings);
+
+      const first = yield* deploy;
+      expect(yield* roundTrip(first.key.name, "first")).toEqual(true);
+
+      yield* stack.destroy();
+
+      const second = yield* deploy;
+      expect(second.ring.name).toEqual(first.ring.name);
+      expect(second.key.name).toEqual(first.key.name);
+      expect(yield* roundTrip(second.key.name, "second")).toEqual(true);
+
+      // At most the one deterministic ring appeared — no leak per cycle.
+      const created = (yield* generatedRings).filter(
+        (name) => !before.has(name),
+      );
+      expect(created.filter((name) => name !== first.ring.name)).toEqual([]);
+
+      yield* stack.destroy();
+
+      const released = yield* kms.getProjectsLocationsKeyRingsCryptoKeys({
+        name: first.key.name,
+      });
+      expect(released.labels?.["alchemy-released"]).toEqual("true");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

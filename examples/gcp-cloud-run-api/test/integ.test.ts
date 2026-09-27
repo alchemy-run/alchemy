@@ -122,9 +122,9 @@ test.skipIf(skip)(
     yield* getWhenReady(`${baseUrl}/`);
 
     const target = "https://alchemy.run/gcp";
-    // A fresh deploy's project-level Firestore grants can take several
-    // minutes to propagate; until then the service answers 500
-    // (Forbidden from Firestore).
+    // A fresh deploy's Firestore grant (a project binding under an IAM
+    // Condition) can take several minutes to propagate; until then the
+    // service answers 500 (Forbidden from Firestore).
     const created = yield* createLink(baseUrl, target).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("10 seconds"),

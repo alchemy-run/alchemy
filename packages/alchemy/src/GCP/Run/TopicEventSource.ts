@@ -21,6 +21,26 @@ import {
   pushHost,
 } from "../PushDelivery.ts";
 
+/**
+ * Subscription `deadLetterPolicy` and `retryPolicy` for the event source's
+ * props. Dead-lettering defaults to a backoff so its attempts span more
+ * than a transient failure.
+ */
+const deliveryPolicyOf = (props: TopicEventSourceProps) => ({
+  deadLetterPolicy:
+    props.deadLetter === undefined
+      ? undefined
+      : {
+          deadLetterTopic: props.deadLetter.topic.name,
+          maxDeliveryAttempts: props.deadLetter.maxDeliveryAttempts ?? 5,
+        },
+  retryPolicy:
+    props.retryPolicy ??
+    (props.deadLetter === undefined
+      ? undefined
+      : { minimumBackoff: "10s", maximumBackoff: "600s" }),
+});
+
 /** Default push path for a topic's deliveries. */
 export const topicPushPath = (topic: Topic, props: TopicEventSourceProps) =>
   props.path ?? `/__alchemy/pubsub/${pathSegment(topic.LogicalId)}`;
@@ -71,6 +91,7 @@ export const TopicEventSource = Layer.effect(
               topic: topic.name,
               ackDeadlineSeconds: props.ackDeadlineSeconds ?? 60,
               filter: props.filter,
+              ...deliveryPolicyOf(props),
               pushConfig: {
                 pushEndpoint: Output.interpolate`${endpoint.url}${path}`,
                 oidcToken: {

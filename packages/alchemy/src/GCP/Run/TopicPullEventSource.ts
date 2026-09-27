@@ -18,6 +18,26 @@ import {
 } from "../PubSub/TopicEventSource.ts";
 
 /**
+ * Subscription `deadLetterPolicy` and `retryPolicy` for the event source's
+ * props. Dead-lettering defaults to a backoff so its attempts span more
+ * than a transient failure.
+ */
+const deliveryPolicyOf = (props: TopicEventSourceProps) => ({
+  deadLetterPolicy:
+    props.deadLetter === undefined
+      ? undefined
+      : {
+          deadLetterTopic: props.deadLetter.topic.name,
+          maxDeliveryAttempts: props.deadLetter.maxDeliveryAttempts ?? 5,
+        },
+  retryPolicy:
+    props.retryPolicy ??
+    (props.deadLetter === undefined
+      ? undefined
+      : { minimumBackoff: "10s", maximumBackoff: "600s" }),
+});
+
+/**
  * Pull implementation of `GCP.PubSub.TopicEventSource` for hosts without
  * an inbound URL (`GCP.Run.Job`, `GCP.Run.WorkerPool`; any host with
  * `ServerHost`).
@@ -58,6 +78,7 @@ export const TopicPullEventSource = Layer.effect(
           topic: topic.name,
           ackDeadlineSeconds: props.ackDeadlineSeconds ?? 60,
           filter: props.filter,
+          ...deliveryPolicyOf(props),
         }),
       );
       const pullBatch = yield* pull(sub);

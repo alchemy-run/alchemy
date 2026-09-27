@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { GcpHttpClient } from "./HttpClient.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { DockerLive } from "../Docker/Docker.ts";
@@ -776,6 +776,10 @@ import { HmacKey, HmacKeyProvider } from "./Storage/HmacKey.ts";
 import { Managed, ManagedProvider } from "./Storage/Managed.ts";
 import { Notification, NotificationProvider } from "./Storage/Notification.ts";
 import {
+  Object as StorageObject,
+  ObjectProvider as StorageObjectProvider,
+} from "./Storage/Object.ts";
+import {
   ObjectAccessControl,
   ObjectAccessControlProvider,
 } from "./Storage/ObjectAccessControl.ts";
@@ -1509,6 +1513,7 @@ import {
   ReasoningEnginesSandboxEnvironmentProvider,
 } from "./AIPlatform/ReasoningEnginesSandboxEnvironment.ts";
 import { CancelTrainingPipelineHttp } from "./AIPlatform/CancelTrainingPipelineHttp.ts";
+import { GenerateContentHttp } from "./AIPlatform/GenerateContentHttp.ts";
 import { GetReasoningEngineHttp } from "./AIPlatform/GetReasoningEngineHttp.ts";
 import { GetSandboxEnvironmentHttp } from "./AIPlatform/GetSandboxEnvironmentHttp.ts";
 import { GetSandboxEnvironmentTemplateHttp } from "./AIPlatform/GetSandboxEnvironmentTemplateHttp.ts";
@@ -3825,7 +3830,7 @@ const gcpLive = Layer.mergeAll(
   GcpAuth,
   ProfileStoreLive,
   CredentialsStoreLive,
-  FetchHttpClient.layer,
+  GcpHttpClient,
 );
 
 export const providers = () =>
@@ -3844,6 +3849,7 @@ export const providers = () =>
           Folder,
           Managed,
           ObjectAccessControl,
+          StorageObject,
           AgentPool,
           TransferJob,
           Topic,
@@ -5048,6 +5054,7 @@ export const providers = () =>
             FolderProvider(),
             ManagedProvider(),
             ObjectAccessControlProvider(),
+            StorageObjectProvider(),
             AgentPoolProvider(),
             TransferJobProvider(),
           ),
@@ -6469,6 +6476,7 @@ export const providers = () =>
           GetKeyStringHttp,
           RecaptchaenterpriseCreateAssessmentHttp,
           CancelTrainingPipelineHttp,
+          GenerateContentHttp,
           GetReasoningEngineHttp,
           GetSandboxEnvironmentHttp,
           GetSandboxEnvironmentTemplateHttp,

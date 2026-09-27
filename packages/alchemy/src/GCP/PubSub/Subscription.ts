@@ -9,6 +9,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { projectNumber } from "../Host.ts";
+import { updateIamMembership } from "../IamPolicy.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -140,6 +142,13 @@ export type SubscriptionProps = {
   retryPolicy?: SubscriptionRetryPolicy;
   /**
    * Dead-letter topic and max delivery attempts. Omit to disable.
+   *
+   * Pub/Sub forwards dead letters as the project's Pub/Sub service agent
+   * (`service-{projectNumber}@gcp-sa-pubsub.iam.gserviceaccount.com`), so
+   * reconcile grants it `roles/pubsub.publisher` on the dead-letter topic
+   * and `roles/pubsub.subscriber` on this subscription. The topic grant is
+   * left in place on delete: the agent is shared by every subscription in
+   * the project that dead-letters to that topic.
    */
   deadLetterPolicy?: SubscriptionDeadLetterPolicy;
   /**
@@ -331,6 +340,32 @@ const waitUntilPresent = (name: string) =>
       times: 60,
     }),
   );
+
+/**
+ * Let the project's Pub/Sub service agent forward dead letters: publish to
+ * the dead-letter topic and ack the original on the subscription.
+ */
+const grantDeadLetterAgent = (
+  project: string,
+  subscription: string,
+  deadLetterTopic: string,
+) =>
+  Effect.gen(function* () {
+    const number = yield* projectNumber(project);
+    const member = `serviceAccount:service-${number}@gcp-sa-pubsub.iam.gserviceaccount.com`;
+    yield* updateIamMembership({
+      kind: "pubsub.topic",
+      name: topicNameOf(project, deadLetterTopic),
+      member,
+      add: ["roles/pubsub.publisher"],
+    });
+    yield* updateIamMembership({
+      kind: "pubsub.subscription",
+      name: subscription,
+      member,
+      add: ["roles/pubsub.subscriber"],
+    });
+  });
 
 const sameOptionalString = (
   left: string | undefined,
@@ -629,6 +664,11 @@ export const SubscriptionProvider = () =>
               schedule: Schedule.spaced("1 second"),
             }),
           );
+      }
+
+      const deadLetterTopic = current.deadLetterPolicy?.deadLetterTopic;
+      if (deadLetterTopic !== undefined && deadLetterTopic !== "") {
+        yield* grantDeadLetterAgent(env.project, name, deadLetterTopic);
       }
 
       return toAttrs(current, env.project);

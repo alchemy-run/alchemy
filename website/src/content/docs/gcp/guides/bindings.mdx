@@ -6,10 +6,10 @@ description: What a yield* of a GCP binding actually does — the per-host servi
 On GCP, giving a container permission to call an API normally means
 three separate things: create a service account, attach it to the Cloud
 Run service, and add role bindings to the project IAM policy. Alchemy
-collapses all three into the line that gets you the callable.
+collapses all three into the line that gets you the client.
 
 ```typescript
-const publish = yield* GCP.PubSub.Publish(topic);
+const events = yield* GCP.PubSub.WriteTopic(topic);
 ```
 
 That expression:
@@ -17,7 +17,8 @@ That expression:
 1. Creates (or adopts) a runtime service account for this host.
 2. Adds `roles/pubsub.publisher` to it on that one topic's IAM policy.
 3. Injects whatever the call needs into the revision.
-4. Returns a typed function you call from a request handler.
+4. Returns a typed client (`events.publish(...)`) you call from a
+   request handler.
 
 It is the GCP counterpart of AWS `policyStatements` on a Lambda and of
 the scoped `AccountApiToken` a Cloudflare binding mints.
@@ -44,31 +45,96 @@ while that grant propagates.
 Pass your own `serviceAccount` on the host and Alchemy uses it instead.
 The difference is what happens on removal, below.
 
+## Access-level clients
+
+For the data services you use most, a binding is an access level on a
+resource rather than an API operation — the same Read / Write /
+ReadWrite split as Cloudflare's R2 and KV bindings. Ask for the least
+you need; `ReadWrite` is the union of the other two.
+
+| Resource | Read | Write | ReadWrite |
+| --- | --- | --- | --- |
+| `Storage.Bucket` | `ReadBucket`: `head`, `get`, `list` | `WriteBucket`: `put`, `delete` | `ReadWriteBucket` |
+| `PubSub.Topic` | — | `WriteTopic`: `publish`, `publishBatch` | — |
+| `PubSub.Subscription` | `ReadSubscription`: `pull`, `acknowledge`, `modifyAckDeadline` | — | — |
+| `Firestore.Database` | `ReadDatabase`: `get`, `list`, `query` | `WriteDatabase`: `set`, `update`, `create`, `delete` | `ReadWriteDatabase` |
+| `BigQuery.Table` | `ReadTable`: `list`, `query` | `WriteTable`: `insert` | `ReadWriteTable` |
+| `SecretManager.Secret` | `ReadSecret`: `access`, `accessBytes` | `WriteSecret`: `addVersion`, `disableVersion`, `destroyVersion` | `ReadWriteSecret` |
+
+A topic is only ever written to and a subscription only ever read, so
+Pub/Sub has one client each. The clients speak plain JavaScript:
+Firestore fields and BigQuery rows are encoded and decoded for you,
+Pub/Sub and Secret Manager payloads come back as strings or bytes, and
+a missing document or secret version reads as `undefined` rather than
+an error.
+
+```typescript
+const db = yield* GCP.Firestore.ReadWriteDatabase(database);
+const doc = yield* db.get("counters/visits");
+const count = typeof doc?.fields.count === "number" ? doc.fields.count : 0;
+yield* db.set("counters/visits", { count: count + 1 });
+```
+
+Everything without an access-level client — KMS `Encrypt` / `Decrypt`,
+`Run.RunJob`, Cloud Tasks, Memorystore, and the long tail of generated
+services — is a per-operation binding that returns one callable.
+
 ## Which role a binding grants
 
-Each binding grants the narrowest predefined role that covers its
-operation, on the resource it is bound to wherever the service has
-resource-level IAM — the GCP counterpart of an AWS statement's
-`Resource: [arn]`:
+Each binding grants the narrowest predefined role that covers it:
 
 | Binding | Role | Granted on |
 | --- | --- | --- |
-| `GCP.PubSub.Publish` | `roles/pubsub.publisher` | the topic |
-| `GCP.PubSub.Pull`, `Acknowledge` | `roles/pubsub.subscriber` | the subscription |
-| `GCP.Storage.GetObject` | `roles/storage.objectViewer` | the bucket |
-| `GCP.Storage.PutObject`, `DeleteObject` | `roles/storage.objectUser` | the bucket |
-| `GCP.SecretManager.AccessSecretVersion` | `roles/secretmanager.secretAccessor` | the secret |
-| `GCP.KMS.Encrypt` / `Decrypt` | `roles/cloudkms.cryptoKeyEncrypter` / `Decrypter` | the key |
-| `GCP.CloudTasks.CreateTask` | `roles/cloudtasks.enqueuer` | the queue |
-| `GCP.Run.RunJob` | `roles/run.jobsExecutorWithOverrides` | the job |
-| `GCP.BigQuery.InsertAll` | `roles/bigquery.dataEditor` | the table |
-| `GCP.Firestore.*` | `roles/datastore.user` / `datastore.viewer` | the project |
+| `Storage.ReadBucket` | `roles/storage.objectViewer` | the bucket |
+| `Storage.WriteBucket`, `ReadWriteBucket` | `roles/storage.objectUser` | the bucket |
+| `PubSub.WriteTopic` | `roles/pubsub.publisher` | the topic |
+| `PubSub.ReadSubscription` | `roles/pubsub.subscriber` | the subscription |
+| `Firestore.ReadDatabase` | `roles/datastore.viewer` | the project, conditioned on the database |
+| `Firestore.WriteDatabase`, `ReadWriteDatabase` | `roles/datastore.user` | the project, conditioned on the database |
+| `BigQuery.ReadTable` | `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` | the table + the project |
+| `BigQuery.WriteTable` | `roles/bigquery.dataEditor` | the table |
+| `BigQuery.ReadWriteTable` | `roles/bigquery.dataEditor` + `roles/bigquery.jobUser` | the table + the project |
+| `BigQuery.Query` | `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` | the dataset's access list + the project |
+| `SecretManager.ReadSecret` | `roles/secretmanager.secretAccessor` | the secret |
+| `SecretManager.WriteSecret` | `roles/secretmanager.secretVersionManager` | the secret |
+| `SecretManager.ReadWriteSecret` | both of the above | the secret |
+| `KMS.Encrypt` / `Decrypt` | `roles/cloudkms.cryptoKeyEncrypter` / `Decrypter` | the key |
+| `CloudTasks.CreateTask` | `roles/cloudtasks.enqueuer` | the queue |
+| `Run.RunJob` | `roles/run.jobsExecutorWithOverrides` | the job |
+| `SQL.*` | `roles/cloudsql.*` | the project, conditioned on the instance |
 
-Services with no resource-level IAM (Firestore, Memorystore, Cloud SQL,
-Vertex AI, …) fall back to the narrowest role on the project. The
-Memorystore RESP bindings (`ReadRedis`, `WriteRedis`, `ReadWriteRedis`)
-grant nothing at all: RESP authenticates with the instance's AUTH
-string, which travels to the runtime with the connection URL.
+## How grants are scoped
+
+A grant lands in the narrowest place GCP lets it, in this order:
+
+1. **The resource's own IAM policy** — the GCP counterpart of an AWS
+   statement's `Resource: [arn]`. Buckets, topics, subscriptions,
+   secrets, KMS keys, Cloud Tasks queues, Run jobs and services, and
+   BigQuery tables all have one.
+2. **The dataset access list** for BigQuery datasets, which have no
+   `setIamPolicy`: the access list *is* the dataset's policy, so
+   Alchemy adds the account as an access entry.
+3. **The project policy under an IAM Condition** for services that
+   have no per-resource policy but support conditions — Firestore,
+   Cloud SQL, and Managed Kafka. The binding carries a condition like
+   `resource.name == "projects/p/databases/links" ||
+   resource.name.startsWith("projects/p/databases/links/")`, so the
+   role applies to that one resource and its children and nothing else
+   in the project.
+4. **The project policy, unconditioned**, only where GCP offers
+   neither resource IAM nor condition support: Memorystore, AlloyDB,
+   Filestore, and Vertex AI publisher models (Gemini). BigQuery's
+   `roles/bigquery.jobUser` is also project-only, because running a
+   query job is a project permission.
+
+The Memorystore RESP bindings (`ReadRedis`, `WriteRedis`,
+`ReadWriteRedis`) grant nothing at all: RESP authenticates with the
+instance's AUTH string, which travels to the runtime with the
+connection URL.
+
+IAM is eventually consistent, and conditional project grants are the
+slowest to land: expect a freshly deployed host to see `Forbidden`
+from Firestore for a few minutes.
 
 ## Adding and removing
 
@@ -83,7 +149,9 @@ account's other roles matter.
 
 Policies are updated read-modify-write under their etag, so parallel
 hosts deploying against one project or topic converge instead of
-overwriting each other. Conditional role bindings are never touched.
+overwriting each other. Conditional bindings are matched on their exact
+condition: Alchemy only ever edits the conditional bindings it wrote,
+and never one someone else added.
 
 Destroying the host revokes every role Alchemy granted and deletes the
 minted account.
@@ -98,17 +166,18 @@ export default class Api extends GCP.Function<Api>()(
   "Api",
   { main: import.meta.url, location: "us-central1" },
   Effect.gen(function* () {
-    const publish = yield* GCP.PubSub.Publish(topic);
+    const events = yield* GCP.PubSub.WriteTopic(topic);
     // ...
   }).pipe(
-    Effect.provide([GCP.PubSub.PublishHttp]),
+    Effect.provide([GCP.PubSub.WriteTopicHttp]),
   ),
 ) {}
 ```
 
-The convention is the binding name plus `Http`: `Publish` →
-`PublishHttp`, `GetDocument` → `GetDocumentHttp`. Forget one and the
-type error names the missing layer.
+The convention is the binding name plus `Http`: `WriteTopic` →
+`WriteTopicHttp`, `ReadWriteDatabase` → `ReadWriteDatabaseHttp`,
+`RunJob` → `RunJobHttp`. Forget one and the type error names the
+missing layer.
 
 ## Errors are typed
 
@@ -116,13 +185,17 @@ Bindings return the operation's real error union, so the failure modes
 are in the type rather than in a status-code comparison:
 
 ```typescript
-const link = yield* getDocument({ documentPath: `links/${code}` }).pipe(
-  Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+yield* db.create(`links/${code}`, { url }).pipe(
+  Effect.catchTag("GCP.Firestore.DocumentAlreadyExists", () =>
+    Effect.succeed(undefined),
+  ),
 );
 ```
 
-`NotFound`, `Forbidden`, `BadRequest`, and `Conflict` are the tags you
-will handle most. Anything you do not catch stays in the channel until
+`Forbidden`, `BadRequest`, and client-specific tags such as
+`DocumentAlreadyExists` or BigQuery's `InsertRowsFailed` are the ones
+you will handle most; per-operation bindings also surface `NotFound`
+and `Conflict`. Anything you do not catch stays in the channel until
 you `Effect.orDie` it.
 
 ## Which host to use

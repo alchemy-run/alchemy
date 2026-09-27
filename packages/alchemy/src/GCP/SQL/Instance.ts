@@ -28,6 +28,12 @@ const DEFAULT_ACTIVATION = "ALWAYS";
 const DEFAULT_DISK_TYPE = "PD_SSD";
 const DEFAULT_DISK_SIZE_GB = 10;
 const MAX_NAME_LENGTH = 63;
+/**
+ * Generated names stay short enough that the connection name
+ * `{project}:{region}:{instance}` fits Cloud Run's 97-character limit for
+ * Cloud SQL volumes (30-character project ids, 23-character regions).
+ */
+const GENERATED_NAME_MAX_LENGTH = 42;
 
 export type DatabaseFlag = {
   /** Flag name (underscores, not hyphens). */
@@ -325,7 +331,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       rfc1035(
         yield* createPhysicalName({
           id,
-          maxLength: MAX_NAME_LENGTH,
+          maxLength: GENERATED_NAME_MAX_LENGTH,
           lowercase: true,
         }),
       )
@@ -402,6 +408,15 @@ const getByName = (project: string, instance: string) =>
   sqladmin
     .getInstances({ project, instance })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+
+/**
+ * Instance create, patch, and delete operations routinely run 5–15
+ * minutes; poll every 10s for up to 20 minutes.
+ */
+const LONG_OPERATION_POLL = {
+  times: 120,
+  schedule: Schedule.spaced("10 seconds"),
+};
 
 const waitForOperation = (
   project: string,
@@ -486,8 +501,7 @@ const waitForOperation = (
       }),
       Effect.retry({
         while: (error) => error._tag === "GCP.SQL.InstanceOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        ...LONG_OPERATION_POLL,
       }),
     );
   });
@@ -529,8 +543,7 @@ const waitUntilRunnable = (project: string, instanceName: string) =>
       while: (error) =>
         error._tag === "GCP.SQL.InstanceNotReady" ||
         error._tag === "GCP.SQL.InstanceNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      ...LONG_OPERATION_POLL,
     }),
   );
 
@@ -543,8 +556,7 @@ const waitUntilGone = (project: string, instanceName: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.InstanceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      ...LONG_OPERATION_POLL,
     }),
   );
 

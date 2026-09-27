@@ -70,15 +70,23 @@ so a producer can add a field without a schema migration.
 // src/Ingest.ts
 export default class Ingest extends GCP.Function<Ingest>()(
   "Ingest",
-  { main: import.meta.url, location: "us-central1", invokerIamDisabled: true },
+  {
+    main: import.meta.url,
+    location: "us-central1",
+    invokerIamDisabled: true,
+  },
   Effect.gen(function* () {
     const topic = yield* Events;
-    const dataset = yield* Analytics;
     const table = yield* EventsTable;
     const drain = yield* Drain;
 
-    const publish = yield* GCP.PubSub.Publish(topic);
-    const query = yield* GCP.BigQuery.Query(dataset);
+    // pubsub.publisher on the topic only.
+    const publisher = yield* GCP.PubSub.WriteTopic(topic);
+    // bigquery.dataViewer on the table, plus bigquery.jobUser on the
+    // project — BigQuery only grants running query jobs there.
+    const warehouse = yield* GCP.BigQuery.ReadTable(table);
+    // Binding a Job to a Service grants run.jobsExecutorWithOverrides on
+    // the job — this is how one host triggers another.
     const runDrain = yield* GCP.Run.RunJob(drain);
 
     // An accessor: the table id is bound at deploy time and read back
@@ -86,10 +94,15 @@ export default class Ingest extends GCP.Function<Ingest>()(
     const tableId = yield* table.tableId;
 ```
 
+The two data bindings are access-level clients: the service may
+publish to the topic and read the table, and nothing else. It cannot
+pull from the subscription or insert rows — that is the drain's job.
+
 `GCP.Run.RunJob(drain)` is the interesting one: binding a Job to a
 Service grants `roles/run.jobsExecutorWithOverrides` on that one Job
-to the service's runtime account and returns a callable. That is how one host triggers another, with no
-job name to interpolate and no IAM policy to write.
+to the service's runtime account and returns a callable. That is how
+one host triggers another, with no job name to interpolate and no IAM
+policy to write.
 
 ### `POST /events`
 
@@ -101,16 +114,14 @@ job name to interpolate and no IAM policy to write.
             payload: JSON.stringify(body.payload ?? {}),
           };
 
-          yield* publish({
-            body: {
-              messages: [
-                {
-                  data: btoa(JSON.stringify(event)),
-                  attributes: { type: event.type },
-                },
-              ],
-            },
-          }).pipe(Effect.orDie);
+          yield* publisher
+            .publish({
+              data: JSON.stringify(event),
+              // Attributes are queryable without decoding the body,
+              // which lets a filtered subscription fan out by type.
+              attributes: { type: event.type },
+            })
+            .pipe(Effect.orDie);
 
           return yield* HttpServerResponse.json(
             { id: event.id },
@@ -118,8 +129,8 @@ job name to interpolate and no IAM policy to write.
           );
 ```
 
-Pub/Sub message data is base64. Attributes are queryable without
-decoding the body, which is what a filtered subscription fans out on.
+`publish` takes a string or bytes and handles Pub/Sub's base64
+encoding; it returns the server-assigned message id.
 
 `202` rather than `201`: the event is accepted, not yet stored.
 
@@ -143,26 +154,26 @@ on a cron; the route exists so you can force a batch by hand.
 
 ```typescript
           const events = yield* tableId;
-          const rows = yield* query({
-            query: type
-              ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
-              : `SELECT COUNT(*) AS n FROM \`${events}\``,
-            parameterMode: type ? "NAMED" : undefined,
-            queryParameters: type
-              ? [
-                  {
-                    name: "type",
-                    parameterType: { type: "STRING" },
-                    parameterValue: { value: type },
-                  },
-                ]
-              : undefined,
-          }).pipe(Effect.orDie);
+          // Unqualified table names resolve against the bound table's
+          // dataset; `params` become named `@type` parameters.
+          const rows = yield* warehouse
+            .query(
+              type
+                ? `SELECT COUNT(*) AS n FROM \`${events}\` WHERE type = @type`
+                : `SELECT COUNT(*) AS n FROM \`${events}\``,
+              type ? { type } : undefined,
+            )
+            .pipe(Effect.orDie);
+
+          return yield* HttpServerResponse.json({
+            count: Number(rows[0]?.n ?? 0),
+          });
 ```
 
-The `Query` binding sets `defaultDataset` from the dataset it is bound
-to, so the bare table name resolves. Named parameters keep a caller's
-`?type=` out of the SQL text.
+`ReadTable.query` sets `defaultDataset` from the bound table, so the
+bare table name resolves, and returns rows decoded to plain JavaScript
+(`INT64` → `number`). Named parameters keep a caller's `?type=` out of
+the SQL text.
 
 ## The drain
 
@@ -173,18 +184,18 @@ to, so the bare table name resolves. Named parameters keep a caller's
 // src/Drain.ts
 export default class Drain extends GCP.Run.Job<Drain>()(
   "Drain",
-  { main: import.meta.url, location: "us-central1" },
+  {
+    main: import.meta.url,
+    location: "us-central1",
+  },
   Effect.gen(function* () {
     const inbox = yield* Inbox;
-    const dataset = yield* Analytics;
     const table = yield* EventsTable;
 
-    const pull = yield* GCP.PubSub.Pull(inbox);
-    const acknowledge = yield* GCP.PubSub.Acknowledge(inbox);
-    const insertAll = yield* GCP.BigQuery.InsertAll(table);
-
-    // Forces the job to wait for the dataset before its first run.
-    yield* dataset.datasetId;
+    // pubsub.subscriber on the subscription, and bigquery.dataEditor on
+    // the table — nothing on the project.
+    const subscription = yield* GCP.PubSub.ReadSubscription(inbox);
+    const warehouse = yield* GCP.BigQuery.WriteTable(table);
 
     return {
       // A pull may return fewer messages than are waiting, so drain
@@ -192,29 +203,28 @@ export default class Drain extends GCP.Run.Job<Drain>()(
       run: Effect.gen(function* () {
         // A pull waits for messages; an empty subscription answers
         // nothing, so a quiet 10 seconds means the backlog is drained.
-        const received = yield* pull({ body: { maxMessages: BATCH } }).pipe(
-          Effect.timeoutOption("10 seconds"),
+        const received = yield* subscription
+          .pull({ maxMessages: BATCH })
+          .pipe(Effect.timeoutOption("10 seconds"));
+        const messages = Option.getOrElse(received, () => []);
+        if (messages.length === 0) {
+          yield* Effect.log("drain: nothing left");
+          return 0;
+        }
+
+        const rows = messages.map(
+          (message) => JSON.parse(message.text) as EventRow,
         );
-        const messages =
-          Option.getOrUndefined(received)?.receivedMessages ?? [];
-        if (messages.length === 0) return 0;
 
-        const rows = messages.flatMap((message) => {
-          const data = message.message?.data;
-          if (data === undefined) return [];
-          const row = JSON.parse(atob(data)) as EventRow;
-          return [{ insertId: row.id, json: row }];
-        });
+        // insertIds make the streaming insert idempotent inside
+        // BigQuery's dedup window, so a redelivered batch collapses.
+        yield* warehouse.insert(rows, { insertIds: rows.map((row) => row.id) });
 
-        yield* insertAll({ body: { rows } });
+        yield* subscription.acknowledge(
+          messages.map((message) => message.ackId),
+        );
 
-        yield* acknowledge({
-          body: {
-            ackIds: messages.flatMap((message) =>
-              message.ackId === undefined ? [] : [message.ackId],
-            ),
-          },
-        });
+        yield* Effect.log(`drain: wrote ${rows.length} row(s)`);
         return messages.length;
       }).pipe(
         Effect.repeat({ until: (count) => count === 0 }),
@@ -224,18 +234,22 @@ export default class Drain extends GCP.Run.Job<Drain>()(
     };
   }).pipe(
     Effect.provide([
-      GCP.PubSub.PullHttp,
-      GCP.PubSub.AcknowledgeHttp,
-      GCP.BigQuery.InsertAllHttp,
+      GCP.PubSub.ReadSubscriptionHttp,
+      GCP.BigQuery.WriteTableHttp,
     ]),
   ),
 ) {}
 ```
 
+`pull` decodes each message for you (`text`, `data`, `attributes`,
+`ackId`), and `insert` takes plain row objects. Because the table
+depends on the dataset, binding the table is enough to make the job
+wait for both before its first run.
+
 :::note[Insert first, ack second]
 The order is deliberate. A crash between the two redelivers the batch
 and duplicates rows, which `SELECT DISTINCT id` removes. Acking first
-would lose the events outright. `insertId` makes the streaming insert
+would lose the events outright. `insertIds` make the streaming insert
 idempotent inside BigQuery's dedup window, so most redeliveries
 collapse on their own.
 :::

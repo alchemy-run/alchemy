@@ -1171,7 +1171,7 @@ export const WorkerPoolProvider = () =>
       });
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ id, output }) {
       const operation = yield* cloudrun
         .deleteProjectsLocationsWorkerPools({ name: output.name })
         .pipe(
@@ -1188,6 +1188,7 @@ export const WorkerPoolProvider = () =>
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
       yield* destroyHostImageRepository(
+        id,
         output,
         rfc1035(`${output.workerPoolId}-src`),
       );

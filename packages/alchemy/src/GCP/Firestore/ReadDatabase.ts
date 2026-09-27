@@ -76,8 +76,9 @@ export interface ReadDatabaseClient {
 
 /**
  * Read access to a Firestore {@link Database}: `get`, `list`, `query`.
- * Grants `roles/datastore.viewer` on the project (Firestore databases have
- * no resource-level IAM policy).
+ * Grants `roles/datastore.viewer` on the project under an IAM Condition
+ * naming this database (Firestore databases have no resource-level IAM
+ * policy).
  *
  * ### Reading documents
  * **Example:** Get a document and list a collection

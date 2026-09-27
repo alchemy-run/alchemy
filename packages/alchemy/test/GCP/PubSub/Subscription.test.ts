@@ -139,3 +139,104 @@ test.provider.skipIf(!hasGcpCreds)(
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
+
+test.provider.skipIf(!hasGcpCreds)(
+  "dead-letters a message after maxDeliveryAttempts",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* GCP.PubSub.Topic("DlqSource", {});
+          const deadLetters = yield* GCP.PubSub.Topic("DlqTarget", {});
+          const inbox = yield* GCP.PubSub.Subscription("DlqInbox", {
+            topic: deadLetters.name,
+          });
+          const subscription = yield* GCP.PubSub.Subscription("DlqWork", {
+            topic: topic.name,
+            deadLetterPolicy: {
+              deadLetterTopic: deadLetters.name,
+              maxDeliveryAttempts: 5,
+            },
+          });
+          return {
+            topic: topic.name,
+            deadLetters: deadLetters.name,
+            inbox: inbox.name,
+            subscription: subscription.name,
+          };
+        }),
+      );
+
+      // The Pub/Sub service agent forwards dead letters, so it must be
+      // able to publish to the target and ack on the source subscription.
+      const topicPolicy = yield* pubsub.getIamPolicyProjectsTopics({
+        resource: out.deadLetters,
+      });
+      const agent = (topicPolicy.bindings ?? [])
+        .find((binding) => binding.role === "roles/pubsub.publisher")
+        ?.members?.find((member) => member.includes("@gcp-sa-pubsub."));
+      expect(agent).toBeDefined();
+      const subscriptionPolicy =
+        yield* pubsub.getIamPolicyProjectsSubscriptions({
+          resource: out.subscription,
+        });
+      expect(
+        (subscriptionPolicy.bindings ?? []).some(
+          (binding) =>
+            binding.role === "roles/pubsub.subscriber" &&
+            binding.members?.includes(agent!),
+        ),
+      ).toBe(true);
+
+      yield* pubsub.publishProjectsTopics({
+        topic: out.topic,
+        body: { messages: [{ data: btoa("poison") }] },
+      });
+
+      // Pull and nack until Pub/Sub gives up on the message.
+      const nackOnce = pubsub
+        .pullProjectsSubscriptions({
+          subscription: out.subscription,
+          body: { maxMessages: 1, returnImmediately: true },
+        })
+        .pipe(
+          Effect.tap(({ receivedMessages = [] }) => {
+            const ackIds = receivedMessages.flatMap((m) =>
+              m.ackId ? [m.ackId] : [],
+            );
+            return ackIds.length === 0
+              ? Effect.void
+              : pubsub.modifyAckDeadlineProjectsSubscriptions({
+                  subscription: out.subscription,
+                  body: { ackIds, ackDeadlineSeconds: 0 },
+                });
+          }),
+        );
+      const deadLetter = pubsub
+        .pullProjectsSubscriptions({
+          subscription: out.inbox,
+          body: { maxMessages: 1, returnImmediately: true },
+        })
+        .pipe(Effect.map(({ receivedMessages = [] }) => receivedMessages[0]));
+
+      const letter = yield* nackOnce.pipe(
+        Effect.andThen(deadLetter),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (message) => message !== undefined,
+          times: 60,
+        }),
+      );
+      expect(atob(letter!.message?.data ?? "")).toEqual("poison");
+      expect(
+        letter!.message?.attributes?.CloudPubSubDeadLetterSourceSubscription,
+      ).toEqual(out.subscription.split("/").pop());
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(out.subscription)).toEqual("gone");
+      expect(yield* waitUntilGone(out.inbox)).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);

@@ -1052,7 +1052,7 @@ export const JobProvider = () =>
       });
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ id, output }) {
       const operation = yield* cloudrun
         .deleteProjectsLocationsJobs({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -1061,7 +1061,11 @@ export const JobProvider = () =>
       }
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
-      yield* destroyHostImageRepository(output, rfc1035(`${output.jobId}-src`));
+      yield* destroyHostImageRepository(
+        id,
+        output,
+        rfc1035(`${output.jobId}-src`),
+      );
       yield* releaseHostIdentity(output);
     }),
   });
