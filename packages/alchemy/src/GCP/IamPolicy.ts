@@ -39,8 +39,30 @@ export interface IamPolicy {
 export interface IamPolicyBinding {
   role?: string;
   members?: ReadonlyArray<string>;
-  condition?: unknown;
+  condition?: IamCondition;
 }
+
+/**
+ * An IAM Condition (CEL). Alchemy uses it to narrow a project-level grant
+ * to one resource on services with no per-resource IAM policy (Firestore,
+ * Cloud SQL, Memorystore, …): `resource.name == "projects/p/…"`.
+ */
+export interface IamCondition {
+  title?: string;
+  expression?: string;
+  description?: string;
+}
+
+/** Condition identity: two conditions are the same binding iff equal. */
+const sameCondition = (
+  left: IamCondition | undefined,
+  right: IamCondition | undefined,
+) =>
+  (left === undefined && right === undefined) ||
+  (left !== undefined &&
+    right !== undefined &&
+    left.expression === right.expression &&
+    (left.title ?? "") === (right.title ?? ""));
 
 /**
  * Resource kinds whose own IAM policy a binding can grant on. Kinds map
@@ -51,6 +73,7 @@ export interface IamPolicyBinding {
 export type GcpIamResourceKind =
   | "project"
   | "artifactregistry.repository"
+  | "bigquery.dataset"
   | "bigquery.table"
   | "bigqueryconnection.connection"
   | "bigtable.instance"
@@ -148,6 +171,94 @@ const computeInstance = (name: string): IamPolicyTarget => {
   };
 };
 
+type DatasetAccessItem = bigquery.DatasetAccessItem;
+
+/** BigQuery stores the three basic dataset roles under legacy names. */
+const LEGACY_DATASET_ROLES: Record<string, string> = {
+  READER: "roles/bigquery.dataViewer",
+  WRITER: "roles/bigquery.dataEditor",
+  OWNER: "roles/bigquery.dataOwner",
+};
+const datasetRole = (role: string) => LEGACY_DATASET_ROLES[role] ?? role;
+
+const principalOf = (item: DatasetAccessItem): string | undefined =>
+  item.iamMember ??
+  (item.userByEmail
+    ? `${item.userByEmail.endsWith(".gserviceaccount.com") ? "serviceAccount" : "user"}:${item.userByEmail}`
+    : item.groupByEmail
+      ? `group:${item.groupByEmail}`
+      : item.domain
+        ? `domain:${item.domain}`
+        : undefined);
+
+const accessItemOf = (role: string, member: string): DatasetAccessItem => {
+  const [type, id = ""] = member.split(/:(.*)/s);
+  switch (type) {
+    case "serviceAccount":
+    case "user":
+      return { role, userByEmail: id };
+    case "group":
+      return { role, groupByEmail: id };
+    case "domain":
+      return { role, domain: id };
+    default:
+      return { role, iamMember: member };
+  }
+};
+
+/**
+ * BigQuery datasets have no `setIamPolicy`; their access list is the
+ * policy. Principal entries map to bindings; view, routine, dataset,
+ * special-group, and conditional entries are carried through untouched.
+ */
+const bigqueryDataset = (name: string): IamPolicyTarget => {
+  const match = /projects\/([^/]+)\/datasets\/([^/]+)/.exec(name);
+  const [, projectId = "", datasetId = ""] = match ?? [];
+  const isPrincipal = (item: DatasetAccessItem) =>
+    item.condition === undefined &&
+    item.role !== undefined &&
+    principalOf(item) !== undefined;
+  const read = bigquery.getDatasets({ projectId, datasetId });
+  return {
+    get: read.pipe(
+      Effect.map((dataset) => {
+        const byRole = new Map<string, string[]>();
+        for (const item of dataset.access ?? []) {
+          if (!isPrincipal(item)) continue;
+          const role = datasetRole(item.role!);
+          const members = byRole.get(role) ?? [];
+          members.push(principalOf(item)!);
+          byRole.set(role, members);
+        }
+        return {
+          etag: dataset.etag,
+          bindings: [...byRole].map(([role, members]) => ({ role, members })),
+        } satisfies IamPolicy;
+      }),
+    ),
+    set: (policy) =>
+      read.pipe(
+        Effect.flatMap((dataset) =>
+          bigquery.patchDatasets({
+            projectId,
+            datasetId,
+            body: {
+              etag: dataset.etag,
+              access: [
+                ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
+                ...(policy.bindings ?? []).flatMap((binding) =>
+                  (binding.members ?? []).map((member) =>
+                    accessItemOf(binding.role ?? "", member),
+                  ),
+                ),
+              ],
+            },
+          }),
+        ),
+      ),
+  };
+};
+
 const secret = (name: string): IamPolicyTarget =>
   /\/locations\//.test(name)
     ? queryStyle(
@@ -168,6 +279,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
     artifactregistry.getIamPolicyProjectsLocationsRepositories,
     artifactregistry.setIamPolicyProjectsLocationsRepositories,
   ),
+  "bigquery.dataset": bigqueryDataset,
   // BigQuery table policies reject requestedPolicyVersion 3.
   "bigquery.table": bodyStyle(
     bigquery.getIamPolicyTables,
@@ -318,6 +430,7 @@ const rewrite = (
   member: string,
   add: ReadonlySet<string>,
   remove: ReadonlySet<string>,
+  condition?: IamCondition,
 ): IamPolicy | undefined => {
   const bindings = (policy.bindings ?? []).map((binding) => ({
     ...binding,
@@ -326,10 +439,15 @@ const rewrite = (
   let dirty = false;
   for (const role of add) {
     const existing = bindings.find(
-      (binding) => binding.role === role && binding.condition === undefined,
+      (binding) =>
+        binding.role === role && sameCondition(binding.condition, condition),
     );
     if (existing === undefined) {
-      bindings.push({ role, members: [member] });
+      bindings.push(
+        condition === undefined
+          ? { role, members: [member] }
+          : { role, members: [member], condition },
+      );
       dirty = true;
     } else if (!existing.members.includes(member)) {
       existing.members.push(member);
@@ -337,7 +455,7 @@ const rewrite = (
     }
   }
   for (const binding of bindings) {
-    if (binding.condition !== undefined) continue;
+    if (!sameCondition(binding.condition, condition)) continue;
     if (binding.role === undefined || !remove.has(binding.role)) continue;
     if (add.has(binding.role)) continue;
     const next = binding.members.filter((item) => item !== member);
@@ -352,6 +470,8 @@ const rewrite = (
   // tables) accept nothing above v1.
   return {
     ...policy,
+    // Writing a conditional binding requires policy version 3.
+    ...(condition !== undefined ? { version: 3 } : {}),
     bindings: bindings.filter((binding) => binding.members.length > 0),
   };
 };
@@ -368,6 +488,8 @@ export const updateIamMembership = (options: {
   member: string;
   add?: Iterable<string>;
   remove?: Iterable<string>;
+  /** Manage the bindings carrying exactly this condition. */
+  condition?: IamCondition;
 }) => {
   const target = TARGETS[options.kind](targetName(options.kind, options.name));
   const member = principal(options.member);
@@ -375,7 +497,7 @@ export const updateIamMembership = (options: {
   const remove = new Set(options.remove ?? []);
   const write = Effect.gen(function* () {
     const policy = yield* target.get;
-    const next = rewrite(policy, member, add, remove);
+    const next = rewrite(policy, member, add, remove, options.condition);
     if (next === undefined) return;
     yield* target.set(next);
   }).pipe(
@@ -395,7 +517,7 @@ export const updateIamMembership = (options: {
   // without etag) is re-applied.
   const confirmed = target.get.pipe(
     Effect.flatMap((policy) =>
-      rewrite(policy, member, add, remove) === undefined
+      rewrite(policy, member, add, remove, options.condition) === undefined
         ? Effect.void
         : Effect.fail(new IamPolicyNotConverged({ name: options.name })),
     ),
@@ -424,12 +546,14 @@ export const revokeIamMembership = (options: {
   name: string;
   member: string;
   roles: Iterable<string>;
+  condition?: IamCondition;
 }) =>
   updateIamMembership({
     kind: options.kind,
     name: options.name,
     member: options.member,
     remove: options.roles,
+    condition: options.condition,
   }).pipe(
     Effect.catchIf(
       (error) => error._tag === "NotFound",

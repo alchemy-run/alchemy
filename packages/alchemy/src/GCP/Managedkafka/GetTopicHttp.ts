@@ -24,7 +24,7 @@ export const GetTopicHttp: Layer.Layer<
     kafka.GetProjectsLocationsClustersTopicsError
   >({
     tag: "GCP.Managedkafka.GetTopic",
-    iam: { role: "roles/managedkafka.viewer" },
+    iam: { role: "roles/managedkafka.viewer", scopeByCondition: true },
     operation: kafka.getProjectsLocationsClustersTopics,
   }),
 );

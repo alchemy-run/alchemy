@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import type { Dataset } from "./Dataset.ts";
 import { Query, type QueryRequest } from "./Query.ts";
 import { bindGcpHost } from "../Host.ts";
+import { grantFor } from "../HttpBinding.ts";
 
 /**
  * HTTP implementation of {@link Query}.
@@ -22,9 +23,11 @@ export const QueryHttp = Layer.effect(
         iam: [
           // bigquery.jobs.create is only grantable on the project.
           { role: "roles/bigquery.jobUser" },
-          // Datasets have no resource kind in the IAM registry, so read
-          // access is granted project-wide.
-          { role: "roles/bigquery.dataViewer" },
+          // Read access on this dataset only (its access list).
+          grantFor(
+            { role: "roles/bigquery.dataViewer", on: "bigquery.dataset" },
+            dataset.name,
+          ),
         ],
       });
       const project = yield* dataset.project;

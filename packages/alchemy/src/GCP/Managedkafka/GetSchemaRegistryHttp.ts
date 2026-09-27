@@ -24,7 +24,10 @@ export const GetSchemaRegistryHttp: Layer.Layer<
     kafka.GetProjectsLocationsSchemaRegistriesError
   >({
     tag: "GCP.Managedkafka.GetSchemaRegistry",
-    iam: { role: "roles/managedkafka.schemaRegistryViewer" },
+    iam: {
+      role: "roles/managedkafka.schemaRegistryViewer",
+      scopeByCondition: true,
+    },
     operation: kafka.getProjectsLocationsSchemaRegistries,
   }),
 );

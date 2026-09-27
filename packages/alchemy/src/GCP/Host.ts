@@ -1,6 +1,7 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -17,6 +18,7 @@ import {
   revokeIamMembership,
   updateIamMembership,
   type GcpIamResourceKind,
+  type IamCondition,
 } from "./IamPolicy.ts";
 import { parseServiceAccountKey } from "./Token.ts";
 
@@ -44,6 +46,12 @@ export type GcpIamGrant = {
     /** Full resource name, e.g. `projects/p/topics/t` (a bucket name for `storage.bucket`). */
     name: string;
   };
+  /**
+   * For a project-level grant on a service with no per-resource IAM
+   * policy: an IAM Condition narrowing the role to one resource, e.g.
+   * `resource.name == "projects/p/databases/d"`.
+   */
+  condition?: IamCondition;
 };
 
 /**
@@ -66,6 +74,8 @@ export type AppliedIamGrant = {
   /** Full resource name, or the project id for `project`. */
   name: string;
   role: string;
+  /** IAM Condition the role is bound under, if any. */
+  condition?: IamCondition;
 };
 
 const GCP_HOST_TYPES = new Set([
@@ -260,19 +270,30 @@ export const retryActAs = <A, E extends { _tag: string }, R>(
     }),
   );
 
+const conditionKey = (condition: IamCondition | undefined) =>
+  condition === undefined
+    ? ""
+    : `${condition.title ?? ""}\u0001${condition.expression ?? ""}`;
+
 const grantKey = (grant: AppliedIamGrant) =>
-  `${grant.kind}\u0000${grant.name}\u0000${grant.role}`;
+  `${grant.kind}\u0000${grant.name}\u0000${grant.role}\u0000${conditionKey(grant.condition)}`;
 
 const groupByTarget = (grants: readonly AppliedIamGrant[]) => {
   const groups = new Map<
     string,
-    { kind: GcpIamResourceKind; name: string; roles: Set<string> }
+    {
+      kind: GcpIamResourceKind;
+      name: string;
+      condition: IamCondition | undefined;
+      roles: Set<string>;
+    }
   >();
   for (const grant of grants) {
-    const key = `${grant.kind}\u0000${grant.name}`;
+    const key = `${grant.kind}\u0000${grant.name}\u0000${conditionKey(grant.condition)}`;
     const group = groups.get(key) ?? {
       kind: grant.kind,
       name: grant.name,
+      condition: grant.condition,
       roles: new Set<string>(),
     };
     group.roles.add(grant.role);
@@ -291,7 +312,12 @@ export const desiredHostGrants = (
     if (grant.role.length === 0) continue;
     const applied: AppliedIamGrant =
       grant.resource === undefined
-        ? { kind: "project", name: project, role: grant.role }
+        ? {
+            kind: "project",
+            name: project,
+            role: grant.role,
+            ...(grant.condition ? { condition: grant.condition } : {}),
+          }
         : {
             kind: grant.resource.kind,
             name: grant.resource.name,
@@ -334,11 +360,20 @@ export const syncHostIam = Effect.fn(function* (options: {
       name: group.name,
       member: options.serviceAccount,
       add: group.roles,
+      condition: group.condition,
     });
   }
 
-  const isHostProject = (grant: { kind: string; name: string }) =>
-    grant.kind === "project" && grant.name === options.project;
+  // Unconditional project grants of a minted account are synced against
+  // the observed policy below; conditional ones only via the record.
+  const isHostProject = (grant: {
+    kind: string;
+    name: string;
+    condition?: IamCondition;
+  }) =>
+    grant.kind === "project" &&
+    grant.name === options.project &&
+    grant.condition === undefined;
 
   if (options.managed) {
     const wanted = new Set(
@@ -363,6 +398,7 @@ export const syncHostIam = Effect.fn(function* (options: {
       name: group.name,
       member: options.serviceAccount,
       roles: group.roles,
+      condition: group.condition,
     });
   }
 
@@ -380,6 +416,7 @@ export const revokeHostIam = Effect.fn(function* (options: {
       name: group.name,
       member: options.serviceAccount,
       roles: group.roles,
+      condition: group.condition,
     });
   }
 });
@@ -407,12 +444,27 @@ export const deleteHostServiceAccount = Effect.fn(function* (options: {
       roles: held,
     });
   }
+  const name = serviceAccountName(options.project, options.email);
   yield* iam
-    .deleteProjectsServiceAccounts({
-      name: serviceAccountName(options.project, options.email),
-    })
+    .deleteProjectsServiceAccounts({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
+  // Block until IAM stops serving the account.
+  yield* iam.getProjectsServiceAccounts({ name }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new HostServiceAccountStillExists({ email: options.email })),
+    ),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.HostServiceAccountStillExists",
+      times: 30,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 });
+
+export class HostServiceAccountStillExists extends Data.TaggedError(
+  "GCP.HostServiceAccountStillExists",
+)<{ email: string }> {}
 
 /**
  * Bind IAM (+ optional env) onto the ambient GCP host at deploy time.

@@ -1,7 +1,7 @@
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
-import type { Output } from "../Output.ts";
+import * as Output from "../Output.ts";
 import { bindGcpHost, type GcpIamGrant } from "./Host.ts";
 import type { GcpIamResourceKind } from "./IamPolicy.ts";
 
@@ -29,17 +29,37 @@ export type GcpHttpOp<I, A, E> = Effect.Effect<
 export interface BindingIam {
   role: string;
   on?: Exclude<GcpIamResourceKind, "project">;
+  /**
+   * For services with no per-resource IAM policy but IAM Conditions
+   * support (Firestore, Cloud SQL, Managed Kafka): grant on the project
+   * under a condition matching only the bound resource and its children.
+   */
+  scopeByCondition?: boolean;
 }
+
+const nameExpression = (value: string) =>
+  `resource.name == "${value}" || resource.name.startsWith("${value}/")`;
+
+/** IAM Condition matching one resource (by full name) and its children. */
+export const resourceNameCondition = (name: Input<string>) => ({
+  title: "alchemy-scoped",
+  expression:
+    typeof name === "string"
+      ? nameExpression(name)
+      : Output.map(name as Output.Output<string>, nameExpression),
+});
 
 /** Build the grant for `iam` against a bound resource's full name. */
 export const grantFor = (
   iam: BindingIam,
   name: Input<string>,
 ): Input<GcpIamGrant> =>
-  iam.on === undefined
-    ? { role: iam.role }
-    : // The engine resolves the name Output before the host reconciles.
-      { role: iam.role, resource: { kind: iam.on, name } };
+  iam.on !== undefined
+    ? // The engine resolves the name Output before the host reconciles.
+      { role: iam.role, resource: { kind: iam.on, name } }
+    : iam.scopeByCondition
+      ? { role: iam.role, condition: resourceNameCondition(name) }
+      : { role: iam.role };
 
 /**
  * Shared HTTP scaffolding for GCP named-resource bindings.
@@ -57,7 +77,7 @@ export const makeNamedHttpBinding = <
   tag: string;
   operation: GcpHttpOp<I, A, E>;
   iam: BindingIam;
-  resourceName: (resource: Resource) => Output<string, never>;
+  resourceName: (resource: Resource) => Output.Output<string, never>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
