@@ -96,6 +96,49 @@ test.provider(
 );
 
 test.provider(
+  "replace keeping an explicit name deletes the old database first",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // A generated name keeps concurrent runs collision-free; the replace
+      // below pins it as the explicit name.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("ReplacedDatabase");
+        }),
+      );
+
+      // `primaryLocationHint` is fixed at creation, so this is a replace
+      // whose replacement has the same name as the database it replaces.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("ReplacedDatabase", {
+            name: initial.databaseName,
+            primaryLocationHint: "weur",
+          });
+        }),
+      );
+
+      expect(replaced.databaseName).toEqual(initial.databaseName);
+      expect(replaced.databaseId).not.toEqual(initial.databaseId);
+      yield* waitForDatabaseToBeDeleted(initial.databaseId, accountId);
+      const actualDatabase = yield* d1.getDatabase({
+        accountId,
+        databaseId: replaced.databaseId,
+      });
+      expect(actualDatabase.name).toEqual(initial.databaseName);
+
+      yield* stack.destroy();
+
+      yield* waitForDatabaseToBeDeleted(replaced.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+test.provider(
   "applies migrations from migrationsDir",
   (stack) =>
     Effect.gen(function* () {
