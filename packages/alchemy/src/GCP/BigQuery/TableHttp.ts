@@ -2,7 +2,11 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
-import { QueryNotComplete, type ReadTableClient } from "./ReadTable.ts";
+import {
+  type ListTableResult,
+  QueryNotComplete,
+  type ReadTableClient,
+} from "./ReadTable.ts";
 import { decodeRows, encodeRow, queryParameter } from "./Rows.ts";
 import type { Table } from "./Table.ts";
 import { InsertRowsFailed, type WriteTableClient } from "./WriteTable.ts";
@@ -33,6 +37,28 @@ export interface TableRef {
 const QUERY_WAIT_MS = 10_000;
 const QUERY_POLLS = 12;
 
+interface QueryPage {
+  jobComplete?: boolean;
+  schema?: bigquery.TableSchema;
+  rows?: bigquery.TableRow[];
+  pageToken?: string;
+}
+
+/** Fetch every result page after `pageToken`. */
+const remainingRows = <E>(
+  fetchPage: (pageToken: string) => Effect.Effect<QueryPage, E>,
+  pageToken: string | undefined,
+): Effect.Effect<ReadonlyArray<bigquery.TableRow>, E> =>
+  pageToken
+    ? fetchPage(pageToken).pipe(
+        Effect.flatMap((page) =>
+          remainingRows(fetchPage, page.pageToken).pipe(
+            Effect.map((rest) => [...(page.rows ?? []), ...rest]),
+          ),
+        ),
+      )
+    : Effect.succeed([]);
+
 /**
  * Shared HTTP scaffolding for the BigQuery Read/Write/ReadWrite table
  * bindings: resolves the distilled operations once at Layer construction
@@ -48,7 +74,12 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
   const insertAll = yield* bigquery.insertAllTabledata;
 
   const makeRead = (table: Effect.Effect<TableRef>): ReadTableClient => ({
-    list: (options) =>
+    list: (
+      options,
+    ): Effect.Effect<
+      ListTableResult,
+      bigquery.GetTablesError | bigquery.ListTabledataError
+    > =>
       Effect.gen(function* () {
         const ref = yield* table;
         const key = {
@@ -68,7 +99,15 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
           nextPageToken: page.pageToken || undefined,
         };
       }),
-    query: (sql, params) =>
+    query: (
+      sql,
+      params,
+    ): Effect.Effect<
+      Record<string, unknown>[],
+      | bigquery.QueryJobsError
+      | bigquery.GetQueryResultsJobsError
+      | QueryNotComplete
+    > =>
       Effect.gen(function* () {
         const ref = yield* table;
         const first = yield* queryJobs({
@@ -95,7 +134,12 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
         });
         const jobId = first.jobReference?.jobId;
         const location = first.jobReference?.location ?? ref.location;
-        const results = (pageToken: string | undefined) =>
+        const results = (
+          pageToken: string | undefined,
+        ): Effect.Effect<
+          bigquery.GetQueryResultsResponse,
+          bigquery.GetQueryResultsJobsError | QueryNotComplete
+        > =>
           jobId === undefined
             ? Effect.fail(new QueryNotComplete({ jobId }))
             : getQueryResults({
@@ -107,32 +151,29 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
                 "formatOptions.useInt64Timestamp": true,
               });
 
-        let response: {
-          jobComplete?: boolean;
-          schema?: bigquery.TableSchema;
-          rows?: bigquery.TableRow[];
-          pageToken?: string;
-        } = first;
-        if (response.jobComplete !== true) {
-          response = yield* results(undefined).pipe(
-            Effect.repeat({
-              until: (r) => r.jobComplete === true,
-              times: QUERY_POLLS,
-            }),
-          );
-          if (response.jobComplete !== true) {
-            return yield* new QueryNotComplete({ jobId });
-          }
+        const settled: Effect.Effect<
+          QueryPage,
+          bigquery.GetQueryResultsJobsError | QueryNotComplete
+        > =
+          first.jobComplete === true
+            ? Effect.succeed(first)
+            : results(undefined).pipe(
+                Effect.repeat({
+                  until: (r: bigquery.GetQueryResultsResponse) =>
+                    r.jobComplete === true,
+                  times: QUERY_POLLS,
+                }),
+              );
+        const complete = yield* settled;
+        if (complete.jobComplete !== true) {
+          return yield* new QueryNotComplete({ jobId });
         }
-        const schema = response.schema;
-        const rows = decodeRows(schema, response.rows);
-        let pageToken = response.pageToken;
-        while (pageToken) {
-          const page = yield* results(pageToken);
-          rows.push(...decodeRows(schema, page.rows));
-          pageToken = page.pageToken;
-        }
-        return rows;
+        const schema = complete.schema;
+        const rest: ReadonlyArray<bigquery.TableRow> = yield* remainingRows(
+          results,
+          complete.pageToken,
+        );
+        return decodeRows(schema, [...(complete.rows ?? []), ...rest]);
       }),
   });
 

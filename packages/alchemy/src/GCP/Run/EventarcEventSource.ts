@@ -28,18 +28,38 @@ const lastSegment = (value: string) => value.split("/").pop() ?? value;
 export const eventarcPath = (id: string, props: EventarcEventSourceProps) =>
   props.path ?? `/__alchemy/eventarc/${pathSegment(id)}`;
 
-const isStorageEvent = (props: EventarcEventSourceProps) =>
+const hasTypePrefix = (props: EventarcEventSourceProps, prefix: string) =>
   props.eventFilters.some(
     (filter) =>
       typeof filter === "object" &&
       "attribute" in filter &&
       filter.attribute === "type" &&
       typeof filter.value === "string" &&
-      filter.value.startsWith("google.cloud.storage."),
+      filter.value.startsWith(prefix),
   );
 
-/** Decode a binary-mode CloudEvent delivery. */
-const toCloudEvent = (request: HttpServerRequest, body: string): CloudEvent => {
+const isStorageEvent = (props: EventarcEventSourceProps) =>
+  hasTypePrefix(props, "google.cloud.storage.");
+
+/**
+ * Firestore triggers reject an unset `eventDataContentType`, so default it
+ * to the `application/protobuf` encoding `gcloud` uses.
+ */
+const eventDataContentType = (props: EventarcEventSourceProps) =>
+  props.eventDataContentType ??
+  (hasTypePrefix(props, "google.cloud.firestore.")
+    ? "application/protobuf"
+    : undefined);
+
+/**
+ * Decode a binary-mode CloudEvent delivery. JSON payloads are parsed,
+ * `text/*` payloads stay strings, and anything else (e.g. the
+ * `application/protobuf` Firestore events) is handed over as raw bytes.
+ */
+const toCloudEvent = (
+  request: HttpServerRequest,
+  body: Uint8Array,
+): CloudEvent => {
   const attributes: Record<string, string> = {};
   for (const [name, value] of Object.entries(request.headers)) {
     if (name.startsWith("ce-") && typeof value === "string") {
@@ -48,11 +68,15 @@ const toCloudEvent = (request: HttpServerRequest, body: string): CloudEvent => {
   }
   const contentType = request.headers["content-type"] ?? "";
   let data: unknown = body;
-  if (contentType.includes("json") && body.length > 0) {
-    try {
-      data = JSON.parse(body);
-    } catch {
-      data = body;
+  if (contentType.includes("json") || contentType.startsWith("text/")) {
+    const text = new TextDecoder().decode(body);
+    data = text;
+    if (contentType.includes("json") && text.length > 0) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
     }
   }
   return {
@@ -132,6 +156,7 @@ export const EventarcEventSource = Layer.effect(
             yield* trigger(`${id}-Trigger`, {
               location: props.location ?? attrs.location,
               eventFilters: props.eventFilters as EventFilter[],
+              eventDataContentType: eventDataContentType(props),
               serviceAccount: Output.map(
                 Output.all(
                   endpoint.serviceAccount,
@@ -154,7 +179,10 @@ export const EventarcEventSource = Layer.effect(
 
       yield* listenForDeliveries(host, path, (request) =>
         Effect.gen(function* () {
-          const body = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
+          const body = yield* request.arrayBuffer.pipe(
+            Effect.map((buffer) => new Uint8Array(buffer)),
+            Effect.orElseSucceed(() => new Uint8Array()),
+          );
           yield* process(toCloudEvent(request, body)).pipe(Effect.orDie);
           return HttpServerResponse.empty({ status: 204 });
         }),

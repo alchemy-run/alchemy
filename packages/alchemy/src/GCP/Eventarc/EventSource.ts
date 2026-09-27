@@ -20,7 +20,11 @@ export interface CloudEvent {
   time: string | undefined;
   /** Every `ce-*` attribute, without the prefix (includes extensions). */
   attributes: Record<string, string>;
-  /** The payload, parsed as JSON when the content type is JSON. */
+  /**
+   * The payload: parsed JSON for JSON content types, a string for
+   * `text/*`, and the raw bytes (`Uint8Array`) otherwise — e.g. Firestore
+   * events, which are `application/protobuf`.
+   */
   data: unknown;
 }
 
@@ -39,6 +43,13 @@ export interface EventarcEventSourceProps {
    * @default the host's region
    */
   location?: string;
+  /**
+   * Payload encoding for events that support more than one, e.g.
+   * `application/json` or `application/protobuf` for Firestore events.
+   * @default `application/protobuf` for Firestore events, otherwise the
+   * event type's default
+   */
+  eventDataContentType?: string;
   /** Delivery path on the host. Defaults to `/__alchemy/eventarc/{id}`. */
   path?: string;
 }

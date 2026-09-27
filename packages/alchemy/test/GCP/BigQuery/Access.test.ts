@@ -20,7 +20,9 @@ const hasGcpCreds = !!(
 );
 
 /** JSON-safe view of a decoded row so Action output round-trips state. */
-const describeRow = (row: Record<string, unknown>) => ({
+const describeRow = (
+  row: Record<string, unknown>,
+): Record<string, unknown> => ({
   ...row,
   at: row.at instanceof Date ? row.at.toISOString() : row.at,
   payload: row.payload instanceof Uint8Array ? [...row.payload] : row.payload,

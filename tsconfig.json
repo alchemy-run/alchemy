@@ -95,10 +95,31 @@
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
     },
     {
+      "path": "./examples/gcp-cloud-function/tsconfig.json"
+    },
+    {
       "path": "./examples/gcp-cloud-run-api/tsconfig.json"
     },
     {
+      "path": "./examples/gcp-cron/tsconfig.json"
+    },
+    {
       "path": "./examples/gcp-event-pipeline/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-service-to-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-storage-uploads/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-eventarc-firestore/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-pubsub-worker/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-secrets-kms/tsconfig.json"
     },
     {
       "path": "./examples/aws-ec2/tsconfig.json"

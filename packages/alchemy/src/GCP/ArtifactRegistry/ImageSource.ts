@@ -317,6 +317,42 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
 /**
  * Init-time constructor for the Artifact Registry image-source resolver.
  */
+/** Delete the Artifact Registry repository `name`; missing is success. */
+export const destroyImageRepository = Effect.fn(function* (name: string) {
+  const operation = yield* artifactregistry
+    .deleteProjectsLocationsRepositories({ name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  if (operation !== undefined) {
+    yield* waitForOperation(operation).pipe(
+      Effect.catchTag(
+        "GCP.ArtifactRegistry.ImageSourceOperationFailed",
+        (error) =>
+          error.message.toLowerCase().includes("not found")
+            ? Effect.void
+            : Effect.fail(error),
+      ),
+    );
+  }
+});
+
+/**
+ * Delete the image repository an Effect-native host built into on
+ * reconcile (`{hostId}-src`, normalized by the host's `rfc1035`).
+ */
+export const destroyHostImageRepository = (
+  output: {
+    project: string;
+    location: string;
+    codeHash: string | undefined;
+  },
+  repositoryId: string,
+) =>
+  output.codeHash === undefined
+    ? Effect.void
+    : destroyImageRepository(
+        resourceName(output.project, output.location, repositoryId),
+      );
+
 export const makeImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
@@ -756,24 +792,12 @@ export const makeImageSource = Effect.gen(function* () {
     return yield* computeStaticSourceHash(options.source, platform);
   });
 
-  const destroyRepository = Effect.fn(function* (name: string) {
-    const operation = yield* artifactregistry
-      .deleteProjectsLocationsRepositories({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    if (operation !== undefined) {
-      yield* waitForOperation(operation).pipe(
-        Effect.catchTag(
-          "GCP.ArtifactRegistry.ImageSourceOperationFailed",
-          (error) =>
-            error.message.toLowerCase().includes("not found")
-              ? Effect.void
-              : Effect.fail(error),
-        ),
-      );
-    }
-  });
-
-  return { resolve, hash, destroyRepository, resourceName };
+  return {
+    resolve,
+    hash,
+    destroyRepository: destroyImageRepository,
+    resourceName,
+  };
 });
 
 export type ImageSource = Effect.Success<typeof makeImageSource>;

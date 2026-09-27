@@ -13,7 +13,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { type ServerHost } from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
-import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
+import {
+  destroyHostImageRepository,
+  makeImageSource,
+} from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   createGcpHostRuntimeContext,
@@ -1250,6 +1253,11 @@ export const ServiceProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
+      // Effect-native hosts build into a per-host repository on reconcile.
+      yield* destroyHostImageRepository(
+        output,
+        rfc1035(`${output.serviceId}-src`),
+      );
       yield* releaseHostIdentity(output);
     }),
   });

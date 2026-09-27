@@ -96,7 +96,7 @@ export const decodeFields = (
 ): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
-    out[key] = decodeValue(value);
+    if (value !== undefined) out[key] = decodeValue(value);
   }
   return out;
 };

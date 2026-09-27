@@ -24,7 +24,10 @@ import {
 } from "../../Server/Process.ts";
 import type { Scope } from "effect/Scope";
 import { tagRecord } from "../../Tags.ts";
-import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
+import {
+  destroyHostImageRepository,
+  makeImageSource,
+} from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   retryActAs,
@@ -1057,6 +1060,8 @@ export const JobProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
+      // Effect-native hosts build into a per-host repository on reconcile.
+      yield* destroyHostImageRepository(output, rfc1035(`${output.jobId}-src`));
       yield* releaseHostIdentity(output);
     }),
   });

@@ -2,6 +2,8 @@ export * from "./GetService.ts";
 export * from "./GetServiceHttp.ts";
 export * from "./GetWorkerPool.ts";
 export * from "./GetWorkerPoolHttp.ts";
+export * from "./InvokeService.ts";
+export * from "./InvokeServiceHttp.ts";
 export * from "./Job.ts";
 export * from "./RunJob.ts";
 export * from "./RunJobHttp.ts";
