@@ -218,19 +218,15 @@ export const ensureNamespace = <R>(
         NamespaceId?: string | undefined;
       } = yield* create.pipe(
         Effect.catchTag(["NamespaceAlreadyExists", "DuplicateRequest"], (e) =>
-          e._tag === "NamespaceAlreadyExists"
-            ? // the name is taken — by an ACTIVE namespace (observed below)
-              // or by one still deleting (observation misses it and the
-              // bounded outer retry re-submits the create)
-              Effect.succeed({
-                OperationId: undefined,
-                NamespaceId: e.NamespaceId,
-              })
-            : // an identical create is already in flight — await THAT one
-              Effect.succeed({
-                OperationId: e.DuplicateOperationId,
-                NamespaceId: undefined,
-              }),
+          Effect.succeed(
+            e._tag === "NamespaceAlreadyExists"
+              ? // the name is taken — by an ACTIVE namespace (observed below)
+                // or by one still deleting (observation misses it and the
+                // bounded outer retry re-submits the create)
+                { OperationId: undefined, NamespaceId: e.NamespaceId }
+              : // an identical create is already in flight — await THAT one
+                { OperationId: e.DuplicateOperationId, NamespaceId: undefined },
+          ),
         ),
       );
       let namespaceId = created.NamespaceId;
