@@ -181,6 +181,12 @@ export interface CodeStep {
   };
   /** No change highlight or spotlight on this step. */
   quiet?: boolean;
+  /**
+   * Per line: added (+, green) or removed (-, red) since this file was last on
+   * screen. Removed lines are kept in `lines` so they can be shown. `start`/`end`
+   * mark the part of a rewritten line that actually changed.
+   */
+  diff?: ({ kind: "add" | "del"; start?: number; end?: number } | null)[];
   frames: number;
 }
 

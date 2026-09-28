@@ -264,15 +264,18 @@ export const CodeSlide = ({
   // Only an edit gets highlighted: when most of the code is new, it's a different snippet.
   const isEdit = (from: CodeStep, to: CodeStep, m: Map<number, number>) =>
     m.size >= from.lines.filter((l) => lineText(l).trim()).length / 2 && to.lines.length > 0;
-  const edit = !!morph && isEdit(prev!, step, matched);
-  const changed = (i: number) => edit && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
+  // A step with a diff shows its changes as -/+ lines; otherwise changed lines are worked out here.
+  const edit = !step.diff && !!morph && isEdit(prev!, step, matched);
+  const changed = (i: number) =>
+    step.diff ? !!step.diff[i] : edit && !matched.has(i) && !!lineText(step.lines[i] ?? []).trim();
   const modified = edit ? modifiedLines(prev!, step, matched) : new Map<number, { from: number; start: number; end: number }>();
   const anyChanged = step.tints.length === 0 && !step.quiet && step.lines.some((_, i) => changed(i));
   const morph2 = !!prev && !!prev2 && prev.group === step.group && prev2.group === prev.group;
   const prevMatched = morph2 ? matchLines(prev2, prev!) : new Map<number, number>();
   const prevEdit = morph2 && isEdit(prev2!, prev!, prevMatched);
-  const prevChanged = (j: number) => prevEdit && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
-  const prevAny = morph2 && prev!.tints.length === 0 && !prev!.quiet && prev!.lines.some((_, j) => prevChanged(j));
+  const prevChanged = (j: number) =>
+    prev?.diff ? !!prev.diff[j] : prevEdit && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
+  const prevAny = (morph2 || !!prev?.diff) && prev!.tints.length === 0 && !prev!.quiet && prev!.lines.some((_, j) => prevChanged(j));
   const dimT = interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const lineLevel = (i: number) => {
     const target = anyChanged ? (changed(i) ? 1 : 0.4) : 1;
@@ -327,6 +330,56 @@ export const CodeSlide = ({
           the cloud
         </div>
       ) : null}
+      {/* a diff: removed lines in red with -, added lines in green with + */}
+      {step.diff
+        ? step.diff.map((d, i) => {
+            if (!d) return null;
+            const add = d.kind === "add";
+            const color = add ? "#2ea043" : "#f85149";
+            return (
+              <div key={`diff-${i}`} style={{ opacity: add ? newIn : 1 }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: g.left - 40,
+                    top: g.top + i * g.lh,
+                    width: g.blockW + 66,
+                    height: g.lh,
+                    background: add ? "rgba(46, 160, 67, 0.16)" : "rgba(248, 81, 73, 0.16)",
+                  }}
+                />
+                {d.start !== undefined && d.end !== undefined && d.end > d.start ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: g.left + d.start * g.cw - 3,
+                      top: g.top + i * g.lh + 3,
+                      width: (d.end - d.start) * g.cw + 6,
+                      height: g.lh - 6,
+                      borderRadius: 4,
+                      background: add ? "rgba(46, 160, 67, 0.4)" : "rgba(248, 81, 73, 0.4)",
+                    }}
+                  />
+                ) : null}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: g.left - 32,
+                    top: g.top + i * g.lh,
+                    height: g.lh,
+                    lineHeight: `${g.lh}px`,
+                    fontFamily: mono,
+                    fontSize: g.size,
+                    fontWeight: 700,
+                    color,
+                  }}
+                >
+                  {add ? "+" : "-"}
+                </div>
+              </div>
+            );
+          })
+        : null}
       {/* lines new or changed since the previous step in this sequence, in diff green */}
       {/* Steps that tint phases are about the phases, not the edit: no change highlight. */}
       {edit && step.tints.length === 0 && !step.quiet

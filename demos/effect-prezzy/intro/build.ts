@@ -12,6 +12,7 @@
 import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHighlighter } from "shiki";
+import { diffArrays } from "diff";
 import { API } from "tsgo/unstable/sync";
 import type { CodeError, CodeStep, IntroJson, IntroStep, Mark, Token } from "../shared/intro.ts";
 import { steps, type CodeSpec, type Find } from "./steps.ts";
@@ -246,6 +247,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     split || spec.beside ? 760 : spec.panel || spec.drill || spec.req || spec.bundle || erroring ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
+  widthFor.set(lines, available);
   return {
     kind: "code",
     title: spec.title,
@@ -273,6 +275,9 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     frames: spec.frames ?? 30,
   };
 };
+
+/** The width each code block was fitted to, so it can be refitted after removed lines are added. */
+const widthFor = new WeakMap<Token[][], number>();
 
 const resolved: IntroStep[] = [];
 for (const spec of steps) {
@@ -306,6 +311,92 @@ for (const spec of steps) {
   } else {
     resolved.push({ ...spec, notes: spec.notes ?? "", frames: spec.frames ?? 60 });
   }
+}
+
+// Diffs: when a file comes back changed, show what changed as -/+ lines.
+{
+  const lastOf = new Map<string, CodeStep>();
+  const textOf = (line: Token[]) => line.map((t) => t.text).join("");
+  steps.forEach((spec, i) => {
+    const step = resolved[i]!;
+    if (spec.kind !== "code" || step.kind !== "code") return;
+    const key = `${step.group}|${step.file ?? ""}`;
+    const prev = lastOf.get(key);
+    lastOf.set(key, step);
+    if (!prev || step.quiet || step.tints.length > 0 || step.beside) return;
+    const before = prev.lines.filter((l) => !prev.diff?.[prev.lines.indexOf(l)] || prev.diff[prev.lines.indexOf(l)]!.kind !== "del");
+    const parts = diffArrays(before.map(textOf), step.lines.map(textOf), {
+      comparator: (a: string, b: string) => a.trim() === b.trim(),
+    });
+    const same = parts.filter((p) => !p.added && !p.removed).reduce((n, p) => n + p.value.filter((l: string) => l.trim()).length, 0);
+    const changes = parts.some((p) => (p.added || p.removed) && p.value.some((l: string) => l.trim()));
+    // Only an edit: when most of the code is new, it's a different snippet.
+    if (!changes || same < before.filter((l) => textOf(l).trim()).length / 2) return;
+    const lines: Token[][] = [];
+    const diff: NonNullable<CodeStep["diff"]> = [];
+    const remap = new Map<number, number>();
+    let b = 0;
+    let a = 0;
+    for (let k = 0; k < parts.length; k++) {
+      const part = parts[k]!;
+      if (!part.added && !part.removed) {
+        for (let n = 0; n < part.count!; n++) (remap.set(a, lines.length), lines.push(step.lines[a++]!), diff.push(null), b++);
+      } else if (part.removed) {
+        const next = parts[k + 1];
+        const rewritten = next?.added && next.count === part.count ? next : undefined;
+        const spans: { start: number; end: number }[] = [];
+        for (let n = 0; n < part.count!; n++) {
+          const old = before[b + n]!;
+          if (rewritten) {
+            // The part of the line that changed, when it's a small edit.
+            const x = textOf(old);
+            const y = textOf(step.lines[a + n]!);
+            let pre = 0;
+            while (pre < x.length && pre < y.length && x[pre] === y[pre]) pre++;
+            let suf = 0;
+            while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
+            spans.push({ start: pre, end: y.length - suf });
+            const small = pre + suf >= Math.max(x.length, y.length) * 0.4;
+            if (textOf(old).trim()) (lines.push(old), diff.push({ kind: "del", ...(small ? { start: pre, end: x.length - suf } : {}) }));
+          } else if (textOf(old).trim()) (lines.push(old), diff.push({ kind: "del" }));
+        }
+        b += part.count!;
+        if (rewritten) {
+          for (let n = 0; n < rewritten.count!; n++) {
+            const x = textOf(before[b - part.count! + n]!);
+            const y = textOf(step.lines[a]!);
+            const { start, end } = spans[n]!;
+            const small = y.length - (end - start) >= Math.max(x.length, y.length) * 0.4;
+            remap.set(a, lines.length);
+            lines.push(step.lines[a++]!);
+            diff.push({ kind: "add", ...(small ? { start, end } : {}) });
+          }
+          k++;
+        }
+      } else {
+        for (let n = 0; n < part.count!; n++) {
+          const line = step.lines[a]!;
+          remap.set(a++, lines.length);
+          lines.push(line);
+          diff.push(textOf(line).trim() ? { kind: "add" } : null);
+        }
+      }
+    }
+    // Everything that points at a line now points at where that line moved.
+    const at = (n: number) => remap.get(n) ?? n;
+    const available = widthFor.get(step.lines) ?? 1560;
+    step.marks = step.marks.map((m) => ({ ...m, line: at(m.line), ...(m.toLine !== undefined ? { toLine: at(m.toLine) } : {}) }));
+    if (step.focus) step.focus = { from: at(step.focus.from), to: at(step.focus.to) };
+    if (step.error) step.error = { ...step.error, line: at(step.error.line) };
+    step.links = step.links?.map((l) => ({ ...l, from: { ...l.from, line: at(l.from.line) } }));
+    step.diagramLinks = step.diagramLinks?.map((l) => ({ ...l, from: { ...l.from, line: at(l.from.line) } }));
+    step.lines = lines;
+    step.diff = diff;
+    if (!spec.fontSize) {
+      const longest = Math.max(...lines.map((l) => textOf(l).length));
+      step.fontSize = Math.min(step.fontSize, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55)));
+    }
+  });
 }
 
 // One size per sequence: a snippet keeps its size as panels and marks come and go.
