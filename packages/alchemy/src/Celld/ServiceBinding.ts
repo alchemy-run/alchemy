@@ -19,8 +19,11 @@ export interface ServiceBindingOptions {
   bindingName?: string;
 }
 
-/** A fetch-only service client; no native RPC, connect or stub transfer surface. */
-export type ServiceFetch = Fetcher["fetch"];
+/** An Effect fetch client with its native capability for Worker Loader interop. */
+export type ServiceFetch = Fetcher["fetch"] & {
+  /** Resolve the native binding during a request for loader env, tails, or outbound routing. */
+  readonly raw: NativeFetcher;
+};
 
 export interface Fetch extends Binding.Service<
   Fetch,
@@ -48,6 +51,18 @@ export interface Fetch extends Binding.Service<
  * }) };
  * ```
  * Provide `Celld.FetchBinding` on the caller Worker's initialization effect.
+ *
+ * ### Passing Native Capabilities
+ * **Example:** Supply a tail Worker to dynamically loaded code
+ * ```typescript
+ * const tail = yield* Celld.Fetch(logs);
+ * // Within a request scope:
+ * const loaded = yield* loader.load({ ...source, tails: [tail.raw] });
+ * ```
+ * The `raw` getter retains the native capability's identity. Read it during a
+ * request and pass it directly to loader tails, env, or globalOutbound.
+ * Include the logs Worker in the same Application's workers list and implement
+ * its `tail(events: readonly Celld.TailEvent[])` handler as an Effect.
  *
  * @binding
  * @product Celld
@@ -92,14 +107,19 @@ export const FetchBinding = Layer.effect(
           });
         }
       }
-      return fromNativeFetcher({
-        fetch: (request, init) => {
-          const native = env[name] as NativeFetcher | undefined;
-          if (!native || typeof native.fetch !== "function")
-            throw new Error(`Missing Celld service binding '${name}'`);
-          return native.fetch(request, init);
-        },
+      const native = () => {
+        const binding = env[name] as NativeFetcher | undefined;
+        if (!binding || typeof binding.fetch !== "function")
+          throw new Error(`Missing Celld service binding '${name}'`);
+        return binding;
+      };
+      const fetch = fromNativeFetcher({
+        fetch: (request, init) => native().fetch(request, init),
       }).fetch;
+      return yield* Effect.sync(
+        () =>
+          Object.defineProperty(fetch, "raw", { get: native }) as ServiceFetch,
+      );
     });
   }),
 );

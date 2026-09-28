@@ -12,7 +12,10 @@ import * as Binding from "../Binding.ts";
 import type { WorkerBuildOptions } from "../Cloudflare/Workers/Sources/Rolldown.ts";
 import { WorkerBundle } from "../Cloudflare/Workers/Sources/Rolldown.ts";
 import type { Request } from "../Cloudflare/Workers/Request.ts";
-import type { WorkerExecutionContext } from "../Cloudflare/Workers/WorkerRuntime.ts";
+import {
+  isWorkerEvent,
+  type WorkerExecutionContext,
+} from "../Cloudflare/Workers/WorkerRuntime.ts";
 import type { Main, MainRpc } from "../Platform.ts";
 import type { Self } from "../Self.ts";
 import type { WorkerEnvironment } from "../Workers/Worker.ts";
@@ -32,6 +35,7 @@ import { RpcCallError, makeFetchRpcStub, serveRpc, type Rpc } from "../Rpc.ts";
 import { packEnvValue } from "../RuntimeContext.ts";
 import { Stack } from "../Stack.ts";
 import { isDurableObjectHost } from "../Workers/DurableObject.ts";
+import { dispatchRpcMethod } from "../Workers/WorkerBridge.ts";
 import { DEFAULT_CELLD_VERSION } from "./RuntimeVersion.ts";
 import { CurrentFleet } from "./FleetContext.ts";
 import { FleetStorage } from "./FleetStorage.ts";
@@ -581,10 +585,18 @@ export const Worker: CelldWorkerClass = Platform(CelldWorkerTypeId, {
         handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
         options?: { shape?: Record<string, unknown> },
       ) =>
-        base.serve(
-          serveRpc(options?.shape ?? {}, safeHttpEffect(handler)),
-          options,
-        ),
+        Effect.gen(function* () {
+          const shape = options?.shape ?? {};
+          if (typeof shape.tail === "function") {
+            yield* base.listen<unknown, Req>((event) => {
+              if (!isWorkerEvent(event) || event.type !== "tail") return;
+              return dispatchRpcMethod(shape, "tail", [event.input]).pipe(
+                Effect.orDie,
+              );
+            });
+          }
+          yield* base.serve(serveRpc(shape, safeHttpEffect(handler)), options);
+        }),
       durableObjectBinding,
       durableObjectStub,
       foldProps: (props: Record<string, unknown>) => {

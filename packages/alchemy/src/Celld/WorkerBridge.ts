@@ -115,7 +115,7 @@ export const makeCelldWorkerBridge = (
   });
 
   const dispatch = (
-    method: "queue" | "scheduled",
+    method: "queue" | "scheduled" | "tail",
     input: unknown,
     env: Record<string, unknown>,
     ctx: unknown,
@@ -129,6 +129,8 @@ export const makeCelldWorkerBridge = (
 
   return {
     // Native events bypass the HTTP gateway and its RPC authentication guard.
+    tail: (events: unknown, env: Record<string, unknown>, ctx: unknown) =>
+      dispatch("tail", events, env, ctx),
     queue: (batch: unknown, env: Record<string, unknown>, ctx: unknown) =>
       dispatch("queue", batch, env, ctx),
     scheduled: (

@@ -115,6 +115,7 @@ type Equal<A, B> =
     ? true
     : false;
 export type ServiceContracts = [
+  Assert<Equal<ServiceFetch["raw"], NativeFetcher>>,
   Assert<Equal<Effect.Services<ReturnType<ServiceFetch>>, RuntimeContext>>,
   Assert<Equal<"increment" extends keyof ServiceFetch ? true : false, false>>,
 ];
@@ -222,6 +223,7 @@ describe(
               HttpClientRequest.bodyText("payload"),
             ),
           );
+          expect(fetchApi.raw).toBe(env.Api);
           expect(response.status).toBe(201);
           expect(response.headers["x-response"]).toBe("yes");
           expect(yield* response.text).toBe("native response");

@@ -841,7 +841,7 @@ describe(
     );
 
     test.live(
-      "native queue and scheduled forwarding bypasses gateway auth and selects each worker",
+      "native queue, scheduled, and tail forwarding bypasses gateway auth and selects each worker",
       () =>
         Effect.gen(function* () {
           class Base {
@@ -875,6 +875,12 @@ describe(
                       }),
                       Context.empty(),
                     ],
+                    tail: (input: unknown) => [
+                      Effect.sync(() => {
+                        observed.push([name, "tail", input]);
+                      }),
+                      Context.empty(),
+                    ],
                   },
                 }),
               },
@@ -895,10 +901,13 @@ describe(
           yield* Effect.promise(() => a.queue("batch-a", {}, ctx));
           yield* Effect.promise(() => b.queue("batch-b", {}, ctx));
           yield* Effect.promise(() => a.scheduled("cron", {}, ctx));
+          const events = [{ outcome: "ok", logs: [] }];
+          yield* Effect.promise(() => b.tail(events, {}, ctx));
           expect(observed).toEqual([
             ["a", "queue", "batch-a"],
             ["b", "queue", "batch-b"],
             ["a", "scheduled", "cron"],
+            ["b", "tail", events],
           ]);
           yield* Effect.forEach(pending, (promise) =>
             Effect.promise(() => promise),

@@ -134,6 +134,11 @@ The host rejects changes to an existing fleet's runtime version or image during
 an ordinary deployment. Preserve the backing data and plan a separate maintenance
 operation before upgrading an existing fleet.
 
+The retained bootstrap descriptor also pins the runtime version. Alchemy has no
+automated migration for that descriptor: stopping the fleet alone does not make
+a normal deployment accept an older installation. A verified maintenance
+migration must preserve ownership, publication pointers, and application data.
+
 The [Celld 0.6.0 release notes](https://github.com/denoland/celld/releases/tag/v0.6.0)
 require stopping the entire fleet when upgrading from 0.5.1 with fleet durability;
 bucket durability supports a rolling update upstream. Alchemy's host keeps its

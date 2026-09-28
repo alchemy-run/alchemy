@@ -1,5 +1,13 @@
+import type { Fetcher, NativeFetcher } from "@/Celld/Fetcher.ts";
+import type {
+  NativeWorkerEntrypoint,
+  WorkerClassOptions,
+  WorkerEntrypointOptions,
+  WorkerInvocationLimits,
+} from "@/Celld/WorkerEntrypoint.ts";
 import {
   WorkerLoader,
+  type LoadedWorker,
   fromNativeWorkerLoader,
   type NativeDurableObjectClass,
   type NativeLoadedWorker,
@@ -31,6 +39,70 @@ export type WorkerLoaderCodeContract = [
   Assert<
     { wasm: Uint8Array<ArrayBuffer> } extends WorkerLoaderModule ? true : false
   >,
+  Assert<
+    Exclude<keyof WorkerInvocationLimits, "cpuMs" | "subRequests"> extends never
+      ? true
+      : false
+  >,
+  Assert<
+    "cpuMs" | "subRequests" extends keyof WorkerInvocationLimits ? true : false
+  >,
+  Assert<
+    "allowExperimental" extends keyof WorkerLoaderWorkerCode ? false : true
+  >,
+  Assert<
+    NativeFetcher[] extends NonNullable<WorkerLoaderWorkerCode["tails"]>
+      ? true
+      : false
+  >,
+  Assert<
+    Fetcher[] extends NonNullable<WorkerLoaderWorkerCode["tails"]>
+      ? false
+      : true
+  >,
+  Assert<
+    string[] extends NonNullable<WorkerLoaderWorkerCode["tails"]> ? false : true
+  >,
+  Assert<
+    Exclude<keyof WorkerClassOptions, "props"> extends never ? true : false
+  >,
+  Assert<
+    Exclude<keyof WorkerEntrypointOptions, "props" | "limits"> extends never
+      ? true
+      : false
+  >,
+  Assert<"limits" extends keyof WorkerEntrypointOptions ? true : false>,
+  Assert<
+    "limits" extends keyof Parameters<NativeWorkerEntrypoint>[0] ? false : true
+  >,
+  Assert<
+    "limits" extends keyof NonNullable<
+      Parameters<NativeLoadedWorker["getDurableObjectClass"]>[1]
+    >
+      ? false
+      : true
+  >,
+  Assert<
+    "limits" extends keyof NonNullable<
+      Parameters<LoadedWorker["getDurableObjectClass"]>[1]
+    >
+      ? false
+      : true
+  >,
+  Assert<
+    "limits" extends keyof NonNullable<
+      Parameters<NativeLoadedWorker["getEntrypoint"]>[1]
+    >
+      ? true
+      : false
+  >,
+  Assert<
+    "limits" extends keyof NonNullable<
+      Parameters<LoadedWorker["getEntrypoint"]>[1]
+    >
+      ? true
+      : false
+  >,
 ];
 
 class Value extends Context.Service<Value, string>()("Loader.Test.Value") {}
@@ -38,7 +110,10 @@ class Value extends Context.Service<Value, string>()("Loader.Test.Value") {}
 const fixture = () =>
   Effect.sync(() => {
     const calls: string[] = [];
-    const selections: unknown[] = [];
+    const selections: {
+      name?: string | null;
+      options?: WorkerClassOptions | WorkerEntrypointOptions;
+    }[] = [];
     const loadedCodes: WorkerLoaderWorkerCode[] = [];
     const callbacks: (() =>
       | WorkerLoaderWorkerCode
@@ -103,12 +178,16 @@ describe(
           const loader = fromNativeWorkerLoader(() => native);
           expect(calls).toEqual([]);
           const props = yield* Effect.sync(() => new Map([["count", 1]]));
+          const options: WorkerEntrypointOptions = {
+            props,
+            limits: { cpuMs: 20, subRequests: 2 },
+          };
           yield* Effect.gen(function* () {
             const worker = yield* loader.load(code);
             expect("fetch" in worker).toBe(false);
             const entrypoint = yield* worker.getEntrypoint<{
               echo(value: string): Promise<string>;
-            }>("Tool", { props });
+            }>("Tool", options);
             expect(yield* entrypoint.echo("hello")).toBe("hello");
             expect(
               yield* (yield* entrypoint.fetch(
@@ -118,11 +197,21 @@ describe(
             expect(
               yield* worker.getDurableObjectClass("Facet", { props }),
             ).toBe(token);
-            const invalid = yield* Effect.result(worker.getEntrypoint("bad"));
+            const invalid = yield* Effect.result(
+              worker.getEntrypoint("bad", options),
+            );
             expect(Result.isFailure(invalid) && invalid.failure._tag).toBe(
               "Celld.WorkerLoaderError",
             );
-            expect(selections[0]).toEqual({ name: "Tool", options: { props } });
+            expect(Result.isFailure(invalid) && invalid.failure.cause).toEqual(
+              new TypeError("Unsupported selection"),
+            );
+            expect(selections[0]).toEqual({ name: "Tool", options });
+            expect(selections[0]!.options).toBe(options);
+            expect(selections[1]).toEqual({
+              name: "Facet",
+              options: { props },
+            });
           }).pipe(Effect.scoped);
           expect(calls.filter((call) => call === "dispose")).toHaveLength(1);
         }).pipe(Effect.provide(RuntimeContext.phantom)),
@@ -147,6 +236,96 @@ describe(
           expect(loadedCodes[0]!.modules["module.wasm"]).toEqual({ wasm });
           yield* loader.get("wasm", () => source);
           expect(yield* Effect.sync(callbacks[0]!)).toBe(source);
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect(
+      "passes limits and native tails unchanged through load and lazy get",
+      () =>
+        Effect.gen(function* () {
+          const { native, loadedCodes, callbacks, selections } =
+            yield* fixture();
+          const loader = fromNativeWorkerLoader(() => native);
+          const tail: NativeFetcher = {
+            fetch: () =>
+              Effect.runPromise(Effect.sync(() => new Response("tail"))),
+          };
+          const source: WorkerLoaderWorkerCode = {
+            ...code,
+            limits: { cpuMs: 50, subRequests: 10 },
+            tails: [tail],
+          };
+          const options: WorkerEntrypointOptions = {
+            limits: { cpuMs: 100, subRequests: 0 },
+          };
+          yield* Effect.gen(function* () {
+            const worker = yield* loader.load(source);
+            yield* worker.getEntrypoint(null, options);
+          }).pipe(Effect.scoped);
+          expect(loadedCodes[0]).toBe(source);
+          expect(loadedCodes[0]!.limits).toBe(source.limits);
+          expect(loadedCodes[0]!.tails).toBe(source.tails);
+          expect(loadedCodes[0]!.tails![0]).toBe(tail);
+          expect(selections[0]!.options).toBe(options);
+          expect(options.limits).toEqual({ cpuMs: 100, subRequests: 0 });
+          let evaluated = 0;
+          const worker = yield* loader.get("limited", () => {
+            evaluated++;
+            return source;
+          });
+          expect(evaluated).toBe(0);
+          yield* worker.getEntrypoint("Tool", options);
+          expect(selections[1]!.options).toBe(options);
+          expect(yield* Effect.sync(callbacks[0]!)).toBe(source);
+          expect(evaluated).toBe(1);
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect(
+      "preserves native invocation failures as RPC errors with limits and tails",
+      () =>
+        Effect.gen(function* () {
+          const cause = new Error("Native invocation limit exceeded");
+          const reject = () =>
+            Effect.runPromise(Effect.void).then(() => {
+              throw cause;
+            });
+          const entrypoint = { fetch: reject, invoke: reject };
+          const { native, calls } = yield* fixture();
+          const loader = fromNativeWorkerLoader(() => ({
+            ...native,
+            load: (source) => ({
+              ...native.load(source),
+              getEntrypoint: () => entrypoint,
+            }),
+          }));
+          yield* Effect.gen(function* () {
+            const worker = yield* loader.load({
+              ...code,
+              limits: { cpuMs: 1, subRequests: 0 },
+              tails: [entrypoint],
+            });
+            const selected = yield* worker.getEntrypoint<{
+              invoke(): Promise<void>;
+            }>(null, { limits: { cpuMs: 1 } });
+            const fetch = yield* Effect.result(
+              selected.fetch(HttpClientRequest.get("https://loaded/")),
+            );
+            expect(Result.isFailure(fetch) && fetch.failure._tag).toBe(
+              "RpcCallError",
+            );
+            expect(
+              Result.isFailure(fetch) &&
+                fetch.failure._tag === "RpcCallError" &&
+                fetch.failure.cause,
+            ).toBe(cause);
+            const rpc = yield* Effect.result(selected.invoke());
+            expect(Result.isFailure(rpc) && rpc.failure._tag).toBe(
+              "RpcCallError",
+            );
+            expect(Result.isFailure(rpc) && rpc.failure.cause).toBe(cause);
+          }).pipe(Effect.scoped);
+          expect(calls.filter((call) => call === "dispose")).toHaveLength(1);
         }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
 

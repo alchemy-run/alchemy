@@ -103,6 +103,7 @@ export {
 } from "./CronEventSource.ts";
 export * from "./WorkerLoader.ts";
 export * from "./WorkerEntrypoint.ts";
+export type { TailEvent } from "./TailEvent.ts";
 export type { Fetcher } from "./Fetcher.ts";
 export {
   Fetch,

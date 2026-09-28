@@ -7,8 +7,10 @@ import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { NativeFetcher } from "./Fetcher.ts";
 import {
   fromNativeWorkerEntrypoint,
+  type WorkerClassOptions,
   type WorkerEntrypoint,
   type WorkerEntrypointOptions,
+  type WorkerInvocationLimits,
 } from "./WorkerEntrypoint.ts";
 
 /** A loader operation or synchronous selector failed. */
@@ -38,6 +40,18 @@ export interface WorkerLoaderWorkerCode {
   env?: Record<string, unknown>;
   /** Null disables outbound access; a native service/loopback Fetcher routes it. */
   globalOutbound?: NativeFetcher | null;
+  /**
+   * Per-invocation CPU and subrequest limits enforced by native Celld.
+   * getEntrypoint() can further restrict, but cannot raise, these limits.
+   */
+  limits?: WorkerInvocationLimits;
+  /**
+   * Native Service Binding Fetchers receiving tail events after loaded fetch
+   * invocations. Native Celld delivers tails after the response is available;
+   * a tail failure does not change the response. Effect Fetcher wrappers are
+   * not native capabilities and must not be passed here.
+   */
+  tails?: NativeFetcher[];
 }
 
 declare const durableObjectClassBrand: unique symbol;
@@ -53,7 +67,7 @@ export interface NativeLoadedWorker {
   ): NativeFetcher;
   getDurableObjectClass(
     name?: string | null,
-    options?: WorkerEntrypointOptions,
+    options?: WorkerClassOptions,
   ): NativeDurableObjectClass;
   /** Schedules native eviction; does not wait for it to finish. */
   dispose(): void;
@@ -75,7 +89,7 @@ export interface LoadedWorker {
   ): Effect.Effect<WorkerEntrypoint<Shape>, WorkerLoaderError, RuntimeContext>;
   getDurableObjectClass(
     name?: string | null,
-    options?: WorkerEntrypointOptions,
+    options?: WorkerClassOptions,
   ): Effect.Effect<NativeDurableObjectClass, WorkerLoaderError, RuntimeContext>;
   /** Native disposal is fire-and-forget; disposing a named worker does not clear the name cache. */
   dispose(): Effect.Effect<void, WorkerLoaderError, RuntimeContext>;
@@ -168,8 +182,10 @@ export const fromNativeWorkerLoader = (
 /**
  * A native worker_loader binding for Celld V8. Loaded workers support fetch,
  * direct single-method RPC, and facet class tokens, not pipelined RPC or
- * introspection. Native code-size limits apply; this adapter does not expose
- * configurable resource limits, tails, or experimental flags.
+ * introspection. Native Celld enforces code-size limits and the optional
+ * per-invocation cpuMs/subRequests limits. WorkerCode can also supply native
+ * Service Binding Fetchers as tails; experimental flags are unsupported.
+ * Class and ctx.exports loopback selectors accept props only, not limits.
  *
  * ### Loading a Worker
  * **Example:** Register at init, then load within a request scope
@@ -183,6 +199,26 @@ export const fromNativeWorkerLoader = (
  * });
  * const entrypoint = yield* handle.getEntrypoint();
  * ```
+ *
+ * ### Limiting Invocations and Delivering Tails
+ * **Example:** Load with a native tail capability and stricter entrypoint limits
+ * ```typescript
+ * // Bind the same-fleet logs Worker at initialization with Celld.FetchBinding.
+ * const tail = yield* Celld.Fetch(logs);
+ * // Load within a request; source is a WorkerLoaderWorkerCode.
+ * const handle = yield* loader.load({
+ *   ...source,
+ *   limits: { cpuMs: 50, subRequests: 10 },
+ *   tails: [tail.raw],
+ * });
+ * const entrypoint = yield* handle.getEntrypoint("Tool", {
+ *   props: { tenant: "example" },
+ *   limits: { cpuMs: 20, subRequests: 2 },
+ * });
+ * ```
+ * Native Celld uses the lower value for each limit set on both the code and
+ * entrypoint. Limits apply to fetch and RPC; tails report fetch invocations.
+ * Tail delivery failures do not change the loaded Worker's response.
  *
  * @binding
  * @product Celld

@@ -347,6 +347,89 @@ export default class NativeFeatures extends Worker<NativeFeatures>()(
           return yield* HttpServerResponse.json({ ok: true });
         }
         if (route === "service") return yield* service(request);
+        if (route === "loader" && action === "tails") {
+          const loaded = yield* loader.load({
+            compatibilityDate: "2026-09-01",
+            mainModule: "main.js",
+            modules: {
+              "main.js": `export default {
+                async fetch(request) {
+                  const url = new URL(request.url);
+                  const body = await request.text();
+                  console.log("native-tail-request", url.searchParams.get("id"), body);
+                  console.warn("native-tail-warning");
+                  if (url.searchParams.get("mode") === "worker-failure")
+                    throw new Error("native-loaded-worker-failure");
+                  return new Response("native-tail-response:" + body, {
+                    status: 201, headers: { "x-native-loaded": "yes" }
+                  });
+                }
+              };`,
+            },
+            globalOutbound: null,
+            tails: [service.raw],
+          });
+          const entrypoint = yield* loaded.getEntrypoint();
+          return yield* entrypoint.fetch(request);
+        }
+        if (route === "loader" && action === "limits") {
+          const number = (name: string) =>
+            url.searchParams.has(name)
+              ? Number(url.searchParams.get(name))
+              : undefined;
+          const loaded = yield* loader.load({
+            compatibilityDate: "2026-09-01",
+            mainModule: "main.js",
+            modules: {
+              "main.js": `import { WorkerEntrypoint } from "cloudflare:workers";
+              export default class Limited extends WorkerEntrypoint {
+                async work(count) {
+                  const tokens = [];
+                  for (let i = 0; i < Math.min(count, 3); i++) {
+                    const response = await this.env.service.fetch("https://service.test/budget", {
+                      headers: { "x-native-token": this.ctx.props.token }
+                    });
+                    tokens.push((await response.json()).token);
+                  }
+                  return { count: tokens.length, tokens };
+                }
+                cpu() {
+                  let checksum = 0;
+                  for (let i = 0; i < 20000000; i++) checksum += Math.sqrt(i);
+                  return { finite: true, checksum };
+                }
+                async fetch(request) {
+                  const url = new URL(request.url);
+                  return Response.json(url.searchParams.has("cpu")
+                    ? this.cpu() : await this.work(Number(url.searchParams.get("count"))));
+                }
+              }`,
+            },
+            env: { service: service.raw },
+            globalOutbound: null,
+            limits: {
+              subRequests: number("codeSubrequests"),
+              cpuMs: number("codeCpu"),
+            },
+          });
+          const entrypoint = yield* loaded.getEntrypoint<{
+            work(count: number): { count: number; tokens: string[] };
+            cpu(): { finite: boolean; checksum: number };
+          }>(null, {
+            props: { token: url.searchParams.get("token") },
+            limits: {
+              subRequests: number("selectorSubrequests"),
+              cpuMs: number("selectorCpu"),
+            },
+          });
+          if (url.searchParams.has("rpc"))
+            return yield* HttpServerResponse.json(
+              url.searchParams.has("cpu")
+                ? yield* entrypoint.cpu()
+                : yield* entrypoint.work(number("count") ?? 0),
+            );
+          return yield* entrypoint.fetch(request);
+        }
         if (route === "loader") {
           const code = {
             compatibilityDate: "2026-09-01",

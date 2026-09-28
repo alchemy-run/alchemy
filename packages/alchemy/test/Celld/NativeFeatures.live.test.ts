@@ -75,6 +75,36 @@ const Observation = Schema.NullOr(
     scheduledTime: Schema.optional(Schema.Number),
   }),
 );
+const TailObservation = Schema.NullOr(
+  Schema.Struct({
+    scriptName: Schema.String,
+    eventTimestamp: Schema.Number,
+    event: Schema.Struct({
+      request: Schema.Struct({
+        cf: Schema.Struct({}),
+        headers: Schema.Struct({ "x-native-tail": Schema.String }),
+        method: Schema.String,
+        url: Schema.String,
+      }),
+      response: Schema.NullOr(Schema.Struct({ status: Schema.Number })),
+    }),
+    logs: Schema.Array(
+      Schema.Struct({
+        timestamp: Schema.Number,
+        level: Schema.String,
+        message: Schema.Array(Schema.String),
+      }),
+    ),
+    exceptions: Schema.Array(
+      Schema.Struct({
+        timestamp: Schema.Number,
+        name: Schema.String,
+        message: Schema.String,
+      }),
+    ),
+    outcome: Schema.String,
+  }),
+);
 const Status = Schema.Struct({
   status: Schema.String,
   output: Schema.optional(
@@ -277,6 +307,13 @@ describe.skipIf(!enabled)(
                 news: {
                   ...common,
                   main: entries.service,
+                  bindings: [
+                    {
+                      type: "kv_namespace",
+                      name: "OBSERVATIONS",
+                      namespaceId: kv.namespaceId,
+                    },
+                  ],
                 },
               });
               const rootArtifacts = yield* Effect.sync(() =>
@@ -732,6 +769,196 @@ describe.skipIf(!enabled)(
             });
         }).pipe(Effect.provide(services)),
     );
+
+    for (const mode of ["success", "worker-failure", "tail-failure"] as const) {
+      test.live(
+        `native loader tails report ${mode} and close the Effect tail request scope`,
+        () =>
+          Effect.gen(function* () {
+            const id = `tail-${mode}-${runId}`;
+            const path = `/loader/tails?id=${id}&mode=${mode}`;
+            const started = yield* Effect.sync(() => Date.now());
+            const http = yield* HttpClient.HttpClient;
+            const response = yield* http.post(`${workerUrl}${path}`, {
+              body: HttpBody.text("native-tail-body"),
+              headers: { "x-native-tail": id },
+            });
+            if (mode === "worker-failure") {
+              expect(response.status).toBe(500);
+              expect(yield* response.text).toContain(
+                "native-loaded-worker-failure",
+              );
+            } else {
+              expect(response.status).toBe(201);
+              expect(response.headers["x-native-loaded"]).toBe("yes");
+              expect(yield* response.text).toBe(
+                "native-tail-response:native-tail-body",
+              );
+            }
+            const event = yield* json(
+              `/observe/${encodeURIComponent(`tail:${id}`)}`,
+            ).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(TailObservation)),
+              Effect.repeat({
+                until: (event) => event !== null,
+                schedule: Schedule.spaced("500 millis"),
+                times: 10,
+              }),
+            );
+            if (!event)
+              return yield* Effect.die("Native tail report was not persisted");
+            expect(event.scriptName).toBeTruthy();
+            expect(event.eventTimestamp).toBeGreaterThanOrEqual(started);
+            expect(event.event.request).toEqual({
+              cf: {},
+              headers: { "x-native-tail": id },
+              method: "POST",
+              url: `${workerUrl}${path}`,
+            });
+            expect(event.event.response).toEqual(
+              mode === "worker-failure" ? null : { status: 201 },
+            );
+            expect(event.outcome).toBe(
+              mode === "worker-failure" ? "exception" : "ok",
+            );
+            expect(event.logs).toEqual([
+              {
+                timestamp: expect.any(Number),
+                level: "log",
+                message: [`native-tail-request ${id} native-tail-body`],
+              },
+              {
+                timestamp: expect.any(Number),
+                level: "warn",
+                message: ["native-tail-warning"],
+              },
+            ]);
+            // Native reports and console records sample different clocks.
+            for (const log of event.logs)
+              expect(
+                Math.abs(log.timestamp - event.eventTimestamp),
+              ).toBeLessThan(1_000);
+            if (mode === "worker-failure") {
+              expect(event.exceptions).toHaveLength(1);
+              expect(event.exceptions[0]?.name).toBe("Error");
+              expect(event.exceptions[0]?.message).toContain(
+                "native-loaded-worker-failure",
+              );
+              expect(
+                Math.abs(event.exceptions[0]!.timestamp - event.eventTimestamp),
+              ).toBeLessThan(1_000);
+            } else expect(event.exceptions).toEqual([]);
+            expect(
+              yield* json(
+                `/observe/${encodeURIComponent(`tail:closed:${id}`)}`,
+              ).pipe(
+                Effect.repeat({
+                  until: (value) => value !== null,
+                  schedule: Schedule.spaced("500 millis"),
+                  times: 10,
+                }),
+              ),
+            ).toEqual({ closed: true });
+            yield* Effect.log({
+              nativeTailProof: { mode, event, closed: true },
+            });
+          }).pipe(Effect.provide(services)),
+        { timeout: 30_000 },
+      );
+    }
+
+    for (const rpc of [false, true]) {
+      test.live(
+        `native loader ${rpc ? "direct RPC" : "fetch"} enforces code and selector subrequest budgets using the lower limit`,
+        () =>
+          Effect.gen(function* () {
+            const cases = [
+              { query: "codeSubrequests=0&count=1", limit: 0 },
+              { query: "selectorSubrequests=0&count=1", limit: 0 },
+              {
+                query: "codeSubrequests=1&selectorSubrequests=3&count=2",
+                limit: 1,
+              },
+              {
+                query: "codeSubrequests=3&selectorSubrequests=1&count=2",
+                limit: 1,
+              },
+              {
+                query: "codeSubrequests=0&selectorSubrequests=0&count=0",
+                count: 0,
+              },
+              {
+                query: "codeSubrequests=1&selectorSubrequests=3&count=1",
+                count: 1,
+              },
+              {
+                query: "codeSubrequests=3&selectorSubrequests=1&count=1",
+                count: 1,
+              },
+            ];
+            for (const scenario of cases) {
+              const response = yield* get(
+                `/loader/limits?${scenario.query}&token=${runId}${rpc ? "&rpc" : ""}`,
+              );
+              if (scenario.limit !== undefined) {
+                expect(response.status).toBe(500);
+                expect(yield* response.text).toContain(
+                  `Worker exceeded subrequest limit of ${scenario.limit}`,
+                );
+              } else {
+                expect(response.status).toBe(200);
+                expect(yield* response.json).toEqual({
+                  count: scenario.count,
+                  tokens: scenario.count === 0 ? [] : [runId],
+                });
+              }
+              yield* Effect.log({
+                nativeSubrequestProof: {
+                  rpc,
+                  ...scenario,
+                  status: response.status,
+                },
+              });
+            }
+          }).pipe(Effect.provide(services)),
+        { timeout: 45_000 },
+      );
+
+      test.live(
+        `native loader ${rpc ? "direct RPC" : "fetch"} enforces CPU budgets on finite work`,
+        () =>
+          Effect.gen(function* () {
+            const suffix = `&cpu${rpc ? "&rpc" : ""}`;
+            const allowed = yield* json(
+              `/loader/limits?codeCpu=5000&selectorCpu=5000${suffix}`,
+            );
+            expect(allowed).toMatchObject({
+              finite: true,
+              checksum: expect.any(Number),
+            });
+            for (const limits of [
+              "codeCpu=1",
+              "selectorCpu=1",
+              "codeCpu=1&selectorCpu=5000",
+              "codeCpu=5000&selectorCpu=1",
+            ]) {
+              const response = yield* get(`/loader/limits?${limits}${suffix}`);
+              expect(response.status).toBe(500);
+              expect(yield* response.text).toContain(
+                "Worker exceeded CPU limit of 1 ms",
+              );
+              yield* Effect.log({
+                nativeCpuProof: { rpc, limits, status: response.status },
+              });
+            }
+            expect(yield* json("/health")).toEqual({
+              runtime: "celld",
+              fixture: "native-features",
+            });
+          }).pipe(Effect.provide(services)),
+        { timeout: 45_000 },
+      );
+    }
 
     test.live(
       "captured SQL migrates native cells atomically and SQL-only publications retain identity and user data",
