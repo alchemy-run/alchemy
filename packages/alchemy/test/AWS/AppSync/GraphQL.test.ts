@@ -190,5 +190,13 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:appsync",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

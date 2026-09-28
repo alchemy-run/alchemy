@@ -796,6 +796,9 @@ layer(D1TestLayer)("D1 binding", (it) => {
 
       // Fill the original database with dummy data
       await fillDummyData(originalDb);
+      await originalDb.exec(
+        "INSERT INTO classrooms (id, capacity) VALUES ('positive_infinity', 9e999), ('negative_infinity', -9e999)",
+      );
 
       // Export the database schema and data
       const result = await originalDb
@@ -804,9 +807,23 @@ layer(D1TestLayer)("D1 binding", (it) => {
         .raw();
       const [dumpStatements] = result as [Array<string>];
       const dump = dumpStatements.join("\n");
+      expect(dump).toContain("9e999");
+      expect(dump).toContain("-9e999");
 
       // Import the dump into the mirror database
       await mirrorDb.exec(dump);
+      expect(
+        (
+          await mirrorDb
+            .prepare(
+              "SELECT capacity > 1e308 AS positive, capacity < -1e308 AS negative FROM classrooms WHERE id LIKE '%infinity' ORDER BY id",
+            )
+            .all()
+        ).results,
+      ).toEqual([
+        { positive: 0, negative: 1 },
+        { positive: 1, negative: 0 },
+      ]);
 
       // Verify that the schema and data in both databases are equal
       await isDatabaseEqual(originalDb, mirrorDb);

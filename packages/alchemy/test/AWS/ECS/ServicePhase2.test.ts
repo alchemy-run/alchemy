@@ -260,5 +260,16 @@ test.provider.skipIf(!!process.env.FAST)(
         ),
       ).toBe(false);
     }),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:applicationautoscaling",
+      "provider:aws:ec2",
+      "provider:aws:ecs",
+      "provider:aws:secretsmanager",
+      "provider:aws:ssm",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

@@ -91,6 +91,7 @@ test(
 
     expect(yield* Ref.get(ran)).toEqual(["loop"]);
   }),
+  { tags: ["unit", "local"] },
 );
 
 // Regression for #706: the generated container/instance entrypoint resolves the
@@ -114,6 +115,7 @@ test(
     yield* program;
     expect(yield* Ref.get(ran)).toBe(true);
   }),
+  { tags: ["unit", "local"] },
 );
 
 // Regression for #706: a hosted Platform program can `yield* Local.Host`
@@ -138,4 +140,5 @@ test(
 
     expect(plan.resources["MyHost"]?.action).toBe("create");
   }),
+  { tags: ["unit", "local"] },
 );

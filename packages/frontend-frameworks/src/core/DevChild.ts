@@ -119,6 +119,8 @@ const transformTypesFlags = (): Array<string> => {
 };
 
 export interface DevChildOptions {
+  /** Use Node from PATH for toolchains that cannot run under Bun. Requires native TypeScript support when running source modules. */
+  readonly runtime?: "node" | undefined;
   /** Framework name for error attribution (e.g. "solidstart", "waku"). */
   readonly framework: string;
   /** Bare module specifier the runner imports (see {@link DevChildPayload}). */
@@ -171,14 +173,21 @@ export const runDevChild = (
         options.callerUrl,
       ),
     );
-    const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+    const isBun =
+      options.runtime !== "node" &&
+      typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+    const executable = options.runtime === "node" ? "node" : process.execPath;
     const payload: DevChildPayload = {
       module: options.module,
       makeOptions: options.makeOptions,
       devOptions: options.devOptions,
     };
     const args = [
-      ...(isBun ? ["run"] : entry.endsWith(".ts") ? transformTypesFlags() : []),
+      ...(isBun
+        ? ["run"]
+        : entry.endsWith(".ts") && options.runtime !== "node"
+          ? transformTypesFlags()
+          : []),
       entry,
       JSON.stringify(payload),
     ];
@@ -186,7 +195,7 @@ export const runDevChild = (
     const handle = yield* Effect.acquireRelease(
       Effect.try({
         try: (): DevChildHandle => {
-          const child = NodeChildProcess.spawn(process.execPath, args, {
+          const child = NodeChildProcess.spawn(executable, args, {
             cwd: options.rootDir,
             stdio: ["ignore", "pipe", "pipe"],
             detached: false,
@@ -199,7 +208,7 @@ export const runDevChild = (
           return handle;
         },
         catch: fail(
-          `Failed to spawn the ${options.framework} dev child (${process.execPath})`,
+          `Failed to spawn the ${options.framework} dev child (${executable})`,
         ),
       }),
       ({ child }) =>

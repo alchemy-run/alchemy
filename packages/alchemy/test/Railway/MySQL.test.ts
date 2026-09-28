@@ -310,52 +310,104 @@ test.provider(
       );
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:mysql",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:variable",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Runtime fixture failures must not prevent the independent resource lifecycle test.
-describe("ConnectMySQL runtime integrations", () => {
-  const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-    providers: Railway.providers(),
-  });
+describe(
+  "ConnectMySQL runtime integrations",
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:mysql",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:variable",
+      "live",
+    ],
+  },
+  () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+      providers: Railway.providers(),
+    });
 
-  const fixture = beforeAll(deploy(FixtureStack), {
-    timeout: 120_000,
-  });
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-    timeout: 120_000,
-  });
+    const fixture = beforeAll(deploy(FixtureStack), {
+      timeout: 120_000,
+    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
+      timeout: 120_000,
+    });
 
-  test(
-    "a Service connects and SELECTs through ConnectMySQL",
-    Effect.gen(function* () {
-      const out = yield* fixture;
-      expect(out.serviceId).toEqual(expect.any(String));
-      expect(out.serviceId.length).toBeGreaterThan(0);
-      expect(out.url).toEqual(expect.any(String));
-      expect(out.url).toContain("up.railway.app");
+    test(
+      "a Service connects and SELECTs through ConnectMySQL",
+      Effect.gen(function* () {
+        const out = yield* fixture;
+        expect(out.serviceId).toEqual(expect.any(String));
+        expect(out.serviceId.length).toBeGreaterThan(0);
+        expect(out.url).toEqual(expect.any(String));
+        expect(out.url).toContain("up.railway.app");
 
-      const fetched = yield* distilled(
-        railway.service({ id: out.serviceId }, { id: true, deletedAt: true }),
-      );
-      expect(fetched.id).toEqual(out.serviceId);
-      expect(fetched.deletedAt).toBeNull();
+        const fetched = yield* distilled(
+          railway.service({ id: out.serviceId }, { id: true, deletedAt: true }),
+        );
+        expect(fetched.id).toEqual(out.serviceId);
+        expect(fetched.deletedAt).toBeNull();
 
-      const vars = yield* distilled(
-        readServiceVariables(out.projectId, out.environmentId, out.serviceId),
-      );
-      expect((vars[Railway.MYSQL_URL_SECRET] ?? "").length).toBeGreaterThan(0);
+        const vars = yield* distilled(
+          readServiceVariables(out.projectId, out.environmentId, out.serviceId),
+        );
+        expect((vars[Railway.MYSQL_URL_SECRET] ?? "").length).toBeGreaterThan(
+          0,
+        );
 
-      const client = yield* HttpClient.HttpClient;
-      const get = (path: string) =>
-        client.get(`${out.url}${path}`).pipe(
+        const client = yield* HttpClient.HttpClient;
+        const get = (path: string) =>
+          client.get(`${out.url}${path}`).pipe(
+            Effect.timeoutOrElse({
+              duration: "8 seconds",
+              orElse: () => Effect.fail(new NotReady({ status: 0 })),
+            }),
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? res.json.pipe(
+                    Effect.mapError(() => new NotReady({ status: res.status })),
+                  )
+                : Effect.fail(new NotReady({ status: res.status })),
+            ),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "NotReady" &&
+                (e.status === 0 ||
+                  e.status === 404 ||
+                  e.status === 502 ||
+                  e.status === 503),
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.upTo({ duration: "45 seconds" }),
+              ),
+              times: 10,
+            }),
+          );
+
+        const getText = client.get(out.url!).pipe(
           Effect.timeoutOrElse({
             duration: "8 seconds",
             orElse: () => Effect.fail(new NotReady({ status: 0 })),
           }),
           Effect.flatMap((res) =>
             res.status === 200
-              ? res.json.pipe(
+              ? res.text.pipe(
                   Effect.mapError(() => new NotReady({ status: res.status })),
                 )
               : Effect.fail(new NotReady({ status: res.status })),
@@ -374,47 +426,22 @@ describe("ConnectMySQL runtime integrations", () => {
           }),
         );
 
-      const getText = client.get(out.url!).pipe(
-        Effect.timeoutOrElse({
-          duration: "8 seconds",
-          orElse: () => Effect.fail(new NotReady({ status: 0 })),
-        }),
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text.pipe(
-                Effect.mapError(() => new NotReady({ status: res.status })),
-              )
-            : Effect.fail(new NotReady({ status: res.status })),
-        ),
-        Effect.retry({
-          while: (e) =>
-            e._tag === "NotReady" &&
-            (e.status === 0 ||
-              e.status === 404 ||
-              e.status === 502 ||
-              e.status === 503),
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.upTo({ duration: "45 seconds" }),
-          ),
-          times: 10,
-        }),
-      );
+        if (out.mode === "effect") {
+          const ping = (yield* get("/ping")) as { ok?: boolean };
+          expect(ping.ok).toEqual(true);
 
-      if (out.mode === "effect") {
-        const ping = (yield* get("/ping")) as { ok?: boolean };
-        expect(ping.ok).toEqual(true);
+          const health = (yield* get("/health")) as { rows?: unknown };
+          expect(firstOk(health.rows)).toEqual(1);
+        } else {
+          const body = yield* getText;
+          expect(typeof body).toEqual("string");
+          expect(body.length).toBeGreaterThan(0);
+        }
 
-        const health = (yield* get("/health")) as { rows?: unknown };
-        expect(firstOk(health.rows)).toEqual(1);
-      } else {
-        const body = yield* getText;
-        expect(typeof body).toEqual("string");
-        expect(body.length).toBeGreaterThan(0);
-      }
-
-      const rows = yield* selectOne(out.publicConnectionUri);
-      expect(firstOk(rows)).toEqual(1);
-    }).pipe(logLevel),
-    { timeout: 120_000 },
-  );
-});
+        const rows = yield* selectOne(out.publicConnectionUri);
+        expect(firstOk(rows)).toEqual(1);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+  },
+);

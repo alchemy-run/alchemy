@@ -55,5 +55,8 @@ test.provider(
         yield* removeIsolatedProject(project);
       }
     }),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:docker", "provider:docker:service", "local"],
+    timeout: 420_000,
+  },
 );

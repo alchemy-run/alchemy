@@ -32,7 +32,10 @@ test(
     const res = yield* client.get(targetUrl).pipe(coldStartRetry);
     expect(yield* res.text).toBe("hello from EntrypointTargetWorker");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -48,7 +51,10 @@ test(
       .pipe(coldStartRetry);
     expect(yield* res.text).toBe("hello alice from Api");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 // The Cloudflare API's service-binding schema does not carry `props` yet:
@@ -67,5 +73,8 @@ test.skip(
       tenant: "acme",
     });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

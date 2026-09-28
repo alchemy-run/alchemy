@@ -84,11 +84,14 @@ jobs:
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
-      - name: Run PR Package tests
-        run: pnpm -C packages/pr-package test
+      - name: Run pkg tests
+        run: pnpm -C packages/pkg test
 
       - name: Run Typecheck
         run: pnpm tsc -b
+
+      - name: Test CLI launcher
+        run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc

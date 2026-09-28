@@ -176,7 +176,7 @@ const request = (
     Effect.scoped,
   );
 
-describe("Git HTTP composition", () => {
+describe("Git HTTP composition", { tags: ["unit", "local"] }, () => {
   it.effect(
     "registers every default group and preserves decoded requests and typed errors",
     () =>

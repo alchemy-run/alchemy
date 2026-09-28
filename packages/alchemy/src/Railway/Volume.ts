@@ -312,6 +312,7 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const Volume: typeof VolumeResource = Object.assign(
   (

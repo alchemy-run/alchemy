@@ -256,5 +256,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         );
       expect(after).toBe(0);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:elbv2",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

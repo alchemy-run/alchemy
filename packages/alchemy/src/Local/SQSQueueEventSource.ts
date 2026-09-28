@@ -24,7 +24,6 @@ export const SQSQueueEventSource = Layer.effect(
       ) => Effect.Effect<void, never, Req | StreamReq>,
     ) {
       const QueueArn = yield* queue.queueArn;
-      const { region } = yield* env;
 
       const receiveMessage = yield* ReceiveMessage(queue);
       const deleteMessageBatch = yield* DeleteMessageBatch(queue);
@@ -33,6 +32,7 @@ export const SQSQueueEventSource = Layer.effect(
         Effect.forever(
           Effect.gen(function* () {
             const queueArn = yield* QueueArn;
+            const region = queueArn.split(":")[3]!;
             const result = yield* receiveMessage({
               MaxNumberOfMessages:
                 props.maxNumberOfMessages ?? props.batchSize ?? 10,

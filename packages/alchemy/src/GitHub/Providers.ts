@@ -4,18 +4,31 @@ import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
+import {
+  BranchProtection,
+  BranchProtectionProvider,
+} from "./BranchProtection.ts";
+import { Collaborator, CollaboratorProvider } from "./Collaborator.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { Label, LabelProvider } from "./Label.ts";
 import { LocalWebhookProvider } from "./LocalWebhookProvider.ts";
+import { Milestone, MilestoneProvider } from "./Milestone.ts";
+import { Issue, IssueProvider } from "./Issue.ts";
 import {
   PersonalAccessToken,
   PersonalAccessTokenProvider,
 } from "./PersonalAccessToken.ts";
+import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
+import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
+import { Ruleset, RulesetProvider } from "./Ruleset.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
+import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
+import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
 export { GitHubCredentials } from "./Credentials.ts";
 
@@ -28,9 +41,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, PersonalAccessToken, Repository,
- * Secret, Variable, Webhook) plus the GitHub AuthProvider that the alchemy
- * CLI discovers.
+ * GitHub resource providers and the GitHub AuthProvider discovered by the CLI.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -48,22 +59,41 @@ export const providers = (options?: ProvidersOptions) =>
   Layer.effect(
     Providers,
     Provider.collection([
+      BranchProtection,
+      Collaborator,
       Comment,
       Environment,
+      Label,
+      Milestone,
+      Issue,
       PersonalAccessToken,
+      PullRequest,
+      Release,
       Repository,
+      Ruleset,
       Secret,
+      TeamAccess,
       Variable,
       Webhook,
+      WikiPage,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        BranchProtectionProvider(),
+        CollaboratorProvider(),
         CommentProvider(),
         EnvironmentProvider(),
+        LabelProvider(),
+        MilestoneProvider(),
+        IssueProvider(),
         PersonalAccessTokenProvider(),
+        PullRequestProvider(),
+        ReleaseProvider(),
         RepositoryProvider(),
+        RulesetProvider(),
         SecretProvider(),
+        TeamAccessProvider(),
         VariableProvider(),
         // GitHub refuses localhost delivery URLs, so dev runs emulate
         // the webhook by polling in the sidecar (LocalWebhookProvider)
@@ -71,6 +101,7 @@ export const providers = (options?: ProvidersOptions) =>
           live: WebhookProvider,
           local: LocalWebhookProvider,
         }),
+        WikiPageProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),

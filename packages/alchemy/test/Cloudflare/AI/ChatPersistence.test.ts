@@ -81,7 +81,15 @@ test(
     // prompt and the assistant reply.
     expect(body.turns).toBe(2);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -116,7 +124,15 @@ test(
     // restored history.
     expect(b2.turns).toBe(4);
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -147,5 +163,13 @@ test(
     expect(rb.status).toBe(200);
     expect(((yield* rb.json) as { turns: number }).turns).toBe(2);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

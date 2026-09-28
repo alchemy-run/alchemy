@@ -62,7 +62,10 @@ test(
     const { program } = yield* ctx.exports;
     expect(program).toBeDefined();
   }),
-  { timeout: 10_000 },
+  {
+    tags: ["unit", "provider:aws", "provider:aws:ecs", "local"],
+    timeout: 10_000,
+  },
 );
 
 // ── plan/apply-level: the inline class form with Effect-valued props ────────
@@ -132,7 +135,10 @@ test.provider(
       expect(props?.image).toBe("nginx:1.27");
       expect(props?.port).toBe(80);
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["unit", "provider:aws", "provider:aws:ecs", "local"],
+    timeout: 60_000,
+  },
 );
 
 // ── plan-only: multiple yields of the inline class stay stable ──────────────
@@ -172,5 +178,8 @@ test(
       ),
     ).toEqual(["InlineService"]);
   }),
-  { timeout: 60_000 },
+  {
+    tags: ["unit", "provider:aws", "provider:aws:ecs", "local"],
+    timeout: 60_000,
+  },
 );

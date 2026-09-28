@@ -65,5 +65,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         yield* removeIsolatedProject(project);
       }
     }),
-  { timeout: 1_200_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 1_200_000 },
 );

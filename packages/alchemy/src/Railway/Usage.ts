@@ -398,6 +398,7 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  * ```
  *
  * @resource
+ * @product Workspace
  */
 export const UsageLimit: typeof UsageLimitResource = Object.assign(
   (

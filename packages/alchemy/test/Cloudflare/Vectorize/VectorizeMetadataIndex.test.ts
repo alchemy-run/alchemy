@@ -57,6 +57,7 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
 
 describe.skipIf(!!process.env.FAST)(
   "Cloudflare.Vectorize.MetadataIndex",
+  { tags: ["provider:cloudflare", "provider:cloudflare:vectorize", "live"] },
   () => {
     test.provider(
       "create and delete a metadata index",

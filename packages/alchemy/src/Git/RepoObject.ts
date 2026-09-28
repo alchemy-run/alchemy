@@ -4285,16 +4285,15 @@ export const GitRepoLive = GitRepo.make(
           const result = outcome.success;
           const objects = storeFor(meta.repoId);
           const pushId = yield* ulid();
-          // The staging row FIRST, like a push and the PR merge: the
-          // ingested objects stage under this id, and finalizeRefTxn
-          // refuses to flip refs for a push id that is not 'staging'
-          // (without the row every import finalized into zero refs);
-          // the staging-GC alarm also reaps the objects if we crash.
+          // Imports use the same staging lifecycle as pushes: finalize
+          // requires an active row, and GC needs it to reap abandoned data.
           yield* sql.run(
             `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
             pushId,
             Date.now(),
           );
+          yield* upsertJob("gc", null);
+          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
           let graph: Array<{
             oid: string;
             tree: string;
@@ -4353,21 +4352,20 @@ export const GitRepoLive = GitRepo.make(
             newOid: ref.oid,
             ref: ref.name,
           }));
-          const flipped = yield* finalizeRefTxn({
+          const results = yield* finalizeRefTxn({
             commands,
             atomic: false,
             unconditional: true,
             pushId,
             graph,
           });
-          // Rejections here are silent per-ref results, not errors —
-          // surface them, or the import "succeeds" into an empty repo.
-          const rejected = flipped.filter((entry) => !entry.ok);
-          if (rejected.length > 0) {
+          const rejected = results.find((ref) => !ref.ok);
+          if (rejected !== undefined) {
             return yield* new StoreError({
-              reason: `import finalize rejected ${rejected.length}/${commands.length} refs: ${rejected[0]!.reason ?? "unknown"}`,
+              reason: `import ref ${rejected.ref}: ${rejected.reason}`,
             });
           }
+          yield* flipPush(pushId);
           if (result.defaultBranch !== null) {
             yield* setConfig("default_branch", result.defaultBranch);
           }

@@ -266,5 +266,18 @@ test.provider(
   // Observed pass baseline is 104–117s under full-suite load with the old
   // ~50s execution poll; the poll is now ~90s, so 210s + the 40s poll delta.
   // Every constituent readiness poll remains independently bounded.
-  { timeout: 250_000, retry: 0 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:appflow",
+      "provider:aws:eventbridge",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "provider:aws:sqs",
+      "live",
+    ],
+    timeout: 250_000,
+    retry: 0,
+  },
 );

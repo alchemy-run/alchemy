@@ -130,7 +130,15 @@ test(
       expect(missing.id).toBe("does-not-exist");
     }
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -154,7 +162,15 @@ test(
     );
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -174,7 +190,15 @@ test(
     expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -204,7 +228,15 @@ test(
     expect(results).toHaveLength(N);
     expect(new Set(results).size).toBe(N);
   }).pipe(logLevel),
-  { timeout: burstTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: burstTimeout,
+  },
 );
 
 test(
@@ -235,5 +267,13 @@ test(
       { concurrency: 32 },
     );
   }).pipe(logLevel),
-  { timeout: burstTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: burstTimeout,
+  },
 );

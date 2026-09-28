@@ -122,7 +122,7 @@ const formatStaticView = (
     <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
       {view}
     </CliEnvironment>,
-    { columns },
+    { columns, colorProfile: colors ? "truecolor" : "none" },
   ).replace(/[\s\n]+$/, "");
   return colors ? output : stripVTControlCharacters(output);
 };

@@ -503,6 +503,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * @resource
+ * @product Swarm
  */
 export const Service: Platform<
   Service,

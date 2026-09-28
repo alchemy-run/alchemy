@@ -25,6 +25,7 @@ import {
  * ```
  *
  * @layer
+ * @product Secret Key
  * @provides Fly.Encrypt
  */
 export const EncryptHttp = Layer.effect(

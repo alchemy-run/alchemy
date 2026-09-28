@@ -70,7 +70,7 @@ const waitForStderr = (read: () => string, text: string) =>
     ),
   );
 
-describe("shutdown feedback", () => {
+describe("shutdown feedback", { tags: ["unit", "local"] }, () => {
   it.live(
     "a slow shutdown prints one delayed status line",
     () =>

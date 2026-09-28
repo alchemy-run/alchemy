@@ -369,6 +369,7 @@ export interface Repository extends Resource<
  * ```
  *
  * @resource
+ * @product Repository
  */
 export const Repository = Resource<Repository>("GitHub.Repository", {
   defaultRemovalPolicy: "retain",

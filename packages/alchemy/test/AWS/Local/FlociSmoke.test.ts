@@ -201,5 +201,14 @@ test.provider.skipIf(!dockerAvailable)(
       const getBucketAfter = yield* rawS3GetBucket(outputs.bucket.bucketName);
       expect(getBucketAfter.status).toBe(404); // NoSuchBucket
     }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:dynamodb",
+      "provider:aws:s3",
+      "provider:aws:sqs",
+      "local",
+    ],
+    timeout: 240_000,
+  },
 );

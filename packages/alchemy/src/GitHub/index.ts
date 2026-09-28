@@ -1,5 +1,7 @@
 export * as Auth from "./AuthProvider.ts";
 export * from "./ApiError.ts";
+export * from "./BranchProtection.ts";
+export * from "./Collaborator.ts";
 export * from "./Comment.ts";
 export {
   GitHubCredentials,
@@ -51,19 +53,27 @@ export * from "./MergePullRequest.ts";
 export * from "./MergePullRequestHttp.ts";
 export * from "./MergePullRequestLocal.ts";
 export * from "./PersonalAccessToken.ts";
+export * from "./Label.ts";
 export * from "./Providers.ts";
+export * from "./PullRequest.ts";
+export * from "./Release.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
 export * from "./RepositoryEventSourcePolling.ts";
 export * from "./RepositoryLike.ts";
+export * from "./Ruleset.ts";
 export * from "./SearchIssues.ts";
 export * from "./SearchIssuesHttp.ts";
 export * from "./SearchIssuesLocal.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
+export * from "./TeamAccess.ts";
 export * from "./UpdateIssue.ts";
 export * from "./UpdateIssueHttp.ts";
 export * from "./UpdateIssueLocal.ts";
 export * from "./Variable.ts";
 export * from "./Variables.ts";
 export * from "./Webhook.ts";
+export * from "./WikiPage.ts";
+export * from "./Milestone.ts";
+export * from "./Issue.ts";

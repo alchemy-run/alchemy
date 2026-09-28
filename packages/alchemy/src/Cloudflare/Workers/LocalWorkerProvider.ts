@@ -22,6 +22,8 @@ import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -42,7 +44,7 @@ import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
   LOCAL_PROVIDERS_URL,
@@ -138,6 +140,8 @@ export const LocalWorkerProvider = () =>
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
+      const runtimeBase = process.cwd();
+      const dotAlchemy = yield* dotAlchemyDirectory;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
@@ -156,7 +160,6 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
-      const cloudflareEnv = yield* CloudflareEnvironment;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
 
@@ -379,7 +382,9 @@ export const LocalWorkerProvider = () =>
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
+          if (data.env) Object.assign(boundEnv, data.env);
           for (const binding of data.bindings ?? []) {
             if (
               binding.type === "durable_object_namespace" &&
@@ -476,7 +481,7 @@ export const LocalWorkerProvider = () =>
           name,
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
-          env: props.env,
+          env: Object.keys(boundEnv).length > 0 ? boundEnv : props.env,
           /**
            * Raw inline module source (mutually exclusive with `main`).
            * Serves as-is without the bundler; part of the hashed config so
@@ -581,7 +586,7 @@ export const LocalWorkerProvider = () =>
         config: WorkerConfig,
         selfUrl: string | undefined,
       ) {
-        const { accountId } = yield* cloudflareEnv;
+        const accountId = yield* localAccountId;
         return yield* materializeRuntimeBindings(
           {
             ...config,
@@ -695,8 +700,8 @@ export const LocalWorkerProvider = () =>
           for (const namespace of worker.durableObjectNamespaces) {
             const image = namespace.container;
             if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(image.context ?? ".");
-            if (context.split(path.sep).includes(".alchemy")) continue;
+            const context = path.resolve(runtimeBase, image.context ?? ".");
+            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
             watched.set(context, {
               dockerfile:
                 image.dockerfile !== undefined
@@ -1248,7 +1253,7 @@ export const LocalWorkerProvider = () =>
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(rootDir ?? process.cwd());
-              const { accountId } = yield* cloudflareEnv;
+              const accountId = yield* localAccountId;
               // Queue-consumer wiring can change while the child is starting
               // (a sibling `Consumer` reconcile), before the restart hook
               // below exists to pick it up. We hold the serve lock, so a
@@ -1407,6 +1412,7 @@ export const LocalWorkerProvider = () =>
           ),
         );
         const devCtx: DevContext = {
+          dotAlchemy,
           id: worker.id,
           fqn: worker.fqn,
           workerName: worker.name,
@@ -1464,7 +1470,7 @@ export const LocalWorkerProvider = () =>
               }
             }
           }
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* localAccountId;
           const urls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
@@ -1496,7 +1502,7 @@ export const LocalWorkerProvider = () =>
         }),
 
         start: Effect.fn(function* ({ fqn, config, invalidate }) {
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* localAccountId;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
           // entirely — typically because an external dev process
@@ -1533,8 +1539,9 @@ export const LocalWorkerProvider = () =>
           // / `runVite` attach to below), so the URL is known before workerd
           // starts. Trailing slash stripped to match the cloud value's shape.
           const needsSelfUrl =
-            config.bindingDescriptors.some((b) => b.type === "self_url") ||
-            Object.values(config.env ?? {}).some(isSelfUrl);
+            config.bindingDescriptors.some(
+              (b) => b.type === "self_url" || b.type === "r2_s3_credentials",
+            ) || Object.values(config.env ?? {}).some(isSelfUrl);
           const selfUrl = needsSelfUrl
             ? (yield* maybeStartProxy(fqn, config.dev)).url
                 .toString()

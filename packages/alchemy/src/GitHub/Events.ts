@@ -18,8 +18,8 @@ import { Event } from "../AI/Event.ts";
 import type { WebhookEvent } from "./RepositoryEventSource.ts";
 
 // Each wire struct is ONE name declared twice — a NAMED interface (so
-// hovers read `Issue`, never a structural expansion) merged with the
-// schema const of the same name (`S.Schema<Issue>` pins the const's
+// hovers read `EventIssue`, never a structural expansion) merged with the
+// schema const of the same name (`S.Schema<EventIssue>` pins the const's
 // Type to the interface, so the two can never drift).
 
 export interface Actor {
@@ -41,23 +41,23 @@ export const RepositoryInfo: S.Schema<RepositoryInfo> = S.Struct({
   owner: Actor,
 });
 
-export interface Label {
+export interface IssueLabel {
   readonly name: string;
 }
 
-export const Label: S.Schema<Label> = S.Struct({
+export const IssueLabel: S.Schema<IssueLabel> = S.Struct({
   name: S.String,
 });
 
 /** The principal fields of an issue as delivered by the wire. */
-export interface Issue {
+export interface EventIssue {
   readonly number: number;
   readonly title: string;
   readonly body?: string | null;
   readonly state?: string;
   readonly html_url?: string;
   readonly user?: Actor | null;
-  readonly labels?: ReadonlyArray<Label>;
+  readonly labels?: ReadonlyArray<IssueLabel>;
   readonly created_at?: string;
   readonly closed_at?: string | null;
   /**
@@ -67,14 +67,14 @@ export interface Issue {
   readonly pull_request?: unknown;
 }
 
-export const Issue: S.Schema<Issue> = S.Struct({
+export const EventIssue: S.Schema<EventIssue> = S.Struct({
   number: S.Number,
   title: S.String,
   body: S.optionalKey(S.NullOr(S.String)),
   state: S.optionalKey(S.String),
   html_url: S.optionalKey(S.String),
   user: S.optionalKey(S.NullOr(Actor)),
-  labels: S.optionalKey(S.Array(Label)),
+  labels: S.optionalKey(S.Array(IssueLabel)),
   created_at: S.optionalKey(S.String),
   closed_at: S.optionalKey(S.NullOr(S.String)),
   pull_request: S.optionalKey(S.Unknown),
@@ -96,7 +96,7 @@ export const IssueComment: S.Schema<IssueComment> = S.Struct({
 });
 
 /** The principal fields of a pull request as delivered by the wire. */
-export interface PullRequest {
+export interface EventPullRequest {
   readonly number: number;
   readonly title: string;
   readonly body?: string | null;
@@ -109,7 +109,7 @@ export interface PullRequest {
   readonly base?: { readonly ref: string };
 }
 
-export const PullRequest: S.Schema<PullRequest> = S.Struct({
+export const EventPullRequest: S.Schema<EventPullRequest> = S.Struct({
   number: S.Number,
   title: S.String,
   body: S.optionalKey(S.NullOr(S.String)),
@@ -140,7 +140,7 @@ export class IssueOpened extends (Event("IssueOpened", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  issue: Issue,
+  issue: EventIssue,
 })`
 An issue was opened in the repository — number, title, body, labels,
 and author, as the wire delivers them.`) {}
@@ -149,8 +149,8 @@ export class IssueLabeled extends (Event("IssueLabeled", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  issue: Issue,
-  label: Label,
+  issue: EventIssue,
+  label: IssueLabel,
 })`
 A label was added to an issue.`) {}
 
@@ -158,7 +158,7 @@ export class IssueCommented extends (Event("IssueCommented", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  issue: Issue,
+  issue: EventIssue,
   comment: IssueComment,
 })`
 Someone commented on an issue or pull request — GitHub's one door
@@ -177,7 +177,7 @@ export class IssueClosed extends (Event("IssueClosed", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  issue: Issue,
+  issue: EventIssue,
 })`
 An issue was closed, by whom and however — the world's word, not
 this org's.`) {}
@@ -186,7 +186,7 @@ export class PullRequestOpened extends (Event("PullRequestOpened", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  pullRequest: PullRequest,
+  pullRequest: EventPullRequest,
 })`
 A pull request was opened — number, title, body, branches, author.`) {}
 
@@ -194,7 +194,7 @@ export class PullRequestSynchronized extends (Event("PullRequestSynchronized", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  pullRequest: PullRequest,
+  pullRequest: EventPullRequest,
   /** The head commit the pull request now points at. */
   after: S.String,
 })`
@@ -206,7 +206,7 @@ export class PullRequestMerged extends (Event("PullRequestMerged", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  pullRequest: PullRequest,
+  pullRequest: EventPullRequest,
 })`
 A pull request was merged.`) {}
 
@@ -215,7 +215,7 @@ export class PullRequestClosed extends (Event("PullRequestClosed", {
   repository: RepositoryInfo,
   /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
   sender: S.optionalKey(S.NullOr(Actor)),
-  pullRequest: PullRequest,
+  pullRequest: EventPullRequest,
 })`
 A pull request was closed without merging.`) {}
 

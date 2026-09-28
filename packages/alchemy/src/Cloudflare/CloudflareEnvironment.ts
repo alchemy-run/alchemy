@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -10,12 +9,9 @@ import {
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthConfig.ts";
 
-export class CloudflareEnvironment extends Context.Service<
-  CloudflareEnvironment,
-  Effect.Effect<CloudflareResolvedCredentials>
->()("Cloudflare::CloudflareEnvironment") {
-  readonly kind = "Environment" as const;
-}
+import { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
+
+export { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
 
 const CLOUDFLARE_ACCOUNT_ID = Config.String("CLOUDFLARE_ACCOUNT_ID");
 
@@ -35,13 +31,20 @@ export const fromProfile = () =>
   Layer.effect(
     CloudflareEnvironment,
     Effect.gen(function* () {
-      // In CI this resolves directly from environment variables. Otherwise it
-      // reads the persisted config under the canonical provider name and only
-      // configures/persists when no local config exists.
-      const { resolve } = yield* resolveProviderConfig<
+      // Building providers must work before Cloudflare is configured. Capture
+      // the resolver's services now, but read profiles/credentials only when
+      // a cloud operation actually evaluates this environment.
+      const resolve = resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
-      >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      return yield* resolve.pipe(Effect.orDie, Effect.cached);
+      >(CLOUDFLARE_AUTH_PROVIDER_NAME).pipe(
+        Effect.flatMap(({ resolve }) => resolve),
+      );
+      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
+      return yield* resolve.pipe(
+        Effect.provideContext(context),
+        Effect.orDie,
+        Effect.cached,
+      );
     }),
   );

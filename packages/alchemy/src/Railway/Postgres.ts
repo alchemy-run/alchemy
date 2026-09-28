@@ -338,6 +338,7 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * ```
  *
  * @resource
+ * @product Postgres
  */
 export const Postgres: typeof PostgresResource = Object.assign(
   (
@@ -390,7 +391,11 @@ class PostgresDeployPending extends Data.TaggedError(
 class VolumePending extends Data.TaggedError("Railway.PostgresVolumePending")<{
   volumeId: string;
   state: string;
-}> {}
+}> {
+  override get message() {
+    return `Postgres volume ${this.volumeId} is still ${this.state}`;
+  }
+}
 
 type CloudService =
   | ServiceResponse
@@ -815,9 +820,10 @@ const waitForVolume = (
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresVolumePending",
       times: 10,
-      schedule: Schedule.spaced("3 seconds"),
+      // Volume attachment can lag creation beyond 30 seconds.
+      // Keep the wait bounded and retain the volume ID/state on exhaustion.
+      schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresVolumePending", () => observe),
   );
 };
 

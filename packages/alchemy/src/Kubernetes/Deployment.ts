@@ -396,6 +396,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * @resource
+ * @product Workloads
  */
 export const Deployment: Platform<
   Deployment,

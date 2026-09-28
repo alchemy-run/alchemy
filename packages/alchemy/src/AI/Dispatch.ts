@@ -118,7 +118,9 @@ export const Dispatch: {
         refs,
         policy: (params: any, thread: any) => {
           const out = fn(params, thread);
-          return Effect.isEffect(out) ? out : Effect.succeed(out);
+          return (
+            Effect.isEffect(out) ? out : Effect.succeed(out)
+          ) as Effect.Effect<any>;
         },
       } satisfies DispatchTool<any, any>;
     })) as never;

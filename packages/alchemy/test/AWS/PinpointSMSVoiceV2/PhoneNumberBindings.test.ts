@@ -55,6 +55,14 @@ const post = (path: string) =>
 // skips clean without the flag.
 describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
   "PinpointSMSVoiceV2 PhoneNumber Bindings",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:pinpointsmsvoicev2",
+      "live",
+    ],
+  },
   () => {
     beforeAll(
       Effect.gen(function* () {

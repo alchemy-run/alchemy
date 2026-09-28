@@ -12,7 +12,6 @@ import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
 import * as Option from "effect/Option";
-import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
@@ -31,7 +30,11 @@ import {
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
-import { State, type StateService } from "../../State/State.ts";
+import {
+  State,
+  type StateService,
+  type StateStoreError,
+} from "../../State/State.ts";
 import {
   recordStateStoreInit,
   recordStateStoreOp,
@@ -657,18 +660,14 @@ const deployWithLocalState = ({
  *
  * @internal exported for unit testing.
  */
-export const isTransientBootstrapWriteError = (error: {
-  cause?: unknown;
-}): boolean => {
-  const cause = error.cause;
-  if (cause == null) return false;
-  const tag = (cause as { _tag?: unknown })._tag;
-  if (typeof tag === "string" && tag.startsWith("Unauthorized")) return true;
-  if (isHttpClientError(cause)) {
-    const status = cause.response?.status;
-    return status === undefined || status === 404 || status >= 500;
-  }
-  return false;
+export const isTransientBootstrapWriteError = (
+  error: Pick<StateStoreError, "http">,
+): boolean => {
+  if (error.http === undefined) return false;
+  const { status } = error.http;
+  return (
+    status === undefined || status === 401 || status === 404 || status >= 500
+  );
 };
 
 // check if there's a local stack that wasn't properly hoisted

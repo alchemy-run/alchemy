@@ -289,5 +289,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       // Clean-slate proof: a passing run leaves ZERO cloud resources.
       expect(yield* scanTaskE2EOrphans).toEqual([]);
     }),
-  { timeout: 1_200_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:ecr",
+      "provider:aws:ecs",
+      "provider:aws:iam",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 1_200_000,
+  },
 );

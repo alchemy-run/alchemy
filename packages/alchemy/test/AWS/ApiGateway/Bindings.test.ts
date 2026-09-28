@@ -186,5 +186,13 @@ test.provider.skipIf(!!process.env.FAST)(
       // gone by its stable ID through the bounded typed NotFound assertion.
       yield* assertApiKeyDeleted(created.id);
     }).pipe(Effect.ensuring(reapApiKeys)),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:apigateway",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

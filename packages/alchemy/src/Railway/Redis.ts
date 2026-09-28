@@ -272,6 +272,7 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * ```
  *
  * @resource
+ * @product Redis
  */
 export const Redis: typeof RedisResource = Object.assign(
   (

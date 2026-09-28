@@ -166,5 +166,13 @@ test.provider(
       yield* stack.destroy();
       yield* assertTableIsDeleted(tableName);
     }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:dynamodb",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
