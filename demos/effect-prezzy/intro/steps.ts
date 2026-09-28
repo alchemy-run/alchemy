@@ -316,15 +316,12 @@ const program = (): StepSpec[] => [
   lang({
     title: "The language would work all of this out from code",
     src: { code: VERSIONED },
-    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    diagram: { nodes: GRAPH(["versioning: on"]), edges: BINDINGS },
     diagramLinks: [
-      { from: "Bucket({ versioning: true })", to: { node: "bucket" } },
-      { from: "Queue()", to: { node: "queue" } },
-      { from: "function api(req)", to: { node: "api" } },
       { from: "bucket.get(req.key)", to: { edge: ["api", "bucket"] } },
       { from: "queue.send(file)", to: { edge: ["api", "queue"] } },
     ],
-    frames: 55,
+    frames: 40,
     notes:
       "A cloud language would derive all of this by static analysis. Nobody would write policies or environment variables by hand: the program would be a graph of resources, and the code would be the source of truth for how they connect.",
   }),
