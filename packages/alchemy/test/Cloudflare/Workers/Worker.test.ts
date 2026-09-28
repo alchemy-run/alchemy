@@ -1395,9 +1395,10 @@ describe.concurrent(
     );
 
     // #1831 regression: a `Config` value read in an Effect-native Worker's
-    // Init lands in `props.env` only (no binding row carries it), so the
-    // metadata hash must cover it. Changing the value must plan an update and
-    // reach the deployed Worker; an unchanged value must stay a noop.
+    // Init lands in `props.env` only, which the Worker diff does not compare;
+    // the planner compares Init-captured values itself. Changing the value
+    // must plan an update and reach the deployed Worker; an unchanged value
+    // must stay a noop.
     test.provider(
       "changing a Config value read in Init plans an update",
       (stack) =>
