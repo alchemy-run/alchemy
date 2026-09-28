@@ -187,6 +187,11 @@ const SCRATCH = VERSIONED.replace(
   "  const file = bucket.get(req.key)",
   "  const scratch = Bucket()\n  const file = bucket.get(req.key)",
 );
+/** The mirror mistake, before phases exist: reading the bucket outside the function. */
+const EARLY_READ = VERSIONED.replace(
+  "const queue = Queue()\n",
+  'const queue = Queue()\nconst hello = bucket.get("hello.txt")\n',
+);
 const SCRATCH_NODE = { id: "scratch", title: "Bucket?", color: "#ff7b72", x: 360, y: 610, ghost: true };
 const COLORED_BAD = COLORED_APP.replace(
   "    const file = bucket.get(req.key)",
@@ -348,6 +353,19 @@ const program = (): StepSpec[] => [
     },
     notes:
       "It wouldn't make sense. Infrastructure has to be created once, ahead of time, by the deploy. The function only uses it. So there would really be two different kinds of code in this program.",
+  }),
+  lang({
+    title: "…and code outside the function has no request to serve",
+    src: { code: EARLY_READ },
+    quiet: true,
+    marks: [{ kind: "strike", find: 'bucket.get("hello.txt")', tone: "bad" }],
+    diagram: {
+      nodes: GRAPH(["versioning: on"], ENV),
+      edges: BINDINGS,
+      cards: [{ text: "✗ runs at deploy, not per request", tone: "bad" }],
+    },
+    notes:
+      "And the mirror image. Reading the bucket outside the function would run at deploy time, while the bucket is still being created, with no request and no permissions yet. That doesn't make sense either.",
   }),
   lang({
     title: "So a cloud program is actually a language with two phases",
@@ -2195,6 +2213,7 @@ export const steps: StepSpec[] = [
   pick("The language would work all of this out from code", "Least-privilege IAM, inferred from the code"),
   pick("But what if the function created a bucket?"),
   pick("Uh-oh. Resources need to be known ahead of time"),
+  pick("…and code outside the function has no request to serve"),
   pick("So a cloud program is actually a language with two phases"),
   pick("Now creating a bucket at runtime is a compile error"),
   pick("And inferring permissions becomes a kind of type checking"),
