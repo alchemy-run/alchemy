@@ -2,11 +2,16 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+// Exclusive: the local lifecycle creates and deletes the account's single
+// organization, so no other organization suite may hold it meanwhile.
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "exclusive",
+);
 
 // Account singleton: an AWS Organization has no list API. `list()` calls
 // `describeOrganization` and returns the single org as a one-element array, or

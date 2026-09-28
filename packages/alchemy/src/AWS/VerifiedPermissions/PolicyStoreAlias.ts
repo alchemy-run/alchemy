@@ -14,8 +14,13 @@ export interface PolicyStoreAliasProps {
    */
   policyStoreId: string;
   /**
-   * Name of the alias. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing the name replaces the alias.
+   * Name of the alias. AWS requires every alias name to start with
+   * `policy-store-alias/`; the prefix is added automatically when omitted,
+   * so `"photo-app-prod"` and `"policy-store-alias/photo-app-prod"` name the
+   * same alias. The full name may be at most 150 characters of letters,
+   * digits, `-`, `_`, and `/`, and must be unique per account and region.
+   * If omitted, a unique name is generated from the app, stage, and logical
+   * ID. Changing the name replaces the alias.
    */
   aliasName?: string;
   /**
@@ -32,8 +37,8 @@ export interface PolicyStoreAlias extends Resource<
   PolicyStoreAliasProps,
   {
     /**
-     * Name of the alias — usable in place of a policy store ID in
-     * authorization requests.
+     * Full name of the alias, including the `policy-store-alias/` prefix —
+     * usable in place of a policy store ID in authorization requests.
      */
     aliasName: string;
     /**
@@ -53,7 +58,9 @@ export interface PolicyStoreAlias extends Resource<
  * A named alias for a Verified Permissions policy store. Aliases let callers
  * reference a policy store by a stable name (e.g. in `IsAuthorized`
  * requests) so the underlying store can be swapped without reconfiguring
- * clients.
+ * clients. Alias names always carry the `policy-store-alias/` prefix AWS
+ * requires; it is added automatically to generated and user-supplied names.
+ *
  * ### Creating an Alias
  * **Example:** Alias with a Generated Name
  * ```typescript
@@ -70,6 +77,7 @@ export interface PolicyStoreAlias extends Resource<
  * ```typescript
  * yield* AWS.VerifiedPermissions.PolicyStoreAlias("Alias", {
  *   policyStoreId: store.policyStoreId,
+ *   // created as "policy-store-alias/photo-app-prod"
  *   aliasName: "photo-app-prod",
  *   deletionMode: "HardDelete",
  * });
@@ -81,10 +89,29 @@ export const PolicyStoreAlias = Resource<PolicyStoreAlias>(
   "AWS.VerifiedPermissions.PolicyStoreAlias",
 );
 
+/**
+ * Every alias name must carry this prefix — CreatePolicyStoreAlias,
+ * GetPolicyStoreAlias, and DeletePolicyStoreAlias reject bare names with a
+ * ValidationException.
+ */
+const ALIAS_PREFIX = "policy-store-alias/";
+
+/** Smithy `Alias` shape: max length of the full (prefixed) name. */
+const ALIAS_MAX_LENGTH = 150;
+
+const withAliasPrefix = (aliasName: string) =>
+  aliasName.startsWith(ALIAS_PREFIX)
+    ? aliasName
+    : `${ALIAS_PREFIX}${aliasName}`;
+
 const toAliasName = (id: string, props: { aliasName?: string } = {}) =>
   props.aliasName
-    ? Effect.succeed(props.aliasName)
-    : createPhysicalName({ id, maxLength: 64, lowercase: true });
+    ? Effect.succeed(withAliasPrefix(props.aliasName))
+    : createPhysicalName({
+        id,
+        maxLength: ALIAS_MAX_LENGTH - ALIAS_PREFIX.length,
+        lowercase: true,
+      }).pipe(Effect.map((name) => `${ALIAS_PREFIX}${name}`));
 
 export const PolicyStoreAliasProvider = () =>
   Provider.effect(
@@ -140,7 +167,10 @@ export const PolicyStoreAliasProvider = () =>
           // deletionMode only affects delete-time behavior
           if (
             olds.policyStoreId !== news.policyStoreId ||
-            (news.aliasName !== undefined && olds.aliasName !== news.aliasName)
+            (news.aliasName !== undefined &&
+              (olds.aliasName === undefined ||
+                withAliasPrefix(olds.aliasName) !==
+                  withAliasPrefix(news.aliasName)))
           ) {
             return { action: "replace" } as const;
           }

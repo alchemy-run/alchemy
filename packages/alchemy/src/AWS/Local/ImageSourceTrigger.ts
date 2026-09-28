@@ -50,6 +50,12 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
       isExternal: options.isExternal,
       bootstrap: makeBunBootstrap(source.handler ?? "default"),
     });
+    // Rolldown's first build runs when the watcher starts, before any file
+    // changed; the deploy already built that exact graph. Only a build that
+    // follows a change (`Start`) is a trigger — otherwise the rerun would
+    // re-register the image and reap the revision the engine just handed to
+    // dependents.
+    let changed = false;
     return Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
       Stream.tap((event) =>
         event._tag === "Error"
@@ -58,7 +64,13 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
             )
           : Effect.void,
       ),
-      Stream.filter((event) => event._tag === "Success"),
+      Stream.filter((event) => {
+        if (event._tag === "Start") {
+          changed = true;
+          return false;
+        }
+        return event._tag === "Success" && changed;
+      }),
       Stream.debounce("200 millis"),
       Stream.map(() => undefined),
     ) as Stream.Stream<void>;

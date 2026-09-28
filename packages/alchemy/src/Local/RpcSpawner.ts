@@ -212,6 +212,9 @@ export const make = Effect.fn(function* ({
         ),
       );
     }
+    yield* Console.error(
+      `[alchemy] RPC sidecar for ${serverEntryUrl} is no longer running; respawning (attempt ${attempt + 1})`,
+    );
     yield* child.kill;
     yield* Cache.invalidate(cache, serverEntryUrl);
     return yield* register(serverEntryUrl, attempt + 1);

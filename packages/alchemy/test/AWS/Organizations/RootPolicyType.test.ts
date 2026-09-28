@@ -2,11 +2,15 @@ import * as AWS from "@/AWS";
 import { Root, RootPolicyType } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // A RootPolicyType is the enable/disable state of a policy type on an org root.
 // `list()` enumerates roots via `listRoots` and emits one Attributes per
@@ -59,6 +63,30 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // Destroy disables the type (detaching every policy of it), so refuse
+      // to take over an enablement that existed before the test.
+      const preEnabled = yield* organizations
+        .listRoots({})
+        .pipe(
+          Effect.map((page) =>
+            (page.Roots ?? []).some((root) =>
+              (root.PolicyTypes ?? []).some(
+                (summary) =>
+                  summary.Type === "BACKUP_POLICY" &&
+                  (summary.Status === "ENABLED" ||
+                    summary.Status === "PENDING_ENABLE"),
+              ),
+            ),
+          ),
+        );
+      if (preEnabled) {
+        return yield* Effect.fail(
+          new Error(
+            "BACKUP_POLICY is already enabled on the organization root; this test would disable it on destroy",
+          ),
+        );
+      }
 
       const deployPolicyType = () =>
         stack.deploy(

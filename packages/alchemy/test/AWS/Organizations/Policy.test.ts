@@ -5,12 +5,15 @@ import {
 } from "@/AWS/IAM/Policy.ts";
 import { Policy } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // `listPolicies` requires a `Filter` (policy type), so `list()` fans out across
 // every policy-type filter and hydrates each policy via `describePolicy` into the

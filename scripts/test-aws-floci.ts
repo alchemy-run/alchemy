@@ -12,9 +12,16 @@
  * `--external` uses an existing server without Docker fallback or state reset.
  * `--dry-run` prints the resolved command without starting tests or touching Floci.
  * Shared state is preserved unless `--reset-shared` is explicitly passed.
+ * Standing prerequisites of gated suites (see floci-fixtures.ts) are
+ * provisioned in Floci before the run and removed after it.
  */
 import { Glob } from "bun";
+import {
+  provisionFlociStandingFixtures,
+  type FlociStandingFixtures,
+} from "./floci-fixtures.ts";
 import { preferLocalFlociImage } from "./floci-image.ts";
+import { resolveFlociDefaultNetwork } from "./floci-network.ts";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -27,22 +34,18 @@ const extraDirs: Record<string, ReadonlyArray<string>> = {
   SecretsManager: ["Secret"],
 };
 
-// The other Organizations suites require a pre-existing management account or
-// the live-only Account provider. Keep automatic discovery on the local fixture.
-const serviceSuites: Record<string, ReadonlyArray<string>> = {
-  Organizations: ["Organization.test.ts"],
-};
-
 // Opt-in gates whose tests are gated only for live-AWS cost, quota, slow
 // provisioning, or preview access. Floci emulates all of them, so enable them
-// here unless the caller set them explicitly. Gates that need real-account
-// values (ARNs, domains, verified identities) stay off.
+// here unless the caller set them explicitly. Gates that need standing
+// resources are provisioned by floci-fixtures.ts.
 const flociOptInGates = [
   "ALCHEMY_TEST_IDENTITY_CENTER",
   "AWS_LAMBDA_TEST_SHUTDOWN",
+  "AWS_ORG_MANAGEMENT_ACCOUNT",
   "AWS_TEST_APIGWV2_VPCLINK",
   "AWS_TEST_APPSYNC_CACHE",
   "AWS_TEST_CLOUDHSM",
+  "AWS_TEST_CLOUDTRAIL_LAKE",
   "AWS_TEST_CLOUDMAP_PUBLIC",
   "AWS_TEST_CODEARTIFACT_EVENTS",
   "AWS_TEST_CONFIG_RECORDER",
@@ -50,18 +53,52 @@ const flociOptInGates = [
   "AWS_TEST_METRICSTREAM",
   "AWS_TEST_NAT_GATEWAY",
   "AWS_TEST_NETWORKFIREWALL",
+  "AWS_TEST_ORG_MANAGEMENT",
+  "AWS_TEST_POLICY_STORE_ALIAS",
   "AWS_TEST_RDS_DBCLUSTER",
   "AWS_TEST_RDS_DBCLUSTER_ENDPOINT",
   "AWS_TEST_RDS_DBINSTANCE",
   "AWS_TEST_RDS_DBSUBNETGROUP",
   "AWS_TEST_RE2_AGGREGATOR",
+  "AWS_TEST_REDSHIFT",
+  "AWS_TEST_REGION_OPT_IN",
+  "AWS_TEST_SAGEMAKER_HYPERPOD",
   "AWS_TEST_SERVICE_QUOTAS",
   "AWS_TEST_SES_DEDICATED_IP",
+  "AWS_TEST_SLOW",
+  "AWS_TEST_TRANSFER_TRANSITIONS",
   "AWS_TEST_WAF_ASSOCIATION",
   "AWS_TEST_WAF_CLOUDFRONT",
   "CLOUDFRONT_TEST_VPC_ORIGIN",
+  "INSPECTOR2_TEST_CIS",
+  "INSPECTOR2_TEST_ENABLER",
+  "LAMBDA_TEST_MICROVM",
   "LAMBDA_TEST_NETWORK_CONNECTOR",
+  "RDS_TEST_LIFECYCLE",
 ];
+
+// Values that gated suites need but Floci accepts without standing resources
+// (checked against each suite and Floci's validation). Applied with `??=`.
+const flociFixedValues: Record<string, string> = {
+  // Distinct from the delegated-admin principal: registering a delegated
+  // admin enables trusted access for its principal (Floci OrganizationsService).
+  AWS_ORG_TRUSTED_SERVICE_PRINCIPAL: "ssm.amazonaws.com",
+  AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL: "config.amazonaws.com",
+  AWS_TEST_SES_MAIL_FROM_IDENTITY: "ses-mailfrom.alchemy-test.example.com",
+  AWS_TEST_SES_MAIL_FROM_DOMAIN: "bounce.ses-mailfrom.alchemy-test.example.com",
+  AWS_TEST_SNS_PLATFORM: "1",
+  AWS_TEST_SNS_PLATFORM_NAME: "GCM",
+  // Floci accepts GCM credentials of 24+ chars without "invalid"/"fake"/"probe".
+  AWS_TEST_SNS_PLATFORM_CREDENTIAL: "alchemy-floci-gcm-server-key-000000000000",
+  AWS_TEST_SNS_PLATFORM_TOKEN: "alchemy-floci-device-token-0001",
+  // Floci's AgentCore control plane records the artifact without pulling it.
+  AWS_TEST_AGENTCORE: "1",
+  AWS_TEST_AGENTCORE_IMAGE:
+    "000000000000.dkr.ecr.us-east-1.amazonaws.com/alchemy-floci-agentcore:latest",
+  // Floci stores authorizer URIs without resolving the function.
+  ALCHEMY_TEST_AUTHORIZER_URI:
+    "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
+};
 
 const dualizedServices = (): string[] => {
   const source = readFileSync(providersFile, "utf8");
@@ -125,11 +162,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const allowedRoots = dualizedServices()
-  .flatMap((service) =>
-    (serviceSuites[service] ?? [""]).map((suite) =>
-      join(awsTestRoot, service, suite),
-    ),
-  )
+  .map((service) => join(awsTestRoot, service))
   .filter((dir) => existsSync(dir));
 
 if (allowedRoots.length === 0) {
@@ -213,6 +246,9 @@ if (dryRun) {
 process.env.ALCHEMY_TEST_DEV = "1";
 process.env.AWS_ENDPOINT_URL = "http://localhost:4566";
 for (const gate of flociOptInGates) process.env[gate] ??= "1";
+for (const [name, value] of Object.entries(flociFixedValues)) {
+  process.env[name] ??= value;
+}
 if (external) {
   process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
   console.log(
@@ -220,6 +256,25 @@ if (external) {
   );
 } else {
   preferLocalFlociImage("test:aws:floci");
+}
+
+// Suites that take subnet/security-group IDs from the environment (e.g.
+// Timestream DbInstance) get the emulator's default VPC network. Floci must
+// be serving for this lookup, so start it here in non-external mode.
+if (
+  process.env.AWS_TEST_SLOW &&
+  (!process.env.AWS_TEST_SUBNET_IDS || !process.env.AWS_TEST_SECURITY_GROUP_IDS)
+) {
+  try {
+    const network = await resolveFlociDefaultNetwork(external);
+    process.env.AWS_TEST_SUBNET_IDS ??= network.subnetIds.join(",");
+    process.env.AWS_TEST_SECURITY_GROUP_IDS ??=
+      network.securityGroupIds.join(",");
+  } catch (error) {
+    fail(
+      `could not resolve the emulator's default VPC network: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+    );
+  }
 }
 
 if (resetShared) {
@@ -242,6 +297,34 @@ if (resetShared) {
   console.log("test:aws:floci: preserving shared emulator state");
 }
 
+// Provisioned after any reset so the reset cannot wipe them. A signal during
+// provisioning interrupts it; already-created fixtures are removed first.
+const provisioning = new AbortController();
+const abortProvisioning = () => provisioning.abort();
+process.on("SIGINT", abortProvisioning);
+process.on("SIGTERM", abortProvisioning);
+let fixtures: FlociStandingFixtures | undefined;
+try {
+  fixtures = await provisionFlociStandingFixtures(external, {
+    files,
+    signal: provisioning.signal,
+  });
+} catch (error) {
+  fail(
+    `could not provision standing fixtures: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+  );
+} finally {
+  process.off("SIGINT", abortProvisioning);
+  process.off("SIGTERM", abortProvisioning);
+}
+if (provisioning.signal.aborted) {
+  await fixtures?.teardown().catch(() => undefined);
+  fail("interrupted while provisioning standing fixtures");
+}
+for (const [name, value] of Object.entries(fixtures?.env ?? {})) {
+  process.env[name] ??= value;
+}
+
 const proc = Bun.spawn(command, {
   cwd: alchemyRoot,
   // Bun.spawn's default env is a snapshot taken at process start, so the
@@ -253,4 +336,21 @@ const proc = Bun.spawn(command, {
   stderr: "inherit",
   stdin: "inherit",
 });
-process.exit(await proc.exited);
+
+// Keep the runner alive until the child exits so teardown always runs.
+// Terminal Ctrl-C already reaches the child through the shared process
+// group; SIGTERM is usually aimed at the runner alone, so forward it.
+process.on("SIGINT", () => undefined);
+process.on("SIGTERM", () => proc.kill("SIGTERM"));
+const exitCode = await proc.exited;
+if (fixtures && Object.keys(fixtures.env).length > 0) {
+  console.log("test:aws:floci: removing standing fixtures");
+  await fixtures
+    .teardown()
+    .catch((error) =>
+      console.error(
+        `test:aws:floci: fixture teardown failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+}
+process.exit(exitCode);

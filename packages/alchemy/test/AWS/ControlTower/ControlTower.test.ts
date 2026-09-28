@@ -1,14 +1,19 @@
 import * as AWS from "@/AWS";
 import { EnabledBaseline, EnabledControl } from "@/AWS/ControlTower";
-import * as Test from "@/Test/Alchemy";
 import * as controltower from "@distilled.cloud/aws/controltower";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as OrganizationLease from "../Organizations/OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+// Shared organization lease: the baseline lifecycle targets an OU, which the
+// emulator fixture provides when AWS_TEST_CONTROLTOWER_OU is unset.
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // AWS Control Tower requires an AWS Organizations MANAGEMENT account with a
 // landing zone deployed — neither is available on the shared testing
@@ -128,14 +133,14 @@ describe(
     // Control Tower landing zone. Provide:
     //   AWS_TEST_CONTROLTOWER=1
     //   AWS_TEST_CONTROLTOWER_OU        target OU ARN (unregistered OU for
-    //                                   the baseline test)
+    //                                   the baseline test; provisioned by
+    //                                   OrganizationLease on the emulator)
     //   AWS_TEST_CONTROLTOWER_CONTROL   control ARN (defaults to the
     //                                   AWS-GR_ENCRYPTED_VOLUMES legacy ARN
     //                                   in us-west-2)
     //   AWS_TEST_CONTROLTOWER_BASELINE_VERSION  (defaults to "4.0")
     // ---------------------------------------------------------------------
 
-    const ouArn = process.env.AWS_TEST_CONTROLTOWER_OU ?? "";
     const controlArn =
       process.env.AWS_TEST_CONTROLTOWER_CONTROL ??
       "arn:aws:controltower:us-west-2::control/AWS-GR_ENCRYPTED_VOLUMES";
@@ -145,6 +150,7 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
+          const ouArn = yield* OrganizationLease.controlTowerOuArn;
 
           const { enabled } = yield* stack.deploy(
             Effect.gen(function* () {
@@ -200,6 +206,7 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
+          const ouArn = yield* OrganizationLease.controlTowerOuArn;
 
           // Discover the AWSControlTowerBaseline ARN dynamically.
           const baselines = yield* controltower.listBaselines.pages({}).pipe(

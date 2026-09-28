@@ -9,12 +9,14 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import CloudflareStack from "./fixtures/microvm/cloudflare-stack.ts";
 import EffectfulStack from "./fixtures/microvm/stack.ts";
 import ExternalStack from "./fixtures/microvm/external/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  // The effectful stack deploys an AWS Lambda AND a Cloudflare Worker driving
-  // the same MicroVM image, so the harness needs both provider sets.
+  // The Cloudflare stack deploys a Worker driving a MicroVM image, so the
+  // harness needs both provider sets. Cloudflare credentials resolve lazily,
+  // so the AWS-only blocks run without them.
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
   state: Alchemy.localState(),
 });
@@ -32,6 +34,10 @@ const TEST_TIMEOUT = 300_000;
 // Lambda MicroVM is a preview feature: builds are asynchronous (minutes) and the
 // account must be onboarded to the preview, with a bootstrapped Assets bucket.
 const skip = !process.env.LAMBDA_TEST_MICROVM;
+
+// The cross-cloud Worker leg additionally needs real Cloudflare credentials,
+// so it is opt-in on top of LAMBDA_TEST_MICROVM.
+const skipCloudflare = skip || !process.env.LAMBDA_TEST_MICROVM_CLOUDFLARE;
 
 const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
@@ -64,14 +70,7 @@ const send = (req: HttpClientRequest.HttpClientRequest) =>
 describe.skipIf(skip)(
   "effectful microvm (main)",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
   },
   () => {
     const stack = beforeAll(deploy(EffectfulStack), { timeout: HOOK_TIMEOUT });
@@ -149,6 +148,31 @@ describe.skipIf(skip)(
       }).pipe(logLevel),
       { timeout: TEST_TIMEOUT },
     );
+  },
+);
+
+/**
+ * Cross-cloud MicroVM: the same bundled image driven from a Cloudflare Worker
+ * that reaches AWS via assume-role credentials minted by the binding. Gated
+ * separately because it needs real Cloudflare credentials.
+ */
+describe.skipIf(skipCloudflare)(
+  "effectful microvm (Cloudflare Worker host)",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+  },
+  () => {
+    const stack = beforeAll(deploy(CloudflareStack), { timeout: HOOK_TIMEOUT });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(CloudflareStack), {
+      timeout: HOOK_TIMEOUT,
+    });
 
     test(
       "drives the MicroVM from a Cloudflare Worker (cross-cloud assume-role)",
@@ -194,13 +218,7 @@ describe.skipIf(skip)(
 describe.skipIf(skip)(
   "external microvm (context/dockerfile)",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:cloudflare",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
   },
   () => {
     const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });

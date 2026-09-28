@@ -1,11 +1,14 @@
 import * as AWS from "@/AWS";
 import { OrganizationResourcePolicy } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // The org resource policy is a singleton with no list API. `list()` describes
 // the single resource policy and returns a one-element array if present, else

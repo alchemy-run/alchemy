@@ -1037,8 +1037,10 @@ export const providers = () =>
           flociDual(AMP.RuleGroupsNamespace, () =>
             AMP.RuleGroupsNamespaceProvider(),
           ),
-          AMP.ScraperProvider(),
-          AMP.ScraperLoggingConfigurationProvider(),
+          flociDual(AMP.Scraper, () => AMP.ScraperProvider()),
+          flociDual(AMP.ScraperLoggingConfiguration, () =>
+            AMP.ScraperLoggingConfigurationProvider(),
+          ),
           flociDual(AMP.Workspace, () => AMP.WorkspaceProvider()),
           flociDual(ApiGateway.Account, () => ApiGateway.AccountProvider()),
           flociDual(ApiGateway.ApiKey, () => ApiGateway.ApiKeyProvider()),
@@ -1427,7 +1429,9 @@ export const providers = () =>
           flociDual(ElastiCache.ReplicationGroup, () =>
             ElastiCache.ReplicationGroupProvider(),
           ),
-          ElastiCache.ServerlessCacheProvider(),
+          flociDual(ElastiCache.ServerlessCache, () =>
+            ElastiCache.ServerlessCacheProvider(),
+          ),
           flociDual(ElastiCache.SubnetGroup, () =>
             ElastiCache.SubnetGroupProvider(),
           ),
@@ -1894,7 +1898,9 @@ export const providers = () =>
           ImageBuilder.ImagePipelineProvider(),
           ImageBuilder.ImageRecipeProvider(),
           ImageBuilder.InfrastructureConfigurationProvider(),
-          Inspector2.CisScanConfigurationProvider(),
+          flociDual(Inspector2.CisScanConfiguration, () =>
+            Inspector2.CisScanConfigurationProvider(),
+          ),
           flociDual(Inspector2.Enabler, () => Inspector2.EnablerProvider()),
           flociDual(Inspector2.Filter, () => Inspector2.FilterProvider()),
           InternetMonitor.MonitorProvider(),
@@ -1964,9 +1970,13 @@ export const providers = () =>
           flociDual(SageMaker.FeatureGroup, () =>
             SageMaker.FeatureGroupProvider(),
           ),
-          SageMaker.ClusterProvider(),
-          SageMaker.ClusterSchedulerConfigProvider(),
-          SageMaker.ComputeQuotaProvider(),
+          flociDual(SageMaker.Cluster, () => SageMaker.ClusterProvider()),
+          flociDual(SageMaker.ClusterSchedulerConfig, () =>
+            SageMaker.ClusterSchedulerConfigProvider(),
+          ),
+          flociDual(SageMaker.ComputeQuota, () =>
+            SageMaker.ComputeQuotaProvider(),
+          ),
           flociDual(Account.AccountName, () => Account.AccountNameProvider()),
           flociDual(Account.AlternateContact, () =>
             Account.AlternateContactProvider(),

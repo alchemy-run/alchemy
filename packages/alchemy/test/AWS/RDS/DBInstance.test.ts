@@ -451,7 +451,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       );
       expect(gone).toBe(true);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
 );
 
 type StorageProps = Pick<

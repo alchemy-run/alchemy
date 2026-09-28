@@ -233,7 +233,7 @@ export const effect = <
       const byStack = new Map<string, typeof remote>([
         [stackKey(stack), remote],
       ]);
-      const forStack = (current: Stack) =>
+      const forStack = (current: Stack["Service"]) =>
         Effect.suspend(() => {
           const cached = byStack.get(stackKey(current));
           if (cached !== undefined) return Effect.succeed(cached);

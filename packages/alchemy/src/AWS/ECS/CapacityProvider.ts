@@ -19,7 +19,9 @@ export type CapacityProviderArn =
 
 export interface CapacityProviderProps {
   /**
-   * Capacity provider name. If omitted, a deterministic name is generated.
+   * Capacity provider name. If omitted, a deterministic name is generated;
+   * a generated name that would begin with a reserved prefix gets `cp-`
+   * prepended.
    *
    * Names beginning with `aws`, `ecs`, or `fargate` are reserved by AWS.
    * Changing this triggers a replacement.
@@ -153,7 +155,13 @@ export const CapacityProviderProvider = () =>
       const toName = (id: string, props: { name?: string } = {}) =>
         props.name
           ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 255, lowercase: true });
+          : createPhysicalName({ id, maxLength: 252, lowercase: true }).pipe(
+              // AWS rejects generated names that start with a reserved prefix
+              // (e.g. a stack named "AWS-...").
+              Effect.map((name) =>
+                /^(aws|ecs|fargate)/.test(name) ? `cp-${name}` : name,
+              ),
+            );
 
       const describe = (name: string) =>
         ecs
