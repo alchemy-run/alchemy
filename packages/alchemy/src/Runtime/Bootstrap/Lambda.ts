@@ -7,6 +7,8 @@
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
+import { getCallerIdentity } from "@distilled.cloud/aws/sts";
+import * as Config from "effect/Config";
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -16,8 +18,10 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
+import { AWSEnvironment } from "../../AWS/Environment.ts";
 import { registerLambdaExtension } from "../../AWS/Lambda/RuntimeExtension.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
+import { Stage } from "../../Stage.ts";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "./Process.ts";
 
 /**
@@ -44,15 +48,38 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const entryLayer = entrypointLayer(entrypoint).pipe(
-    Layer.provideMerge(stackFromEnv),
+  const awsEnvironment = Layer.effect(
+    AWSEnvironment,
+    Effect.gen(function* () {
+      const credentials = yield* Credentials.Credentials;
+      const region = yield* yield* Region.Region;
+      const endpoint = yield* yield* Endpoint.Endpoint;
+      const resolve = getCallerIdentity({}).pipe(
+        Effect.map(({ Account }) => ({
+          accountId: Account!,
+          region,
+          credentials,
+          endpoint,
+        })),
+      );
+      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
+      // Resolve account identity only when requested, once per sandbox.
+      return yield* resolve.pipe(
+        Effect.provideContext(context),
+        Effect.orDie,
+        Effect.cached,
+      );
+    }),
+  ).pipe(
     Layer.provideMerge(Credentials.fromEnv()),
     Layer.provideMerge(Region.fromEnv()),
-    // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
-    // emulators (floci) into the Lambda container — without it, runtime
-    // bindings in `alchemy dev` would call REAL AWS with dummy credentials.
-    // Resolves undefined when unset, so live deploys are unaffected.
     Layer.provideMerge(Endpoint.fromEnv()),
+  );
+
+  const entryLayer = entrypointLayer(entrypoint).pipe(
+    Layer.provideMerge(stackFromEnv),
+    Layer.provideMerge(Layer.effect(Stage, Config.String("ALCHEMY_STAGE"))),
+    Layer.provideMerge(awsEnvironment),
     Layer.provideMerge(platform),
     Layer.provideMerge(
       Layer.succeed(
