@@ -27,8 +27,20 @@ import { SecondaryStorage, toPromiseStorage } from "./SecondaryStorage.ts";
  */
 export interface BetterAuthProps extends Omit<
   BetterAuthOptions,
-  "database" | "secondaryStorage" | "secret"
+  "database" | "secondaryStorage" | "secret" | "plugins"
 > {
+  /**
+   * Better Auth plugins. Use a factory for plugins that mutate options or
+   * capture the auth context during initialization (for example, Stripe's
+   * organization hooks). Each execution receives fresh plugin instances.
+   *
+   * The factory also runs during deployment for schema inspection. Return
+   * the same plugin configuration and schema each time, creating mutable
+   * plugin options inside the factory.
+   */
+  readonly plugins?:
+    | BetterAuthOptions["plugins"]
+    | (() => NonNullable<BetterAuthOptions["plugins"]>);
   /**
    * Distinguishes multiple BetterAuth instances in one namespace — suffixes
    * the auto-provisioned secret resource and the migration action logical
@@ -63,15 +75,20 @@ export interface BetterAuthProps extends Omit<
     | Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 }
 
+type ResolvePlugins<P> = P extends () => infer T ? T : P;
+
 /**
  * The Better Auth options type seen by `Auth<Options>` — the user's literal
  * options with the alchemy extension fields stripped, so plugin/session/user
  * type inference flows through untouched.
  */
-export type AuthOptions<O extends BetterAuthProps> =
-  Omit<O, "id" | "migrate" | "secret"> extends infer T extends BetterAuthOptions
-    ? T
-    : BetterAuthOptions;
+export type AuthOptions<O extends BetterAuthProps> = {
+  [
+    K in keyof O as K extends "id" | "migrate" | "secret" ? never : K
+  ]: K extends "plugins" ? ResolvePlugins<O[K]> : O[K];
+} extends infer T extends BetterAuthOptions
+  ? T
+  : BetterAuthOptions;
 
 /** The inferred `{ session, user }` shape for a given options type. */
 export type Session<O extends BetterAuthProps> = Auth<
@@ -150,9 +167,13 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       id = "BetterAuth",
       migrate,
       secret,
+      plugins,
       ...userOptions
     } = options as BetterAuthProps;
-    const authOptions = userOptions as BetterAuthOptions;
+    const resolveOptions = (): BetterAuthOptions => ({
+      ...userOptions,
+      plugins: typeof plugins === "function" ? plugins() : plugins,
+    });
 
     const db = yield* Database;
     const secondary = yield* Effect.serviceOption(SecondaryStorage);
@@ -179,7 +200,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       const { registerMigration } = yield* Effect.promise(
         () => import("./Migrate.ts"),
       );
-      yield* registerMigration({ id, options: authOptions, db, migrate });
+      yield* registerMigration({ id, options: resolveOptions(), db, migrate });
     }
 
     // One Better Auth instance per execution (Worker event, DO call,
@@ -188,6 +209,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
     // on the execution scope and released when the event settles.
     const makeAuth = yield* makeExecutionMemo(
       Effect.gen(function* () {
+        const authOptions = resolveOptions();
         const database = yield* db.runtime;
         const secretValue = Redacted.value(yield* secretAccessor);
 

@@ -1,17 +1,24 @@
-import { RuntimeContext } from "alchemy";
+import { RuntimeContext, Stack } from "alchemy";
+import type { ActionLike } from "alchemy/Action";
 import { APIError } from "better-auth/api";
 import { anonymous } from "better-auth/plugins/anonymous";
+import { organization } from "better-auth/plugins/organization";
+import type { BetterAuthPlugin } from "better-auth";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   BetterAuth,
   BetterAuthApiError,
+  Database,
   isAPIErrorLike,
   Memory,
   mergeAPIErrorHeaders,
 } from "@/index.ts";
+import { schemaFingerprint } from "@/Migrate.ts";
 
 const baseOptions = {
   baseURL: "http://localhost:3000",
@@ -146,6 +153,157 @@ describe("BetterAuth (memory)", { tags: ["unit", "local"] }, () => {
       const result = yield* auth.api.signInAnonymous({});
       expect(result?.user.isAnonymous).toBe(true);
     }).pipe(Effect.provide(Memory()), provideTestEnv),
+  );
+
+  it.live(
+    "isolates plugin hooks and database lifetimes between executions",
+    () =>
+      Effect.gen(function* () {
+        let factories = 0;
+        let acquires = 0;
+        const released: number[] = [];
+        const hooks: Parameters<NonNullable<BetterAuthPlugin["init"]>>[0][] =
+          [];
+        const memory = yield* Database;
+        const auth = yield* BetterAuth({
+          ...baseOptions,
+          plugins: () => {
+            factories++;
+            const org = organization();
+            const captureContext = {
+              id: "capture-organization-context",
+              init(context) {
+                // Plugins such as Stripe wrap organization hooks during init.
+                // The organization endpoints close over this mutable options object.
+                const previous = org.options.organizationHooks;
+                org.options.organizationHooks = {
+                  ...previous,
+                  beforeDeleteOrganization: async (data) => {
+                    await previous?.beforeDeleteOrganization?.(data);
+                    hooks.push(context);
+                  },
+                };
+              },
+            } satisfies BetterAuthPlugin;
+            return [org, anonymous(), captureContext];
+          },
+        }).pipe(
+          Effect.provideService(Database, {
+            ...memory,
+            runtime: Effect.acquireRelease(
+              Effect.gen(function* () {
+                const adapter = yield* memory.runtime;
+                const id = ++acquires;
+                return { id, adapter };
+              }),
+              ({ id }) => Effect.sync(() => released.push(id)),
+            ).pipe(Effect.map(({ adapter }) => adapter)),
+          }),
+        );
+
+        // Deployment inspects its own plugin set without opening the database.
+        expect(factories).toBe(1);
+        expect(acquires).toBe(0);
+        const scopeA = yield* Scope.make();
+        const scopeB = yield* Scope.make();
+        const nativeA = yield* auth.auth.pipe(Scope.provide(scopeA));
+        const contextA = yield* Effect.promise(() => nativeA.$context);
+        const nativeB = yield* auth.auth.pipe(Scope.provide(scopeB));
+        const contextB = yield* Effect.promise(() => nativeB.$context);
+        expect(nativeA).not.toBe(nativeB);
+        expect(nativeA.options.plugins).not.toBe(nativeB.options.plugins);
+        expect(factories).toBe(3);
+        expect(acquires).toBe(2);
+        expect(yield* auth.auth.pipe(Scope.provide(scopeA))).toBe(nativeA);
+        expect(yield* auth.auth.pipe(Scope.provide(scopeB))).toBe(nativeB);
+        expect(factories).toBe(3);
+
+        const response = yield* Effect.promise(() =>
+          nativeA.api.signInAnonymous({ asResponse: true }),
+        );
+        const cookie = response.headers
+          .getSetCookie()
+          .map((value) => value.split(";")[0])
+          .join("; ");
+        const headers = new Headers({ cookie });
+        const session = yield* auth
+          .getSession(headers)
+          .pipe(Scope.provide(scopeA));
+        // These fields and endpoints must remain inferred from the factory.
+        const isAnonymous: boolean | null | undefined =
+          session?.user.isAnonymous;
+        const activeOrganizationId: string | null | undefined =
+          session?.session.activeOrganizationId;
+        expect(isAnonymous).toBe(true);
+        expect(activeOrganizationId).toBeFalsy();
+
+        for (const [scope, slug] of [
+          [scopeA, "first"],
+          [scopeB, "second"],
+        ] as const) {
+          const org = yield* auth.api
+            .createOrganization({
+              headers,
+              body: { name: slug, slug },
+            })
+            .pipe(Scope.provide(scope));
+          yield* auth.api
+            .deleteOrganization({
+              headers,
+              body: { organizationId: org!.id },
+            })
+            .pipe(Scope.provide(scope));
+        }
+        // The older execution must still call only its own initialized hook.
+        expect(hooks).toEqual([contextA, contextB]);
+        expect(factories).toBe(3);
+        expect(released).toEqual([]);
+        yield* Scope.close(scopeA, Exit.void);
+        expect(released).toEqual([1]);
+        yield* Scope.close(scopeB, Exit.void);
+        expect(released).toEqual([1, 2]);
+      }).pipe(Effect.provide(Memory()), provideTestEnv),
+  );
+
+  it.live("resolves plugin factories for the migration schema", () =>
+    Effect.gen(function* () {
+      let factories = 0;
+      const actions: Record<string, ActionLike> = {};
+      yield* BetterAuth({
+        ...baseOptions,
+        plugins: () => {
+          factories++;
+          return [organization()];
+        },
+      }).pipe(
+        Effect.provideService(Stack, {
+          name: "auth-schema",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions,
+        }),
+        Effect.provideService(Database, {
+          provider: "sqlite",
+          runtime: Effect.die("Deployment must not acquire a runtime database"),
+          migrate: {
+            identity: { database: "auth-schema" },
+            connect: Effect.succeed(
+              Effect.die("Registration must not migrate"),
+            ),
+          },
+        }),
+      );
+      const migrations = Object.values(actions);
+      expect(factories).toBe(1);
+      expect(migrations.length).toBe(1);
+      expect(migrations[0]!.Input.schema).toBe(
+        yield* schemaFingerprint({ ...baseOptions, plugins: [organization()] }),
+      );
+      expect(migrations[0]!.Input.schema).not.toBe(
+        yield* schemaFingerprint(baseOptions),
+      );
+    }).pipe(provideTestEnv),
   );
 
   it("api proxy is not a thenable and caches wrappers", () => {
