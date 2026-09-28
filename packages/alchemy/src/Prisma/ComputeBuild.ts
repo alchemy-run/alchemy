@@ -7,8 +7,8 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
 
 // `@vercel/nft` is an optional peer dependency — loaded lazily so importing

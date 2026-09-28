@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export class Greeting extends Schema.Class<Greeting>("Greeting")({
   message: Schema.String,

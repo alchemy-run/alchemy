@@ -2,9 +2,9 @@ import { newWebSocketRpcSession } from "capnweb";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
 import { unwrapRpcHandlers } from "alchemy/Local/RpcSerialization";
 import type { RpcProxyApi } from "alchemy/Local/RpcServer";
 import {

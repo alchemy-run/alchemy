@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import type { Path } from "effect/Path";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";

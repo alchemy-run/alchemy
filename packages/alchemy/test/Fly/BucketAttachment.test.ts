@@ -10,7 +10,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const requests: Array<{ method: string; path: string }> = [];
 const providers = Layer.effect(

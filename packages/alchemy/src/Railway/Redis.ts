@@ -239,7 +239,7 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  *
  * **Example:** Read and write
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export const Site = Railway.Project("Site");
  * export const Cache = Railway.Redis("Cache", { project: Site });

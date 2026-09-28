@@ -15,7 +15,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import RuntimeEntryWorker from "./fixtures/runtime-entry/worker.ts";
 

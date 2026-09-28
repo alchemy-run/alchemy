@@ -3,8 +3,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import { resolveVinextCli } from "../cli.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import {

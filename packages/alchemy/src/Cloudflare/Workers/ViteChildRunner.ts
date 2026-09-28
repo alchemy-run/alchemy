@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as NodeV8 from "node:v8";
 import {
   Artifacts,

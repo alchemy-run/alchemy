@@ -7,8 +7,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as Sse from "effect/unstable/encoding/Sse";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Sse from "effect/encoding/Sse";
+import * as HttpClient from "effect/http/HttpClient";
 import { Gateway } from "./fixtures/Gateway.ts";
 import LanguageModelTestWorker from "./fixtures/LanguageModelWorker.ts";
 

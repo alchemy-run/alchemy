@@ -4,7 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import StorageFunction from "./fixtures/StorageFunction.ts";
 import { StorageBucket, StorageSettings } from "./fixtures/StorageResources.ts";
 

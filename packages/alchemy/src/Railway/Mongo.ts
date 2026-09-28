@@ -360,7 +360,7 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  *
  * **Example:** Bind and ping
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  * import * as Redacted from "effect/Redacted";
  *
  * export default class Api extends Railway.Service<Api>()(

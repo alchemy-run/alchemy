@@ -5,7 +5,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 import {
   startDelayedOtlpCollector,

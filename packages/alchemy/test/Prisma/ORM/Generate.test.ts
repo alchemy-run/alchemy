@@ -8,7 +8,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { ChildProcess } from "effect/unstable/process";
+import { ChildProcess } from "effect/process";
 
 const describe = layer(NodeServices.layer, { excludeTestServices: true });
 

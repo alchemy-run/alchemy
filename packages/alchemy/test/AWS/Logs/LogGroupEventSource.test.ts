@@ -7,7 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import LogGroupEventSourceFunctionLive, {
   LogGroupEventSourceFunction,
 } from "./event-source-handler.ts";

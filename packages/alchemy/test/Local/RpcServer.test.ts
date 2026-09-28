@@ -7,7 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { openWebSocket, waitForExit } from "./fixtures/process-effect.ts";
 import { runtimes } from "./fixtures/runtimes.ts";

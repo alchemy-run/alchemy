@@ -4,10 +4,10 @@ import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpEffect from "effect/unstable/http/HttpEffect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 // ---------------------------------------------------------------------------
 // In-memory loopback: the server `serveRpc` handler is turned into a Web

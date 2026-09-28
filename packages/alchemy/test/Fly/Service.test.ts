@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";

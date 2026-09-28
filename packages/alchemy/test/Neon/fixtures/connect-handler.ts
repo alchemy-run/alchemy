@@ -3,7 +3,7 @@ import { CurrentRuntimeContext } from "@/RuntimeContext";
 import { Postgres } from "@/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { ConnectBranch, ConnectProject } from "./connect-database.ts";
 
 export const connectHandler = Effect.gen(function* () {

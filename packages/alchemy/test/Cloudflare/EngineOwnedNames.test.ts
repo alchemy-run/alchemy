@@ -32,7 +32,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name

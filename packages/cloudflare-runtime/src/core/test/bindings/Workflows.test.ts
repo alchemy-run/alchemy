@@ -6,7 +6,7 @@ import * as Path from "effect/Path";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Workflows from "../../bindings/workflows/Workflows.ts";
 import * as Docker from "../../Docker.ts";
 import * as Globals from "../../globals/Globals.ts";

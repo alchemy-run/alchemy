@@ -10,7 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 

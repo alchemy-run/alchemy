@@ -1,7 +1,7 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
 import { bytesToBase64, makeHttpSecretKeyBinding } from "./SecretKeyHttp.ts";
 import { Verify, type VerifyRequest } from "./Verify.ts";

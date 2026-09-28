@@ -3,7 +3,7 @@ import { nodeLoaderArgs } from "@/Util/Node.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { ChildProcess } from "effect/unstable/process";
+import { ChildProcess } from "effect/process";
 import { fileURLToPath } from "node:url";
 
 describe(

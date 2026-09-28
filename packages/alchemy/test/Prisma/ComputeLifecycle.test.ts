@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { Retry, fromApiToken } from "@distilled.cloud/prisma";
 import {
   type Captured,

@@ -13,7 +13,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import { MinimumLogLevel } from "effect/References";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

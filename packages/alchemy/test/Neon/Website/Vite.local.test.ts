@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { bodyContaining, exampleRoot } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers(), dev: true });

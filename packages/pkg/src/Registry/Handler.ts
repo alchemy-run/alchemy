@@ -4,18 +4,18 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Hex } from "effect/encoding";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Etag from "effect/unstable/http/Etag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { ManifestJson, type ManifestPackage } from "../Manifest.ts";
 import {
   BadRequest,
@@ -351,7 +351,7 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
     .put(key, request.stream, {
       contentLength,
       // The params schema already constrained this to 64 hex chars.
-      sha256: Result.getOrThrow(Encoding.decodeHex(sha256)),
+      sha256: Result.getOrThrow(Hex.decode(sha256)),
     })
     .pipe(
       Effect.mapError(

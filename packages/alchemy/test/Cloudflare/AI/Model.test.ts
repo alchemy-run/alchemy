@@ -8,7 +8,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

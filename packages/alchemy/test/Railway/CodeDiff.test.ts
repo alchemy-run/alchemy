@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Railway from "@/Railway";
 import { RailwayEnvironment } from "@/Railway/Environment";
 import { Credentials, GqlTransport } from "@distilled.cloud/railway";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import {
   createRailwayFunctionSupport,
   createRailwayHostedSupport,

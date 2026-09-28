@@ -17,10 +17,10 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import * as Socket from "effect/unstable/socket/Socket";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { RpcClient, RpcSerialization } from "effect/rpc";
+import type { RpcClientError } from "effect/rpc/RpcClientError";
+import * as Socket from "effect/socket/Socket";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import {
   Greeting,

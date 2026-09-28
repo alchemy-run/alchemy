@@ -9,7 +9,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import ProvisionedCacheDataPlaneLive, {
   ProvisionedCacheDataPlaneFunction,
 } from "./Provisioned.DataPlane.handler.ts";

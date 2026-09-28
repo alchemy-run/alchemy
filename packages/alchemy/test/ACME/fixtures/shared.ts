@@ -6,7 +6,7 @@ import * as Output from "@/Output";
 import * as ZeroSsl from "@distilled.cloud/zerossl";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 export const ZONE_NAME = "alchemy-test-2.us";
 

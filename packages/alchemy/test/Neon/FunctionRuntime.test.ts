@@ -13,8 +13,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as HttpClient from "effect/http/HttpClient";
 import RuntimeFunction from "./fixtures/function-effect.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

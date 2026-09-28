@@ -8,8 +8,8 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { transportProxy, type TransportEvent } from "./fixtures/transport.ts";
 
