@@ -117,6 +117,34 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
     );
   });
 
+  describe("returned RPC objects", () => {
+    for (const nested of [false, true]) {
+      it.effect(
+        `rejects remote methods over HTTP instead of discarding them (nested=${nested})`,
+        () =>
+          withRpc(
+            {
+              open: () =>
+                Effect.succeed(
+                  nested
+                    ? { child: { ping: () => Effect.succeed("pong") } }
+                    : { ping: () => Effect.succeed("pong") },
+                ),
+            },
+            (stub) =>
+              Effect.gen(function* () {
+                const error = (yield* stub
+                  .open()
+                  .pipe(Effect.flip)) as Rpc.RpcCallError;
+                expect(error._tag).toBe("RpcCallError");
+                expect(error.method).toBe("open");
+                expect(error.message).toContain("native Cloudflare binding");
+              }),
+          ),
+      );
+    }
+  });
+
   describe("error channel", () => {
     it.effect("lifts a remote tagged failure into the error channel", () =>
       withRpc(shape, (stub) =>

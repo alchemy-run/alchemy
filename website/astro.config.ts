@@ -614,6 +614,7 @@ export default defineConfig({
                   label: "Schemaless RPC",
                   link: "/cloudflare/apis/schemaless-rpc",
                 },
+                { label: "RPC objects", link: "/cloudflare/apis/rpc-objects" },
                 { label: "Effect RPC", link: "/cloudflare/apis/effect-rpc" },
                 {
                   label: "Effect HTTP",

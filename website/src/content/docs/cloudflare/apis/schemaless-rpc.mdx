@@ -146,6 +146,10 @@ return HttpServerResponse.stream(stream, {
 
 The stub call is both an Effect and a Stream — value methods `yield*`, streaming methods pipe through `Stream.*` combinators, and elements are pulled lazily under backpressure all the way to the HTTP response. Durable Object RPC in depth: [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc).
 
+## Return an RPC object
+
+Return a stateful object and call its Effect and Stream methods. See [RPC objects](/cloudflare/apis/rpc-objects) for the counter service, caller, and scope lifetime.
+
 ## Another script's Durable Object
 
 ```typescript

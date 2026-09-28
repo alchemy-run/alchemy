@@ -12,13 +12,16 @@ import {
 import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import {
   asEffectOrStream,
-  decodeRpcResult,
   makeRpcErrorReviver,
-  RpcCallError,
   type RpcErrorClass,
 } from "../../Rpc.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import {
+  callNativeRpc,
+  isRpcMethodName,
+  NativeInvocation,
+} from "./RpcObjectBridge.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
 // encode/decode, `asEffectOrStream`, and the plain-`fetch` client/server) now
@@ -47,6 +50,8 @@ export const makeRpcStub = <Shape>(
      * instances instead of the plain objects RPC serialization produces.
      */
     readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
+    /** @internal Use the cancellable invocation entrypoint on Effect-native hosts. */
+    readonly invocations?: boolean;
   },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
@@ -55,26 +60,51 @@ export const makeRpcStub = <Shape>(
     : fromCloudflareFetcher(stubSource as cf.Fetcher);
   const proxyTarget: object = eagerFetcher ?? {};
   const revive = makeRpcErrorReviver(options?.errors);
+  const methods = new Map<string, (...args: any[]) => unknown>();
 
   return new Proxy(proxyTarget, {
     get: (target: any, prop) => {
-      if (!isLazy && prop in target) return target[prop];
-      if (typeof prop !== "string" && typeof prop !== "symbol") {
-        return target[prop];
+      if (!isRpcMethodName(prop)) return undefined;
+      if (!isLazy && Object.hasOwn(target, prop)) return target[prop];
+      let method = methods.get(prop);
+      if (method === undefined) {
+        method = (...args: any[]) =>
+          asEffectOrStream(
+            Effect.gen(function* () {
+              const stub = isLazy
+                ? yield* stubSource as Effect.Effect<any>
+                : stubSource;
+              return yield* callNativeRpc(
+                prop,
+                () =>
+                  options?.invocations
+                    ? (stub as any)[NativeInvocation](prop).then(
+                        (value: unknown) =>
+                          value === undefined
+                            ? (stub as any)[prop](...args)
+                            : value,
+                        (error: unknown) => {
+                          if (
+                            error instanceof Error &&
+                            (error.message ===
+                              `The RPC receiver does not implement the method "${NativeInvocation}".` ||
+                              error.message ===
+                                `Method "${NativeInvocation}" not found on worker. Make sure it's returned from the worker's default export.`)
+                          )
+                            return (stub as any)[prop](...args);
+                          throw error;
+                        },
+                      )
+                    : (stub as any)[prop](...args),
+                revive,
+                undefined,
+                args,
+              );
+            }),
+          );
+        methods.set(prop, method);
       }
-      return (...args: any[]) =>
-        asEffectOrStream(
-          Effect.gen(function* () {
-            const stub = isLazy
-              ? yield* stubSource as Effect.Effect<any>
-              : stubSource;
-            return yield* Effect.tryPromise({
-              try: () => (stub as any)[prop](...args),
-              catch: (cause) =>
-                new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap((value) => decodeRpcResult(value, revive)));
-          }),
-        );
+      return method;
     },
   }) as Shape;
 };

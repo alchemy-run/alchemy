@@ -23,6 +23,7 @@ import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
+import type { ValidateRpcShape } from "./RpcObject.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
@@ -184,7 +185,8 @@ export interface Platform<
                 ConfigError.ConfigError,
                 PropsReq
               >,
-          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq> &
+            ValidateRpcShape<NoInfer<Shape>>,
         ): Layer.Layer<
           Self,
           never,
@@ -194,7 +196,9 @@ export interface Platform<
         new (
           _: never,
         ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
-        of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
+        of(
+          shape: Shape & MainShape & ValidateRpcShape<Shape>,
+        ): MakeShape<Shape, BaseShape>;
       };
   };
   <Self>(): {
@@ -212,7 +216,8 @@ export interface Platform<
             ConfigError.ConfigError,
             PropsReq
           >,
-      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq> &
+        ValidateRpcShape<NoInfer<Shape>>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
@@ -235,6 +240,7 @@ export interface Platform<
         make<
           PropsReq = never,
           InitReq extends Services | PlatformServices | Resource = never,
+          Shape extends MainShape = MainShape,
         >(
           props:
             | InputProps<InlineProps>
@@ -243,7 +249,8 @@ export interface Platform<
                 ConfigError.ConfigError,
                 PropsReq
               >,
-          impl: Effect.Effect<MainShape, ConfigError.ConfigError, InitReq>,
+          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq> &
+            ValidateRpcShape<NoInfer<Shape>>,
         ): Layer.Layer<
           Self,
           never,
@@ -280,7 +287,8 @@ export interface Platform<
     props:
       | InputProps<InlineProps>
       | Effect.Effect<InputProps<InlineProps>, never, PropsReq>,
-    impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+    impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq> &
+      ValidateRpcShape<NoInfer<Shape>>,
   ): Effect.Effect<
     Resource & Rpc<Shape> & Named<Id>,
     never,
