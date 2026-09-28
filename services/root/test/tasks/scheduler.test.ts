@@ -10,11 +10,11 @@
  * math, deviation records, walk traces) live in ranking.test.ts; the
  * combinator itself in walk.test.ts.
  */
-import * as TS from "@distilled.cloud/typesafe-ai";
 import { RuntimeContext } from "alchemy";
-import type * as TypeSafe from "alchemy/TypeSafe";
+import * as TypeSafe from "alchemy/TypeSafe";
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {
   rerank,
@@ -24,8 +24,13 @@ import {
 import type { RankWrite, TaskRow } from "../../src/tasks/TasksDO.ts";
 
 const query = ((questions, options) =>
-  TS.query(questions, options).pipe(
-    Effect.provide([TS.CredentialsFromEnv, FetchHttpClient.layer]),
+  Effect.gen(function* () {
+    const client = yield* TypeSafe.SystemOne;
+    return yield* client(questions, options);
+  }).pipe(
+    Effect.provide(
+      TypeSafe.SystemOneHttp.pipe(Layer.provide(FetchHttpClient.layer)),
+    ),
   )) as typeof TypeSafe.SystemOne.Service;
 
 interface CardSpec {

@@ -1,25 +1,11 @@
 /**
- * TypeSafe — System One (Jev) as an Alchemy binding.
+ * TypeSafe — System One (Jev) as an Alchemy binding, speaking effect's
+ * native `Decision` language (`effect/unstable/ai`).
  *
- * The question builders are re-exported from the SDK so a judgment reads
- * as one import: `TypeSafe.Choice`, `TypeSafe.Noul`, `TypeSafe.Score`.
+ * `TypeSafe.Choice` / `TypeSafe.Noul` / `TypeSafe.Score` are sugar over
+ * `Decision.classify` / `Decision.probability` / `Decision.rate` (Choice
+ * additionally accepts structured rubric cards), and a judgment's answers
+ * are effect `Decision.Answers`.
  */
-export {
-  asChoice,
-  asNoul,
-  asScore,
-  Choice,
-  Noul,
-  Score,
-} from "@distilled.cloud/typesafe-ai";
-export type {
-  Answer,
-  ChoiceAnswer,
-  NoulAnswer,
-  QueryOptions,
-  ScoreAnswer,
-  SystemOneError,
-  SystemOneResponse,
-} from "@distilled.cloud/typesafe-ai";
 export * from "./SystemOne.ts";
 export * from "./SystemOneHttp.ts";

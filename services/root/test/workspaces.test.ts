@@ -17,7 +17,7 @@
  *    calls land inside its workspace, `@name` reaches siblings, and
  *    the developer's checkout is STRUCTURALLY out of reach (the
  *    incident regression).
- * 3. The pre-bootstrap-era ref (`pull/1356/head`, network): a tree
+ * 3. The pre-bootstrap-era ref (`pull/1424/head`, network): a tree
  *    that predates the distilled submodule provisions cleanly.
  *
  * Keys are `test-ws-*`: distinct from any real thread's, torn down by
@@ -53,7 +53,7 @@ import { workspaceKey } from "../src/sandbox/Keys.ts";
 const REPO = resolve(import.meta.dirname, "..", "..", "..");
 const WORKSPACES = resolve(REPO, WORKSPACES_DIR);
 /** The pull request whose pre-bootstrap-era head broke worktree adds. */
-const OLD_PR_REF = "pull/1356/head";
+const OLD_PR_REF = "pull/1424/head";
 /** A fixed loopback port for the forked dev server — test-only. */
 const PORT = 43117;
 
@@ -329,7 +329,7 @@ test(
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const verbs = yield* yield* host;
-        const key = workspaceKey("test-ws", "pr-1356");
+        const key = workspaceKey("test-ws", "pr-1424");
 
         const tree = yield* verbs.workspaceEnsure(key, { ref: OLD_PR_REF });
         yield* Effect.addFinalizer(() =>

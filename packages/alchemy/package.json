@@ -387,7 +387,6 @@
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
-    "@distilled.cloud/typesafe-ai": "workspace:*",
     "@effect/ai-anthropic": "catalog:",
     "@distilled.cloud/stripe": "workspace:*",
     "@effect/sql-d1": "catalog:",

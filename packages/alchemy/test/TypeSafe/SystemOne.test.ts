@@ -37,14 +37,13 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)("TypeSafe.SystemOne", () => {
           },
         );
 
-        expect(verdict.value.disposition).toBe("thread");
-        expect(verdict.value.urgent).toBe(true);
+        expect(verdict.answers.disposition.label).toBe("thread");
+        expect(verdict.answers.urgent.probability).toBeGreaterThan(0.5);
 
-        // asked as a Choice, so the answer is a choice answer — no
+        // asked as a Choice, so the answer IS a classify answer — no
         // narrowing, no cast
         const disposition = verdict.answers.disposition;
-        if (disposition === undefined) throw new Error("expected an answer");
-        expect(disposition.confidence).toBeGreaterThan(0.5);
+        expect(disposition.confidence ?? 0).toBeGreaterThan(0.5);
         const total = Object.values(disposition.probabilities).reduce(
           (sum: number, value) => sum + (value ?? 0),
           0,

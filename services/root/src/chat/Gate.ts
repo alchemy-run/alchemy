@@ -149,7 +149,7 @@ export const needsContextQuestion = TypeSafe.Noul(
  * using a reply affordance. `none` for a message standing on its own.
  */
 export const repliesToQuestion = (candidates: Record<string, string>) =>
-  TypeSafe.Choice(
+  TypeSafe.Choice<string>(
     "Is `message` a DIRECT REPLY to one of these recent messages — " +
       "agreeing, answering, piling on ('+1', 'same here'), or " +
       "correcting it? Choose that message's id. Choose `none` for a " +
@@ -159,7 +159,7 @@ export const repliesToQuestion = (candidates: Record<string, string>) =>
   );
 
 export const refersToQuestion = (candidates: Record<string, string>) =>
-  TypeSafe.Choice(
+  TypeSafe.Choice<string>(
     "Which of these threads does `message` refer to? The candidates are " +
       "recent threads of this channel, each shown as its opening " +
       "message. Choose `none` unless `message` clearly leans on one of " +
@@ -290,7 +290,7 @@ export interface Message {
 export const judge = Effect.fn("root/Gate.judge")(function* (
   query: typeof TypeSafe.SystemOne.Service,
   state: Message,
-  extra: Record<string, TypeSafe.Questions[string]> = {},
+  extra: TypeSafe.Decisions = {},
   roles?: Record<
     string,
     { what: string; notFor?: string; examples?: ReadonlyArray<string> }
@@ -319,49 +319,57 @@ export const judge = Effect.fn("root/Gate.judge")(function* (
   );
   if (verdict === undefined) return undefined;
 
-  const value = verdict.value as {
-    disposition: Disposition;
-    explicitThread: boolean;
-    addressedTo?: Respondent | "nobody";
-    respondent?: Respondent;
-  } & Record<string, unknown>;
+  const raw = verdict.answers as Record<
+    string,
+    | { label: string; confidence?: number }
+    | { probability: number }
+    | { rating: number; label: string }
+    | undefined
+  >;
+  // an extra's DECODED value: a choice's label, a noul's probability,
+  // a score's rating — the calibrated answer rides `extraAnswers`
+  const decoded = (field: string): unknown => {
+    const answer = raw[field];
+    if (answer === undefined) return undefined;
+    if ("probability" in answer) return answer.probability;
+    if ("rating" in answer) return answer.rating;
+    return answer.label;
+  };
   const extras = Object.fromEntries(
-    Object.keys(extra).map((field) => [field, value[field]]),
+    Object.keys(extra).map((field) => [field, decoded(field)]),
   );
   const extraAnswers = Object.fromEntries(
-    Object.keys(extra).map((field) => [
-      field,
-      (verdict.answers as Record<string, unknown>)[field],
-    ]),
+    Object.keys(extra).map((field) => [field, raw[field]]),
   );
   const answers = verdict.answers as {
-    disposition?: { confidence: number };
-    explicitThread?: { noul: number };
-    addressedTo?: { confidence: number };
-    respondent?: { confidence: number };
+    disposition?: { label: Disposition; confidence?: number };
+    explicitThread?: { probability: number };
+    addressedTo?: { label: Respondent | "nobody"; confidence?: number };
+    respondent?: { label: Respondent };
   };
 
   const confidence = answers.disposition?.confidence ?? 0;
-  const explicitly = (answers.explicitThread?.noul ?? 0) >= EXPLICIT;
+  const explicitly = (answers.explicitThread?.probability ?? 0) >= EXPLICIT;
 
   // an explicit ask for a thread IS a thread, however light the message
   // reads; otherwise the disposition holds only when it is sure
   const disposition: Disposition = explicitly
     ? "thread"
     : confidence >= CONFIDENT
-      ? value.disposition
+      ? (answers.disposition?.label ?? "inline")
       : "inline";
 
   // being spoken to beats being closest to the subject
+  const addressedTo = answers.addressedTo?.label;
   const addressed =
-    value.addressedTo !== undefined &&
-    value.addressedTo !== "nobody" &&
+    addressedTo !== undefined &&
+    addressedTo !== "nobody" &&
     (answers.addressedTo?.confidence ?? 0) >= CONFIDENT;
   const respondent =
     solo ??
     (addressed
-      ? (value.addressedTo as Respondent)
-      : (value.respondent ?? state.roster[0]!));
+      ? (addressedTo as Respondent)
+      : (answers.respondent?.label ?? state.roster[0]!));
 
   yield* Effect.annotateCurrentSpan({
     "gate.disposition": disposition,

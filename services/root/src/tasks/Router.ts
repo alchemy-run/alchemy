@@ -40,8 +40,8 @@ export const routeTask = Effect.fn("root/tasks/Router.routeTask")(function* (
     { state: { task } },
   ).pipe(tryQuery);
   if (verdict === undefined) return undefined;
-  const chosen = verdict.value.tag;
-  const confidence = verdict.answers.tag?.confidence ?? 0;
+  const chosen = verdict.answers.tag.label;
+  const confidence = verdict.answers.tag.confidence ?? 0;
   if (chosen === "untagged" || confidence < CONFIDENT) return undefined;
   return chosen;
 });

@@ -100,7 +100,7 @@ export interface ScoutDeps {
     { what: string; notFor?: string; examples?: ReadonlyArray<string> }
   >;
   /** Extra questions to fan into the first judgment (same call). */
-  readonly extra?: Record<string, TypeSafe.Questions[string]>;
+  readonly extra?: TypeSafe.Decisions;
 }
 
 /** `#123`, `owner/repo#123` and `#p-…` — extraction is code, not judgment. */
@@ -214,7 +214,7 @@ const searchThreads = Effect.fn(function* (deps: ScoutDeps, state: Message) {
       { state: { message: state.message, recent: state.recent } },
     )
     .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
-  const choice = picked?.value.refersTo;
+  const choice = picked?.answers.refersTo.label;
   // The SEARCH bar sits below the routing bar (Gate.CONFIDENT) on
   // purpose: probability spreads across however many threads are
   // offered, and the stakes are low — a wrong pick attaches one
@@ -261,7 +261,11 @@ export const scout = Effect.fn("root/Scout.scout")(function* (
   let evidence = yield* resolveReferences(deps, explicit);
 
   // implicit reference, nothing explicit found → one judged search hop
-  if (evidence.length === 0 && first.extras.needsContext === true) {
+  // (needsContext is a Noul — its decoded extra is the probability)
+  if (
+    evidence.length === 0 &&
+    ((first.extras.needsContext as number | undefined) ?? 0) >= 0.5
+  ) {
     evidence = yield* searchThreads(deps, state);
   }
   if (evidence.length === 0) {

@@ -265,9 +265,9 @@ const judgeDisposition = Effect.fn(function* (
     { disposition: dispositionQuestion },
     { state: { reply } },
   ).pipe(tryQuery);
-  const sure = (verdict?.answers.disposition?.confidence ?? 0) >= 0.6;
+  const sure = (verdict?.answers.disposition.confidence ?? 0) >= 0.6;
   return {
-    kind: sure ? verdict!.value.disposition : "complete",
+    kind: sure ? verdict!.answers.disposition.label : "complete",
     note: "",
   } satisfies Disposition as Disposition;
 });

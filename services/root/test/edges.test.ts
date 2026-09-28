@@ -14,8 +14,10 @@
  *   explicit references) and at what confidence, so a wrong judgment
  *   can be superseded without touching the DAG.
  */
-import * as TS from "@distilled.cloud/typesafe-ai";
+import { RuntimeContext } from "alchemy";
+import * as TypeSafe from "alchemy/TypeSafe";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { describe, expect, test } from "bun:test";
 import {
@@ -86,12 +88,20 @@ describe("squash: segmentation is code", () => {
 describe("squash: only ambiguity is judged", () => {
   const confirm = (previous: string, message: string) =>
     Effect.runPromise(
-      TS.query(
-        { sameUtterance: sameUtteranceQuestion },
-        { state: { previous, message } },
-      ).pipe(
-        Effect.provide([TS.CredentialsFromEnv, FetchHttpClient.layer]),
-        Effect.map((verdict) => verdict.value.sameUtterance),
+      Effect.gen(function* () {
+        const client = yield* TypeSafe.SystemOne;
+        return yield* client(
+          { sameUtterance: sameUtteranceQuestion },
+          { state: { previous, message } },
+        );
+      }).pipe(
+        Effect.provide(
+          TypeSafe.SystemOneHttp.pipe(Layer.provide(FetchHttpClient.layer)),
+        ),
+        Effect.provide(RuntimeContext.phantom),
+        Effect.map(
+          (verdict) => verdict.answers.sameUtterance.probability >= 0.5,
+        ),
       ),
     );
 

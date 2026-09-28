@@ -63,7 +63,7 @@ export const independentLooks = Effect.fn("root/Looks.independentLooks")(
         },
       ),
     );
-    const contradicts = (verdict?.answers.contradicts?.noul ?? 0) >= 0.6;
+    const contradicts = (verdict?.answers.contradicts.probability ?? 0) >= 0.6;
 
     if (contradicts) {
       yield* deps.dispatch("manager", {

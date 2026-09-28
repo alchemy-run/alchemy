@@ -56,37 +56,47 @@ const rankJudge = (options: {
       if ("next" in questions) {
         const value = chooseHuman();
         return {
-          value: { next: value, probe: "enough" },
           answers: {
             next: {
-              choice: value,
+              label: value,
               confidence: options.confidence,
               probabilities: { [value]: options.confidence },
             },
-            probe: { choice: "enough", confidence: 0.9 },
+            probe: {
+              label: "enough",
+              confidence: 0.9,
+              probabilities: { enough: 0.9 },
+            },
           },
+          usage: {},
         };
       }
       if ("pair" in questions) {
         const value = chooseHuman();
         return {
-          value: { pair: value },
           answers: {
             pair: {
-              choice: value,
+              label: value,
               confidence: options.confidence,
               probabilities: { [value]: options.confidence },
             },
           },
+          usage: {},
         };
       }
       if ("changes" in questions) {
-        return { value: { changes: false }, answers: { changes: { noul: 0.05 } } };
+        return { answers: { changes: { probability: 0.05 } }, usage: {} };
       }
       if ("disposition" in questions) {
         return {
-          value: { disposition: "complete" },
-          answers: { disposition: { confidence: 0.9 } },
+          answers: {
+            disposition: {
+              label: "complete",
+              confidence: 0.9,
+              probabilities: { complete: 0.9 },
+            },
+          },
+          usage: {},
         };
       }
       throw new Error("unscripted question");

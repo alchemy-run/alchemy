@@ -286,18 +286,24 @@ export const deskWorld = (options?: {
     Effect.sync(() => {
       if ("changes" in questions) {
         const review = String(opts.state.review ?? "");
-        const noul = /changes needed|fix|defect|racy/i.test(review)
+        const probability = /changes needed|fix|defect|racy/i.test(review)
           ? 0.92
           : 0.06;
         return {
-          value: { changes: noul >= 0.5 },
-          answers: { changes: { noul } },
+          answers: { changes: { probability } },
+          usage: {},
         };
       }
       if ("disposition" in questions) {
         return {
-          value: { disposition: "complete" },
-          answers: { disposition: { confidence: 0.9 } },
+          answers: {
+            disposition: {
+              label: "complete",
+              probabilities: { complete: 0.9, park: 0.06, handoff: 0.04 },
+              confidence: 0.9,
+            },
+          },
+          usage: {},
         };
       }
       throw new Error("unscripted question");

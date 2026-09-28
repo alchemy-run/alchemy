@@ -43,8 +43,8 @@ export const clusterBy = Effect.fn(function* (
       { cluster: sameProblem(clusters) },
       { state: { item: event.title } },
     ).pipe(tryQuery);
-    const choice = verdict?.value.cluster;
-    const sure = (verdict?.answers.cluster?.confidence ?? 0) >= 0.5;
+    const choice = verdict?.answers.cluster.label;
+    const sure = (verdict?.answers.cluster.confidence ?? 0) >= 0.5;
     if (choice === undefined || choice === "new" || !sure) {
       clusters.push([event]);
     } else {

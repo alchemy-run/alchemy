@@ -74,8 +74,8 @@ export const handleBurst = Effect.fn("root/Burst.handleBurst")(function* (
           { state: { title: event.title, repo: event.repo } },
         )
         .pipe(tryQuery);
-      const sure = (verdict?.answers.stream?.confidence ?? 0) >= 0.6;
-      return { event, stream: sure ? verdict!.value.stream : "other" };
+      const sure = (verdict?.answers.stream.confidence ?? 0) >= 0.6;
+      return { event, stream: sure ? verdict!.answers.stream.label : "other" };
     }),
     { concurrency: 4 },
   );
@@ -117,7 +117,7 @@ export const handleBurst = Effect.fn("root/Burst.handleBurst")(function* (
           const wants = yield* deps
             .query({ changes: CHANGES }, { state: { review } })
             .pipe(tryQuery);
-          if ((wants?.answers.changes?.noul ?? 0) >= 0.6) {
+          if ((wants?.answers.changes.probability ?? 0) >= 0.6) {
             const fixed = yield* dispatch("engineer", {
               thread: itemRoot,
               ask: `The review of ${ref} demands changes:\n${review}\nAddress them.`,

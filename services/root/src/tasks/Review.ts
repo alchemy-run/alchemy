@@ -28,7 +28,7 @@ export const reviewVerdict = Effect.fn("root/tasks/Review.reviewVerdict")(
       { changes: changesQuestion },
       { state: { review } },
     ).pipe(tryQuery);
-    return ((verdict?.answers.changes?.noul ?? 0) >= DEMANDS_CHANGES
+    return ((verdict?.answers.changes.probability ?? 0) >= DEMANDS_CHANGES
       ? "changes_requested"
       : "approved") satisfies ReviewVerdict as ReviewVerdict;
   },

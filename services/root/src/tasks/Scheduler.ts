@@ -144,7 +144,7 @@ export const nextQuestion = (
   desk: string,
   candidates: Record<string, { what: string }>,
 ) =>
-  TypeSafe.Choice(
+  TypeSafe.Choice<string>(
     `Which ready task should \`${desk}\` work NEXT? Read the whole ` +
       "`board`: a PREREQUISITE other work builds on, or an urgent " +
       "interrupt (an outage, a blocked release, a hard date), MUST " +
@@ -166,7 +166,7 @@ export const nextQuestion = (
 export const probeQuestion = (
   expansions: Record<string, { what: string }>,
 ) =>
-  TypeSafe.Choice(
+  TypeSafe.Choice<string>(
     "Is the state already enough to COMMIT to the `next` pick, or " +
       "should the scheduler LOOK CLOSER first? Choose `enough` when " +
       "the cards already decide the order. Choose an expansion ONLY " +
@@ -188,7 +188,7 @@ export const pairQuestion = (
   a: { id: string; what: string },
   b: { id: string; what: string },
 ) =>
-  TypeSafe.Choice(
+  TypeSafe.Choice<string>(
     `Which task should \`${desk}\` take FIRST? A PREREQUISITE the ` +
       "other builds on, or an urgent interrupt, MUST come first; " +
       "otherwise prefer the tighter continuation of `desk.recent`. " +
@@ -457,11 +457,18 @@ const pickWalk = (
         );
         budget.calls += 1;
         // one fan-out call per step: the pick AND the probe — extra
-        // questions in the same call are nearly free (Gate's pattern)
+        // questions in the same call are nearly free (Gate's pattern).
+        // With nothing to drill the probe is not asked (a one-option
+        // Choice is not a question): the answer IS `enough`.
         const verdict = yield* query(
           {
             next: nextQuestion(context.desk.desk, candidates),
-            probe: probeQuestion(expansions),
+            ...(Object.keys(expansions).length > 0
+              ? { probe: probeQuestion(expansions) }
+              : {}),
+          } as {
+            next: ReturnType<typeof nextQuestion>;
+            probe?: ReturnType<typeof probeQuestion>;
           },
           { state },
         ).pipe(tryQuery);
@@ -474,11 +481,11 @@ const pickWalk = (
             conviction: 0,
           } satisfies WalkStepOutcome<PickAccumulator, PickVerdict>;
         }
-        const pick = String(verdict.value.next);
-        const answer = TypeSafe.asChoice(verdict.answers.next);
+        const answer = verdict.answers.next;
+        const pick = answer.label;
         const conviction =
-          answer?.probabilities?.[pick] ?? answer?.confidence ?? 0;
-        const probe = String(verdict.value.probe ?? "enough");
+          answer.probabilities[pick] ?? answer.confidence ?? 0;
+        const probe = verdict.answers.probe?.label ?? "enough";
         if (pick === "none" || probe === "enough") {
           return {
             move: { kind: "done", value: { pick, conviction } },
@@ -557,11 +564,8 @@ const pickWalk = (
                 conviction: 0,
               } satisfies WalkStepOutcome<PickAccumulator, PickVerdict>;
             }
-            const winner = String(faced.value.pair);
-            const mass =
-              TypeSafe.asChoice(faced.answers.pair)?.probabilities?.[
-                winner
-              ] ?? 0;
+            const winner = faced.answers.pair.label;
+            const mass = faced.answers.pair.probabilities[winner] ?? 0;
             return {
               move: {
                 kind: "continue",
@@ -776,10 +780,10 @@ export const rankReady = Effect.fn("root/tasks/Scheduler.rankReady")(
             if (gate === undefined) {
               return fallbackRank(human, context.width, context.desk.desk);
             }
-            const winner = String(gate.value.pair);
-            const answer = TypeSafe.asChoice(gate.answers.pair);
+            const winner = gate.answers.pair.label;
+            const answer = gate.answers.pair;
             const mass =
-              answer?.probabilities?.[winner] ?? answer?.confidence ?? 0;
+              answer.probabilities[winner] ?? answer.confidence ?? 0;
             gateSteps.push({
               question: `override sam's order? ${picked.id} vs ${guarded.id}`,
               answer: `${winner} first`,

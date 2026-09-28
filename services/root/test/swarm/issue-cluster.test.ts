@@ -9,18 +9,23 @@
  * and asks, per item, "which existing cluster, or new?" — Scout's
  * wide-Choice trick pointed at intake. Judgments run LIVE.
  */
-import * as TS from "@distilled.cloud/typesafe-ai";
 import { RuntimeContext } from "alchemy";
-import type * as TypeSafe from "alchemy/TypeSafe";
+import * as TypeSafe from "alchemy/TypeSafe";
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { Agent, InboundEvent } from "../../src/engineering/Burst.ts";
 import { handleCluster } from "../../src/engineering/Cluster.ts";
 
 const query = ((questions, options) =>
-  TS.query(questions, options).pipe(
-    Effect.provide([TS.CredentialsFromEnv, FetchHttpClient.layer]),
+  Effect.gen(function* () {
+    const client = yield* TypeSafe.SystemOne;
+    return yield* client(questions, options);
+  }).pipe(
+    Effect.provide(
+      TypeSafe.SystemOneHttp.pipe(Layer.provide(FetchHttpClient.layer)),
+    ),
   )) as typeof TypeSafe.SystemOne.Service;
 
 const clusterWorld = () => {

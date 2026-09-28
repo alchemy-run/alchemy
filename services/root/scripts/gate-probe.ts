@@ -6,10 +6,10 @@
  *
  * `bun scripts/gate-probe.ts [root|engineering] ["a message…"]`
  */
-import * as TS from "@distilled.cloud/typesafe-ai";
 import { RuntimeContext } from "alchemy";
-import type * as TypeSafe from "alchemy/TypeSafe";
+import * as TypeSafe from "alchemy/TypeSafe";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { judge, type Respondent } from "../src/chat/Gate.ts";
 
@@ -33,10 +33,14 @@ const CHANNEL = process.argv[2] ?? "engineering";
 const roster = ROOMS[CHANNEL]!;
 const messages = process.argv[3] !== undefined ? [process.argv[3]] : MESSAGES;
 
-const query = ((questions, options) =>
-  TS.query(questions, options).pipe(
-    Effect.provide([TS.CredentialsFromEnv, FetchHttpClient.layer]),
-  )) as typeof TypeSafe.SystemOne.Service;
+const physics = TypeSafe.SystemOneHttp.pipe(
+  Layer.provide(FetchHttpClient.layer),
+);
+const query = ((decisions, options) =>
+  Effect.gen(function* () {
+    const client = yield* TypeSafe.SystemOne;
+    return yield* client(decisions, options);
+  }).pipe(Effect.provide(physics))) as typeof TypeSafe.SystemOne.Service;
 
 const probe = Effect.fn(function* (message: string) {
   const verdict = yield* judge(query, {
