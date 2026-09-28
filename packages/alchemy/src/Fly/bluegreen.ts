@@ -1,3 +1,4 @@
+import { regionOfReplica } from "./Region.ts";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import type { Machine } from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
@@ -62,7 +63,7 @@ const setMetadata = Effect.fn(function* (
     machine.id!,
     () =>
       machines
-        .updateMachineMetadata({
+        .patchMachineMetadata({
           app_name: appName,
           machine_id: machine.id!,
           metadata,
@@ -213,7 +214,8 @@ export const reconcileBlueGreen = Effect.fn(function* (
       : config,
     count: input.count,
     minSecretsVersion: input.minSecretsVersion,
-    region: input.region,
+    // A single region hashes as before, so existing generations stay current.
+    region: input.regions.length === 1 ? input.regions[0] : [...input.regions],
   });
   const observe = listMachinesByApp(input.appName).pipe(
     Effect.flatMap((listed) => {
@@ -515,7 +517,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
           .createMachine({
             app_name: input.appName,
             name,
-            region: input.region,
+            region: regionOfReplica(input.regions, index),
             config: {
               ...pinnedConfig,
               image: containerPins ? undefined : (image ?? config.image),

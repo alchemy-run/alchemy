@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ENSURE_NOTES_SQL, Notes } from "./schema.ts";
-import { API_PORT, Db, Site } from "./shared.ts";
+import { API_PORT, Db } from "./shared.ts";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -23,7 +23,6 @@ const json = (value: unknown, status = 200) =>
 export default class Api extends Fly.Service<Api>()(
   "Api",
   {
-    app: Site,
     main: import.meta.url,
     port: API_PORT,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },

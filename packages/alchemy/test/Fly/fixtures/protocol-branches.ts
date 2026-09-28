@@ -39,7 +39,7 @@ const input: ReconcileReplicasInput = {
   resourceInstanceId: metadata[keys.instance],
   fqn: metadata[keys.fqn],
   baseName: metadata[keys.baseName],
-  region: "ord",
+  regions: ["ord"],
   count: 1,
   disks: [],
   policy: {
@@ -180,7 +180,7 @@ export const protocolClient = (
             return reply(request, {});
           if (
             path === `/v1/apps/${appName}/machines/${candidateId}/metadata` &&
-            request.method === "PUT" &&
+            request.method === "PATCH" &&
             current
           ) {
             current = {
