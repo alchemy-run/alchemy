@@ -511,6 +511,34 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Kubernetes",
+    intro:
+      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.",
+    pages: {
+      slugs: [
+        "kubernetes/index",
+        "kubernetes/setup",
+        "kubernetes/tutorial/part-1",
+        "kubernetes/tutorial/part-2",
+        "kubernetes/tutorial/part-3",
+        "kubernetes/tutorial/part-4",
+        "kubernetes/tutorial/part-5",
+        "kubernetes/clusters/connecting",
+        "kubernetes/clusters/registries",
+        "kubernetes/clusters/local",
+        "kubernetes/clusters/eks",
+        "kubernetes/clusters/cluster-adapters",
+        "kubernetes/workloads/deployments",
+        "kubernetes/workloads/jobs",
+        "kubernetes/workloads/images",
+        "kubernetes/workloads/bindings",
+        "kubernetes/workloads/object-lifecycle",
+        "kubernetes/objects/manifests",
+        "kubernetes/objects/helm-charts",
+      ],
+    },
+  },
+  {
     heading: "SQL",
     intro:
       "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
@@ -646,7 +674,11 @@ async function loadPage(slug: string): Promise<Page> {
   for (const rel of candidates) {
     const full = path.join(docsDir, rel);
     try {
-      const source = await readFile(full, "utf8");
+      // Dev-generated reference pages carry copy-editor markers.
+      const source = (await readFile(full, "utf8")).replace(
+        /<!--copy:[^>]*?-->|^<div data-copy=[^\n]*>\n|^<\/div><!--\/copy-->\n/gm,
+        "",
+      );
       const fm = parseFrontmatter(source);
       const title = fm.title;
       const description = fm.description ?? fm.excerpt ?? "";

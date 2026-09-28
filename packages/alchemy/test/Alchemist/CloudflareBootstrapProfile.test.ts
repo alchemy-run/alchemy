@@ -6,6 +6,8 @@ import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
 import * as Interaction from "@/Interaction.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -158,11 +160,15 @@ it.live(
         });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
-        const missing = yield* resolveStateStoreScope({ envFile }).pipe(
-          Effect.flip,
-        );
-        expect(missing).toBeInstanceOf(AuthError);
-        expect((missing as AuthError).message).toContain("profile 'default'");
+        // Environment resolution is lazy: missing auth surfaces when the
+        // account is demanded, through the environment's defect channel.
+        const missing = yield* Effect.exit(resolveStateStoreScope({ envFile }));
+        expect(Exit.isFailure(missing)).toBe(true);
+        if (Exit.isFailure(missing)) {
+          const error = Cause.squash(missing.cause);
+          expect(error).toBeInstanceOf(AuthError);
+          expect(String(error)).toContain("profile 'default'");
+        }
       }),
     ),
   { tags: ["unit", "local"], exclusive: true },
