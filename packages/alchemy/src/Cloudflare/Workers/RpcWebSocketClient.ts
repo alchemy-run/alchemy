@@ -1,28 +1,5 @@
-import type * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
-import type * as Rpc from "effect/unstable/rpc/Rpc";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as Socket from "effect/unstable/socket/Socket";
-
-export interface LayerOptions {
-  /** Options passed to Effect's WebSocket transport. */
-  readonly socket?: Parameters<typeof Socket.layerWebSocket>[1];
-  /** Options passed to Effect's socket RPC protocol. */
-  readonly protocol?: Parameters<typeof RpcClient.layerProtocolSocket>[0];
-  /** Options passed to the grouped Effect RPC client. */
-  readonly client?: Omit<
-    NonNullable<Parameters<typeof RpcClient.make>[1]>,
-    "flatten"
-  >;
-  /**
-   * Serialization matching the server. Alchemy's RpcDurableObject uses JSON.
-   * @default RpcSerialization.json
-   */
-  readonly serialization?: RpcSerialization.RpcSerialization["Service"];
-}
+import { layer as sharedLayer } from "../../Workers/RpcWebSocketClient.ts";
+export type { LayerOptions } from "../../Workers/RpcWebSocketClient.ts";
 
 /**
  * Provide a typed RPC client and its WebSocket connection for the Layer's lifetime.
@@ -70,28 +47,4 @@ export interface LayerOptions {
  * @product Workers
  * @category Workers & Compute
  */
-export const layer = <I, Rpcs extends Rpc.Any>(
-  service: Context.Key<I, RpcClient.RpcClient<Rpcs, RpcClientError>>,
-  group: RpcGroup.RpcGroup<Rpcs>,
-  url: Parameters<typeof Socket.layerWebSocket>[0],
-  options: LayerOptions = {},
-): Layer.Layer<
-  I,
-  never,
-  Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>
-> =>
-  Layer.effect(service, RpcClient.make(group, options.client)).pipe(
-    Layer.provide(
-      RpcClient.layerProtocolSocket(options.protocol).pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            Socket.layerWebSocket(url, options.socket),
-            Layer.succeed(
-              RpcSerialization.RpcSerialization,
-              options.serialization ?? RpcSerialization.json,
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+export const layer: typeof sharedLayer = sharedLayer;

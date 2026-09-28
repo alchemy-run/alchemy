@@ -19,7 +19,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  Effect.gen(function* () {
+    yield* destroy(Stack);
+    return yield* deploy(Stack);
+  }),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 let bust = 0;

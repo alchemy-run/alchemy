@@ -163,7 +163,10 @@ export const CapacityProviderProvider = () =>
           })
           .pipe(
             Effect.map((res) =>
-              res.capacityProviders?.find((p) => p.name === name),
+              // Exact-name lookups retain INACTIVE tombstones after deletion.
+              res.capacityProviders?.find(
+                (p) => p.name === name && p.status !== "INACTIVE",
+              ),
             ),
           );
 

@@ -180,7 +180,7 @@ export const protocolClient = (
             return reply(request, {});
           if (
             path === `/v1/apps/${appName}/machines/${candidateId}/metadata` &&
-            request.method === "PUT" &&
+            request.method === "PATCH" &&
             current
           ) {
             current = {

@@ -629,25 +629,29 @@ export const CertificateProvider = () =>
           const certificateArn = certificate.CertificateArn;
           yield* session.note(certificateArn);
 
-          // Sync DNS validation: ensure validation records are upserted and
-          // the cert reaches `ISSUED`. The zone is the explicit
-          // `hostedZoneId` when given; otherwise the most specific public
-          // zone containing `domainName` is inferred. When neither yields a
-          // zone, validation is left to the caller (external DNS) and the
-          // certificate is returned pending — the pre-inference behavior.
-          // For an already-issued cert this is a fast-path: we only wait
-          // for validation records when the cert isn't already issued.
+          // Sync DNS validation. ACM populates each `ResourceRecord` a few
+          // seconds after the request — always wait for the RECORDS so the
+          // returned `domainValidationOptions` are usable by whoever
+          // publishes them. Issuance is then owned by ONE of two parties:
+          // - a governing Route 53 zone (explicit `hostedZoneId`, or the
+          //   most specific public zone containing `domainName`): the
+          //   records are upserted here and this resource waits for
+          //   `ISSUED`, so consumers can attach the certificate directly;
+          // - no Route 53 zone: the certificate is returned PENDING with
+          //   its validation records; the caller publishes them through
+          //   its DNS provider and gates consumers on
+          //   `AWS.ACM.CertificateValidation`, which waits for issuance.
+          // For an already-issued cert this is a fast path.
           if (
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
             certificate.Status !== "ISSUED"
           ) {
+            certificate = yield* waitForValidationRecords(certificateArn);
             const validationZoneId =
               news.hostedZoneId ??
               (yield* findPublicHostedZoneId(news.domainName));
             if (validationZoneId !== undefined) {
-              const withRecords =
-                yield* waitForValidationRecords(certificateArn);
-              yield* upsertValidationRecords(validationZoneId, withRecords);
+              yield* upsertValidationRecords(validationZoneId, certificate);
               certificate = yield* waitForIssued(certificateArn);
             }
           }

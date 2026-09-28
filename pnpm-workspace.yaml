@@ -5,11 +5,16 @@ onlyBuiltDependencies:
   - sharp
   - workerd
 allowBuilds:
+  "@google/genai": false
   "@parcel/watcher": true
+  better-sqlite3: true
+  cbor-extract: true
   core-js: false
   es5-ext: false
   esbuild: true
+  koffi: true
   msgpackr-extract: true
+  protobufjs: false
   sharp: true
   vue-demi: false
   workerd: true
@@ -242,6 +247,7 @@ overrides:
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
+  "@types/pg": 8.20.4
   mysql2: 3.24.2
   zod: 4.5.4
   rolldown: 1.2.5

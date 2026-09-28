@@ -1,4 +1,9 @@
+import { Worker as CelldWorker } from "@/Celld/Worker.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
+import {
+  Worker as RivetWorker,
+  type RivetWorkerProps,
+} from "@/Rivet/Worker.ts";
 import type { Named, PlatformIdentity } from "@/index.ts";
 import type { Platform, PlatformProps } from "@/Platform.ts";
 import type { Resource } from "@/Resource.ts";
@@ -75,11 +80,41 @@ const ExternalFunctionalEffectWorker = Worker(
   Effect.succeed({}),
 );
 
+class ModularCelldWorker extends CelldWorker<ModularCelldWorker, {}>()(
+  "ModularCelldWorker",
+) {}
+class BareCelldWorker extends CelldWorker<BareCelldWorker>()(
+  "BareCelldWorker",
+) {}
+class InlineCelldWorker extends CelldWorker<InlineCelldWorker>()(
+  "InlineCelldWorker",
+  { main: import.meta.url },
+  Effect.succeed({}),
+) {}
+class ModularRivetWorker extends RivetWorker<ModularRivetWorker, {}>()(
+  "ModularRivetWorker",
+) {}
+class BareRivetWorker extends RivetWorker<BareRivetWorker>()(
+  "BareRivetWorker",
+) {}
+declare const rivetProps: RivetWorkerProps;
+class InlineRivetWorker extends RivetWorker<InlineRivetWorker>()(
+  "InlineRivetWorker",
+  rivetProps,
+  Effect.succeed({}),
+) {}
+
 const identity = <const Id extends string>(
   declaration: PlatformIdentity<Id>,
 ): Id => declaration.LogicalId;
 
 const ids = {
+  ModularCelldWorker: identity(ModularCelldWorker),
+  BareCelldWorker: identity(BareCelldWorker),
+  InlineCelldWorker: identity(InlineCelldWorker),
+  ModularRivetWorker: identity(ModularRivetWorker),
+  BareRivetWorker: identity(BareRivetWorker),
+  InlineRivetWorker: identity(InlineRivetWorker),
   ModularPlatform: identity(ModularPlatform),
   BarePlatform: identity(BarePlatform),
   InlinePlatform: identity(InlinePlatform),

@@ -196,6 +196,8 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     top: 100%;
     inset-inline-start: 0;
     min-width: 280px;
+    max-height: calc(100dvh - var(--sl-nav-height) - 0.5rem);
+    overflow-y: auto;
     z-index: 30;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);

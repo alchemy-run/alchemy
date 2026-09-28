@@ -1,17 +1,11 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import type { HttpServerResponse } from "effect/unstable/http/HttpServerResponse";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import type { Rpc, RpcGroup } from "effect/unstable/rpc";
-import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import type { Dependencies } from "../../Dependencies.ts";
@@ -28,7 +22,7 @@ import {
   type DurableObjectServices,
 } from "./DurableObject.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
-import { bindEffectRpc } from "./Rpc.ts";
+import { bindEffectRpc, makeHandlers } from "../../Workers/RpcDurableObject.ts";
 import * as RpcWebSocket from "./RpcWebSocket.ts";
 import type { Worker as WorkerService } from "./Worker.ts";
 
@@ -319,10 +313,10 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ### Calling the DO from a Worker
  * **Example:** Typed rpc client at the call site
  * `yield* Counter` resolves to a value whose `getByName(id)` returns
- * an `Effect<RpcClient<CounterRpcs>>`. Each rpc method is a typed
- * Effect/Stream factory — no `RpcClient.make` setup needed. Yield
- * the client inside a per-request `Effect.scoped` handler so it's
- * freed with the request.
+ * an `Effect<RpcClient<CounterRpcs>>`. Each RPC method acquires its
+ * native stub and client in the current call's scope, not when selecting
+ * the namespace. Unary calls and streams release their own clients;
+ * `{ asQueue: true }` subscriptions retain the consumer's `Scope`.
  * ```typescript
  * import Counter from "./counter.ts";
  *
@@ -551,87 +545,17 @@ const wrapImpl = (
       inner.pipe(
         Effect.flatMap((value) => {
           if (Layer.isLayer(value)) {
-            return makeHandlers(props, value as Layer.Layer<any, never, any>);
+            return makeHandlers(
+              props.schema,
+              value as Layer.Layer<any, never, any>,
+              { transport: RpcWebSocket.make },
+            );
           }
           return Effect.succeed({ fetch: value });
         }),
       ),
     ),
   ) as Effect.Effect<Effect.Effect<any>>;
-
-class RpcRequestLifetime extends RpcMiddleware.Service<RpcRequestLifetime>()(
-  "Cloudflare.RpcDurableObject.RequestLifetime",
-) {}
-
-const makeHandlers = Effect.fn(function* (
-  props: RpcDurableObjectProps<any>,
-  handlers: Layer.Layer<any, never, any>,
-) {
-  // The protocol outlives the constructor's temporary layer scope.
-  return yield* Effect.acquireUseRelease(
-    Scope.make(),
-    (instanceScope) =>
-      Effect.gen(function* () {
-        const memoMap = Layer.makeMemoMapUnsafe();
-        const context = yield* Layer.buildWithMemoMap(
-          handlers,
-          memoMap,
-          instanceScope,
-        );
-        const services = Layer.succeedContext(context);
-        const http = Effect.gen(function* () {
-          const handler = yield* RpcServer.toHttpEffect(props.schema).pipe(
-            Effect.provide(
-              Layer.mergeAll(services, RpcSerialization.layerNdjson),
-            ),
-          );
-          return yield* handler;
-        });
-        const state = yield* DurableObjectState;
-        const runtime = yield* RuntimeContext;
-        const lifetime = Layer.succeed(RpcRequestLifetime, (effect) =>
-          Effect.withFiber((fiber) =>
-            // RpcServer sends Exit before finalization and drops sends after disconnect.
-            state
-              .waitUntil(Fiber.await(fiber))
-              .pipe(
-                Effect.provideService(RuntimeContext, runtime),
-                Effect.andThen(effect),
-              ),
-          ),
-        );
-        const transport = yield* RpcWebSocket.make.pipe(
-          Effect.provide(RpcSerialization.layerJson),
-        );
-        yield* Layer.buildWithMemoMap(
-          RpcServer.layer(props.schema.middleware(RpcRequestLifetime)).pipe(
-            Layer.provide(
-              Layer.mergeAll(
-                services,
-                lifetime,
-                Layer.succeed(RpcServer.Protocol, transport.protocol),
-              ),
-            ),
-          ),
-          memoMap,
-          instanceScope,
-        );
-        return {
-          webSocketMessage: transport.webSocketMessage,
-          webSocketClose: transport.webSocketClose,
-          webSocketError: transport.webSocketError,
-          fetch: Effect.gen(function* () {
-            const request = yield* HttpServerRequest;
-            return yield* request.headers.upgrade?.toLowerCase() === "websocket"
-              ? transport.fetch
-              : http;
-          }),
-        };
-      }),
-    (instanceScope, exit) =>
-      Exit.isFailure(exit) ? Scope.close(instanceScope, exit) : Effect.void,
-  );
-});
 
 const build = (
   name: string,

@@ -43,7 +43,7 @@ import {
   uploadAssets,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isDurableObjectExport } from "./DurableObject.ts";
+import { isDurableObjectExport } from "../../Workers/DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";

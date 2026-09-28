@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import type { WorkflowExport as CelldWorkflowExport } from "../../Celld/Workflows/Workflow.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -9,11 +10,16 @@ import {
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
 import type * as Serverless from "../../Serverless/index.ts";
-import type { DurableObjectExport } from "./DurableObject.ts";
+import type {
+  DurableObjectBindingDeclaration,
+  DurableObjectExport,
+  DurableObjectStubOptions,
+} from "../../Workers/DurableObject.ts";
+import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
+import { makeRpcStub } from "./Rpc.ts";
 import {
   ExportedHandlerMethods,
-  WorkerEnvironment,
   WorkerExecutionContext,
   WorkerTypeId,
   deferredExecutionContext,
@@ -25,6 +31,7 @@ import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 export type WorkerExport =
   | DurableObjectExport
   | WorkflowExport
+  | CelldWorkflowExport
   | SqlMigrationsExport;
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
@@ -85,6 +92,25 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
+    // The Cloudflare Durable Object flavors (see `DurableObjectHostLike`):
+    // the Worker binding contract's `bindings` array, and the workerd JSRPC
+    // stub. Celld / Rivet spread this context and override both.
+    durableObjectBinding: (decl: DurableObjectBindingDeclaration) => ({
+      bindings: [
+        {
+          type: "durable_object_namespace" as const,
+          name: decl.name,
+          className: decl.className,
+          scriptName: decl.scriptName,
+          transferredFrom: decl.transferredFrom,
+        },
+      ],
+    }),
+    durableObjectStub: (
+      nativeStub: unknown,
+      _namespace: string,
+      options: DurableObjectStubOptions,
+    ) => makeRpcStub(nativeStub, { errors: options.errors }),
     planServices: Layer.mergeAll(
       Layer.succeed(WorkerEnvironment, {}),
       // Lets the init closure `yield*` WorkerExecutionContext during plan;

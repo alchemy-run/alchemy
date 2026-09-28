@@ -887,10 +887,25 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         prepareReset: Effect.fn(function* (value: string) {
           yield* onArchive.schedule("reset", {
+            // Released explicitly after reconstruction, independently of HTTP latency.
             after: "5 minutes",
             payload: { value },
           });
           return yield* snapshot();
+        }),
+        releaseReset: Effect.fn(function* () {
+          const at = yield* Effect.sync(() => Date.now() + 100);
+          yield* storage.transaction(
+            Effect.gen(function* () {
+              yield* storage.sql.exec(
+                "UPDATE alchemy_alarm_callbacks SET run_at = ? WHERE callback = ? AND id = ?",
+                at,
+                "archive",
+                "reset",
+              );
+              yield* storage.setAlarm(at);
+            }),
+          );
         }),
         optional: Effect.fn(function* () {
           if (!onOptional) {

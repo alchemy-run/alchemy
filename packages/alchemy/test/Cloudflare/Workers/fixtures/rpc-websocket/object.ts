@@ -116,14 +116,14 @@ export const SocketObjectLive = SocketObject.make(
           });
           for (const socket of sockets) {
             yield* Effect.sync(() => {
-              const attachment = socket.deserializeAttachment<unknown>();
+              const attachment: unknown = socket.ws.deserializeAttachment();
               if (!Schema.is(attachmentSchema)(attachment)) {
                 throw new Error("Missing RPC WebSocket attachment");
               }
               if (attachment.__alchemyRpcWebSocket.pending) {
                 throw new Error("Cannot change serialization during an RPC");
               }
-              socket.serializeAttachment({
+              socket.ws.serializeAttachment({
                 ...attachment,
                 __alchemyRpcWebSocket: {
                   ...attachment.__alchemyRpcWebSocket,

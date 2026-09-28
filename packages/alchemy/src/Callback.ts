@@ -68,9 +68,10 @@ export type CallbackFactory = <Payload, E, R>(
 /**
  * Register a durable callback with the current host.
  *
- * Cloudflare Durable Objects supply callback registration on their per-instance
- * RuntimeContext. Register handlers in their inner Effect. Other hosts must
- * implement RuntimeContext.makeCallback; unsupported hosts reject registration.
+ * Cloudflare, Celld, and Rivet Durable Objects supply callback registration on
+ * their per-instance RuntimeContext. Register handlers in their inner Effect.
+ * Other hosts must implement RuntimeContext.makeCallback; unsupported hosts
+ * reject registration.
  * Delivery is at least once: external writes must be idempotent. This API does
  * not make unrelated external operations atomic.
  *
@@ -118,7 +119,9 @@ export type CallbackFactory = <Payload, E, R>(
  * instance termination relies on Cloudflare's native alarm retries. Calling
  * `state.abort` with `{ retryAlarm: false }` removes that recovery guarantee:
  * pending jobs remain stored, but may need an explicitly rearmed native alarm.
- * Other implementations must document their own transaction integration.
+ * Celld uses its native SQLite, KV, and alarm transaction boundary. Rivet
+ * persists jobs in actor state and uses its native scheduler; actor KV,
+ * SQLite transactions, and scheduler writes are separate persistence boundaries.
  */
 export const makeCallback = <Payload, E, R>(
   name: string,
