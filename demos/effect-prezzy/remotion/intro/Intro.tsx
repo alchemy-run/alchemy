@@ -16,6 +16,7 @@ import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
 import { CodeSlide, SPLIT } from "./CodeSlide.tsx";
 import { LinksView } from "./Links.tsx";
+import { BrowserPane, TerminalPane } from "./Panes.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
 const TITLE_WIDTH = 1920 - 2 * 110;
@@ -88,6 +89,10 @@ export const Intro = ({ intro }: IntroProps) => {
             </>
           ) : null}
         </>
+      ) : step.kind === "terminal" ? (
+        <TerminalPane step={step} prev={prev} local={local} />
+      ) : step.kind === "browser" ? (
+        <BrowserPane step={step} prev={prev} local={local} />
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}

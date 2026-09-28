@@ -1,0 +1,17 @@
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { ShortyApi } from "./ShortyApi.ts";
+
+declare const API_URL: string;
+
+// #region show
+const shorty = HttpApiClient.make(ShortyApi, { baseUrl: API_URL });
+
+export const createLink = (url: string) =>
+  shorty.pipe(
+    Effect.flatMap((client) => client.links.create({ payload: { url } })),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.runPromise,
+  );
+// #endregion show

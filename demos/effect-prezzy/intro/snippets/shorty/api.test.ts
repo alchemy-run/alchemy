@@ -1,0 +1,51 @@
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import Stack from "./alchemy.run.ts";
+import { ShortyApi } from "./ShortyApi.ts";
+
+// #region show
+const { test, beforeAll, deploy } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
+
+const stack = beforeAll(deploy(Stack));
+
+test(
+  "creates and reads back a link",
+  Effect.gen(function* () {
+    const { api } = yield* stack;
+    const shorty = yield* HttpApiClient.make(ShortyApi, { baseUrl: api });
+
+    const link = yield* shorty.links.create({ payload: { url: "https://effect.website" } });
+    const found = yield* shorty.links.get({ params: { code: link.code } });
+    expect(found.url).toBe("https://effect.website");
+  }),
+);
+// #endregion show
+
+test(
+  "a missing link is a typed LinkNotFound",
+  Effect.gen(function* () {
+    const { api } = yield* stack;
+    const shorty = yield* HttpApiClient.make(ShortyApi, { baseUrl: api });
+    const error = yield* shorty.links.get({ params: { code: "nope" } }).pipe(Effect.flip);
+    expect(error._tag).toBe("LinkNotFound");
+  }),
+);
+
+test(
+  "lists every link",
+  Effect.gen(function* () {
+    const { api } = yield* stack;
+    const response = yield* Test.executeWhenReady(HttpClientRequest.get(`${api}/links`)).pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+    );
+    expect(response.status).toBe(200);
+  }),
+);

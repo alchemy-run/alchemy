@@ -9,6 +9,7 @@
  */
 import type { BundlePanel, Drill, MiniGraph, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
 import CLIENTS from "./bundle-clients.json" with { type: "json" };
+import { demo } from "./demo.ts";
 
 /** Where in the code: the first match of `text` (or the `nth`, 1-based). */
 export type Find = string | { text: string; nth?: number };
@@ -43,7 +44,12 @@ export interface CodeSpec {
    * For `*.error.ts` snippets: which lines of the compiler's message to show,
    * or `hide` to show the (still failing) code before the error is revealed.
    */
-  error?: { pick?: (lines: string[]) => string[]; hide?: boolean };
+  error?: {
+    pick?: (lines: string[]) => string[];
+    hide?: boolean;
+    /** Show the error under the code, so the code keeps the full width. */
+    below?: boolean;
+  };
   panel?: { title: string; items: PanelItem[] };
   /** A drawing beside the code that evolves with it. */
   diagram?: MiniGraph;
@@ -88,7 +94,30 @@ export interface BoardSpec {
   frames?: number;
 }
 
-export type StepSpec = CodeSpec | SlideSpec | BoardSpec;
+/** A terminal pane. `lines` is everything shown; `fresh` of them (at the end) are new. */
+export interface TerminalSpec {
+  kind: "terminal";
+  title: string;
+  notes?: string;
+  group?: string;
+  tabs?: string[];
+  active?: number;
+  lines: string;
+  fresh?: number;
+  frames?: number;
+}
+
+/** A browser window showing a screenshot from `intro/assets/`. */
+export interface BrowserSpec {
+  kind: "browser";
+  title: string;
+  notes?: string;
+  url: string;
+  image: string;
+  frames?: number;
+}
+
+export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {
@@ -1967,4 +1996,5 @@ export const steps: StepSpec[] = [
     notes:
       "Approve it, and the providers do the work: the bucket, the queue, then the Worker with its bindings attached. One program, deployed. Now let's build something real.",
   },
+  ...demo,
 ];

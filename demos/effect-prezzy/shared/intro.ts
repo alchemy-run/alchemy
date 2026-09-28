@@ -48,6 +48,8 @@ export interface CodeError {
   len: number;
   code: string;
   message: string[];
+  /** Shown under the code, like an editor tooltip, instead of in the right column. */
+  below?: boolean;
 }
 
 export interface PanelItem {
@@ -202,7 +204,32 @@ export interface BoardStep {
   frames: number;
 }
 
-export type IntroStep = CodeStep | SlideStep | BoardStep;
+/** A terminal pane: the command and the output shown so far (ANSI colours allowed). */
+export interface TerminalStep {
+  kind: "terminal";
+  title: string;
+  notes: string;
+  group: string;
+  /** Tab labels across the top; the active one is highlighted. */
+  tabs?: string[];
+  active?: number;
+  lines: Token[][];
+  /** Lines that are new since the previous step (they fade in). */
+  fresh: number;
+  frames: number;
+}
+
+/** A browser window showing one screenshot. */
+export interface BrowserStep {
+  kind: "browser";
+  title: string;
+  notes: string;
+  url: string;
+  image: string;
+  frames: number;
+}
+
+export type IntroStep = CodeStep | SlideStep | BoardStep | TerminalStep | BrowserStep;
 
 export interface IntroJson {
   steps: IntroStep[];

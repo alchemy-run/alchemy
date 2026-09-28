@@ -30,7 +30,12 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 /** Pixel geometry for the code block, centred in whatever space it gets. */
 const layout = (step: CodeStep, area: Area = AREA) => {
   const width =
-    area.width - (step.diagram ? DIAGRAM_WIDTH + 60 : step.panel || step.drill || step.req || step.bundle || step.error ? PANEL_WIDTH + 60 : 0);
+    area.width -
+    (step.diagram
+      ? DIAGRAM_WIDTH + 60
+      : step.panel || step.drill || step.req || step.bundle || (step.error && !step.error.below)
+        ? PANEL_WIDTH + 60
+        : 0);
   const size = step.fontSize;
   const cw = size * CHAR;
   const lh = size * LINE;
@@ -654,13 +659,18 @@ const ErrorView = ({
   // A squiggle along the error range.
   const wave: string[] = [];
   for (let x = 0; x <= r.w * p; x += 6) wave.push(`${r.x + x},${r.y + r.h - 4 + (Math.floor(x / 6) % 2 ? 4 : 0)}`);
-  const boxX = AREA.x + AREA.width - PANEL_WIDTH;
-  const boxY = Math.min(Math.max(minTop, r.y - 40), AREA.y + AREA.height - 320);
+  // Under the code, like an editor tooltip; or in the right column beside it.
+  // Under the code, bottom-right and sized to the message; or in the right column beside it.
+  const boxWidth = error.below ? Math.min(900, 60 + Math.max(...error.message.map((l) => l.length)) * 12.6) : PANEL_WIDTH;
+  const boxX = error.below ? AREA.x + AREA.width - boxWidth : AREA.x + AREA.width - PANEL_WIDTH;
+  const boxY = error.below
+    ? Math.min(g.top + step.lines.length * g.lh + 28, AREA.y + AREA.height - 100)
+    : Math.min(Math.max(minTop, r.y - 40), AREA.y + AREA.height - 320);
   return (
     <>
       <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
         {wave.length > 1 ? <polyline points={wave.join(" ")} fill="none" stroke="#f14c4c" strokeWidth={2.5} /> : null}
-        {box > 0 ? (
+        {box > 0 && !error.below ? (
           <path
             d={`M ${r.x + r.w * 0.5} ${r.y + r.h + 2} C ${r.x + r.w * 0.5} ${r.y + r.h + 60}, ${boxX - 80} ${boxY + 30}, ${boxX - 8} ${boxY + 30}`}
             fill="none"
@@ -676,7 +686,7 @@ const ErrorView = ({
           position: "absolute",
           left: boxX,
           top: boxY,
-          width: PANEL_WIDTH,
+          width: boxWidth,
           padding: "14px 18px",
           background: "#252526",
           border: "1px solid #454545",

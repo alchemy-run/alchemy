@@ -41,18 +41,29 @@ const flatten = (chain: Chain, depth = 0): string[] => [
 
 // Type-checking is the slow part; skip it when no snippet changed since the last build.
 const cacheFile = path.join(out, "diagnostics.json");
-const snippetNames = (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts") || f === "tsconfig.json");
+/** Sub-projects with their own tsconfig (e.g. the demo's `shorty/` app), checked as a unit. */
+const projects = [
+  "",
+  ...(await readdir(snippetsDir, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name),
+];
+const listTs = async (dir: string) =>
+  (await readdir(path.join(snippetsDir, dir))).filter((f) => f.endsWith(".ts")).map((f) => (dir ? `${dir}/${f}` : f));
+const snippetNames = [
+  ...(await Promise.all(projects.map(listTs))).flat(),
+  ...projects.map((p) => (p ? `${p}/tsconfig.json` : "tsconfig.json")),
+];
 const stamp = (await Promise.all(snippetNames.map(async (f) => `${f}:${(await stat(path.join(snippetsDir, f))).mtimeMs}`))).join("|");
 const cached = await readFile(cacheFile, "utf8").then((t) => JSON.parse(t) as { stamp: string; diagnostics: [string, Diagnostic[]][] }, () => undefined);
 const diagnostics = new Map<string, Diagnostic[]>(cached?.stamp === stamp ? cached.diagnostics : []);
 if (cached?.stamp !== stamp) {
 console.log("● type-checking intro/snippets (tsgo)");
 const api = new API({ cwd: snippetsDir });
-const configFile = path.join(snippetsDir, "tsconfig.json");
-const snapshot = api.createSnapshot({ openProjects: [configFile] });
-const project = snapshot.getConfiguredProject(configFile);
-if (!project) throw new Error("could not open intro/snippets/tsconfig.json");
-for (const file of (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"))) {
+const configs = projects.map((p) => path.join(snippetsDir, p, "tsconfig.json"));
+const snapshot = api.createSnapshot({ openProjects: configs });
+for (const [i, dir] of projects.entries()) {
+const project = snapshot.getConfiguredProject(configs[i]!);
+if (!project) throw new Error(`could not open ${configs[i]}`);
+for (const file of await listTs(dir)) {
   const full = path.join(snippetsDir, file);
   const list = [
     ...project.program.getSyntacticDiagnostics(full),
@@ -68,12 +79,13 @@ for (const file of (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"))
     })),
   );
 }
+}
 api.close();
 await mkdir(out, { recursive: true });
 await writeFile(cacheFile, JSON.stringify({ stamp, diagnostics: [...diagnostics] }));
 }
 
-const snippetFiles = (await readdir(snippetsDir)).filter((f) => f.endsWith(".ts"));
+const snippetFiles = (await Promise.all(projects.map(listTs))).flat();
 for (const file of snippetFiles) {
   const list = diagnostics.get(file) ?? [];
   const errorFile = file.endsWith(".error.ts");
@@ -114,13 +126,21 @@ const cut = (text: string, keep?: string[]): Cut => {
       return;
     }
     if (REGION.test(line)) return;
-    if (keep && !keep.some((name) => open.includes(name))) return;
+    if (keep && !keep.some((name) => open.includes(name))) {
+      // Skipped code shows as one "…" line, indented like the code it stands for.
+      // Only inside `show` (the whole excerpt): code outside it is never on screen.
+      if (line.trim() && open.includes("show") && kept.at(-1)?.trim() !== "…") {
+        kept.push(`${line.match(/^\s*/)![0]}…`);
+        origin.push(i);
+      }
+      return;
+    }
     kept.push(line.replace(HIDDEN, ""));
     origin.push(i);
   });
-  // Drop the shared indentation and blank edges.
+  // Drop the shared indentation and blank edges, and a "…" standing for the file's tail.
   while (kept.length && !kept[0]!.trim()) (kept.shift(), origin.shift());
-  while (kept.length && !kept.at(-1)!.trim()) (kept.pop(), origin.pop());
+  while (kept.length && (!kept.at(-1)!.trim() || kept.at(-1)!.trim() === "…")) (kept.pop(), origin.pop());
   return { code: kept.join("\n"), origin, regions };
 };
 
@@ -167,7 +187,8 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     regions = c.regions;
     const list = diagnostics.get(spec.src.snippet) ?? [];
     if (spec.src.snippet.endsWith(".error.ts") && !spec.error?.hide) {
-      const d = list[0]!;
+      // The diagnostic to show: the first whose message `pick` keeps anything from.
+      const d = (spec.error?.pick && list.find((x) => spec.error!.pick!(x.message).length > 0)) || list[0]!;
       const line = c.origin.indexOf(d.line);
       if (line < 0) throw new Error(`step "${spec.title}": the error is outside the shown regions`);
       const shown = spec.error?.pick ? spec.error.pick(d.message) : d.message.slice(0, 2);
@@ -176,7 +197,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
       const indent = (text.split("\n")[d.line]!.length - text.split("\n")[d.line]!.trimStart().length) -
         (lineText.length - lineText.trimStart().length);
       const col = Math.max(0, d.col - indent);
-      error = { line, col, len: Math.max(1, lineText.length - col), code: d.code, message: shown };
+      error = { line, col, len: Math.max(1, lineText.length - col), code: d.code, message: shown, below: spec.error?.below };
     }
   } else {
     code = spec.src.code;
@@ -220,7 +241,9 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   }));
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
-  const available = split || spec.beside ? 760 : spec.panel || spec.drill || spec.req || spec.bundle ? 1060 : 1560;
+  const erroring = "snippet" in spec.src && spec.src.snippet.endsWith(".error.ts") && !spec.error?.hide && !spec.error?.below;
+  const available =
+    split || spec.beside ? 760 : spec.panel || spec.drill || spec.req || spec.bundle || erroring ? 1060 : 1560;
   const fontSize =
     spec.fontSize ?? Math.max(18, Math.min(34, Math.floor(available / (longest * 0.6)), Math.floor(780 / (lines.length * 1.55))));
   return {
@@ -265,6 +288,21 @@ for (const spec of steps) {
       subtitle: spec.subtitle,
       frames: spec.frames ?? 60,
     });
+  } else if (spec.kind === "terminal") {
+    const lines = tokenize(spec.lines, false, "ansi");
+    resolved.push({
+      kind: "terminal",
+      title: spec.title,
+      notes: spec.notes ?? "",
+      group: spec.group ?? "terminal",
+      tabs: spec.tabs,
+      active: spec.active,
+      lines,
+      fresh: spec.fresh ?? lines.length,
+      frames: spec.frames ?? 24,
+    });
+  } else if (spec.kind === "browser") {
+    resolved.push({ kind: "browser", title: spec.title, notes: spec.notes ?? "", url: spec.url, image: spec.image, frames: spec.frames ?? 20 });
   } else {
     resolved.push({ ...spec, notes: spec.notes ?? "", frames: spec.frames ?? 60 });
   }
