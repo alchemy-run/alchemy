@@ -29,6 +29,12 @@ const selection = {
     certificateErrorMessage: true,
     verificationDnsHost: true,
     verificationToken: true,
+    dnsRecords: {
+      fqdn: true,
+      zone: true,
+      recordType: true,
+      requiredValue: true,
+    },
   },
 } as const satisfies railway.Selection<"CustomDomain">;
 type CreateCustomDomainResponse = railway.Result<
@@ -40,6 +46,18 @@ type DomainsResponseCustomDomainsItem = railway.Result<
   "CustomDomain!",
   typeof selection
 >;
+
+/**
+ * A DNS record Railway requires for a custom domain.
+ */
+export interface CustomDomainDnsRecord {
+  /** Fully qualified record name, e.g. `www.example.com`. */
+  name: string;
+  /** Record type. */
+  type: "A" | "CNAME" | "TXT";
+  /** Value Railway expects, e.g. the `*.up.railway.app` CNAME target. */
+  value: string;
+}
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -119,6 +137,13 @@ export type CustomDomain = Resource<
     verificationDnsHost: string | undefined;
     /** DNS token Railway expects for the verification TXT record. */
     verificationToken: string | undefined;
+    /**
+     * Every record Railway requires for the hostname, with fully qualified
+     * names: the routing `CNAME` (or `A`), any ACME challenge `CNAME`, and
+     * the ownership verification `TXT`. Publish them with a DNS adapter
+     * (see [DNS Adapters](/infrastructure-as-code/dns-adapters)).
+     */
+    dnsRecords: CustomDomainDnsRecord[];
     /** Observed sync status (`ACTIVE`, `CREATING`, …). */
     syncStatus: string | undefined;
     /** `https://{domain}`. */
@@ -136,8 +161,9 @@ export type CustomDomain = Resource<
  *
  * ### Attach a hostname
  * Pass the parent Service, the environment id, and the hostname. Yield the
- * CustomDomain next to the Service. Point DNS at the values in
- * `verificationDnsHost` / `verificationToken`.
+ * CustomDomain next to the Service. Publish the records listed in
+ * `dnsRecords` (the routing `CNAME` and the `verificationDnsHost` /
+ * `verificationToken` TXT) at your DNS host.
  *
  * **Example:** Basic CustomDomain
  * ```typescript
@@ -244,6 +270,69 @@ const isGone = (domain: CloudDomain | undefined) =>
   domain.deletedAt != null ||
   domain.syncStatus === "DELETED";
 
+const RECORD_TYPES = {
+  DNS_RECORD_TYPE_A: "A",
+  DNS_RECORD_TYPE_CNAME: "CNAME",
+  DNS_RECORD_TYPE_TXT: "TXT",
+} as const satisfies Record<string, CustomDomainDnsRecord["type"]>;
+
+const trimDot = (name: string) => name.replace(/\.$/, "");
+
+/** Qualify a (possibly zone-relative) host label with its zone. */
+const qualify = (host: string, zone: string | undefined) => {
+  const name = trimDot(host);
+  if (zone === undefined || zone.length === 0) return name;
+  const apex = trimDot(zone);
+  if (name === "@" || name === "") return apex;
+  const lower = name.toLowerCase();
+  const lowerApex = apex.toLowerCase();
+  return lower === lowerApex || lower.endsWith(`.${lowerApex}`)
+    ? name
+    : `${name}.${apex}`;
+};
+
+const toDnsRecords = (
+  status:
+    | {
+        verificationDnsHost?: string | null;
+        verificationToken?: string | null;
+        dnsRecords?: ReadonlyArray<{
+          fqdn: string;
+          zone: string;
+          recordType: string;
+          requiredValue: string;
+        }>;
+      }
+    | undefined,
+): CustomDomainDnsRecord[] => {
+  const observed = status?.dnsRecords ?? [];
+  const records: CustomDomainDnsRecord[] = [];
+  for (const record of observed) {
+    // NS / unspecified records are not publishable by a DNS adapter.
+    const type = (
+      RECORD_TYPES as Record<string, CustomDomainDnsRecord["type"] | undefined>
+    )[record.recordType];
+    if (type === undefined || record.requiredValue.length === 0) continue;
+    records.push({
+      name: qualify(record.fqdn, record.zone),
+      type,
+      value: record.requiredValue,
+    });
+  }
+  const host = status?.verificationDnsHost ?? undefined;
+  const token = status?.verificationToken ?? undefined;
+  if (host !== undefined && host.length > 0 && token !== undefined) {
+    const name = qualify(host, observed[0]?.zone);
+    const listed = records.some(
+      (record) =>
+        record.type === "TXT" &&
+        record.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (!listed) records.push({ name, type: "TXT", value: token });
+  }
+  return records;
+};
+
 const toAttrs = (
   domain: CloudDomain,
   fallback?: { projectId?: string; environmentId?: string },
@@ -262,6 +351,7 @@ const toAttrs = (
     certificateErrorMessage: status?.certificateErrorMessage ?? undefined,
     verificationDnsHost: status?.verificationDnsHost ?? undefined,
     verificationToken: status?.verificationToken ?? undefined,
+    dnsRecords: toDnsRecords(status),
     syncStatus: domain.syncStatus,
     url: `https://${name}`,
   };

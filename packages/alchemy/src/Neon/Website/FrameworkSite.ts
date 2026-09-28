@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as DNS from "../../DNS/Adapter.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import type { WebsiteAssetsProps } from "../../Website/assets.ts";
@@ -32,11 +33,40 @@ export interface FrameworkSiteOptions {
   assets?: WebsiteAssetsProps;
   /** Native framework dev server, including external-server mode. */
   dev?: ServerDevProps;
-  /** Custom hostname. Publish domain.cnameTarget as a DNS-only CNAME and verify HTTPS separately. */
-  domain?: string;
+  /**
+   * Custom hostname registered with `Neon.CustomDomain`.
+   *
+   * A string (or `{ name }`) leaves DNS to you: publish `domain.cnameTarget`
+   * as a DNS-only CNAME and verify HTTPS separately. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to publish
+   * that CNAME through the DNS host. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  domain?: WebsiteDomain;
   /** Supported Function controls; memory, listening ports, and Docker options are not available. */
   function?: WebsiteFunctionOptions;
 }
+
+/** Custom hostname of a Neon website: the hostname, or `{ name, dns }`. */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `www.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the CNAME to the domain's `cnameTarget`
+       * (see [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
+       * `Cloudflare.DNS.Adapter()`. Neon requires the record to be
+       * DNS-only, so do not proxy it. Omitted: publish it yourself.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (
+  domain: WebsiteDomain | undefined,
+): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
 
 /** Scope references are forwarded to the composed resources without resolution. */
 export type WebsiteScope =
@@ -110,9 +140,23 @@ export const deployWebsite = Effect.fn(function* (
     artifact: { zip: artifact.artifactPath },
     env: { ...props.env, NODE_ENV: "production" },
   });
-  const domain = props.domain
-    ? yield* CustomDomain("Domain", { function: fn, hostname: props.domain })
+  const domainName = websiteDomainName(props.domain);
+  const domain = domainName
+    ? yield* CustomDomain("Domain", { function: fn, hostname: domainName })
     : undefined;
+  if (
+    domain !== undefined &&
+    typeof props.domain === "object" &&
+    props.domain.dns !== undefined
+  ) {
+    const dns = yield* DNS.resolve(props.domain.dns);
+    // Not "Domain": Route 53 names a CNAME alias by the bare id, which
+    // would collide with the CustomDomain above.
+    yield* dns.alias("DomainAlias", {
+      name: props.domain.name,
+      target: { hostname: domain.cnameTarget },
+    });
+  }
   return {
     url: domain ? domain.url : fn.url,
     function: fn,

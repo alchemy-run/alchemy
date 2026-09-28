@@ -59,9 +59,19 @@ import {
   type FunctionImageSource,
   makeFunctionImage,
 } from "./FunctionImage.ts";
+import {
+  composeFunctionDomain,
+  functionDomainUrl,
+  type FunctionDomain,
+} from "./FunctionDomain.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
+export {
+  InvalidFunctionDomain,
+  type FunctionDomain,
+  type FunctionDomainConfig,
+} from "./FunctionDomain.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
@@ -224,6 +234,23 @@ export interface FunctionCommonProps extends PlatformProps {
    * @default true
    */
   functionUrl?: boolean | FunctionUrlConfig;
+  /**
+   * Serve the Function on a custom domain. Function URLs cannot take custom
+   * hostnames, so this composes an API Gateway v2 HTTP API in front of the
+   * Function (`$default` route, payload 2.0 — the Function URL event shape,
+   * so an Effect `fetch` handler works unchanged), a regional ACM
+   * certificate, an API Gateway domain name + API mapping per hostname, and
+   * the DNS records. The Function's `domainUrl` attribute is
+   * `https://{name}`.
+   *
+   * A string is a hostname in a Route 53 hosted zone. Use the object form
+   * for aliases, a pinned hosted zone, or another DNS host via `dns` (e.g.
+   * `Cloudflare.DNS.Adapter()`).
+   *
+   * Not composed while the Function runs locally under `alchemy dev`
+   * (pipe it through `Alchemy.remote()` to serve the domain in dev).
+   */
+  domain?: FunctionDomain;
   functionName?: string;
   /**
    * Instruction set architecture for the Lambda function.
@@ -527,6 +554,10 @@ export interface Function extends Resource<
     functionArn: string;
     functionName: string;
     functionUrl: string | undefined;
+    /**
+     * `https://{domain.name}` when the Function has a custom `domain`.
+     */
+    domainUrl?: string;
     roleName: string;
     roleArn: string;
     code: {
@@ -793,6 +824,49 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
+ * ### Custom Domains
+ * Function URLs cannot serve a custom hostname, so `domain` puts an API
+ * Gateway v2 HTTP API in front of the Function (payload 2.0 — the same
+ * event shape as a Function URL, so a `fetch` handler works unchanged),
+ * with a regional ACM certificate, an API Gateway domain name per
+ * hostname, and the DNS records. `domainUrl` is `https://{domain.name}`.
+ *
+ * **Example:** Domain in Route 53 (default)
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("Api", {
+ *   main: "./src/handler.ts",
+ *   domain: "api.example.com",
+ * });
+ * // func.domainUrl -> "https://api.example.com"
+ * ```
+ *
+ * **Example:** Aliases and a pinned hosted zone
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("Api", {
+ *   main: "./src/handler.ts",
+ *   domain: {
+ *     name: "api.example.com",
+ *     aliases: ["www.api.example.com"],
+ *     hostedZoneId: "Z1234567890",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Domain whose DNS lives in Cloudflare
+ * The certificate is validated and each hostname CNAMEd through Cloudflare;
+ * the stack's providers must include `Cloudflare.providers()`.
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ *
+ * const func = yield* AWS.Lambda.Function("Api", {
+ *   main: "./src/handler.ts",
+ *   domain: {
+ *     name: "api.example.com",
+ *     dns: Cloudflare.DNS.Adapter({ zone: "example.com" }),
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -1004,6 +1078,13 @@ export const Function: Platform<
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
+  // The custom-domain front door integrates the Function's own ARN, so it
+  // composes AFTER the Function resource is declared.
+  onCreate: (resource, props) =>
+    composeFunctionDomain(
+      resource as Function,
+      (props as FunctionProps | undefined)?.domain,
+    ),
   createRuntimeContext: (id: string): Serverless.FunctionContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const env: Record<string, any> = {};
@@ -2524,6 +2605,7 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             functionUrl: functionUrl as any,
+            domainUrl: functionDomainUrl(news.domain),
             roleName,
             roleArn,
             code: prepared.attributes,

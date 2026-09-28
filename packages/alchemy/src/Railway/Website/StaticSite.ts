@@ -12,7 +12,9 @@ import { CustomDomain } from "../CustomDomain.ts";
 import { Project } from "../Project.ts";
 import { Service } from "../Service.ts";
 import {
+  publishWebsiteDomainDns,
   WEBSITE_PORT,
+  websiteDomainName,
   type FrameworkSiteProps,
   type Website,
 } from "./FrameworkSite.ts";
@@ -243,15 +245,20 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       extraFiles: [{ source: clientAbs, dest: path.basename(clientAbs) }],
     });
 
-    if (props.domain !== undefined && props.domain.length > 0) {
-      yield* CustomDomain("Domain", {
+    const domainName = websiteDomainName(props.domain);
+    if (domainName !== undefined && domainName.length > 0) {
+      const customDomain = yield* CustomDomain("Domain", {
         service,
         environment,
-        domain: props.domain,
+        domain: domainName,
         targetPort: WEBSITE_PORT,
       }).pipe(Namespace.push(id));
+      yield* publishWebsiteDomainDns({
+        domain: props.domain,
+        customDomain,
+      }).pipe(Namespace.push(id));
       return {
-        url: `https://${props.domain}`,
+        url: `https://${domainName}`,
         service,
         project,
       } satisfies Website;

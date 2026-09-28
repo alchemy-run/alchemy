@@ -26,7 +26,7 @@ import {
   AdapterLive as DnsAdapterLive,
   RecordList as DnsRecordList,
   RecordListProvider as DnsRecordListProvider,
-} from "./DNS/index.ts";
+} from "./DNS.ts";
 import { RecordSet, RecordSetProvider } from "./RecordSet.ts";
 import { Server, ServerProvider } from "./Server.ts";
 import { Service, ServiceProvider } from "./Service.ts";

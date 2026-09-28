@@ -154,11 +154,12 @@ const sameValues = (a: string[], b: string[]) =>
   [...a].sort().every((value, index) => value === [...b].sort()[index]);
 
 /**
- * Converge one `(zone, name, type)` record set: `desired` are the values
- * this list publishes there now, `previous` the values it published
- * before (removed unless still desired).
+ * Plan the change converging one `(zone, name, type)` record set: `desired`
+ * are the values this list publishes there now, `previous` the values it
+ * published before (removed unless still desired). `undefined` when the
+ * live record set already matches.
  */
-const syncRecordSet = (
+const planRecordSetChange = (
   hostedZoneId: string,
   name: string,
   type: DnsRecordType,
@@ -187,19 +188,21 @@ const syncRecordSet = (
           : [...new Set(desiredValues)];
     const ttl = desired[0]?.ttl ?? live?.TTL ?? DEFAULT_TTL;
 
-    let change: route53.Change | undefined;
     if (values.length === 0) {
       // Nothing of ours (or anyone's, for TXT) remains: delete what we own.
       const ours =
         live !== undefined &&
         (type === "TXT" || liveValues.every((value) => removed.has(value)));
-      if (ours) change = { Action: "DELETE", ResourceRecordSet: live };
-    } else if (
+      return ours
+        ? ({ Action: "DELETE", ResourceRecordSet: live } as route53.Change)
+        : undefined;
+    }
+    if (
       live === undefined ||
       !sameValues(liveValues, values) ||
       live.TTL !== ttl
     ) {
-      change = {
+      return {
         Action: "UPSERT",
         ResourceRecordSet: {
           Name: `${name}.`,
@@ -209,27 +212,81 @@ const syncRecordSet = (
             Value: toWire(type, value),
           })),
         },
-      };
+      } as route53.Change;
     }
-    if (change === undefined) return;
-    const response = yield* route53
-      .changeResourceRecordSets({
-        HostedZoneId: normalizeHostedZoneId(hostedZoneId),
-        ChangeBatch: {
-          Comment: "Alchemy Route53 record list",
-          Changes: [change],
-        },
-      })
-      .pipe(
-        Effect.catchTag("InvalidChangeBatch", (error) =>
-          // A DELETE racing another writer is benign; anything else isn't.
-          change?.Action === "DELETE"
-            ? Effect.succeed(undefined)
-            : Effect.fail(error),
-        ),
+    return undefined;
+  });
+
+const submitChanges = (hostedZoneId: string, changes: route53.Change[]) =>
+  route53.changeResourceRecordSets({
+    HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+    ChangeBatch: { Comment: "Alchemy Route53 record list", Changes: changes },
+  });
+
+/**
+ * Apply one zone's changes as a single batch and wait for it once — each
+ * Route 53 change takes up to a minute to reach `INSYNC`. A rejected batch
+ * (e.g. a DELETE racing another writer) falls back to one change at a
+ * time, where a rejected DELETE is benign and anything else fails.
+ */
+const applyChanges = (hostedZoneId: string, changes: route53.Change[]) =>
+  Effect.gen(function* () {
+    if (changes.length === 0) return;
+    const batch = yield* submitChanges(hostedZoneId, changes).pipe(
+      Effect.map((response) => [response.ChangeInfo.Id]),
+      Effect.catchTag("InvalidChangeBatch", (error) =>
+        changes.length === 1 && changes[0]?.Action !== "DELETE"
+          ? Effect.fail(error)
+          : Effect.forEach(changes, (change) =>
+              submitChanges(hostedZoneId, [change]).pipe(
+                Effect.map((response) => [response.ChangeInfo.Id]),
+                Effect.catchTag("InvalidChangeBatch", (error) =>
+                  change.Action === "DELETE"
+                    ? Effect.succeed([] as string[])
+                    : Effect.fail(error),
+                ),
+              ),
+            ).pipe(Effect.map((ids) => ids.flat())),
+      ),
+    );
+    yield* Effect.forEach(batch, waitForChange, { discard: true });
+  });
+
+/**
+ * Converge every `(zone, name, type)` record set touched by `desired` or
+ * `previous`, one change batch per hosted zone.
+ */
+const syncRecordSets = (
+  desired: RecordListEntry[],
+  previous: RecordListEntry[],
+) =>
+  Effect.gen(function* () {
+    const desiredGroups = groupBy(desired);
+    const previousGroups = groupBy(previous);
+    const changesByZone = new Map<string, route53.Change[]>();
+    for (const key of new Set([
+      ...desiredGroups.keys(),
+      ...previousGroups.keys(),
+    ])) {
+      const group = desiredGroups.get(key) ?? [];
+      const before = previousGroups.get(key) ?? [];
+      const sample = group[0] ?? before[0];
+      const change = yield* planRecordSetChange(
+        sample.hostedZoneId,
+        sample.name,
+        sample.type,
+        group,
+        before,
       );
-    if (response !== undefined) {
-      yield* waitForChange(response.ChangeInfo.Id);
+      if (change !== undefined) {
+        changesByZone.set(sample.hostedZoneId, [
+          ...(changesByZone.get(sample.hostedZoneId) ?? []),
+          change,
+        ]);
+      }
+    }
+    for (const [hostedZoneId, changes] of changesByZone) {
+      yield* applyChanges(hostedZoneId, changes);
     }
   });
 
@@ -280,39 +337,13 @@ export const RecordListProvider = () =>
         desiredByKey.set(keyOf(entry), entry);
       }
       const desired = [...desiredByKey.values()];
-      const desiredGroups = groupBy(desired);
-      const previousGroups = groupBy(output?.records ?? []);
-
-      for (const key of new Set([
-        ...desiredGroups.keys(),
-        ...previousGroups.keys(),
-      ])) {
-        const group = desiredGroups.get(key) ?? [];
-        const previous = previousGroups.get(key) ?? [];
-        const sample = group[0] ?? previous[0];
-        yield* syncRecordSet(
-          sample.hostedZoneId,
-          sample.name,
-          sample.type,
-          group,
-          previous,
-        );
-      }
+      yield* syncRecordSets(desired, output?.records ?? []);
 
       yield* session.note(`${desired.length} record(s)`);
       return { records: desired };
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      for (const previous of groupBy(output.records).values()) {
-        const sample = previous[0];
-        yield* syncRecordSet(
-          sample.hostedZoneId,
-          sample.name,
-          sample.type,
-          [],
-          previous,
-        );
-      }
+      yield* syncRecordSets([], output.records);
     }),
   });

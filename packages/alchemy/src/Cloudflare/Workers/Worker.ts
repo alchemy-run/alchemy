@@ -6,6 +6,7 @@ import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
+import type { DnsConfig } from "../../DNS/Adapter.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
 import type * as Output from "../../Output.ts";
@@ -49,6 +50,7 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
+import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import type {
   WorkerBinding,
   WorkerBindingResource,
@@ -61,6 +63,7 @@ import {
 } from "./WorkerRuntimeContext.ts";
 
 export * from "./WorkerRuntime.ts";
+export { WorkerDomainDnsError } from "./WorkerDomainDns.ts";
 
 export const isWorker = <T>(value: T): value is T & Worker =>
   isResourceOfType(value, WorkerTypeId);
@@ -253,6 +256,36 @@ export interface WorkerDomainConfig {
    * @default false
    */
   previews?: boolean;
+  /**
+   * The DNS host that publishes this domain's records. Omit it (or pass
+   * `Cloudflare.DNS.Adapter()`) for hostnames in a Cloudflare zone of the
+   * account: they attach as native custom domains, exactly as without
+   * `dns`.
+   *
+   * Any other adapter (`AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`)
+   * serves the hostnames through
+   * [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/):
+   * {@link name} and each alias become a
+   * `Cloudflare.CustomHostname.CustomHostname` on the SaaS zone
+   * ({@link zoneId} / {@link zone} / {@link zoneName}, required), the
+   * DNS host publishes their ownership and certificate-validation TXT
+   * records plus a `CNAME` to {@link cnameTarget}, and the Worker gets a
+   * `<hostname>/*` route on the SaaS zone instead of a custom domain.
+   * {@link redirects} and {@link previews} are not supported on this path,
+   * and the Worker's `url` stays its `workers.dev` URL. Declare the SaaS
+   * zone's `Cloudflare.CustomHostname.FallbackOrigin` once yourself —
+   * several Workers can share one SaaS zone.
+   *
+   * See [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  dns?: DnsConfig;
+  /**
+   * Hostname in the SaaS zone that custom hostnames CNAME to, typically
+   * the zone's fallback origin (`FallbackOrigin`'s `origin`). Required
+   * when {@link dns} names a DNS host other than Cloudflare; unused
+   * otherwise.
+   */
+  cnameTarget?: string;
 }
 
 export interface WorkerRouteConfig {
@@ -1935,6 +1968,36 @@ export const isSelf = (value: unknown): value is Self =>
  * });
  * ```
  *
+ * **Example:** Route 53 domain through Cloudflare for SaaS
+ * ```typescript
+ * // Once per SaaS zone (a Cloudflare zone with Cloudflare for SaaS
+ * // enabled): an originless proxied record as the fallback origin.
+ * const origin = yield* Cloudflare.DNS.Record("SaasOrigin", {
+ *   zoneId: "<SAAS_ZONE_ID>",
+ *   name: "customers.my-saas.com",
+ *   type: "AAAA",
+ *   content: "100::",
+ *   proxied: true,
+ * });
+ * const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+ *   "SaasFallback",
+ *   { zoneId: "<SAAS_ZONE_ID>", origin: origin.name },
+ * );
+ *
+ * // app.example.com's DNS lives in Route 53: Route 53 gets the
+ * // verification TXT records and a CNAME to the fallback origin, and the
+ * // Worker serves `app.example.com/*` on the SaaS zone.
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: {
+ *     name: "app.example.com",
+ *     zoneId: "<SAAS_ZONE_ID>",
+ *     cnameTarget: fallback.origin,
+ *     dns: AWS.Route53.Adapter({ hostedZoneId: "Z1234567890" }),
+ *   },
+ * });
+ * ```
+ *
  * ### Worker Previews
  * The `preview` prop maps Cloudflare's
  * [Worker Previews](https://developers.cloudflare.com/workers/previews/) —
@@ -2573,9 +2636,13 @@ export const Worker: ResourceClassLike<Worker> &
   WorkerTypeId,
   {
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+    // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
     onCreate: (resource, props) =>
-      bindWorkerAsyncBindings(resource as Worker, props),
+      bindWorkerAsyncBindings(resource as Worker, props ?? {}),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+    // `domain.dns` naming a non-Cloudflare DNS host composes Cloudflare for
+    // SaaS custom hostnames + records and rewrites `domain` into routes.
+    transformProps: (id, props) => transformWorkerDomainProps(id, props),
   },
   { URL },
 );

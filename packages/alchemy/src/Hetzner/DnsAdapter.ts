@@ -9,11 +9,11 @@ import {
   type DnsAdapter,
   type DnsConfig,
   type DnsRecord,
-} from "../../DNS/Adapter.ts";
-import type { Input } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import * as RemovalPolicy from "../../RemovalPolicy.ts";
-import { RecordList } from "./RecordList.ts";
+} from "../DNS/Adapter.ts";
+import type { Input } from "../Input.ts";
+import * as Output from "../Output.ts";
+import * as RemovalPolicy from "../RemovalPolicy.ts";
+import { RecordList } from "./DnsRecordList.ts";
 
 /** The {@link DnsConfig.type} of the Hetzner DNS adapter. */
 export const HETZNER_DNS = "Hetzner.DNS";

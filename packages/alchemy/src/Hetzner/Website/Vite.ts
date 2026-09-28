@@ -81,6 +81,15 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * **Example:** Publish DNS in Cloudflare
+ * ```typescript
+ * // No Hetzner zone needed: the A record is published in the Cloudflare
+ * // zone. Requires Cloudflare.providers() in the stack.
+ * const site = yield* Hetzner.Website.Vite("Web", {
+ *   domain: { name: "app.example.com", dns: Cloudflare.DNS.Adapter() },
+ * });
+ * ```
+ *
  * ### Build Configuration
  * **Example:** Custom Output Directory and Base Path
  * ```typescript

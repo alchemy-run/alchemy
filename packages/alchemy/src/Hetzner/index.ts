@@ -3,7 +3,7 @@ export * from "./AuthProvider.ts";
 export * from "./Catalog.ts";
 export * from "./Certificate.ts";
 export * from "./Credentials.ts";
-export * as DNS from "./DNS/index.ts";
+export * as DNS from "./DNS.ts";
 export * from "./Environment.ts";
 export * from "./Firewall.ts";
 export * from "./FloatingIp.ts";

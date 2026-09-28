@@ -1,9 +1,11 @@
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -157,16 +159,33 @@ test.provider(
   { tags },
 );
 
+/**
+ * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
+ * whether the engine raised it as a typed failure or a defect.
+ */
+const findOwnedError = (cause: Cause.Cause<unknown>) =>
+  cause.reasons
+    .map((reason) =>
+      Cause.isFailReason(reason)
+        ? reason.error
+        : Cause.isDieReason(reason)
+          ? reason.defect
+          : undefined,
+    )
+    .find(
+      (value): value is OwnedBySomeoneElse =>
+        value instanceof OwnedBySomeoneElse,
+    );
+
 test.provider(
-  "overwrites an existing record at a managed name",
+  "adoption — an existing record errors without adopt, is taken over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
       yield* stack.destroy();
       yield* purge(zoneId, NAME_FOREIGN);
 
-      // A record the set did not create (Route 53 UPSERT parity: it is
-      // overwritten, then owned and removed on destroy).
+      // A record the set did not create — e.g. published by hand.
       yield* dns.createRecord({
         zoneId,
         type: "CNAME",
@@ -174,18 +193,30 @@ test.provider(
         content: TARGET_2,
         ttl: 1,
       });
+      const foreignSet = Cloudflare.DNS.Records("ForeignSet", {
+        type: "CNAME",
+        content: TARGET_1,
+        names: [NAME_FOREIGN],
+      });
 
-      yield* stack.deploy(
-        Cloudflare.DNS.Records("ForeignSet", {
-          type: "CNAME",
-          content: TARGET_1,
-          names: [NAME_FOREIGN],
-        }),
+      // Without `adopt`: DNS records carry no ownership marker, so the
+      // engine refuses to overwrite it.
+      const error = yield* stack.deploy(foreignSet).pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
       );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+      const [untouched] = yield* listCnames(zoneId, NAME_FOREIGN);
+      expect(untouched?.content).toEqual(TARGET_2);
+
+      // With `adopt(true)`: taken over and converged.
+      const adopted = yield* stack.deploy(foreignSet.pipe(adopt(true)));
+      expect(adopted.names).toEqual([NAME_FOREIGN]);
       const [live, ...extra] = yield* listCnames(zoneId, NAME_FOREIGN);
       expect(extra).toHaveLength(0);
       expect(live?.content).toEqual(TARGET_1);
 
+      // Adopted means owned — destroy removes it.
       yield* stack.destroy();
       expect(yield* listCnames(zoneId, NAME_FOREIGN)).toHaveLength(0);
     }),

@@ -2,11 +2,11 @@ import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type { DnsRecord, DnsRecordType } from "../../DNS/Adapter.ts";
-import * as Provider from "../../Provider.ts";
-import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { waitForZoneAction } from "../actions.ts";
-import type { Providers } from "../Providers.ts";
+import type { DnsRecord, DnsRecordType } from "../DNS/Adapter.ts";
+import * as Provider from "../Provider.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
+import { waitForZoneAction } from "./actions.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface RecordListProps {
   /**
@@ -88,7 +88,6 @@ export type RecordList = Resource<
  *
  * @resource
  * @product DNS
- * @category Networking
  */
 export const RecordList = Resource<RecordList>("Hetzner.DNS.RecordList");
 
@@ -105,6 +104,8 @@ const toWire = (type: DnsRecordType, value: string) =>
 
 const keyOf = (entry: RecordListEntry) =>
   `${entry.zoneId}|${entry.name}|${entry.type}|${entry.value}`;
+
+const RRSET_CONCURRENCY = 8;
 
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(500), 1.5),
@@ -280,22 +281,26 @@ export const RecordListProvider = () =>
       const desired = [...desiredByKey.values()];
       const desiredGroups = groupBy(desired);
       const previousGroups = groupBy(output?.records ?? []);
-      for (const key of new Set([
-        ...desiredGroups.keys(),
-        ...previousGroups.keys(),
-      ])) {
-        yield* syncRrset(
-          desiredGroups.get(key) ?? [],
-          previousGroups.get(key) ?? [],
-        );
-      }
+      // RRSets are independent: converge them concurrently (each change is
+      // a zone action that takes seconds to apply).
+      yield* Effect.forEach(
+        new Set([...desiredGroups.keys(), ...previousGroups.keys()]),
+        (key) =>
+          syncRrset(
+            desiredGroups.get(key) ?? [],
+            previousGroups.get(key) ?? [],
+          ),
+        { concurrency: RRSET_CONCURRENCY, discard: true },
+      );
       yield* session.note(`${desired.length} record(s)`);
       return { records: desired };
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      for (const previous of groupBy(output.records).values()) {
-        yield* syncRrset([], previous);
-      }
+      yield* Effect.forEach(
+        groupBy(output.records).values(),
+        (previous) => syncRrset([], previous),
+        { concurrency: RRSET_CONCURRENCY, discard: true },
+      );
     }),
   });

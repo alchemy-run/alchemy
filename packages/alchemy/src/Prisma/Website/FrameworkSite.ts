@@ -3,6 +3,7 @@ import * as Output from "../../Output.ts";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as DNS from "../../DNS/Adapter.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import type { WebsiteAssetsProps } from "../../Website/assets.ts";
 import { Server, type ServerDevProps } from "../../Website/Server.ts";
@@ -10,7 +11,7 @@ import { Compute, type ComputeProps } from "../Compute.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
-import type { PrismaRegionId } from "../Types.ts";
+import type { CustomDomainDnsRecord, PrismaRegionId } from "../Types.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 
 /** A Prisma Project resource, ID, or lightweight ID reference. */
@@ -38,6 +39,35 @@ export type WebsiteComputeOptions = Pick<
   | "urlReadinessTimeoutSeconds"
 >;
 
+/** Custom hostname of a Prisma website: the hostname, or `{ name, dns }`. */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `www.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the records Prisma returns in the custom
+       * domain's `dnsRecords` (see
+       * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish them yourself.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (
+  domain: WebsiteDomain | undefined,
+): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
+
+const toDnsRecords = (records: CustomDomainDnsRecord[]): DNS.DnsRecord[] =>
+  records.map((record) => ({
+    name: record.name,
+    type: record.type,
+    value: record.value,
+    ...(record.ttl == null ? {} : { ttl: record.ttl }),
+  }));
+
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {
   /** Existing Project or ID reference, optionally produced by an Effect. Omission creates a project without a database, only on live deployments. */
@@ -57,8 +87,17 @@ export interface FrameworkSiteProps {
   assets?: WebsiteAssetsProps;
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
-  /** Custom hostname attached using Prisma.CustomDomain. Only apps on the default branch support custom domains; configure the returned DNS records before routing traffic. */
-  domain?: string;
+  /**
+   * Custom hostname attached using `Prisma.CustomDomain`. Only apps on the
+   * default branch support custom domains.
+   *
+   * A string (or `{ name }`) leaves DNS to you: configure the returned
+   * `domain.dnsRecords` before routing traffic. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish those records through the DNS host. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  domain?: WebsiteDomain;
   /** Compute region. Defaults to the project's default region, then us-east-1. */
   regionId?: PrismaRegionId;
   /** Existing branch ID. Mutually exclusive with branchGitName. */
@@ -139,9 +178,20 @@ export const deployWebsite = Effect.fn(function* (
       NODE_ENV: "production",
     },
   });
-  const domain = props.domain
-    ? yield* CustomDomain("Domain", { app: compute, hostname: props.domain })
+  const domainName = websiteDomainName(props.domain);
+  const domain = domainName
+    ? yield* CustomDomain("Domain", { app: compute, hostname: domainName })
     : undefined;
+  if (
+    domain !== undefined &&
+    typeof props.domain === "object" &&
+    props.domain.dns !== undefined
+  ) {
+    const dns = yield* DNS.resolve(props.domain.dns);
+    yield* dns.records("DomainRecords", {
+      records: Output.map(domain.dnsRecords, toDnsRecords),
+    });
+  }
   return {
     url: domain
       ? Output.map(domain.hostname, (hostname) => `https://${hostname}`)
