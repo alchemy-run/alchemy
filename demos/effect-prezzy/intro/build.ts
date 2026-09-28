@@ -359,8 +359,9 @@ for (const spec of steps) {
             while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
             spans.push({ start: pre, end: y.length - suf });
             const small = pre + suf >= Math.max(x.length, y.length) * 0.4;
-            if (textOf(old).trim()) (lines.push(old), diff.push({ kind: "del", ...(small ? { start: pre, end: x.length - suf } : {}) }));
-          } else if (textOf(old).trim()) (lines.push(old), diff.push({ kind: "del" }));
+            void small;
+          }
+          // Removed lines aren't shown: only what's there now, with changed lines in green.
         }
         b += part.count!;
         if (rewritten) {
