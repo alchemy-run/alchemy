@@ -645,10 +645,6 @@ export type Container<Id extends string = string> = Named<Id> & {
  */
 export const Container: ResourceClassLike<ContainerApplication> &
   Pick<ResourceClass<ContainerApplication>, "ref"> & {
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<ContainerApplication>;
     <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
@@ -716,15 +712,9 @@ export const Container: ResourceClassLike<ContainerApplication> &
       });
     }
   },
-  // Spread `ContainerPlatform` so `Container` inherits its static fields —
-  // `ref`, `Type`, `Provider`, `Self`, `Aliases` come from the `ResourceClass`
-  // `Platform` builds internally (Platform.ts:691-704); `bind` and `Platform`
-  // come from `methods`. This is the same shape `Worker` gets by being
-  // `Platform(...)` directly, but `Container` keeps its own dispatcher because
-  // the per-id return values carry Container-specific markers
-  // (`~alchemy/Container/Binding`, `~alchemy/Container/ClassName`,
-  // `~alchemy/Container/Shape`, `Application`) that `Platform`'s generic
-  // constructor doesn't add.
+  // `ref`, `Type`, `Provider`, and the other static fields come from the
+  // Platform. The dispatcher above stays: its per-id values carry the
+  // Container-specific markers the generic Platform constructor omits.
   ContainerPlatform,
 ) as any;
 
