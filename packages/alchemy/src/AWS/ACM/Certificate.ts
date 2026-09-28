@@ -622,7 +622,13 @@ export const CertificateProvider = () =>
               acm
                 .requestCertificate({
                   DomainName: news.domainName,
-                  SubjectAlternativeNames: news.subjectAlternativeNames,
+                  // ACM rejects an empty list (min length 1) — composites
+                  // pass `[]` for a domain without aliases.
+                  SubjectAlternativeNames:
+                    news.subjectAlternativeNames &&
+                    news.subjectAlternativeNames.length > 0
+                      ? news.subjectAlternativeNames
+                      : undefined,
                   ValidationMethod:
                     news.validationMethod ?? defaultValidationMethod,
                   KeyAlgorithm: news.keyAlgorithm,

@@ -32,6 +32,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({
@@ -368,6 +369,47 @@ class SiteNotServing extends Data.TaggedError("SiteNotServing")<{
   readonly status: number;
 }> {}
 
+class CnameNotPublished extends Data.TaggedError("CnameNotPublished")<{
+  readonly server: string;
+}> {}
+
+/**
+ * Wait until every authoritative nameserver of the zone answers the CNAME,
+ * so the first HTTPS request never resolves (and negatively caches) the
+ * hostname before it exists.
+ */
+const waitForAuthoritativeCname = (name: string, target: string) =>
+  Effect.gen(function* () {
+    const nameServers = yield* Effect.tryPromise(() =>
+      resolveNs(zoneName),
+    ).pipe(Effect.orDie);
+    const servers = (yield* Effect.forEach(nameServers, (ns) =>
+      Effect.tryPromise(() => resolve4(ns)).pipe(Effect.orDie),
+    )).flat();
+    yield* Effect.forEach(servers, (server) =>
+      Effect.gen(function* () {
+        const resolver = yield* Effect.sync(() => {
+          const r = new Resolver();
+          r.setServers([server]);
+          return r;
+        });
+        const answers = yield* Effect.tryPromise(() =>
+          resolver.resolveCname(name),
+        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        if (
+          !answers.some(
+            (answer) =>
+              answer.replace(/\.$/, "").toLowerCase() === target.toLowerCase(),
+          )
+        ) {
+          return yield* Effect.fail(new CnameNotPublished({ server }));
+        }
+      }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
+      ),
+    );
+  });
+
 const listSiteCnames = (zoneId: string) =>
   dns.listRecords
     .items({ zoneId, name: { exact: SITE_NAME }, type: "CNAME" })
@@ -410,21 +452,23 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           expect(cname?.content).toMatch(/\.cloudfront\.net$/);
           expect(cname?.proxied).toBe(false);
 
-          // Resolver caches and the distribution's edge rollout need a
-          // moment — bounded retry until the custom hostname serves.
+          yield* waitForAuthoritativeCname(SITE_NAME, cname!.content!);
+
+          // The distribution's edge rollout needs a few minutes — bounded
+          // retry until the custom hostname serves.
           const client = yield* HttpClient.HttpClient;
           const response = yield* client.get(`https://${SITE_NAME}/`).pipe(
-            Effect.flatMap((res) =>
+            Effect.flatMap((res): Effect.Effect<number, unknown> =>
               res.status === 200
-                ? Effect.succeed(res)
+                ? Effect.succeed(res.status)
                 : Effect.fail(new SiteNotServing({ status: res.status })),
             ),
             Effect.retry({
-              schedule: Schedule.exponential("2 seconds"),
-              times: 10,
+              schedule: Schedule.spaced("10 seconds"),
+              times: 60,
             }),
           );
-          expect(response.status).toBe(200);
+          expect(response).toBe(200);
 
           yield* stack.destroy();
           expect(yield* listSiteCnames(zoneId)).toHaveLength(0);
