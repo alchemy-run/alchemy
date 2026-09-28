@@ -5,27 +5,29 @@ sidebar:
   order: 5
 ---
 
-Effect HTTP defines real REST endpoints — URLs, path params, query
-strings, typed bodies — behind an RPC-like typed interface, which
-makes it the natural fit when your consumers aren't Effect (or
-aren't TypeScript at all) and want a plain HTTP client. This page is
-the Lambda wiring; the concept lives at
-[Effect HTTP](/apis/effect-http), and [RPC](/apis) covers choosing
-between the RPC styles.
+Effect HTTP defines REST endpoints, with URLs, path params, query
+strings, and typed bodies, behind a typed interface. Use it when your
+consumers aren't Effect, or aren't TypeScript, and want a plain HTTP
+client.
+
+This page is the Lambda wiring. See
+[Effect HTTP](/apis/effect-http) for the concept and [RPC](/apis) for
+choosing between the RPC styles.
 
 The [Lambda](/aws/compute/lambda) page serves HTTP with a hand-rolled
-`fetch` handler — raw request parsing, manual routing. That works,
-but as your API grows you lose type safety at the boundary: request
-payloads aren't validated, response shapes aren't enforced, and
-errors slip through untyped.
+`fetch` handler that parses requests and routes by hand. As your API
+grows, you lose type safety at the boundary. Payloads aren't
+validated, response shapes aren't enforced, and errors slip through
+untyped.
 
-Effect's `HttpApi` module solves this. You declare endpoints with
-schemas for payloads, responses, and errors, then implement handlers
-against those schemas. The result is an `HttpEffect` — the same type
-a Lambda's `fetch` expects — so it plugs in directly. It's the exact
-same module used in the
-[Workers version of this guide](/cloudflare/apis/effect-http-api);
-the spec and handlers are portable, only the host changes.
+Effect's `HttpApi` module declares endpoints with schemas for
+payloads, responses, and errors, and you implement handlers against
+those schemas. The result is an `HttpEffect`, the type a Lambda's
+`fetch` expects, so it plugs in directly.
+
+The [Workers version of this guide](/cloudflare/apis/effect-http-api)
+uses the same module. The spec and handlers are portable, and only the
+host changes.
 
 The mental model:
 
@@ -33,8 +35,8 @@ The mental model:
    descriptions and can be imported by clients.
 2. **Bind resources and construct handlers inside the Function's
    Construction phase.** The Construction phase runs at deploy time *and* at cold
-   start, so we only do pure construction here — bindings, layers,
-   never per-request work.
+   start, so do only pure construction here, such as bindings and
+   layers, and never per-request work.
 3. **Return `{ fetch }`** where `fetch` is an `HttpEffect` produced
    by `HttpRouter.toHttpEffect`. That's the value Lambda invokes on
    every request.
@@ -111,11 +113,10 @@ export const JobApi = HttpApi.make("JobApi").add(
 );
 ```
 
-Nothing executes yet — `JobApi` is purely a value-level description.
-The same constant is what we'll hand to the client at the end of
-this guide.
+Nothing executes yet, because `JobApi` is a value-level description.
+The client at the end of this guide uses the same constant.
 
-## 3. Build the Function
+## 3. Build the Lambda Function
 
 Now wire it up. Create `src/JobFunction.ts` with an empty Construction
 phase and a public Function URL:
@@ -145,7 +146,7 @@ layer construction, never per-request work.
 
 Jobs need somewhere durable to live. Yield a DynamoDB `Table` inside
 the constructor to declare the resource, then bind the two operations the
-handlers will need:
+handlers need:
 
 ```diff lang="typescript"
   Effect.gen(function* () {
@@ -161,11 +162,10 @@ handlers will need:
   }),
 ```
 
-Each binding does double duty: at deploy time it attaches a
-least-privilege IAM statement to the function's execution role
-(`GetItem` grants exactly `dynamodb:GetItem` on this table's ARN);
-at runtime it returns a typed callable that injects the table name
-automatically.
+Each binding does two jobs. At deploy time it attaches a
+least-privilege IAM statement to the function's execution role, so
+`GetItem` grants only `dynamodb:GetItem` on this table's ARN. At
+runtime it returns a typed callable that injects the table name.
 
 ### 3b. Provide the binding implementations
 
@@ -193,7 +193,7 @@ credentials to wire up.
 ### 3c. Construct the handler group
 
 `HttpApiBuilder.group` *constructs* a `Layer` that wires handlers
-into the API spec. It's pure — it doesn't run them — so it's safe to
+into the API spec. It doesn't run the handlers, so it's safe to
 build inside the constructor. The handlers close over the `getItem` / `putItem`
 bindings from step 3a:
 
@@ -237,15 +237,17 @@ bindings from step 3a:
 
 Each handler receives a typed request. `query.jobId` is a `string`
 because that's what the endpoint declared, and the return type must
-satisfy `Job` (or fail with `JobNotFound`). Mismatches are caught at
-compile time. `Effect.orDie` converts DynamoDB's infrastructure
-errors into defects — the HttpApi runtime turns those into 500s —
-keeping the typed error channel reserved for `JobNotFound`.
+satisfy `Job` or fail with `JobNotFound`, so mismatches fail at
+compile time.
+
+`Effect.orDie` converts DynamoDB's infrastructure errors
+into defects, which the HttpApi runtime turns into 500s. The typed
+error channel stays reserved for `JobNotFound`.
 
 ### 3d. Return `{ fetch }`
 
-The return value of the constructor is the Function's runtime surface — for an
-HTTP Lambda that means an object with a `fetch` field.
+The return value of the constructor is the Function's runtime surface.
+For an HTTP Lambda, that's an object with a `fetch` field.
 `HttpApiBuilder.layer(JobApi)` assembles the API from the handler
 group, and `HttpRouter.toHttpEffect` converts that Layer into the
 `HttpEffect` that `fetch` expects:
@@ -350,6 +352,27 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
 ) {}
 ```
 
+### Restrict access to the URL
+
+`functionUrl: true` creates a public URL (`authType: "NONE"`), so the
+schema validation is your only input boundary. Add auth for anything
+that isn't public, and allow browser origins on the URL itself:
+
+```diff lang="typescript"
+-  { main: import.meta.url, functionUrl: true },
++  {
++    main: import.meta.url,
++    functionUrl: {
++      authType: "AWS_IAM", // require SigV4-signed callers
++      cors: { AllowOrigins: ["https://app.example.com"] },
++    },
++  },
+```
+
+To handle CORS in the app instead, on any host, provide
+`HttpRouter.cors({ allowedOrigins: [...] })` as a layer. See
+[Effect HTTP on Workers › Enable CORS](/cloudflare/apis/effect-http-api#3d-enable-cors).
+
 ## 4. Add to the Stack
 
 ```typescript
@@ -395,8 +418,8 @@ curl "https://<id>.lambda-url.us-west-2.on.aws/?jobId=d3adb33f-..."
 ```
 
 Invalid payloads get automatic 400 responses with structured
-validation errors, and a missing job comes back as a 404 — the
-`httpApiStatus` we declared on `JobNotFound`.
+validation errors. A missing job comes back as a 404, the
+`httpApiStatus` declared on `JobNotFound`.
 
 ## 6. Call it from a typed test
 
@@ -460,7 +483,7 @@ branch is a real typed value you can pattern-match on (here via
 
 The full
 [`examples/aws-lambda-httpapi`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-httpapi)
-example grows this app in a few directions: it hides DynamoDB behind
+example grows this app in a few directions. It hides DynamoDB behind
 a cloud-agnostic `JobStorage` service (with a drop-in S3
 implementation), publishes job-created notifications to SNS, fans
 table changes out to SQS via DynamoDB Streams, and adds a CloudWatch

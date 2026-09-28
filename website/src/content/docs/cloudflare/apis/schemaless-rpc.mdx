@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-The schemaless RPC pattern — what makes a member callable, how the typed client arises, what crosses the wire — is documented at [Schemaless RPC](/apis/schemaless). This page walks Cloudflare's pairings. Worker → Worker and Worker → Durable Object ride the platform's native JSRPC channel (values move by structured clone, and service bindings never traverse the public internet); Containers ride the generic fetch transport.
+[Schemaless RPC](/apis/schemaless) documents the pattern, including what makes a member callable, how the typed client arises, and what crosses the wire. This page walks Cloudflare's pairings. Worker → Worker and Worker → Durable Object ride the platform's native JSRPC channel (values move by structured clone, and service bindings never traverse the public internet); Containers ride the generic fetch transport.
 
 ## Expose an interface
 
@@ -30,7 +30,7 @@ export default class BindingTargetWorker extends Cloudflare.Worker<BindingTarget
 ) {}
 ```
 
-Any non-`fetch` function member returning an Effect or a Stream becomes callable remotely, and the class instance type *is* the interface: there is no schema to declare. The full member rules live at [Schemaless RPC](/apis/schemaless).
+Any non-`fetch` function member returning an Effect or a Stream becomes callable remotely, and the class instance type *is* the interface, so there is no schema to declare. The full member rules live at [Schemaless RPC](/apis/schemaless).
 
 ## Worker → Worker
 
@@ -146,6 +146,21 @@ return HttpServerResponse.stream(stream, {
 
 The stub call is both an Effect and a Stream — value methods `yield*`, streaming methods pipe through `Stream.*` combinators, and elements are pulled lazily under backpressure all the way to the HTTP response. Durable Object RPC in depth: [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc).
 
+### Typed errors across the boundary
+
+Tagged failures from a Durable Object arrive at the caller as plain `{ _tag, ...fields }` structs. Declare the error classes on the Durable Object, and the calling side rebuilds each matching failure as a real instance, so `instanceof` and schema encoders see the class:
+
+```typescript
+export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
+  "Repo",
+  // matched by the class's static `identifier` (Schema tagged errors),
+  // otherwise by class name, so the class name must equal its `_tag`
+  { errors: [RepoNotFound] },
+) {}
+```
+
+Undeclared errors still arrive as plain structs. `Effect.catchTag` matches either way, because it keys on `_tag`.
+
 ## Another script's Durable Object
 
 ```typescript
@@ -178,7 +193,7 @@ export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
 
 ## Containers
 
-### Declare the Shape
+### Declare the shape
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -254,7 +269,7 @@ export class ContainerHost extends Cloudflare.DurableObject<ContainerHost>()(
 
 Containers run inside Durable Objects, so the chain is Worker → DO → Container; the container leg rides the fetch transport (`POST /__rpc__/{name}`), and a forwarded value like `readObjectRpc` is itself an RPC call — nested forwarding just works. Running and connecting containers in depth: [Containers](/cloudflare/compute/containers).
 
-## Dynamically-loaded Workers
+## Dynamically loaded Workers
 
 ```typescript
 // Construction phase — register the loader binding:

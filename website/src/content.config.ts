@@ -13,6 +13,10 @@ export const collections = {
       extend: (ctx) =>
         blogSchema(ctx).extend({
           category: z.enum(blogCategories).optional(),
+          // Diátaxis page type. See website/STYLE.md.
+          type: z
+            .enum(["tutorial", "how-to", "reference", "explanation"])
+            .optional(),
         }),
     }),
   }),

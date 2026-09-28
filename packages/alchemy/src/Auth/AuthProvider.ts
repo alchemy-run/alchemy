@@ -82,6 +82,14 @@ export const reconfigureHint = (
 ): string =>
   `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
+/**
+ * Registry of auth providers, keyed by provider name.
+ *
+ * Each cloud's `providers()` layer registers its auth provider here through
+ * {@link AuthProviderLayer}. `alchemy profile edit` imports the stack,
+ * reads this registry, and runs each selected provider's `configure` and
+ * `login`. A second registration under the same name overwrites the first.
+ */
 export class AuthProviders extends Context.Service<
   AuthProviders,
   {
@@ -232,6 +240,12 @@ export interface AuthProviderImpl<
    */
   readonly configSchema: Schema.Codec<Config>;
 
+  /**
+   * Interactive setup, run by `alchemy profile edit --add` and
+   * `--reconfigure`. Prompts for the method and its values (or opens a
+   * browser for OAuth) and returns the config to store in the profile.
+   * `currentConfig` is the stored config when reconfiguring.
+   */
   configure(
     profileName: string,
     currentConfig?: Config,
@@ -257,12 +271,25 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
+  /**
+   * Obtain or refresh the stored secrets for an already-configured method,
+   * for example an OAuth grant or `aws sso login`. Run by
+   * `alchemy profile edit` after `configure` and by
+   * `alchemy profile refresh`. Return a changed config, or pass it to
+   * `updateConfig`, to write new values such as refreshed tokens back to
+   * the profile.
+   */
   login(
     profileName: string,
     config: Config,
     updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<Config | void, AuthError, R | Interaction>;
 
+  /**
+   * Discard the stored secrets, for example by revoking an OAuth token.
+   * Run by `alchemy profile edit --remove` before the provider's entry is
+   * deleted from the profile.
+   */
   logout(
     profileName: string,
     config: Config,
@@ -286,6 +313,10 @@ export interface AuthProviderImpl<
    * (with {@link readEnvironment}) that child processes exercise, and their
    * graphs carry no interaction services. When re-authentication is needed,
    * fail with {@link NeedsReauth} instead of prompting.
+   *
+   * `updateConfig` writes changed values, such as a refreshed OAuth token,
+   * back to the profile. The same callback is passed to {@link login} and
+   * {@link details}.
    */
   read(
     profileName: string,

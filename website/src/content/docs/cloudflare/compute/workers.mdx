@@ -575,7 +575,7 @@ never runs. Acquire anything that needs cleanup, connections and
 pools, inside handlers. `Drizzle.Postgres` follows this pattern, one
 pool per event, and the
 [SQL connection lifecycle](/sql/effect-sql/lifecycle) spells out the
-contract. [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
+contract. [Instance scope vs request scope](/infrastructure-as-effects/phases#instance-scope-vs-request-scope)
 covers the model across all runtimes.
 
 ## Versions

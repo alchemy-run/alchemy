@@ -83,7 +83,9 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * settings before dead-lettering. Per-message control is still
  * available by calling `msg.ack()` / `msg.retry()` inside the
  * handler.
- * **Example:** Example
+ *
+ * ### Consuming a Queue
+ * **Example:** Consume with Batch and Retry Settings
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Duration from "effect/Duration";
@@ -105,11 +107,23 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * );
  * ```
  *
- * **Example:** Example
+ * **Example:** Consume without Options
  * ```typescript
  * // Without options — handler is the second argument.
  * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(queueResource, (stream) =>
  *   Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
+ * );
+ * ```
+ *
+ * ### Retries and Dead-Letter Queues
+ * **Example:** Dead-Letter After Three Retries
+ * ```typescript
+ * // acked when the handler succeeds, retried up to 3 times when it
+ * // fails, then sent to the "orders-dlq" queue
+ * yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(
+ *   Orders,
+ *   { maxRetries: 3, retryDelay: "1 second", deadLetterQueue: "orders-dlq" },
+ *   (stream) => Stream.runForEach(stream, (msg) => Effect.log(msg.body.text)),
  * );
  * ```
  *

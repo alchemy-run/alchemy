@@ -5,26 +5,26 @@ sidebar:
   order: 7
 ---
 
-Effect RPC is a trust-boundary tool: schemas validate every request,
-so reach for it when data needs sanitizing on its way in — a web app
+Effect RPC is a trust-boundary tool. Schemas validate every request,
+so use it when data needs sanitizing on its way in, such as a web app
 or an external service calling your Lambda. Internal calls use
 [Schemaless RPC](/apis/schemaless) instead (on AWS, a Lambda Function
 driving a [MicroVM](/aws/compute/microvms)); the
 [RPC overview](/apis) has the full decision.
 
 The [HTTP API guide](/aws/apis/effect-http-api) showed how to
-build REST-style endpoints with schema validation. Effect RPC takes
-a different angle — you define **procedures** instead of HTTP
-endpoints, and you get a fully typed client for free with no URL
-construction or manual serialization.
-[Effect RPC](/apis/effect-rpc) covers the host-agnostic core; this
-page covers the Lambda side — a public Function URL via `functionUrl: true`,
+build REST-style endpoints with schema validation. With Effect RPC
+you define **procedures** instead of HTTP endpoints, and you get a
+typed client with no URL construction or manual serialization.
+
+[Effect RPC](/apis/effect-rpc) covers the host-agnostic core. This
+page covers the Lambda side, a Function URL via `functionUrl: true`
 and binding implementations provided with
 `Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp)`.
 
-The transport is still HTTP under the hood — the RPC server compiles
-down to the same `HttpEffect` a Lambda's `fetch` expects — so the
-wiring story is identical to the HTTP API guide:
+The transport is still HTTP. The RPC server compiles down to the same
+`HttpEffect` a Lambda's `fetch` expects, so the wiring matches the HTTP
+API guide:
 
 1. **Define schemas outside the Function.** Domain types and tagged
    errors, importable by both server and client.
@@ -74,9 +74,9 @@ codes, so there's no `httpApiStatus` annotation here.
 
 ## 2. Declare the RPCs
 
-Each `Rpc.make` declares one procedure: a name, a payload schema, a
-success schema, and an error schema. `RpcGroup.make` collects them
-into a single value that both the server and the client will share.
+Each `Rpc.make` declares one procedure with a name, a payload schema,
+a success schema, and an error schema. `RpcGroup.make` collects them
+into a single value that the server and the client share.
 
 ```typescript
 // src/JobRpcs.ts
@@ -105,7 +105,7 @@ export class JobRpcs extends RpcGroup.make(getJob, createJob) {}
 
 `JobRpcs` is just a value-level description. Nothing executes yet.
 
-## 3. Build the Function
+## 3. Build the Lambda Function
 
 Create `src/JobFunction.ts` with an empty Construction phase and a public
 Function URL:
@@ -134,7 +134,7 @@ per-request work.
 
 Jobs need somewhere durable to live. Yield a DynamoDB `Table` inside
 the constructor to declare the resource, then bind the two operations the
-handlers will need:
+handlers need:
 
 ```diff lang="typescript"
   Effect.gen(function* () {
@@ -150,10 +150,9 @@ handlers will need:
   }),
 ```
 
-Each binding does double duty: at deploy time it attaches a
-least-privilege IAM statement to the function's execution role; at
-runtime it returns a typed callable that injects the table name
-automatically.
+Each binding does two jobs. At deploy time it attaches a
+least-privilege IAM statement to the function's execution role. At
+runtime it returns a typed callable that injects the table name.
 
 ### 3b. Construct the handlers inside the constructor
 
@@ -211,8 +210,8 @@ declared `PutJobFailed` error so the client can match on it.
 ### 3c. Return `{ fetch }`
 
 `RpcServer.toHttpEffect` converts the `RpcGroup` into the
-`HttpEffect` that `fetch` expects. We provide two layers to it: the
-`handlersLayer` we just built and `RpcSerialization.layerJson`,
+`HttpEffect` that `fetch` expects. Provide it two layers, the
+`handlersLayer` from the previous step and `RpcSerialization.layerJson`,
 which tells the server to encode and decode messages as JSON (swap
 for `layerNdjson` when you add streaming procedures). Unlike the
 HTTP API approach, RPC doesn't need `HttpPlatform.layer` or
@@ -311,6 +310,16 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
 ) {}
 ```
 
+### Require signed callers
+
+`functionUrl: true` creates a public URL (`authType: "NONE"`). To accept
+only SigV4-signed callers, configure the URL instead:
+
+```diff lang="typescript"
+-  { main: import.meta.url, functionUrl: true },
++  { main: import.meta.url, functionUrl: { authType: "AWS_IAM" } },
+```
+
 ## 4. Add to the Stack
 
 ```typescript
@@ -404,7 +413,7 @@ explicitly.
 
 The full
 [`examples/aws-lambda-rpc`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-rpc)
-example grows this app in a few directions: it hides DynamoDB behind
+example grows this app in a few directions. It hides DynamoDB behind
 a cloud-agnostic `JobStorage` service (with a drop-in S3
 implementation), publishes job-created notifications to SNS, fans
 table changes out to SQS via DynamoDB Streams, and adds a CloudWatch

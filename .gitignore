@@ -87,3 +87,7 @@ examples/cloudflare-worker/src/scratch.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg
+
+# Vale packages downloaded by `vale sync` (see website/STYLE.md)
+website/.vale/styles/*
+!website/.vale/styles/Alchemy/

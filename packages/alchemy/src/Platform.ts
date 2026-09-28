@@ -155,6 +155,34 @@ export interface PlatformIdentity<Id extends string = string> {
   readonly LogicalId: Id;
 }
 
+/**
+ * The type of a runtime resource (a Worker, Lambda Function, ECS Task, ...)
+ * whose user code is an Effectful constructor.
+ *
+ * Type parameters, shown with the `AWS.ECS.Task` instantiation:
+ *
+ * - `Resource`: the resource contract, e.g. `Task`.
+ * - `Services`: services the runtime provides to the user's constructor
+ *   Effect, e.g. `Credentials | Region | ServerHost | AWSEnvironment`.
+ * - `MainShape`: what the constructor Effect may return, e.g. `TaskShape`,
+ *   which is `{ fetch?, run? }`.
+ * - `RuntimeContext`: the mutable context that collects handlers, env, and
+ *   exports while the constructor runs, e.g. `TaskRuntimeContext`. See
+ *   {@link BaseRuntimeContext}.
+ * - `BaseShape`: members every returned shape gets. Defaults to `{}`.
+ * - `InlineProps`: the props accepted inline. Defaults to the resource's
+ *   `Props`.
+ *
+ * @example Declare a Platform
+ * ```typescript
+ * export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
+ *   Platform("AWS.ECS.Task", {
+ *     createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Task") as (
+ *       id: string,
+ *     ) => TaskRuntimeContext,
+ *   });
+ * ```
+ */
 export interface Platform<
   Resource extends ResourceLike<string, PlatformProps>,
   Services,

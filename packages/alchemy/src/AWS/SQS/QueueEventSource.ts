@@ -40,6 +40,18 @@ type MessagesHandler<Req> = (
  * );
  * ```
  *
+ * @example Shape each batch
+ * ```typescript
+ * // up to 10 records per invocation, gathered for at most 5 seconds.
+ * // If the handler fails, the queue redelivers the whole batch.
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   { batchSize: 10, maximumBatchingWindow: "5 seconds" },
+ *   (records) =>
+ *     Stream.runForEach(records, (record) => Effect.log(record.body)),
+ * );
+ * ```
+ *
  * @example With batching configuration
  * ```typescript
  * yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (records) =>
@@ -95,6 +107,19 @@ export function consumeQueueMessages<Q extends Queue, Req = never>(
  *       ),
  *     );
  *   }).pipe(Effect.provide(Lambda.QueueEventSource)),
+ * );
+ * ```
+ *
+ * ### Batching and Retries
+ * **Example:** Shape Each Batch
+ * ```typescript
+ * // up to 10 records per invocation, gathered for at most 5 seconds.
+ * // If the handler fails, the queue redelivers the whole batch.
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   { batchSize: 10, maximumBatchingWindow: "5 seconds" },
+ *   (records) =>
+ *     Stream.runForEach(records, (record) => Effect.log(record.body)),
  * );
  * ```
  *

@@ -1097,80 +1097,18 @@ Use `pnpm build:clean` when you encounter stale build artifacts or dependency is
 3. `pnpm build` - Builds the project
 4. `pnpm download:env` - Downloads environment files
 
-# Tutorial Documentation Standard
+# Docs Writing Standard
 
-Tutorials under `website/src/content/docs/tutorial/` are **step-by-step and granular**: every code snippet introduces exactly **one** new thing, followed by a short prose explanation of just that thing. Each step gets its own `##` heading.
+[website/STYLE.md](./website/STYLE.md) is the style guide for every hand-written page under `website/src/content/docs` and for the prose in JSDoc. Read it before writing or editing docs, and include it in any docs task you hand to an agent. The essentials:
 
-**Anti-pattern** — one snippet that adds multiple distinct changes, followed by a numbered list or bullet list explaining each:
+- Every page is one Diátaxis type (`tutorial`, `how-to`, `reference`, or `explanation`), declared as `type` in its frontmatter. Material for a different type goes on another page and is linked.
+- Each concept has one canonical page. Other pages summarize it in one sentence and link there.
+- Show, then tell. Teach each idea as one or two sentences plus the code snippet that shows it. Paragraphs are at most three sentences, and options and defaults live in the snippet.
+- Short sentences, active voice, "you". No marketing words, no "it's not X, it's Y" framing, no colons joining clauses, and at most one em dash per paragraph.
+- Tutorials change one thing per step, with one `##` heading, one `diff` snippet, and one short paragraph each.
+- Every code example uses real APIs from `packages/alchemy/src`.
 
-````md
-## Bind the DO to the Worker
-
-```diff lang="typescript"
-+import Counter from "./counter.ts";
-+import { HttpServerRequest } from "...";
-
-  Effect.gen(function* () {
-+    const counters = yield* Counter;
-    return {
-      fetch: Effect.gen(function* () {
-+        const request = yield* HttpServerRequest;
-+        if (request.url.startsWith("/counter/") && ...) {
-+          const next = yield* counters.getByName(name).increment();
-+          return HttpServerResponse.text(String(next));
-+        }
-        return HttpServerResponse.text("Hello!");
-      }),
-    };
-  })
-```
-
-Two things just happened:
-1. `yield* Counter` registers the DO ...
-2. `counters.getByName(name)` returns a typed stub ...
-````
-
-**Correct** — split into one heading per step, each with one snippet and one explanation:
-
-````md
-## Bind the DO to the Worker
-
-```diff lang="typescript"
-+import Counter from "./counter.ts";
-
-  Effect.gen(function* () {
-+    const counters = yield* Counter;
-    ...
-  })
-```
-
-`yield* Counter` registers the DO with the Worker (binding + class-migration metadata) and hands you the namespace.
-
-## Call the DO from `fetch`
-
-```diff lang="typescript"
-+import { HttpServerRequest } from "...";
-
-  fetch: Effect.gen(function* () {
-+    const request = yield* HttpServerRequest;
-+    if (request.url.startsWith("/counter/") && ...) {
-+      const next = yield* counters.getByName(name).increment();
-+      return HttpServerResponse.text(String(next));
-+    }
-    return HttpServerResponse.text("Hello!");
-  })
-```
-
-`counters.getByName(name)` returns a typed stub — `increment()` and `get()` round-trip through Cloudflare's RPC machinery.
-````
-
-Rules of thumb:
-
-- If you find yourself writing "Two/three things just happened", "A few things are happening here", or a numbered/bulleted list explaining separate parts of a single snippet — **split the snippet**.
-- One concept ⇒ one heading ⇒ one diff snippet ⇒ one explanation paragraph (no bullets).
-- Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
-- A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
-- Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+Run `pnpm docs:lint` in `website/` (requires `brew install vale`) to check a page against the Google style and the `Alchemy` house rules.
 
 # Pull Request Conventions
 

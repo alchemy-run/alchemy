@@ -4,19 +4,20 @@ description: Have ephemeral PR-preview stages reference a long-lived Neon or Pla
 ---
 
 [Stages](/environments/stages) make it cheap to spin up isolated copies
-of a stack — per-developer, `pr-42`, `prod`. Most resources should
-be isolated. But some — a Neon Postgres project, a shared S3
-bucket, a global rate limiter — are too expensive or too stateful
-to re-provision per stage. PR-preview stages should *point at* the
-shared instance instead.
+of a stack, such as per-developer stages, `pr-42`, and `prod`. Most
+resources should be isolated. Some, such as a Neon Postgres project, a
+shared S3 bucket, or a global rate limiter, are too expensive or too
+stateful to re-provision per stage.
+
+PR-preview stages should *point at* the shared instance instead.
 
 `Resource.ref(id, { stage })` reads a deployed resource's
 attributes from another stage of the same stack — typed, lazy,
 resolved at plan time against the persisted state store. See
 [References](/infrastructure-as-code/references) for the full reference surface
-(`Output.ref`, `Output.stackRef`, `Stack.stage`).
+(`Output.of`, `Output.stackRef`, `Stack.stage`).
 
-The example we'll build: a Neon Postgres project that's owned by
+This guide builds a Neon Postgres project that's owned by
 `staging`, with PR-preview stages (`pr-*`) referencing it instead
 of creating their own. The full file lives in
 [`examples/cloudflare-neon-drizzle/src/Db.ts`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle/src/Db.ts).
@@ -62,8 +63,7 @@ Fine for `staging` and `prod`. Overkill for `pr-147`.
 
 ## Read the current stage
 
-Pull the active stage from the `Stack` service so we can branch on
-it. `Alchemy.Stack` is the same handle used everywhere — it gives
+Pull the active stage from the `Stack` service to branch on it. `Alchemy.Stack` is the same handle used everywhere — it gives
 you `name`, `stage`, and friends:
 
 ```diff lang="typescript"
@@ -77,7 +77,7 @@ you `name`, `stage`, and friends:
 ```
 
 `stage` is whatever was passed to `alchemy deploy --stage <name>`.
-We'll use it to route PR previews to the shared project.
+The next step uses it to route PR previews to the shared project.
 
 ## Swap in `Neon.Project.ref` for PR stages
 
@@ -113,7 +113,7 @@ Three things to know about `Resource.ref`:
 
 The signature is
 `Resource.ref(id, { stage?: string, stack?: string })`. Both
-options default to the current stack and stage; here we override
+options default to the current stack and stage. This example overrides
 `stage` to point at the long-lived shared environment.
 
 ## Pass the reference downstream
@@ -208,8 +208,8 @@ const branch = yield* Planetscale.PostgresBranch("app-branch", {
 });
 ```
 
-One twist worth stealing: instead of pointing every PR at a single
-global `staging`, the ref targets `staging-${stage}` — so `pr-42`
+Instead of pointing every PR at a single global `staging`, the ref
+targets `staging-${stage}` — so `pr-42`
 reads from `staging-pr-42`. Each PR gets a parallel staging stage
 that owns its database, keeping PR data isolated while the
 create-vs-reference split stays the same. Deploy `staging-pr-42`
@@ -237,7 +237,7 @@ const project = yield* Neon.Project.ref("app-db", {
 The lookup is `{ stack, stage, id }` — change any of them and
 you're pointing at a different deployed resource. For pulling a
 whole stack's outputs (instead of a single resource) see the
-multi-stack section of [Monorepos](/project-structure/monorepo).
+[Monorepo with many stacks](/project-structure/monorepo-multi-stack) guide.
 
 ## When to use which
 
@@ -245,18 +245,18 @@ multi-stack section of [Monorepos](/project-structure/monorepo).
 | ------------------------------------------- | ---------------------------------------------- |
 | Reference a single resource, same stack, different stage | `Resource.ref(id, { stage })`            |
 | Reference a single resource, different stack | `Resource.ref(id, { stack, stage })`           |
-| Reference an entire stack's outputs         | `Backend.stage[name]` ([guide](/project-structure/monorepo))             |
-| Reference an arbitrary deployed Output      | [`Output.ref`](/infrastructure-as-code/outputs#ref)          |
+| Reference an entire stack's outputs         | `Backend.stage[name]` ([guide](/project-structure/monorepo-multi-stack))             |
+| Reference an arbitrary deployed Output      | [`Output.of`](/infrastructure-as-code/outputs#of) with `Alchemy.ref` |
 
 All four resolve through the same state store — they just differ
 in what shape they return.
 
 ## Related
 
-- [Resource](/infrastructure-as-code/resource#ref) — `Resource.ref` reference.
+- [References](/infrastructure-as-code/references) — `Resource.ref` reference.
 - [Stages](/environments/stages) — naming conventions for `pr-*`,
   `dev_*`, `staging`, `prod`.
-- [Monorepos](/project-structure/monorepo) — whole-stack references via
+- [Monorepo with many stacks](/project-structure/monorepo-multi-stack) — whole-stack references via
   typed `Stack` handles.
 - [Neon](/neon) and [PlanetScale](/planetscale) — the two database
   providers used in this guide.
