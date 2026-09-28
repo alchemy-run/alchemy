@@ -171,6 +171,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+- [R2 presigned URLs](https://alchemy.run/cloudflare/data/r2-presigned-urls) — Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 
 ## Cloudflare — Messaging & events
