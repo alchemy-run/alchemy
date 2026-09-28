@@ -172,8 +172,7 @@ export const demo: StepSpec[] = [
       omit: ["storeError", "get", "list"],
       notes: "Links is an interface: create a link. The Worker will depend on this, never on a database.",
     },
-    { title: "It can get a link…", omit: ["storeError", "list"], notes: "Get one by code." },
-    { title: "…and list them", omit: ["storeError"], notes: "List them all." },
+    { title: "It can also get and list links", omit: ["storeError"], notes: "Get one by code, and list them all." },
     {
       title: "Storage can fail, and the type says so",
       notes: "And every method can fail with a LinkStoreError, because databases fail. It's in the type.",
@@ -195,12 +194,11 @@ export const demo: StepSpec[] = [
       notes: "Implement create by calling links.create.",
     },
     {
-      title: "get turns a storage failure into a 500",
-      omit: ["list", "fetch"],
+      title: "get and list turn storage failures into a 500",
+      omit: ["fetch"],
       error: { hide: true },
-      notes: "get calls links.get. A storage failure there is a defect, so it dies: the platform returns a 500.",
+      notes: "get and list call Links too. A storage failure there is a defect, so it dies: the platform returns a 500.",
     },
-    { title: "…and list", omit: ["fetch"], error: { hide: true }, notes: "And list." },
     { title: "fetch serves the whole API", error: { hide: true }, notes: "fetch serves ShortyApi with those handlers." },
   ]),
 
