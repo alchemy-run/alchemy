@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
+import type { AssetsConfig, AssetsProps } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -16,9 +16,11 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
   extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.,
+   * and `retainPrevious` to keep the previous build's hashed files served
+   * for one more deploy.
    */
-  assets?: AssetsConfig;
+  assets?: AssetsConfig & Pick<AssetsProps, "retainPrevious">;
 }
 
 /**

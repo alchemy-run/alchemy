@@ -40,7 +40,10 @@ import {
   mergeAssetsConfigFiles,
   readAssets,
   readAssetsConfigFiles,
+  selectRetainedAssets,
   uploadAssets,
+  type AssetManifest,
+  type RetainPreviousAssets,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
@@ -1133,6 +1136,11 @@ interface WorkerMetadataHashInput {
    */
   readonly selfUrl?: string;
 }
+
+const resolveRetainPrevious = (
+  assets: WorkerProps["assets"],
+): RetainPreviousAssets | undefined =>
+  typeof assets === "object" ? assets.retainPrevious : undefined;
 
 // The asset router config the resource declares (htmlHandling,
 // notFoundHandling, ...), minus the local `directory` path (machine-specific,
@@ -2677,7 +2685,7 @@ export const LiveWorkerProvider = () =>
         }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
-        const { directory, hash, base, ...config } = assets;
+        const { directory, hash, base, retainPrevious, ...config } = assets;
         // `base` re-keys the manifest without changing the build output, so
         // a caller-supplied hash alone would let the skip path carry a
         // stale root-keyed manifest forward across a `base` change. Salt
@@ -2689,7 +2697,12 @@ export const LiveWorkerProvider = () =>
           directory,
           config,
           hash: effectiveHash,
-          skip: effectiveHash === output?.hash?.assets,
+          // The skip path never reads the manifest, so it can only carry
+          // retained entries forward from state, not record them.
+          skip:
+            effectiveHash === output?.hash?.assets &&
+            (retainPrevious === undefined ||
+              output?.retainedAssets !== undefined),
         };
       };
 
@@ -3735,6 +3748,11 @@ export const LiveWorkerProvider = () =>
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
         let keepAssets = false;
+        // `retainPrevious`: the current build's matching entries, recorded
+        // in state for the next deploy to carry. Only the build's own
+        // entries, never the ones carried from the deploy before.
+        const retainPrevious = resolveRetainPrevious(news.assets);
+        let retainedAssets: AssetManifest | undefined;
         if (prebuiltAssets?.skip) {
           // Hash matched what's already on Cloudflare: keep the
           // existing asset manifest and skip the upload session.
@@ -3742,6 +3760,8 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
+          // Same build as the recorded one, so its entries still hold.
+          retainedAssets = retainPrevious ? output?.retainedAssets : undefined;
           // `keepAssets` only preserves the uploaded files — the PUT
           // replaces the asset config wholesale. The skip path never
           // walked the directory, so read just `_headers`/`_redirects`
@@ -3757,6 +3777,13 @@ export const LiveWorkerProvider = () =>
             name: "ASSETS",
           });
         } else if (assets) {
+          retainedAssets = retainPrevious
+            ? selectRetainedAssets(
+                assets.manifest,
+                retainPrevious,
+                assets.pathPrefix,
+              )
+            : undefined;
           // We had to read the directory. Even after the read, the
           // computed hash may match what's already deployed (e.g.
           // legacy `string` / `AssetsProps` shapes that don't carry a
@@ -3782,13 +3809,19 @@ export const LiveWorkerProvider = () =>
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
             );
-            const { jwt } = yield* uploadAssets(
+            const { jwt, carried } = yield* uploadAssets(
               accountId,
               name,
               assets,
               session,
               dispatchNamespace,
+              retainPrevious ? output?.retainedAssets : undefined,
             );
+            if (carried.length > 0) {
+              yield* Effect.logInfo(
+                `Cloudflare Worker update: keeping ${carried.length} asset(s) of the previous deploy for ${name}`,
+              );
+            }
             metadataAssets = {
               jwt,
               // Same `_headers`/`_redirects` fold as the keep path above.
@@ -4380,6 +4413,7 @@ export const LiveWorkerProvider = () =>
             // The settings read endpoint doesn't expose
             // `streaming_tail_consumers`; record what this deploy uploaded.
             streamingTailConsumers,
+            retainedAssets,
             hash,
           } satisfies Worker["Attributes"];
         }
@@ -4655,6 +4689,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           deploymentId,
           affinityZoneIds,
+          retainedAssets,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -5549,6 +5584,8 @@ export const LiveWorkerProvider = () =>
                 // The bundle hash is computed locally during deployment and
                 // cannot be reconstructed from Cloudflare's read APIs.
                 hash: output?.hash,
+                // Recorded from the local build, like the hash.
+                retainedAssets: output?.retainedAssets,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -5685,6 +5722,8 @@ export const LiveWorkerProvider = () =>
               // The bundle hash is computed locally during deployment and
               // cannot be reconstructed from Cloudflare's read APIs.
               hash: output?.hash,
+              // Recorded from the local build, like the hash.
+              retainedAssets: output?.retainedAssets,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
