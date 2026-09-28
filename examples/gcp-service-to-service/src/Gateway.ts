@@ -23,7 +23,7 @@ export default class Gateway extends GCP.Function<Gateway>()(
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
-    const quotes = yield* GCP.Run.InvokeService(yield* Quotes);
+    const quotes = yield* GCP.Run.InvokeService(Quotes);
 
     return {
       fetch: Effect.gen(function* () {

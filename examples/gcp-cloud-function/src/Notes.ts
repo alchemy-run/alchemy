@@ -45,7 +45,7 @@ export default class Notes extends GCP.CloudFunctions.Function<Notes>()(
   "Notes",
   { main: import.meta.url, location: "us-central1" },
   Effect.gen(function* () {
-    const db = yield* GCP.Firestore.ReadWriteDatabase(yield* NotesDb);
+    const db = yield* GCP.Firestore.ReadWriteDatabase(NotesDb);
 
     return {
       fetch: Effect.gen(function* () {

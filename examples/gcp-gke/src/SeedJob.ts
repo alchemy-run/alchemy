@@ -57,7 +57,7 @@ export default Kubernetes.Job(
     };
   }),
   Effect.gen(function* () {
-    const db = yield* GCP.Firestore.WriteDatabase(yield* EntriesDatabase);
+    const db = yield* GCP.Firestore.WriteDatabase(EntriesDatabase);
 
     return {
       // One-shot entry: seed the database, log, exit 0.

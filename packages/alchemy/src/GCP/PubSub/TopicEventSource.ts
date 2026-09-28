@@ -1,5 +1,5 @@
 import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
@@ -157,23 +157,29 @@ export const TopicEventSource = Binding.Service<TopicEventSource>(
  * Subscribe an Effect handler to messages published to a Pub/Sub
  * {@link Topic}. See {@link TopicEventSource} for the host implementations.
  */
-export function consumeTopicMessages<Req = never>(
-  topic: Topic,
+export function consumeTopicMessages<Req = never, ResourceReq = never>(
+  topic: Topic | Effect.Effect<Topic, never, ResourceReq>,
   process: TopicMessagesHandler<Req>,
-): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicMessages<Req = never>(
-  topic: Topic,
+): Effect.Effect<void, never, TopicEventSource | ResourceReq>;
+export function consumeTopicMessages<Req = never, ResourceReq = never>(
+  topic: Topic | Effect.Effect<Topic, never, ResourceReq>,
   props: TopicEventSourceProps,
   process: TopicMessagesHandler<Req>,
-): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicMessages<Req = never>(
-  topic: Topic,
+): Effect.Effect<void, never, TopicEventSource | ResourceReq>;
+export function consumeTopicMessages<Req = never, ResourceReq = never>(
+  topic: Topic | Effect.Effect<Topic, never, ResourceReq>,
   propsOrProcess: TopicEventSourceProps | TopicMessagesHandler<Req>,
   maybeProcess?: TopicMessagesHandler<Req>,
-): Effect.Effect<void, never, TopicEventSource> {
+): Effect.Effect<void, never, TopicEventSource | ResourceReq> {
   const [props, process] =
     typeof propsOrProcess === "function"
       ? [{} as TopicEventSourceProps, propsOrProcess]
       : [propsOrProcess, maybeProcess!];
-  return TopicEventSource.use((source) => source(topic, props, process));
+  // Accept the resource or the Effect that declares it, like bindings do.
+  const resolved = Effect.isEffect(topic) ? topic : Effect.succeed(topic);
+  return resolved.pipe(
+    Effect.flatMap((value) =>
+      TopicEventSource.use((source) => source(value, props, process)),
+    ),
+  );
 }

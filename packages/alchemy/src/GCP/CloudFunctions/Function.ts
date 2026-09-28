@@ -457,7 +457,7 @@ export type FunctionShape = Main<FunctionServices>;
  *   "Hello",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const publish = yield* GCP.PubSub.Publish(yield* Events);
+ *     const publish = yield* GCP.PubSub.Publish(Events);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         yield* publish({ body: { messages: [{ data: btoa("hi") }] } }).pipe(

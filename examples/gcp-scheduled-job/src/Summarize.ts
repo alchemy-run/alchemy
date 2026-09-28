@@ -36,7 +36,7 @@ export default class Summarize extends GCP.Run.Job<Summarize>()(
   Effect.gen(function* () {
     const table = yield* Orders;
     const orders = yield* GCP.BigQuery.ReadTable(table);
-    const reports = yield* GCP.Storage.WriteBucket(yield* Reports);
+    const reports = yield* GCP.Storage.WriteBucket(Reports);
     // The table id is bound at deploy time and read inside `run`.
     const tableId = yield* table.tableId;
 

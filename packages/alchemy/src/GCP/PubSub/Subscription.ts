@@ -346,12 +346,23 @@ export class SubscriptionStillExists extends Data.TaggedError(
   "GCP.PubSub.SubscriptionStillExists",
 )<{ name: string }> {}
 
+// Pub/Sub serves reads from replicas that lag writes: one successful GET
+// does not mean the next one (or a publish routed to it) sees the
+// resource. Require consecutive successful reads before reporting ready.
+const CONSISTENT_READS = 3;
+
 const waitUntilPresent = (name: string) =>
-  getByName(name).pipe(
-    Effect.filterOrFail(
-      (existing): existing is pubsub.Subscription => existing !== undefined,
-      () => new SubscriptionNotResolved({ name }),
-    ),
+  Effect.gen(function* () {
+    let found: pubsub.Subscription | undefined;
+    for (let read = 0; read < CONSISTENT_READS; read++) {
+      if (read > 0) yield* Effect.sleep("1 second");
+      found = yield* getByName(name);
+      if (found === undefined) {
+        return yield* new SubscriptionNotResolved({ name });
+      }
+    }
+    return found!;
+  }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.PubSub.SubscriptionNotResolved",
       schedule: Schedule.spaced("1 second"),

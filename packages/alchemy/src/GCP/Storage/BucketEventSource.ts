@@ -128,25 +128,31 @@ export const BucketEventSource = Binding.Service<BucketEventSource>(
  * Subscribe an Effect handler to object changes in a Cloud Storage
  * {@link Bucket}. See {@link BucketEventSource} for the implementations.
  */
-export function consumeBucketEvents<Req = never>(
-  bucket: Bucket,
+export function consumeBucketEvents<Req = never, ResourceReq = never>(
+  bucket: Bucket | Effect.Effect<Bucket, never, ResourceReq>,
   process: BucketEventsHandler<Req>,
-): Effect.Effect<void, never, BucketEventSource>;
-export function consumeBucketEvents<Req = never>(
-  bucket: Bucket,
+): Effect.Effect<void, never, BucketEventSource | ResourceReq>;
+export function consumeBucketEvents<Req = never, ResourceReq = never>(
+  bucket: Bucket | Effect.Effect<Bucket, never, ResourceReq>,
   props: BucketEventSourceProps,
   process: BucketEventsHandler<Req>,
-): Effect.Effect<void, never, BucketEventSource>;
-export function consumeBucketEvents<Req = never>(
-  bucket: Bucket,
+): Effect.Effect<void, never, BucketEventSource | ResourceReq>;
+export function consumeBucketEvents<Req = never, ResourceReq = never>(
+  bucket: Bucket | Effect.Effect<Bucket, never, ResourceReq>,
   propsOrProcess: BucketEventSourceProps | BucketEventsHandler<Req>,
   maybeProcess?: BucketEventsHandler<Req>,
-): Effect.Effect<void, never, BucketEventSource> {
+): Effect.Effect<void, never, BucketEventSource | ResourceReq> {
   const [props, process] =
     typeof propsOrProcess === "function"
       ? [{} as BucketEventSourceProps, propsOrProcess]
       : [propsOrProcess, maybeProcess!];
-  return BucketEventSource.use((source) => source(bucket, props, process));
+  // Accept the resource or the Effect that declares it, like bindings do.
+  const resolved = Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket);
+  return resolved.pipe(
+    Effect.flatMap((value) =>
+      BucketEventSource.use((source) => source(value, props, process)),
+    ),
+  );
 }
 
 const decodeBase64Utf8 = (data: string) => {

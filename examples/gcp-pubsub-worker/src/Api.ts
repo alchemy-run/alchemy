@@ -22,8 +22,8 @@ export default class Api extends GCP.Function<Api>()(
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
-    const jobs = yield* GCP.PubSub.WriteTopic(yield* Jobs);
-    const results = yield* GCP.Firestore.ReadDatabase(yield* Results);
+    const jobs = yield* GCP.PubSub.WriteTopic(Jobs);
+    const results = yield* GCP.Firestore.ReadDatabase(Results);
 
     return {
       fetch: Effect.gen(function* () {

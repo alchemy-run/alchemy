@@ -165,8 +165,28 @@ const waitUntilGone = (name: string) =>
     Effect.asVoid,
     Effect.retry({
       while: (error) => error._tag === "GCP.PubSub.SnapshotStillExists",
+      // Pub/Sub reads lag deletes; allow up to a minute.
+      schedule: Schedule.spaced("2 seconds"),
+      times: 30,
+    }),
+  );
+
+const CONSISTENT_READS = 3;
+
+const waitUntilPresent = (name: string) =>
+  Effect.gen(function* () {
+    let found: pubsub.Snapshot | undefined;
+    for (let read = 0; read < CONSISTENT_READS; read++) {
+      if (read > 0) yield* Effect.sleep("1 second");
+      found = yield* getByName(name);
+      if (found === undefined) return yield* new SnapshotNotResolved({ name });
+    }
+    return found!;
+  }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "GCP.PubSub.SnapshotNotResolved",
       schedule: Schedule.spaced("1 second"),
-      times: 8,
+      times: 60,
     }),
   );
 
@@ -253,7 +273,7 @@ export const SnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* pubsub
+        yield* pubsub
           .createProjectsSnapshots({
             name,
             body: {
@@ -261,8 +281,10 @@ export const SnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
-        current = created ?? undefined;
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        // Block until Pub/Sub consistently serves the snapshot; the next
+        // call (label patch) can otherwise hit a lagging replica.
+        current = yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {

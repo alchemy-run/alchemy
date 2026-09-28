@@ -48,10 +48,10 @@ export default class Worker extends GCP.Run.WorkerPool<Worker>()(
     scaling: { manualInstanceCount: 1 },
   },
   Effect.gen(function* () {
-    const results = yield* GCP.Firestore.WriteDatabase(yield* Results);
+    const results = yield* GCP.Firestore.WriteDatabase(Results);
 
     yield* GCP.PubSub.consumeTopicMessages(
-      yield* Jobs,
+      Jobs,
       { maxMessages: 10, ackDeadlineSeconds: 60 },
       (messages) =>
         messages.pipe(

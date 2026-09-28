@@ -27,7 +27,7 @@ export default class Orders extends GCP.Function<Orders>()(
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
-    const events = yield* GCP.PubSub.WriteTopic(yield* OrderEvents);
+    const events = yield* GCP.PubSub.WriteTopic(OrderEvents);
 
     const publish = (event: OrderEvent) =>
       events

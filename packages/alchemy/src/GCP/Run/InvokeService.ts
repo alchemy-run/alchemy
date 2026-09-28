@@ -70,7 +70,7 @@ export class InvokeServiceError extends Data.TaggedError(
  *   "Gateway",
  *   { main: import.meta.url, invokerIamDisabled: true },
  *   Effect.gen(function* () {
- *     const quotes = yield* GCP.Run.InvokeService(yield* Quotes);
+ *     const quotes = yield* GCP.Run.InvokeService(Quotes);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const response = yield* quotes.fetch("/quote").pipe(Effect.orDie);

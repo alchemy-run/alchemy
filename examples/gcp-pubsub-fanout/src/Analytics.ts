@@ -22,9 +22,9 @@ export default class Analytics extends GCP.Function<Analytics>()(
     location: "us-central1",
   },
   Effect.gen(function* () {
-    const table = yield* GCP.BigQuery.WriteTable(yield* OrderEventsTable);
+    const table = yield* GCP.BigQuery.WriteTable(OrderEventsTable);
 
-    yield* GCP.PubSub.consumeTopicMessages(yield* OrderEvents, (messages) =>
+    yield* GCP.PubSub.consumeTopicMessages(OrderEvents, (messages) =>
       messages.pipe(
         Stream.runForEach(({ message }) =>
           Effect.gen(function* () {

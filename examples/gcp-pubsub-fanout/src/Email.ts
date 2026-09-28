@@ -61,10 +61,10 @@ export default class Email extends GCP.Function<Email>()(
     location: "us-central1",
   },
   Effect.gen(function* () {
-    const outbox = yield* GCP.Storage.WriteBucket(yield* Outbox);
+    const outbox = yield* GCP.Storage.WriteBucket(Outbox);
 
     yield* GCP.PubSub.consumeTopicMessages(
-      yield* OrderEvents,
+      OrderEvents,
       {
         filter: 'attributes.type = "order.created"',
         deadLetter: {

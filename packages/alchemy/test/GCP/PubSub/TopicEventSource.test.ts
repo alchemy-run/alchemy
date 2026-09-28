@@ -40,6 +40,16 @@ const dockerAvailable = (() => {
   }
 })();
 
+// Pub/Sub reads are eventually consistent; ride out a lagging replica.
+const readSubscription = (subscription: string) =>
+  pubsub.getProjectsSubscriptions({ subscription }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
+
 const subscriptionStatus = (subscription: string) =>
   pubsub.getProjectsSubscriptions({ subscription }).pipe(
     Effect.as("found" as const),
@@ -92,9 +102,7 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
       const { subscriptions = [] } =
         yield* pubsub.listProjectsTopicsSubscriptions({ topic: out.topic });
       expect(subscriptions.length).toEqual(1);
-      const subscription = yield* pubsub.getProjectsSubscriptions({
-        subscription: subscriptions[0]!,
-      });
+      const subscription = yield* readSubscription(subscriptions[0]!);
       const pushEndpoint = `${out.uri}/__alchemy/pubsub/pushorders`;
       expect(subscription.pushConfig?.pushEndpoint).toEqual(pushEndpoint);
       expect(subscription.pushConfig?.oidcToken?.audience).toEqual(
@@ -133,9 +141,7 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
       const { subscriptions = [] } =
         yield* pubsub.listProjectsTopicsSubscriptions({ topic: out.topic });
       expect(subscriptions.length).toEqual(1);
-      const subscription = yield* pubsub.getProjectsSubscriptions({
-        subscription: subscriptions[0]!,
-      });
+      const subscription = yield* readSubscription(subscriptions[0]!);
       expect(subscription.pushConfig?.pushEndpoint).toBeUndefined();
 
       const event = yield* publishAndAwaitMarker(out.topic, out.bucket, "pull");

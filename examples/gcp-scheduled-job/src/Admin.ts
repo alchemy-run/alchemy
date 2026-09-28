@@ -25,7 +25,7 @@ export default class Admin extends GCP.Function<Admin>()(
   },
   Effect.gen(function* () {
     // Grants this service's runtime account permission to run the job.
-    const runSummarize = yield* GCP.Run.RunJob(yield* Summarize);
+    const runSummarize = yield* GCP.Run.RunJob(Summarize);
 
     return {
       fetch: Effect.gen(function* () {

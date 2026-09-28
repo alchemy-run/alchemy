@@ -78,7 +78,7 @@ export default Api.make(
     };
   }),
   Effect.gen(function* () {
-    const db = yield* GCP.Firestore.ReadWriteDatabase(yield* EntriesDatabase);
+    const db = yield* GCP.Firestore.ReadWriteDatabase(EntriesDatabase);
 
     return {
       fetch: Effect.gen(function* () {
