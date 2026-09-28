@@ -1,12 +1,11 @@
-//! A ~100 second teaser for Alchemy, following the arc of the "Infrastructure as
-//! Effects" talk: infrastructure as code, two programs that are really one, a cloud
-//! language with two phases, Effect's Req as the missing type, and the agentic loop.
+//! Alchemy, the high-motion cut. 101 seconds at 128 BPM: every slam, cut, flash and
+//! zoom lands on a beat of `media/music.mp3` (synthesized by `scripts/music.sh`).
 //!
-//! Every scene is a struct that draws one SVG tree per frame. Times inside a scene
-//! are seconds from the scene's start.
+//! Scenes are whole bars long, so beat math inside a scene matches the music.
+//! A GPU shader draws the living background; the kick punches the camera.
 use fframes::{
-    AnimateRuntimeInput, AudioMap, Color, Duration, FFramesContext, Frame, Overlap, Scene, Scenes,
-    Svgr, Transform, Video,
+    AnimateRuntimeInput, AudioMap, AudioTimestamp::*, AudioTrack, Color, Duration, FFramesContext,
+    Frame, Scene, Scenes, Shader, ShaderUniforms, Svgr, Video,
     animation::{AnimationRuntime, Easing},
     include_media_dir,
 };
@@ -17,173 +16,145 @@ include_media_dir!(pub struct AlchemyTeaserMedia, "media");
 pub const WIDTH: usize = 1920;
 pub const HEIGHT: usize = 1080;
 
-// The Alchemy brand, dark mode (website/src/styles/tokens.css).
+/// 128 BPM.
+const BEAT: f32 = 60.0 / 128.0;
+const BAR: f32 = BEAT * 4.0;
+
 const BG: &str = "#14110d";
-const CARD: &str = "#221e18";
-const LINE: &str = "#3a3328";
 const FG: &str = "#faf6ec";
 const MUTED: &str = "#a89572";
 const MOSS: &str = "#a3c473";
 const EMBER: &str = "#d8835a";
 const RED: &str = "#f14c4c";
-const GREEN_BG: &str = "#1f3a22";
-const RED_BG: &str = "#3d1f1c";
+const TEAL: &str = "#4ec9b0";
+const CARD: &str = "#221e18";
 
-// Syntax colours, VS Code dark.
 const KW: &str = "#c586c0";
 const FN: &str = "#dcdcaa";
-const TY: &str = "#4ec9b0";
 const STR: &str = "#ce9178";
 const VAR: &str = "#9cdcfe";
 const PUN: &str = "#d4d4d4";
 
-const SANS: &str = "Inter";
+const DISPLAY: &str = "Inter";
 const MONO: &str = "JetBrains Mono";
-const SERIF: &str = "Source Serif 4";
-const HAND: &str = "Caveat";
 
-/// Fast start, long settle.
-static SLIDE: LazyLock<AnimationRuntime> =
-    LazyLock::new(|| AnimationRuntime::new(0.7, &Easing::CubicBezier(0.16, 1.0, 0.3, 1.0)));
-static SPRING: LazyLock<AnimationRuntime> = LazyLock::new(|| {
-    AnimationRuntime::new(3.0, &Easing::Spring { mass: 1.0, stiffness: 200.0, damping: 22.0 })
+static SNAP: LazyLock<AnimationRuntime> = LazyLock::new(|| {
+    AnimationRuntime::new(3.0, &Easing::Spring { mass: 1.0, stiffness: 520.0, damping: 24.0 })
 });
-static FADE: LazyLock<AnimationRuntime> = LazyLock::new(|| AnimationRuntime::new(0.35, &Easing::EaseOut));
+static BOUNCE: LazyLock<AnimationRuntime> = LazyLock::new(|| {
+    AnimationRuntime::new(3.0, &Easing::Spring { mass: 1.0, stiffness: 300.0, damping: 14.0 })
+});
+static POP: LazyLock<AnimationRuntime> = LazyLock::new(|| AnimationRuntime::new(0.08, &Easing::EaseOut));
+static WHIP: LazyLock<AnimationRuntime> =
+    LazyLock::new(|| AnimationRuntime::new(0.18, &Easing::CubicBezier(0.16, 1.0, 0.3, 1.0)));
 
-/// 0 → 1, easing out over 0.7 s from `at`.
-fn ramp(frame: &Frame, at: f32) -> f32 {
-    frame.animate_runtime(AnimateRuntimeInput { on_second: at, from: 0.0, to: 1.0, animation_runtime: &SLIDE })
-}
-/// 0 → 1 over 0.35 s from `at`.
-fn fade(frame: &Frame, at: f32) -> f32 {
-    frame.animate_runtime(AnimateRuntimeInput { on_second: at, from: 0.0, to: 1.0, animation_runtime: &FADE })
-}
-/// A spring from `from` px to 0 at `at`.
-fn rise(frame: &Frame, at: f32, from: f32) -> f32 {
-    frame.animate_runtime(AnimateRuntimeInput { on_second: at, from, to: 0.0, animation_runtime: &SPRING })
-}
-/// Fades a scene out over its last 0.35 s, so cuts cross-fade with the next one.
-fn out(frame: &Frame, length: f32) -> f32 {
-    1.0 - fade(frame, length - 0.35)
+fn b(beats: f32) -> f32 {
+    beats * BEAT
 }
 
-// ─── building blocks ─────────────────────────────────────────────────────────
+/// A stable pseudo-random number in 0..1.
+fn hash(n: u32) -> f32 {
+    let mut x = n.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
+    x = ((x >> ((x >> 28) + 4)) ^ x).wrapping_mul(277_803_737);
+    (((x >> 22) ^ x) as f32) / (u32::MAX as f32)
+}
 
-/// A syntax-highlighted line of code: (text, colour) runs.
+fn spring(frame: &Frame, at: f32, from: f32, to: f32, rt: &AnimationRuntime) -> f32 {
+    frame.animate_runtime(AnimateRuntimeInput { on_second: at, from, to, animation_runtime: rt })
+}
+
+/// Decays from 1 at `at` (a hit), 0 before it.
+fn hit(t: f32, at: f32, rate: f32) -> f32 {
+    if t < at { 0.0 } else { (-(t - at) * rate).exp() }
+}
+
+/// Text that slams in from far away, with RGB-split trails that settle.
+#[allow(clippy::too_many_arguments)]
+fn slam<'a>(frame: &Frame, at: f32, x: f32, y: f32, text: impl Into<String>, size: f32, color: &'a str, anchor: &'a str) -> Svgr<'a> {
+    let t = frame.seconds();
+    if t < at {
+        return Svgr::empty();
+    }
+    let text: String = text.into();
+    let s = spring(frame, at, 2.8, 1.0, &SNAP);
+    let o = spring(frame, at, 0.0, 1.0, &POP);
+    let g = hit(t, at, 7.0);
+    let jx = g * 22.0 * (hash(frame.index as u32 * 31 + 7) * 2.0 - 1.0);
+    let jy = g * 10.0 * (hash(frame.index as u32 * 17 + 3) * 2.0 - 1.0);
+    fframes::svgr!(<g transform={format!("translate({x} {y}) scale({s})")} opacity={o}
+        font-family={DISPLAY} font-weight="900" font-size={size} text-anchor={anchor} letter-spacing={-size * 0.03}>
+        <text x={-jx - g * 14.0} y={jy} fill={EMBER} opacity={g * 0.85}>{text.clone()}</text>
+        <text x={jx + g * 14.0} y={-jy} fill={TEAL} opacity={g * 0.85}>{text.clone()}</text>
+        <text x={jx * 0.3} y="0" fill={color}>{text}</text>
+    </g>)
+}
+
+/// A line of code, typed out to `n` characters.
 type Line = &'static [(&'static str, &'static str)];
-
-/// How a code line looks at this moment.
-#[derive(Clone, Copy, PartialEq)]
-enum Mark {
-    Plain,
-    Add,
-    Del,
-    Dim,
+fn typed<'a>(runs: Line, n: usize) -> Vec<Svgr<'a>> {
+    let mut left = n;
+    let mut out = vec![];
+    for (text, color) in runs.iter() {
+        if left == 0 {
+            break;
+        }
+        let take = text.chars().count().min(left);
+        let s: String = text.chars().take(take).collect();
+        left -= take;
+        out.push(fframes::svgr!(<tspan fill={*color}>{s}</tspan>));
+    }
+    out
+}
+fn line_len(runs: Line) -> usize {
+    runs.iter().map(|(t, _)| t.chars().count()).sum()
 }
 
-/// A code block: lines appear at their own time, marked as a diff when they change.
-fn code<'a>(x: f32, y: f32, size: f32, lines: Vec<(Line, f32, Mark)>, frame: &Frame) -> Svgr<'a> {
-    code_w(x, y, size, 1400.0, lines, frame)
-}
-
-/// `code`, with the diff bars `width` px wide.
-fn code_w<'a>(x: f32, y: f32, size: f32, width: f32, lines: Vec<(Line, f32, Mark)>, frame: &Frame) -> Svgr<'a> {
-    let lh = size * 1.55;
-    let rows: Vec<Svgr> = lines
-        .into_iter()
-        .enumerate()
-        .map(|(i, (runs, at, mark))| {
-            let o = fade(frame, at);
-            let top = y + i as f32 * lh;
-            let (bg, sign, sign_color) = match mark {
-                Mark::Add => (GREEN_BG, "+", MOSS),
-                Mark::Del => (RED_BG, "-", RED),
-                _ => ("none", "", MUTED),
-            };
-            let text_opacity = if mark == Mark::Dim { 0.35 } else { 1.0 };
-            let spans: Vec<Svgr> = runs
-                .iter()
-                .map(|(t, c)| fframes::svgr!(<tspan fill={*c}>{*t}</tspan>))
-                .collect();
-            fframes::svgr!(<g opacity={o}>
-                <rect x={x - 48.0} y={top - size * 1.1} width={width} height={lh} fill={bg} />
-                <text x={x - 34.0} y={top} font-family={MONO} font-size={size} font-weight="700" fill={sign_color}>{sign}</text>
-                <text x={x} y={top} font-family={MONO} font-size={size} opacity={text_opacity}>{spans}</text>
-            </g>)
-        })
-        .collect();
-    fframes::svgr!(<g>{rows}</g>)
-}
-
-/// The big heading at the top of a scene.
-fn title<'a>(frame: &Frame, text: &'a str, at: f32) -> Svgr<'a> {
-    let o = ramp(frame, at);
-    fframes::svgr!(<g opacity={o} transform={Transform::translate(0, rise(frame, at, 24.0))}>
-        <text x="160" y="170" font-family={SANS} font-weight="700" font-size="68" letter-spacing="-1.5" fill={FG}>{text}</text>
-    </g>)
-}
-
-/// A handwritten note.
-fn note<'a>(frame: &Frame, x: f32, y: f32, text: &'a str, color: &'a str, at: f32) -> Svgr<'a> {
-    let o = fade(frame, at);
-    fframes::svgr!(<text x={x} y={y} opacity={o} font-family={HAND} font-weight="700" font-size="54" fill={color}>{text}</text>)
-}
-
-/// A rounded "resource" box for architecture diagrams.
-fn node<'a>(frame: &Frame, x: f32, y: f32, label: &'a str, color: &'a str, at: f32) -> Svgr<'a> {
-    let o = ramp(frame, at);
-    let s = 0.92 + 0.08 * o;
-    fframes::svgr!(<g opacity={o} transform={format!("translate({x} {y}) scale({s})")}>
-        <rect x="-150" y="-52" width="300" height="104" rx="18" fill={CARD} stroke={color} stroke-width="3" />
-        <circle cx="-108" cy="0" r="9" fill={color} />
-        <text x="-84" y="13" font-family={SANS} font-weight="700" font-size="38" fill={FG}>{label}</text>
-    </g>)
-}
-
-/// An arrow between two points that draws on from `at`.
-fn arrow<'a>(frame: &Frame, x1: f32, y1: f32, x2: f32, y2: f32, color: &'a str, at: f32, label: &'a str) -> Svgr<'a> {
-    let p = ramp(frame, at);
-    let len = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
-    let (mx, my) = ((x1 + x2) / 2.0, (y1 + y2) / 2.0);
-    fframes::svgr!(<g>
-        <path d={format!("M {x1} {y1} L {x2} {y2}")} stroke={color} stroke-width="3.5" fill="none"
-              stroke-dasharray={len} stroke-dashoffset={len * (1.0 - p)} />
-        <g opacity={fade(frame, at + 0.35)}>
-            <rect x={mx - 150.0} y={my - 26.0} width="300" height="46" rx="23" fill={BG} stroke={color} stroke-width="2" />
-            <text x={mx} y={my + 8.0} text-anchor="middle" font-family={MONO} font-size="24" fill={color}>{label}</text>
-        </g>
-    </g>)
-}
-
-/// A terminal window with lines that appear one at a time.
-fn terminal<'a>(frame: &Frame, x: f32, y: f32, w: f32, h: f32, lines: Vec<(Line, f32)>) -> Svgr<'a> {
-    let rows: Vec<Svgr> = lines
-        .into_iter()
-        .enumerate()
-        .map(|(i, (runs, at))| {
-            let spans: Vec<Svgr> = runs.iter().map(|(t, c)| fframes::svgr!(<tspan fill={*c}>{*t}</tspan>)).collect();
-            fframes::svgr!(<text x={x + 40.0} y={y + 110.0 + i as f32 * 50.0} opacity={fade(frame, at)}
-                font-family={MONO} font-size="32">{spans}</text>)
-        })
-        .collect();
-    fframes::svgr!(<g>
-        <rect x={x} y={y} width={w} height={h} rx="18" fill="#1a1814" stroke={LINE} stroke-width="2" />
-        <circle cx={x + 34.0} cy={y + 34.0} r="8" fill="#ff5f57" />
-        <circle cx={x + 60.0} cy={y + 34.0} r="8" fill="#febc2e" />
-        <circle cx={x + 86.0} cy={y + 34.0} r="8" fill="#28c840" />
-        {rows}
-    </g>)
+/// A full-screen flash.
+fn flash<'a>(opacity: f32, color: &'a str) -> Svgr<'a> {
+    fframes::svgr!(<rect width="1920" height="1080" fill={color} opacity={opacity.clamp(0.0, 1.0)} />)
 }
 
 // ─── the video ───────────────────────────────────────────────────────────────
 
+const BACKGROUND: &str = "
+uniform float3 iResolution;
+uniform float iTime;
+uniform float uPulse;
+uniform float uEnergy;
+
+half4 main(float2 coord) {
+  float2 uv = (coord - 0.5 * iResolution.xy) / iResolution.y;
+  float t = iTime * 0.35;
+  float r = length(uv);
+  float v = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    v += sin(uv.x * (2.0 + fi) * 1.7 + t * (1.0 + fi * 0.3) + sin(uv.y * 3.0 + t * 1.3 + fi));
+  }
+  v *= 0.25;
+  float3 moss = float3(0.64, 0.77, 0.45);
+  float3 ember = float3(0.85, 0.51, 0.35);
+  float3 bg = float3(0.078, 0.067, 0.051);
+  float3 col = mix(moss, ember, smoothstep(-0.7, 0.7, v + uv.x * 0.8));
+  float glow = (0.10 + 0.30 * uEnergy) * (0.6 + 0.4 * v) * exp(-r * 1.3);
+  glow += uPulse * uEnergy * 0.22 * exp(-r * 2.2);
+  float rings = sin(r * 22.0 - iTime * 5.0) * 0.5 + 0.5;
+  float3 c = bg + col * glow + col * rings * 0.035 * uEnergy * exp(-r * 1.6);
+  float2 g = abs(fract(uv * 7.0 + float2(0.0, iTime * 0.25 * uEnergy)) - 0.5);
+  c += moss * smoothstep(0.475, 0.5, max(g.x, g.y)) * 0.06 * uEnergy * exp(-r * 1.1);
+  c *= 1.0 - 0.5 * r * r;
+  return half4(c, 1.0);
+}
+";
+
 pub struct AlchemyTeaserVideo<'a> {
     pub media: &'a AlchemyTeaserMedia,
+    background: Shader,
 }
 
 impl<'a> AlchemyTeaserVideo<'a> {
     pub fn new(media: &'a AlchemyTeaserMedia, _title: &'a str) -> Self {
-        Self { media }
+        Self { media, background: Shader::sksl(BACKGROUND) }
     }
 }
 
@@ -204,552 +175,604 @@ impl Video for AlchemyTeaserVideo<'_> {
     }
 
     fn audio(&self) -> AudioMap<'_> {
-        AudioMap::none()
+        AudioMap::from([AudioTrack::new("music.mp3", Second(0.)..Eof).fade_out(1.2)])
     }
 
     fn define_scenes(&self) -> Scenes<'_> {
         Scenes::from(vec![
-            &Cold as &dyn Scene,
-            &Scripts,
-            &Declare,
-            &Cdk,
-            &TwoPrograms,
-            &Imagine,
-            &Phases,
-            &Req,
-            &Resource,
-            &Binding,
-            &Worker,
+            &Ignite as &dyn Scene,
+            &Pain,
+            &OneProgram,
+            &Graph,
+            &Riser,
+            &Drop,
             &Loop,
             &Swap,
-            &Deploy,
-            &Logo,
+            &Ticker,
+            &Finale,
         ])
     }
 
     fn render_frame<'a>(&'a self, frame: Frame, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        // A slow drift keeps holds from looking frozen.
-        let drift = frame.animate_loop(&fframes::timeline!(at 0.0 => 12.0, animate 0.0_f32 => 1.0, Easing::Linear));
-        let a = (drift * std::f32::consts::TAU).sin() * 90.0;
-        let b = (drift * std::f32::consts::TAU).cos() * 70.0;
+        let t = frame.seconds();
+        let bar = t / BAR;
+        let energy = match bar {
+            x if x < 4.0 => 0.25,
+            x if x < 12.0 => 0.55,
+            x if x < 16.0 => 0.7,
+            x if x < 17.0 => 0.7 + (x - 16.0) * 0.3,
+            x if x < 49.0 => 1.0,
+            _ => 0.9,
+        };
+        let kick = (4.0..16.0).contains(&bar) || (17.0..49.0).contains(&bar);
+        let pulse = if kick { (-(t % BEAT) * 9.0).exp() } else { 0.0 } + hit(t, 49.0 * BAR, 2.0);
+        // The kick punches the camera.
+        let punch = 1.0 + 0.022 * pulse.min(1.0);
+        let layer = self.background.draw(
+            &frame,
+            ShaderUniforms::new().float("uPulse", pulse.min(1.0)).float("uEnergy", energy),
+        );
         fframes::svgr!(
             <svg xmlns="http://www.w3.org/2000/svg" width={WIDTH} height={HEIGHT} viewBox="0 0 1920 1080">
                 <defs>
-                    <radialGradient id="moss" cx="0.5" cy="0.5" r="0.5">
-                        <stop offset="0" stop-color="#3a4a24" stop-opacity="0.55" />
-                        <stop offset="1" stop-color="#3a4a24" stop-opacity="0" />
-                    </radialGradient>
-                    <radialGradient id="ember" cx="0.5" cy="0.5" r="0.5">
-                        <stop offset="0" stop-color="#4a2a18" stop-opacity="0.5" />
-                        <stop offset="1" stop-color="#4a2a18" stop-opacity="0" />
-                    </radialGradient>
+                    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+                        <rect width="4" height="1" fill="#000" opacity="0.18" />
+                    </pattern>
                 </defs>
                 <rect width="1920" height="1080" fill={BG} />
-                <g transform={Transform::translate(a, b)}>
-                    <ellipse cx="260" cy="180" rx="760" ry="560" fill="url(#moss)" />
+                <image href={layer.href()} x="0" y="0" width="1920" height="1080" />
+                <g transform={format!("translate(960 540) scale({punch}) translate(-960 -540)")}>
+                    {ctx.render_scenes(&frame)}
                 </g>
-                <g transform={Transform::translate(-b, a)}>
-                    <ellipse cx="1700" cy="980" rx="820" ry="600" fill="url(#ember)" />
-                </g>
-                {ctx.render_scenes(&frame)}
+                <rect width="1920" height="1080" fill="url(#scan)" />
             </svg>
         )
     }
 }
 
-// ─── 1. Cold open (0 – 6s) ───────────────────────────────────────────────────
+// ─── 1. Ignite · bars 0–3 · pad ──────────────────────────────────────────────
 
 #[derive(Debug)]
-struct Cold;
-impl Scene for Cold {
+struct Ignite;
+impl Scene for Ignite {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
+        Duration::Seconds(BAR * 4.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 6.0);
-        let l1 = ramp(&frame, 0.3);
-        let l2 = ramp(&frame, 1.6);
-        fframes::svgr!(<g opacity={o}>
-            <g opacity={l1} transform={Transform::translate(0, rise(&frame, 0.3, 30.0))}>
-                <text x="960" y="470" text-anchor="middle" font-family={SERIF} font-weight="600" font-size="112" fill={FG}>"What if your cloud"</text>
+        let t = frame.seconds();
+        // A prompt types itself, then ALCHEMY assembles letter by letter.
+        let prompt = "$ alchemy";
+        let n = ((t - 0.4) / 0.09).clamp(0.0, prompt.len() as f32) as usize;
+        let cursor = if (t * 2.2) as i32 % 2 == 0 { 1.0 } else { 0.0 };
+        let prompt_o = 1.0 - spring(&frame, b(8.0), 0.0, 1.0, &WHIP);
+        const WIDTHS: [f32; 7] = [174.0, 142.0, 178.0, 186.0, 150.0, 222.0, 168.0];
+        let total: f32 = WIDTHS.iter().sum();
+        let letters: Vec<Svgr> = "ALCHEMY"
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                let at = b(8.0) + i as f32 * 0.09;
+                let x = 960.0 - total / 2.0 + WIDTHS[..i].iter().sum::<f32>() + WIDTHS[i] / 2.0;
+                let flicker = if t < at + 0.25 && hash(frame.index as u32 * 13 + i as u32) > 0.5 { 0.2 } else { 1.0 };
+                let dy = spring(&frame, at, -140.0 * (if i % 2 == 0 { 1.0 } else { -1.0 }), 0.0, &BOUNCE);
+                fframes::svgr!(<g opacity={if t < at { 0.0 } else { flicker }}>
+                    {slam(&frame, at, x, 600.0 + dy, c.to_string(), 250.0, FG, "middle")}
+                </g>)
+            })
+            .collect();
+        // The scan line and a flash into the kick.
+        let scan = (t / BAR * 2.0).fract() * 1080.0;
+        let build = ((t - b(14.0)) / b(2.0)).clamp(0.0, 1.0).powi(3);
+        fframes::svgr!(<g>
+            <rect x="0" y={scan} width="1920" height="2" fill={MOSS} opacity="0.35" />
+            <g opacity={prompt_o}>
+                <text x="760" y="560" font-family={MONO} font-size="64" fill={FG}>{prompt[..n].to_string()}</text>
+                <rect x={760.0 + n as f32 * 38.4 + 6.0} y="510" width="34" height="64" fill={MOSS} opacity={cursor} />
             </g>
-            <g opacity={l2} transform={Transform::translate(0, rise(&frame, 1.6, 30.0))}>
-                <text x="960" y="610" text-anchor="middle" font-family={SERIF} font-weight="600" font-size="112" fill={MOSS}>"was just a program?"</text>
+            {letters}
+            <g opacity={fade_in(t, b(12.0))}>
+                <text x="960" y="720" text-anchor="middle" font-family={MONO} font-size="34" letter-spacing="14" fill={MUTED}>"INFRASTRUCTURE AS EFFECTS"</text>
+            </g>
+            {flash(build, FG)}
+        </g>)
+    }
+}
+
+fn fade_in(t: f32, at: f32) -> f32 {
+    ((t - at) / 0.25).clamp(0.0, 1.0)
+}
+
+// ─── 2. Pain · bars 4–7 · kick ───────────────────────────────────────────────
+
+const PAIN: [&str; 8] = ["SCRIPTS", "YAML", "TEMPLATES", "IAM POLICIES", "ENV VARS", "GLUE CODE", "TWO PROGRAMS", "BY HAND"];
+
+#[derive(Debug)]
+struct Pain;
+impl Scene for Pain {
+    fn duration(&self) -> Duration<'_> {
+        Duration::Seconds(BAR * 4.0)
+    }
+    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        let t = frame.seconds();
+        let i = ((t / b(2.0)) as usize).min(PAIN.len() - 1);
+        let word = PAIN[i];
+        let size = if word.len() > 9 { 170.0 } else { 220.0 };
+        let at = b(2.0 * i as f32);
+        let strike_at = at + BEAT;
+        let s = spring(&frame, strike_at, 0.0, 1.0, &WHIP);
+        let w = word.len() as f32 * size * 0.66;
+        let shake = hit(t, strike_at, 10.0) * 26.0;
+        let jx = shake * (hash(frame.index as u32 * 5) * 2.0 - 1.0);
+        let jy = shake * (hash(frame.index as u32 * 9 + 1) * 2.0 - 1.0);
+        let rot = if i % 2 == 0 { -3.0 } else { 3.0 };
+        let red = hit(t, strike_at, 6.0) * 0.18;
+        // Earlier words pile up around the edges, struck out.
+        let pile: Vec<Svgr> = PAIN[..i]
+            .iter()
+            .enumerate()
+            .map(|(k, wd)| {
+                let x = 180.0 + hash(k as u32 * 3 + 11) * 1400.0;
+                let y = if k % 2 == 0 { 150.0 + hash(k as u32 + 5) * 120.0 } else { 880.0 + hash(k as u32 + 9) * 120.0 };
+                let wlen = wd.len() as f32 * 64.0 * 0.66;
+                fframes::svgr!(<g opacity="0.28">
+                    <text x={x} y={y} font-family={DISPLAY} font-weight="900" font-size="64" fill={MUTED}>{*wd}</text>
+                    <path d={format!("M {} {} L {} {}", x - 10.0, y - 22.0, x + wlen + 10.0, y - 22.0)} stroke={RED} stroke-width="6" />
+                </g>)
+            })
+            .collect();
+        fframes::svgr!(<g>
+            {flash(red, RED)}
+            {pile}
+            <text x="160" y="110" font-family={MONO} font-size="30" fill={MUTED} letter-spacing="6">{format!("BEFORE · {:02}/{:02}", i + 1, PAIN.len())}</text>
+            <g transform={format!("translate({jx} {jy}) rotate({rot} 960 560)")}>
+                {slam(&frame, at, 960.0, 620.0, word, size, FG, "middle")}
+                <path d={format!("M {} 560 L {} 560", 960.0 - w / 2.0 - 40.0, 960.0 - w / 2.0 - 40.0 + (w + 80.0) * s)}
+                      stroke={RED} stroke-width="22" stroke-linecap="round" opacity={if t >= strike_at { 1.0 } else { 0.0 }} />
             </g>
         </g>)
     }
 }
 
-// ─── 2. Scripts (6 – 14s) ────────────────────────────────────────────────────
+// ─── 3. One program · bars 8–11 ──────────────────────────────────────────────
 
-const SH1: Line = &[("aws", FN), (" s3api create-bucket ", STR), ("--bucket", VAR), (" uploads", STR)];
-const SH_IF: Line = &[("if", KW), (" ! aws s3api head-bucket ", STR), ("--bucket", VAR), (" uploads; ", STR), ("then", KW)];
-const SH_IN: Line = &[("  aws", FN), (" s3api create-bucket ", STR), ("--bucket", VAR), (" uploads", STR)];
-const SH_FI: Line = &[("fi", KW)];
-const SH2: Line = &[("aws", FN), (" s3api put-bucket-versioning ", STR), ("--bucket", VAR), (" uploads", STR)];
+const BUCKET: Line = &[("const", KW), (" bucket = ", VAR), ("yield", KW), ("* R2.", VAR), ("Bucket", "#4ec9b0"), ("(", PUN), ("\"Uploads\"", STR), (");", PUN)];
 
 #[derive(Debug)]
-struct Scripts;
-impl Scene for Scripts {
+struct OneProgram;
+impl Scene for OneProgram {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(8.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 4.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 8.0) * fade(&frame, 0.0);
-        let before = 1.0 - fade(&frame, 3.2);
-        let after = fade(&frame, 3.2);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Cloud infrastructure used to be scripts", 0.2)}
-            <g opacity={before}>
-                {code(240.0, 380.0, 40.0, vec![(SH1, 0.7, Mark::Plain), (SH2, 1.3, Mark::Plain)], &frame)}
-                {note(&frame, 240.0, 620.0, "…run it twice and it fails", RED, 2.0)}
+        let t = frame.seconds();
+        // ONE. PROGRAM. then the camera flies through the words.
+        let through = ((t - b(4.0)) / 0.45).clamp(0.0, 1.0);
+        let zoom = 1.0 + through.powi(3) * 14.0;
+        let words_o = 1.0 - through;
+        // A line of code types itself…
+        let len = line_len(BUCKET);
+        let n = ((t - b(5.0)) / 0.028).clamp(0.0, len as f32) as usize;
+        let cw = 62.0 * 0.6;
+        let x0 = 960.0 - len as f32 * cw / 2.0;
+        // …and becomes a real bucket.
+        let card = spring(&frame, b(9.0), 0.0, 1.0, &BOUNCE);
+        let ring = ((t - b(9.0)) / 0.9).clamp(0.0, 1.0);
+        fframes::svgr!(<g>
+            <g opacity={words_o} transform={format!("translate(960 540) scale({zoom}) translate(-960 -540)")}>
+                {slam(&frame, 0.0, 960.0, 520.0, "ONE", 380.0, FG, "middle")}
+                {slam(&frame, b(2.0), 960.0, 760.0, "PROGRAM.", 250.0, MOSS, "middle")}
             </g>
-            <g opacity={after}>
-                {code(240.0, 380.0, 40.0, vec![
-                    (SH_IF, 3.3, Mark::Add),
-                    (SH_IN, 3.3, Mark::Plain),
-                    (SH_FI, 3.3, Mark::Add),
-                    (SH2, 3.3, Mark::Plain),
-                ], &frame)}
-                {note(&frame, 240.0, 760.0, "…so every script checks what already exists", MUTED, 4.4)}
+            <g opacity={if t >= b(5.0) { 1.0 } else { 0.0 }}>
+                <text x={x0} y="470" font-family={MONO} font-size="62">{typed(BUCKET, n)}</text>
+                <rect x={x0 + n as f32 * cw + 4.0} y="420" width="30" height="62" fill={MOSS} opacity={if n < len || (t * 3.0) as i32 % 2 == 0 { 1.0 } else { 0.0 }} />
             </g>
+            <g opacity={if t >= b(9.0) { 1.0 } else { 0.0 }}>
+                <circle cx="960" cy="690" r={40.0 + ring * 420.0} fill="none" stroke={MOSS} stroke-width="4" opacity={1.0 - ring} />
+                <g transform={format!("translate(960 690) scale({card})")}>
+                    <rect x="-200" y="-70" width="400" height="140" rx="24" fill={CARD} stroke="#8b7cf6" stroke-width="5" />
+                    <circle cx="-140" cy="0" r="14" fill="#8b7cf6" />
+                    <text x="-104" y="18" font-family={DISPLAY} font-weight="900" font-size="54" fill={FG}>"Uploads"</text>
+                </g>
+            </g>
+            {slam(&frame, b(12.0), 960.0, 240.0, "A VARIABLE.", 110.0, FG, "middle")}
+            {slam(&frame, b(14.0), 960.0, 940.0, "A REAL BUCKET.", 110.0, MOSS, "middle")}
         </g>)
     }
 }
 
-// ─── 3. Declare it (14 – 21s) ────────────────────────────────────────────────
+// ─── 4. Graph · bars 12–15 · pad + kick ──────────────────────────────────────
 
-const Y1: Line = &[("Resources", VAR), (":", PUN)];
-const Y2: Line = &[("  Uploads", VAR), (":", PUN)];
-const Y3: Line = &[("    Type", VAR), (": ", PUN), ("AWS::S3::Bucket", STR)];
-const Y4: Line = &[("    Versioning", VAR), (": ", PUN), ("Enabled", STR)];
+const NODES: [(&str, &str, f32, f32); 7] = [
+    ("Api", "#f38020", 1260.0, 540.0),
+    ("Uploads", "#8b7cf6", 1560.0, 280.0),
+    ("Jobs", "#e0a86b", 1620.0, 720.0),
+    ("Postgres", "#63b3ed", 1250.0, 900.0),
+    ("Web", "#a3c473", 900.0, 300.0),
+    ("Links", "#4ec9b0", 880.0, 780.0),
+    ("Logs", "#d8835a", 1600.0, 500.0),
+];
 
 #[derive(Debug)]
-struct Declare;
-impl Scene for Declare {
+struct Graph;
+impl Scene for Graph {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(7.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 4.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 7.0) * fade(&frame, 0.0);
-        let versioned = fade(&frame, 3.4);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Infrastructure as code declares what should be", 0.2)}
-            {code(240.0, 380.0, 44.0, vec![
-                (Y1, 0.6, Mark::Plain), (Y2, 0.8, Mark::Plain), (Y3, 1.0, Mark::Plain), (Y4, 3.2, Mark::Add),
-            ], &frame)}
-            {node(&frame, 1420.0, 470.0, "Bucket", "#8b7cf6", 1.8)}
-            <g opacity={versioned}>
-                <text x="1420" y="570" text-anchor="middle" font-family={MONO} font-size="28" fill={MOSS}>"versioning: on"</text>
+        let t = frame.seconds();
+        let (cx, cy) = (NODES[0].2, NODES[0].3);
+        let pos = |i: usize| -> (f32, f32, f32) {
+            let at = b(i as f32);
+            let p = spring(&frame, at, 0.0, 1.0, &BOUNCE);
+            let (_, _, x, y) = NODES[i];
+            (cx + (x - cx) * p, cy + (y - cy) * p, p)
+        };
+        let edges: Vec<Svgr> = (1..NODES.len())
+            .map(|i| {
+                let (x, y, p) = pos(i);
+                let d = ((t - b(i as f32 + 0.5)) / 0.3).clamp(0.0, 1.0);
+                let len = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt().max(1.0);
+                let dot = ((t * 1.6 + i as f32 * 0.37).fract()).clamp(0.0, 1.0);
+                fframes::svgr!(<g opacity={p.min(1.0)}>
+                    <path d={format!("M {cx} {cy} L {x} {y}")} stroke={MOSS} stroke-width="4" stroke-dasharray={len} stroke-dashoffset={len * (1.0 - d)} opacity="0.7" />
+                    <circle cx={cx + (x - cx) * dot} cy={cy + (y - cy) * dot} r="7" fill={FG} opacity={d} />
+                </g>)
+            })
+            .collect();
+        let nodes: Vec<Svgr> = (0..NODES.len())
+            .map(|i| {
+                let (x, y, p) = pos(i);
+                let (label, color, _, _) = NODES[i];
+                let s = p.max(0.01);
+                fframes::svgr!(<g transform={format!("translate({x} {y}) scale({s})")} opacity={if t >= b(i as f32) { 1.0 } else { 0.0 }}>
+                    <rect x="-130" y="-46" width="260" height="92" rx="18" fill={CARD} stroke={color} stroke-width="4" />
+                    <circle cx="-94" cy="0" r="10" fill={color} />
+                    <text x="-70" y="13" font-family={DISPLAY} font-weight="900" font-size="36" fill={FG}>{label}</text>
+                </g>)
+            })
+            .collect();
+        let spin = (t * 0.8).sin() * 2.0;
+        let zoom = 0.9 + t / (BAR * 4.0) * 0.15;
+        fframes::svgr!(<g>
+            <g transform={format!("translate(1260 590) rotate({spin}) scale({zoom}) translate(-1260 -590)")}>
+                {edges}
+                {nodes}
             </g>
-            {note(&frame, 1230.0, 700.0, "an engine makes it so", MOSS, 4.2)}
+            {slam(&frame, b(8.0), 140.0, 420.0, "INFRA", 150.0, FG, "start")}
+            {slam(&frame, b(10.0), 140.0, 560.0, "AS", 150.0, FG, "start")}
+            {slam(&frame, b(12.0), 140.0, 700.0, "EFFECTS", 150.0, MOSS, "start")}
         </g>)
     }
 }
 
-// ─── 4. The CDK (21 – 28s) ───────────────────────────────────────────────────
-
-const C1: Line = &[("const", KW), (" uploads = ", VAR), ("new", KW), (" s3.", VAR), ("Bucket", TY), ("(", PUN), ("this", KW), (", ", PUN), ("\"Uploads\"", STR), (");", PUN)];
-const C2: Line = &[("const", KW), (" fn = ", VAR), ("new", KW), (" lambda.", VAR), ("Function", TY), ("(", PUN), ("this", KW), (", ", PUN), ("\"Fn\"", STR), (", { … });", PUN)];
-const C3: Line = &[("uploads.", VAR), ("grantReadWrite", FN), ("(fn);", PUN)];
+// ─── 5. Riser · bar 16 ───────────────────────────────────────────────────────
 
 #[derive(Debug)]
-struct Cdk;
-impl Scene for Cdk {
+struct Riser;
+impl Scene for Riser {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(7.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 7.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Then the CDK let us write it in real code", 0.2)}
-            {code(240.0, 400.0, 38.0, vec![(C1, 0.7, Mark::Plain), (C2, 1.1, Mark::Plain), (C3, 1.5, Mark::Plain)], &frame)}
-            {note(&frame, 240.0, 640.0, "…but it just generated YAML", EMBER, 3.4)}
-        </g>)
-    }
-}
-
-// ─── 5. Two programs (28 – 36s) ──────────────────────────────────────────────
-
-const H1: Line = &[("export const", KW), (" handler = ", VAR), ("async", KW), (" (event) => {", PUN)];
-const H2: Line = &[("  await", KW), (" s3.", VAR), ("send", FN), ("(", PUN), ("new", KW), (" ", PUN), ("PutObjectCommand", TY), ("({", PUN)];
-const H3: Line = &[("    Bucket", VAR), (": process.env.", PUN), ("BUCKET_NAME", VAR), (",", PUN)];
-const H4: Line = &[("  }));", PUN)];
-
-#[derive(Debug)]
-struct TwoPrograms;
-impl Scene for TwoPrograms {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(8.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 8.0) * fade(&frame, 0.0);
-        let link = ramp(&frame, 2.4);
-        let len = 820.0_f32;
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "But the code that runs lived somewhere else", 0.2)}
-            <text x="160" y="330" font-family={MONO} font-size="24" fill={MUTED}>"infra/api.ts"</text>
-            {code(160.0, 400.0, 24.0, vec![(C1, 0.5, Mark::Plain), (C2, 0.5, Mark::Plain), (C3, 0.5, Mark::Plain)], &frame)}
-            <text x="1080" y="330" font-family={MONO} font-size="24" fill={MUTED} opacity={fade(&frame, 1.1)}>"src/handler.ts"</text>
-            {code(1080.0, 400.0, 24.0, vec![(H1, 1.1, Mark::Plain), (H2, 1.1, Mark::Plain), (H3, 1.1, Mark::Plain), (H4, 1.1, Mark::Plain)], &frame)}
-            <path d="M 420 482 C 700 540, 900 560, 1150 482" stroke={EMBER} stroke-width="3" fill="none"
-                  stroke-dasharray={len} stroke-dashoffset={len * (1.0 - link)} />
-            {note(&frame, 560.0, 760.0, "two programs, kept in sync by hand", EMBER, 3.6)}
-        </g>)
-    }
-}
-
-// ─── 6. Imagine (36 – 44s) ───────────────────────────────────────────────────
-
-const I1: Line = &[("const", KW), (" bucket = ", VAR), ("Bucket", TY), ("()", PUN)];
-const I2: Line = &[("const", KW), (" queue = ", VAR), ("Queue", TY), ("()", PUN)];
-const I3: Line = &[("function", KW), (" ", PUN), ("api", FN), ("(req) {", PUN)];
-const I4: Line = &[("  const", KW), (" file = bucket.", VAR), ("get", FN), ("(req.key)", PUN)];
-const I5: Line = &[("  queue.", VAR), ("send", FN), ("(file)", PUN)];
-const I6: Line = &[("}", PUN)];
-
-#[derive(Debug)]
-struct Imagine;
-impl Scene for Imagine {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(8.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 8.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "What if one language did both?", 0.2)}
-            {code(180.0, 380.0, 34.0, vec![
-                (I1, 0.6, Mark::Plain), (I2, 1.0, Mark::Plain), (I3, 1.6, Mark::Plain),
-                (I4, 1.9, Mark::Plain), (I5, 2.2, Mark::Plain), (I6, 1.6, Mark::Plain),
-            ], &frame)}
-            {node(&frame, 1620.0, 360.0, "Bucket", "#8b7cf6", 0.9)}
-            {node(&frame, 1620.0, 760.0, "Queue", "#e0a86b", 1.3)}
-            {node(&frame, 1110.0, 560.0, "api", "#f38020", 1.8)}
-            {arrow(&frame, 1260.0, 520.0, 1470.0, 400.0, MOSS, 2.9, "s3:GetObject")}
-            {arrow(&frame, 1260.0, 600.0, 1470.0, 720.0, MOSS, 3.5, "sqs:SendMessage")}
-            {note(&frame, 960.0, 920.0, "permissions, worked out from the code", MOSS, 4.4)}
-        </g>)
-    }
-}
-
-// ─── 7. Two phases (44 – 51s) ────────────────────────────────────────────────
-
-#[derive(Debug)]
-struct Phases;
-impl Scene for Phases {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(7.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 7.0) * fade(&frame, 0.0);
-        let c = fade(&frame, 1.0);
-        let r = fade(&frame, 2.4);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "A cloud program has two phases", 0.2)}
-            <g opacity={c}>
-                <rect x="190" y="340" width="1540" height="150" rx="14" fill={MOSS} fill-opacity="0.13" />
-                <text x="1700" y="378" text-anchor="end" font-family={MONO} font-size="26" fill={MOSS}>"construct · at deploy"</text>
+        let t = frame.seconds();
+        let p = t / BAR;
+        let travel = p * p * 3.0;
+        // A tunnel of frames rushing at the camera, faster and faster.
+        let rects: Vec<Svgr> = (0..14)
+            .map(|k| {
+                let d = (k as f32 / 14.0 + travel).fract();
+                let s = 0.04 + d.powi(3) * 2.2;
+                let (w, h) = (1920.0 * s, 1080.0 * s);
+                let color = if k % 2 == 0 { MOSS } else { EMBER };
+                fframes::svgr!(<rect x={960.0 - w / 2.0} y={540.0 - h / 2.0} width={w} height={h} fill="none" stroke={color} stroke-width={2.0 + d * 10.0} opacity={d * (1.0 - d) * 3.0} />)
+            })
+            .collect();
+        let flicker = if (t * 16.0 / BEAT) as i32 % 2 == 0 { 1.0 } else { 0.3 };
+        fframes::svgr!(<g>
+            {rects}
+            <g opacity={flicker}>
+                <text x="960" y="580" text-anchor="middle" font-family={DISPLAY} font-weight="900" font-size={120.0 + p * 160.0} fill={FG}>"READY?"</text>
             </g>
-            <g opacity={r}>
-                <rect x="190" y="500" width="1540" height="248" rx="14" fill={EMBER} fill-opacity="0.13" />
-                <text x="1700" y="538" text-anchor="end" font-family={MONO} font-size="26" fill={EMBER}>"runtime · every request"</text>
-            </g>
-            {code(240.0, 410.0, 40.0, vec![
-                (I1, 0.0, Mark::Plain), (I2, 0.0, Mark::Plain), (I3, 0.0, Mark::Plain),
-                (I4, 0.0, Mark::Plain), (I5, 0.0, Mark::Plain), (I6, 0.0, Mark::Plain),
-            ], &frame)}
-            {note(&frame, 240.0, 880.0, "mix them up, and it shouldn't compile", MUTED, 3.8)}
+            {flash(p.powi(5), FG)}
         </g>)
     }
 }
 
-// ─── 8. Req (51 – 58s) ───────────────────────────────────────────────────────
+// ─── 6. Drop · bars 17–24 ────────────────────────────────────────────────────
+
+const REQS: [&str; 5] = ["R2.ReadBucket", "Queues.WriteQueue", "Neon.Postgres", "Cloudflare.Worker", "RuntimeContext"];
 
 #[derive(Debug)]
-struct Req;
-impl Scene for Req {
+struct Drop;
+impl Scene for Drop {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(7.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 8.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 7.0) * fade(&frame, 0.0);
-        let t = ramp(&frame, 0.5);
-        let req = ramp(&frame, 2.0);
-        let s = 0.9 + 0.1 * t;
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Effect already has the type for that", 0.2)}
-            <g opacity={t} transform={format!("translate(960 600) scale({s})")}>
-                <text x="0" y="0" text-anchor="middle" font-family={MONO} font-size="150" fill={FG}>
-                    <tspan fill={TY}>"Effect"</tspan><tspan fill={PUN}>"<A, Err, "</tspan><tspan fill={TY}>"Req"</tspan><tspan fill={PUN}>">"</tspan>
-                </text>
-            </g>
-            <g opacity={req}>
-                <ellipse cx="1580" cy="552" rx="170" ry="92" fill="none" stroke={MOSS} stroke-width="5" />
-                <text x="1580" y="760" text-anchor="middle" font-family={HAND} font-weight="700" font-size="64" fill={MOSS}>"what it needs"</text>
-            </g>
-        </g>)
-    }
-}
-
-// ─── 9. A resource (58 – 64s) ────────────────────────────────────────────────
-
-const A1: Line = &[("const", KW), (" api = ", VAR), ("Effect", TY), (".", PUN), ("gen", FN), ("(", PUN), ("function", KW), ("* () {", PUN)];
-const A2: Line = &[("  const", KW), (" bucket = ", VAR), ("yield", KW), ("* R2.", VAR), ("Bucket", TY), ("(", PUN), ("\"Uploads\"", STR), (");", PUN)];
-const A3: Line = &[("  const", KW), (" uploads = ", VAR), ("yield", KW), ("* R2.", VAR), ("ReadBucket", TY), ("(bucket);", PUN)];
-const A4: Line = &[("  return", KW), (" {", PUN)];
-const A5: Line = &[("    fetch", VAR), (": ", PUN), ("Effect", TY), (".", PUN), ("gen", FN), ("(", PUN), ("function", KW), ("* () {", PUN)];
-const A6: Line = &[("      return", KW), (" ", PUN), ("yield", KW), ("* uploads.", VAR), ("get", FN), ("(", PUN), ("\"hello.txt\"", STR), (");", PUN)];
-const A7: Line = &[("    }),", PUN)];
-const A8: Line = &[("  };", PUN)];
-const A9: Line = &[("});", PUN)];
-
-/// The Req list on the right: names with a note, each at its own time.
-fn req_list<'a>(frame: &Frame, items: Vec<(&'a str, &'a str, f32, bool)>) -> Svgr<'a> {
-    let rows: Vec<Svgr> = items
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, why, at, met))| {
-            let y = 420.0 + i as f32 * 90.0;
-            let color = if met { MOSS } else { TY };
-            fframes::svgr!(<g opacity={fade(frame, at)} transform={Transform::translate(rise(frame, at, 16.0), 0)}>
-                <text x="1300" y={y} font-family={MONO} font-size="38" fill={color} text-decoration={if met { "line-through" } else { "none" }}>
-                    <tspan fill={PUN}>"| "</tspan>{name}
-                </text>
-                <text x="1300" y={y + 36.0} font-family={SANS} font-weight="500" font-size="24" fill={MUTED}>{why}</text>
+        let t = frame.seconds();
+        let size = 150.0;
+        let cw = size * 0.6;
+        let x0 = 960.0 - 15.0 * cw / 2.0;
+        let char_x = |k: f32| x0 + (k + 0.5) * cw;
+        // Zoom into the R.
+        let z = ((t - b(12.0)) / b(2.0)).clamp(0.0, 1.0);
+        let zoom = 1.0 + z.powi(3) * 7.0;
+        let (rx, ry) = (char_x(13.0), 500.0);
+        let type_o = if t < b(14.0) { 1.0 } else { 0.0 };
+        let hi = |k: f32, at: f32, color: &'a str, label: &'a str| -> Svgr<'a> {
+            let p = spring(&frame, at, 0.0, 1.0, &SNAP);
+            fframes::svgr!(<g opacity={if t >= at { 1.0 } else { 0.0 }}>
+                <rect x={char_x(k) - cw * 0.55} y={500.0 - size * 0.82} width={cw * 1.1} height={size * 1.08} rx="14" fill="none" stroke={color} stroke-width="7" transform={format!("translate({} {}) scale({}) translate({} {})", char_x(k), 440.0, 0.6 + 0.4 * p, -char_x(k), -440.0)} />
+                {slam(&frame, at, char_x(k), 700.0, label, 42.0, color, "middle")}
             </g>)
-        })
-        .collect();
-    fframes::svgr!(<g>
-        <text x="1300" y="340" font-family={MONO} font-size="26" fill={MUTED}>"Req · what it needs"</text>
-        {rows}
-    </g>)
-}
-
-#[derive(Debug)]
-struct Resource;
-impl Scene for Resource {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 6.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "In Alchemy, a program is an Effect", 0.2)}
-            {code_w(200.0, 380.0, 32.0, 1040.0, vec![
-                (A1, 0.5, Mark::Plain), (A2, 1.4, Mark::Add), (A4, 0.5, Mark::Plain), (A5, 0.5, Mark::Plain),
-                (A7, 0.5, Mark::Plain), (A8, 0.5, Mark::Plain), (A9, 0.5, Mark::Plain),
-            ], &frame)}
-            {note(&frame, 200.0, 760.0, "a resource is just data", MOSS, 2.6)}
-            {req_list(&frame, vec![("R2.BucketProvider", "to create the bucket", 1.9, false)])}
+        };
+        let reqs_o = if t >= b(14.0) && t < b(25.0) { 1.0 } else { 0.0 } * (1.0 - spring(&frame, b(24.5), 0.0, 1.0, &WHIP));
+        let reqs: Vec<Svgr> = REQS
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let at = b(14.0 + i as f32);
+                let ok = b(20.0 + i as f32);
+                let y = 330.0 + i as f32 * 125.0;
+                let sweep = ((t - ok) / 0.15).clamp(0.0, 1.0);
+                fframes::svgr!(<g>
+                    <rect x="380" y={y - 70.0} width={(1160.0 * sweep).max(0.5)} height="96" rx="12" fill="#1f3a22" opacity={if sweep > 0.0 { 1.0 } else { 0.0 }} />
+                    {slam(&frame, at, 440.0, y, format!("| {name}"), 64.0, TEAL, "start")}
+                    {slam(&frame, ok, 1470.0, y, "✓", 80.0, MOSS, "middle")}
+                </g>)
+            })
+            .collect();
+        let flashes = hit(t, 0.0, 5.0)
+            + 0.35 * (hit(t, b(4.0), 9.0) + hit(t, b(6.0), 9.0) + hit(t, b(8.0), 9.0) + hit(t, b(14.0), 6.0))
+            + 0.5 * (hit(t, b(26.0), 8.0) + hit(t, b(28.0), 8.0));
+        let slam_in = spring(&frame, 0.0, 3.2, 1.0, &SNAP);
+        fframes::svgr!(<g>
+            <g opacity={type_o} transform={format!("translate({rx} {ry}) scale({zoom}) translate({} {})", -rx, -ry)}>
+                <g transform={format!("translate(960 460) scale({slam_in}) translate(-960 -460)")}>
+                    <text x={x0} y="500" font-family={MONO} font-size={size}>
+                        <tspan fill={TEAL}>"Effect"</tspan><tspan fill={PUN}>"<A, E, "</tspan><tspan fill={MOSS}>"R"</tspan><tspan fill={PUN}>">"</tspan>
+                    </text>
+                </g>
+                {hi(7.0, b(4.0), FG, "SUCCESS")}
+                {hi(10.0, b(6.0), EMBER, "ERRORS")}
+                {hi(13.0, b(8.0), MOSS, "REQUIREMENTS")}
+            </g>
+            <g opacity={reqs_o}>
+                <text x="440" y="200" font-family={MONO} font-size="34" letter-spacing="6" fill={MUTED}>"R · WHAT IT NEEDS"</text>
+                {reqs}
+            </g>
+            {slam(&frame, b(26.0), 960.0, 500.0, "TYPE-CHECKED", 200.0, FG, "middle")}
+            {slam(&frame, b(28.0), 960.0, 700.0, "INFRASTRUCTURE.", 150.0, MOSS, "middle")}
+            {flash(flashes, FG)}
         </g>)
     }
 }
 
-// ─── 10. A binding (64 – 71s) ────────────────────────────────────────────────
-
-#[derive(Debug)]
-struct Binding;
-impl Scene for Binding {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(7.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 7.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Using it is just another requirement", 0.2)}
-            {code_w(200.0, 380.0, 32.0, 1040.0, vec![
-                (A1, 0.0, Mark::Dim), (A2, 0.0, Mark::Dim), (A3, 0.6, Mark::Add), (A4, 0.0, Mark::Dim),
-                (A5, 0.0, Mark::Dim), (A6, 1.8, Mark::Add), (A7, 0.0, Mark::Dim), (A8, 0.0, Mark::Dim), (A9, 0.0, Mark::Dim),
-            ], &frame)}
-            {req_list(&frame, vec![
-                ("R2.BucketProvider", "to create the bucket", 0.0, false),
-                ("R2.ReadBucket", "to read it at runtime", 1.0, false),
-            ])}
-            {note(&frame, 200.0, 880.0, "the compiler won't let you forget", MOSS, 3.2)}
-        </g>)
-    }
-}
-
-// ─── 11. Worker (71 – 77s) ───────────────────────────────────────────────────
-
-const W1: Line = &[("export default", KW), (" Cloudflare.", VAR), ("Worker", TY), ("(", PUN), ("\"Api\"", STR), (", {…},", PUN)];
-const W2: Line = &[("  Effect", TY), (".", PUN), ("gen", FN), ("(", PUN), ("function", KW), ("* () { … })", PUN)];
-const W3: Line = &[("    .", PUN), ("pipe", FN), ("(", PUN), ("Effect", TY), (".", PUN), ("provide", FN), ("(", PUN), ("ReadBucketBinding", TY), (")),", PUN)];
-const W4: Line = &[(");", PUN)];
-
-#[derive(Debug)]
-struct Worker;
-impl Scene for Worker {
-    fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
-    }
-    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 6.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Provide a Layer, and it runs in a Worker", 0.2)}
-            {code_w(200.0, 420.0, 34.0, 1040.0, vec![
-                (W1, 0.5, Mark::Add), (W2, 0.5, Mark::Plain), (W3, 1.3, Mark::Add), (W4, 0.5, Mark::Add),
-            ], &frame)}
-            {req_list(&frame, vec![
-                ("R2.BucketProvider", "the Stack, at deploy", 0.0, false),
-                ("R2.ReadBucket", "ReadBucketBinding", 1.6, true),
-            ])}
-            {note(&frame, 200.0, 760.0, "the binding grants the permission, and nothing more", MOSS, 2.8)}
-        </g>)
-    }
-}
-
-// ─── 12. The agentic loop (77 – 86s) ─────────────────────────────────────────
-
-const T1: Line = &[("$ ", MUTED), ("tsc --noEmit", FG)];
-const T2: Line = &[("src/Api.ts:21:44", RED), (" - error TS2322", RED)];
-const T3: Line = &[("  Type 'LinkStoreError' is not assignable to type 'never'.", FG)];
-const T4: Line = &[("✓ ", MOSS), ("no errors", FG)];
-const T5: Line = &[("$ ", MUTED), ("bun test", FG), ("   # dev: true, local in seconds", MUTED)];
-const T6: Line = &[("✓ ", MOSS), ("creates and reads back a link ", FG), ("(38ms)", MUTED)];
-const T7: Line = &[("✓ ", MOSS), ("a missing link is a typed LinkNotFound ", FG), ("(9ms)", MUTED)];
-const T8: Line = &[("3 pass", MOSS), (" · 0 fail · 1.4s", MUTED)];
+// ─── 7. The agent loop · bars 25–32 ──────────────────────────────────────────
 
 #[derive(Debug)]
 struct Loop;
 impl Scene for Loop {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(9.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 8.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 9.0) * fade(&frame, 0.0);
-        let first = 1.0 - fade(&frame, 3.6);
-        let second = fade(&frame, 3.6);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "An agent's fastest loop: types, then tests", 0.2)}
-            <g opacity={first}>
-                {terminal(&frame, 190.0, 290.0, 1540.0, 460.0, vec![(T1, 0.6), (T2, 1.2), (T3, 1.4)])}
+        let t = frame.seconds();
+        let beat = t / BEAT;
+        let bi = beat as usize;
+        let (cx, cy, r) = (960.0, 540.0, 300.0);
+        // One station per beat around the loop.
+        let step = beat.floor() + (1.0 - (1.0 - beat.fract()).powi(4));
+        let angle = (-90.0 + 120.0 * step).to_radians();
+        let (dx, dy) = (cx + r * angle.cos(), cy + r * angle.sin());
+        let stations: Vec<Svgr> = [("WRITE", -90.0_f32), ("TSC", 30.0), ("TEST", 150.0)]
+            .iter()
+            .map(|(label, a)| {
+                let a = a.to_radians();
+                let (x, y) = (cx + (r + 150.0) * a.cos(), cy + (r + 110.0) * a.sin() + 16.0);
+                fframes::svgr!(<text x={x} y={y} text-anchor="middle" font-family={MONO} font-weight="700" font-size="44" fill={MUTED}>{*label}</text>)
+            })
+            .collect();
+        let (label, result, color) = match bi {
+            0 => ("WRITE", "Api.ts", FG),
+            1 => ("TSC", "✗ TS2322", RED),
+            2 => ("FIX", "orDie", EMBER),
+            3 => ("TSC", "✓ 0.41s", MOSS),
+            4 => ("TEST", "✓ 3 PASS", MOSS),
+            n => match n % 3 {
+                0 => ("TSC", "✓ 0.38s", MOSS),
+                1 => ("TEST", "✓ 1.4s", MOSS),
+                _ => ("WRITE", "+ 12 lines", FG),
+            },
+        };
+        let ring_o = 1.0 - spring(&frame, b(24.0), 0.0, 1.0, &WHIP);
+        let err = hit(t, b(1.0), 9.0);
+        let jx = err * 30.0 * (hash(frame.index as u32 * 3) * 2.0 - 1.0);
+        let iteration = 1 + bi / 3;
+        let spin = t * (40.0 + t * 12.0);
+        fframes::svgr!(<g>
+            {flash(err * 0.25, RED)}
+            <g opacity={ring_o} transform={format!("translate({jx} 0)")}>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#3a3328" stroke-width="16" />
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={MOSS} stroke-width="6" stroke-dasharray="40 30" transform={format!("rotate({spin} {cx} {cy})")} opacity="0.7" />
+                <circle cx={dx} cy={dy} r="26" fill={MOSS} />
+                <circle cx={dx} cy={dy} r={26.0 + (beat.fract()) * 60.0} fill="none" stroke={MOSS} stroke-width="4" opacity={1.0 - beat.fract()} />
+                {stations}
+                <text x={cx} y={cy - 50.0} text-anchor="middle" font-family={MONO} font-size="36" letter-spacing="8" fill={MUTED}>{label}</text>
+                {slam(&frame, b(bi as f32), cx, cy + 50.0, result, 80.0, color, "middle")}
             </g>
-            <g opacity={second}>
-                {terminal(&frame, 190.0, 290.0, 1540.0, 460.0, vec![(T1, 3.7), (T4, 4.1), (T5, 4.9), (T6, 5.7), (T7, 5.9), (T8, 6.4)])}
-            </g>
-            {note(&frame, 190.0, 880.0, "the errors are in the types, so the agent can see them", MOSS, 2.0)}
+            <text x="1760" y="110" text-anchor="end" font-family={MONO} font-size="34" fill={MUTED} opacity={ring_o}>{format!("ITERATION {iteration:02}")}</text>
+            <text x="160" y="110" font-family={MONO} font-size="34" fill={MUTED} opacity={ring_o}>"dev: true · local"</text>
+            {slam(&frame, b(24.0), 960.0, 500.0, "THE FASTEST LOOP", 150.0, FG, "middle")}
+            {slam(&frame, b(27.0), 960.0, 690.0, "FOR AGENTS.", 150.0, MOSS, "middle")}
+            {flash(0.4 * hit(t, b(24.0), 8.0) + 0.4 * hit(t, b(27.0), 8.0), FG)}
         </g>)
     }
 }
 
-// ─── 13. Swap the infrastructure (86 – 92s) ──────────────────────────────────
+// ─── 8. Swap · bars 33–40 ────────────────────────────────────────────────────
 
-const L1: Line = &[("  }).", PUN), ("pipe", FN), ("(", PUN), ("Effect", TY), (".", PUN), ("provide", FN), ("(LinksSql.", PUN), ("pipe", FN), ("(", PUN), ("Layer", TY), (".", PUN), ("provide", FN), ("(", PUN), ("D1Storage", TY), ("))))", PUN)];
-const L2: Line = &[("  }).", PUN), ("pipe", FN), ("(", PUN), ("Effect", TY), (".", PUN), ("provide", FN), ("(LinksSql.", PUN), ("pipe", FN), ("(", PUN), ("Layer", TY), (".", PUN), ("provide", FN), ("(", PUN), ("NeonStorage", TY), ("))))", PUN)];
+const BACKENDS: [(&str, &str); 8] = [
+    ("D1Storage", "#f38020"),
+    ("NeonStorage", "#63b3ed"),
+    ("DynamoStorage", "#ff9900"),
+    ("PlanetScale", "#f5f5f5"),
+    ("SqliteStorage", "#4ec9b0"),
+    ("NeonStorage", "#63b3ed"),
+    ("D1Storage", "#f38020"),
+    ("PgStorage", "#8b7cf6"),
+];
 
 #[derive(Debug)]
 struct Swap;
 impl Scene for Swap {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 8.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 6.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "Swap the infrastructure, keep the code", 0.2)}
-            {code(200.0, 460.0, 34.0, vec![(L1, 0.6, Mark::Del), (L2, 1.4, Mark::Add)], &frame)}
-            {node(&frame, 620.0, 740.0, "D1", "#f38020", 0.6)}
-            <g opacity={fade(&frame, 1.4)}>
-                <text x="960" y="755" text-anchor="middle" font-family={SANS} font-weight="700" font-size="54" fill={MUTED}>"→"</text>
+        let t = frame.seconds();
+        let size = 72.0;
+        let cw = size * 0.6;
+        let slot_chars = 13.0;
+        let total = 14.0 + slot_chars + 1.0;
+        let x0 = 960.0 - total * cw / 2.0;
+        let slot_x = x0 + 14.0 * cw;
+        let y = 600.0;
+        // Every 4 beats the reel spins for a beat and lands on a new backend.
+        let k = ((t / b(4.0)) as usize).min(BACKENDS.len() - 1);
+        let phase = t - b(4.0 * k as f32);
+        let spinning = phase < BEAT * 0.75 && k > 0;
+        let (name, color) = BACKENDS[k];
+        let reel: Vec<Svgr> = if spinning {
+            (0..6)
+                .map(|j| {
+                    let off = ((phase / BEAT) * 9.0 + j as f32).fract();
+                    let yy = y - 110.0 + off * 220.0;
+                    let n = BACKENDS[(k + j) % BACKENDS.len()].0;
+                    fframes::svgr!(<text x={slot_x + 12.0} y={yy} font-family={MONO} font-size={size} fill={MUTED} opacity="0.6">{n}</text>)
+                })
+                .collect()
+        } else {
+            let land = spring(&frame, b(4.0 * k as f32) + if k > 0 { BEAT * 0.75 } else { 0.0 }, -60.0, 0.0, &BOUNCE);
+            vec![fframes::svgr!(<text x={slot_x + 12.0} y={y + land} font-family={MONO} font-size={size} fill={color}>{name}</text>)]
+        };
+        let landed = if k > 0 { hit(t, b(4.0 * k as f32) + BEAT * 0.75, 7.0) } else { 0.0 };
+        fframes::svgr!(<g>
+            <defs>
+                <clipPath id="slot">
+                    <rect x={slot_x - 4.0} y={y - 72.0} width={slot_chars * cw + 32.0} height="100" />
+                </clipPath>
+            </defs>
+            <text x={x0} y={y} font-family={MONO} font-size={size}>
+                <tspan fill="#4ec9b0">"Layer"</tspan><tspan fill={PUN}>"."</tspan><tspan fill={FN}>"provide"</tspan><tspan fill={PUN}>"("</tspan>
+            </text>
+            <rect x={slot_x - 4.0} y={y - 72.0} width={slot_chars * cw + 32.0} height="100" rx="12" fill={CARD} stroke={color} stroke-width={3.0 + landed * 8.0} />
+            <g clip-path="url(#slot)">{reel}</g>
+            <text x={slot_x + slot_chars * cw + 34.0} y={y} font-family={MONO} font-size={size} fill={PUN}>")"</text>
+            {slam(&frame, 0.0, 960.0, 320.0, "SWAP THE INFRA.", 140.0, FG, "middle")}
+            <g opacity={if t >= b(16.0) { 0.0 } else { 1.0 }}>
+                <text x="960" y="820" text-anchor="middle" font-family={MONO} font-size="40" fill={MUTED} letter-spacing="4">"LINES OF APP CODE CHANGED: 0"</text>
             </g>
-            {node(&frame, 1300.0, 740.0, "Postgres", "#63b3ed", 1.6)}
-            {note(&frame, 200.0, 920.0, "one Layer, same tests", MOSS, 2.6)}
+            {slam(&frame, b(16.0), 960.0, 860.0, "KEEP THE CODE.", 140.0, MOSS, "middle")}
+            {flash(landed * 0.15, color)}
         </g>)
     }
 }
 
-// ─── 14. Deploy (92 – 98s) ───────────────────────────────────────────────────
+// ─── 9. Ticker · bars 41–48 ──────────────────────────────────────────────────
 
-const D1L: Line = &[("$ ", MUTED), ("alchemy deploy --stage prod", FG)];
-const D2: Line = &[("✓ ", MOSS), ("Postgres ", FG), ("(Neon.Project)", MUTED), (" created", FG)];
-const D3: Line = &[("✓ ", MOSS), ("Pool ", FG), ("(Cloudflare.Hyperdrive)", MUTED), (" created", FG)];
-const D4: Line = &[("✓ ", MOSS), ("Api ", FG), ("(Cloudflare.Worker)", MUTED), (" created", FG)];
-const D5: Line = &[("✓ ", MOSS), ("Web ", FG), ("(Cloudflare.Website)", MUTED), (" created", FG)];
-const D6: Line = &[("Stack deployed (4/4)", MOSS)];
+const PROVIDERS: &str = "CLOUDFLARE · AWS · NEON · PLANETSCALE · AXIOM · STRIPE · GITHUB · FLY · HETZNER · RAILWAY · KUBERNETES · DOCKER · PRISMA · ";
 
 #[derive(Debug)]
-struct Deploy;
-impl Scene for Deploy {
+struct Ticker;
+impl Scene for Ticker {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 8.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = out(&frame, 6.0) * fade(&frame, 0.0);
-        fframes::svgr!(<g opacity={o}>
-            {title(&frame, "One command to production", 0.2)}
-            {terminal(&frame, 190.0, 290.0, 1540.0, 480.0, vec![
-                (D1L, 0.5), (D2, 1.3), (D3, 1.7), (D4, 2.1), (D5, 2.5), (D6, 3.2),
-            ])}
+        let t = frame.seconds();
+        let beat = t / BEAT;
+        // Each beat kicks the rows forward.
+        let kick = beat.floor() + (1.0 - (1.0 - beat.fract()).powi(3));
+        let size = 150.0;
+        let row_w = PROVIDERS.chars().count() as f32 * size * 0.64;
+        let rows: Vec<Svgr> = [(150.0_f32, 1.0_f32, false), (340.0, -1.3, true), (760.0, 1.1, true), (950.0, -0.9, false)]
+            .iter()
+            .enumerate()
+            .map(|(i, (y, dir, outline))| {
+                let travel = (t * 260.0 + kick * 90.0) * dir;
+                let x = -((travel % row_w + row_w) % row_w) - hash(i as u32) * row_w;
+                let text = PROVIDERS.repeat(3);
+                if *outline {
+                    fframes::svgr!(<text x={x} y={y} font-family={DISPLAY} font-weight="900" font-size={size} fill="none" stroke={FG} stroke-width="2.5" opacity="0.5">{text}</text>)
+                } else {
+                    fframes::svgr!(<text x={x} y={y} font-family={DISPLAY} font-weight="900" font-size={size} fill={FG} opacity="0.14">{text}</text>)
+                }
+            })
+            .collect();
+        let band = if (beat / 4.0) as i32 % 2 == 0 { MOSS } else { EMBER };
+        let hitb = hit(t, b(beat.floor()), 10.0);
+        fframes::svgr!(<g>
+            {rows}
+            <rect x="0" y={430.0 - hitb * 12.0} width="1920" height={220.0 + hitb * 24.0} fill={band} />
+            {slam(&frame, 0.0, 960.0, 600.0, "ONE LANGUAGE.", 170.0, BG, "middle")}
+            <g opacity={if t >= b(16.0) { 1.0 } else { 0.0 }}>
+                <rect x="0" y={430.0 - hitb * 12.0} width="1920" height={220.0 + hitb * 24.0} fill={band} />
+            </g>
+            {slam(&frame, b(16.0), 960.0, 600.0, "EVERY CLOUD.", 170.0, BG, "middle")}
+            {flash(0.5 * hit(t, b(16.0), 8.0), FG)}
         </g>)
     }
 }
 
-// ─── 15. Logo (98 – 104s) ────────────────────────────────────────────────────
+// ─── 10. Finale · bars 49–53 ─────────────────────────────────────────────────
 
 #[derive(Debug)]
-struct Logo;
-impl Scene for Logo {
+struct Finale;
+impl Scene for Finale {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(6.0)
-    }
-    fn overlap(&self) -> Overlap {
-        Overlap::Previous(0.35)
+        Duration::Seconds(BAR * 5.0)
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let o = fade(&frame, 0.0);
-        let w = ramp(&frame, 0.3);
-        let t = ramp(&frame, 1.2);
-        let u = fade(&frame, 2.2);
-        fframes::svgr!(<g opacity={o}>
-            <g opacity={w} transform={Transform::translate(0, rise(&frame, 0.3, 30.0))}>
-                <text x="960" y="500" text-anchor="middle" font-family={SERIF} font-weight="600" font-size="190" letter-spacing="-4" fill={FG}>"Alchemy"</text>
+        let t = frame.seconds();
+        let rings: Vec<Svgr> = (0..3)
+            .map(|k| {
+                let p = ((t - k as f32 * 0.12) / 1.3).clamp(0.0, 1.0);
+                let color = if k == 1 { EMBER } else { MOSS };
+                fframes::svgr!(<circle cx="960" cy="520" r={(p * 1300.0).max(0.5)} fill="none" stroke={color} stroke-width={14.0 * (1.0 - p) + 0.5} opacity={1.0 - p} />)
+            })
+            .collect();
+        let sparks: Vec<Svgr> = (0..70)
+            .map(|k| {
+                let a = hash(k * 7 + 1) * std::f32::consts::TAU;
+                let speed = 500.0 + hash(k * 13 + 2) * 1100.0;
+                let d = speed * (1.0 - (-t * 2.6).exp());
+                let (x, y) = (960.0 + a.cos() * d, 520.0 + a.sin() * d);
+                let tail = 40.0 * (-t * 2.0).exp() + 4.0;
+                let color = if k % 3 == 0 { EMBER } else if k % 3 == 1 { MOSS } else { FG };
+                fframes::svgr!(<path d={format!("M {x} {y} L {} {}", x - a.cos() * tail, y - a.sin() * tail)} stroke={color} stroke-width="4" stroke-linecap="round" opacity={(1.0 - t / 1.6).clamp(0.0, 1.0)} />)
+            })
+            .collect();
+        let cmd = "$ alchemy deploy --stage prod";
+        let n = ((t - b(8.0)) / 0.03).clamp(0.0, cmd.len() as f32) as usize;
+        let bar = ((t - b(9.5)) / b(2.0)).clamp(0.0, 1.0);
+        let bar = 1.0 - (1.0 - bar).powi(3);
+        let end = ((t - (BAR * 5.0 - 0.8)) / 0.8).clamp(0.0, 1.0);
+        fframes::svgr!(<g>
+            {rings}
+            {sparks}
+            {slam(&frame, 0.0, 960.0, 600.0, "ALCHEMY", 280.0, FG, "middle")}
+            <g opacity={fade_in(t, b(4.0))}>
+                <text x="960" y="700" text-anchor="middle" font-family={MONO} font-size="42" letter-spacing="16" fill={MOSS}>"INFRASTRUCTURE AS EFFECTS"</text>
             </g>
-            <g opacity={t}>
-                <text x="960" y="610" text-anchor="middle" font-family={SANS} font-weight="500" font-size="54" fill={MOSS}>"Infrastructure as Effects"</text>
+            <text x="560" y="830" font-family={MONO} font-size="36" fill={FG}>{cmd[..n].to_string()}</text>
+            <rect x="560" y="860" width={(800.0 * bar).max(0.5)} height="8" rx="4" fill={MOSS} opacity={if t >= b(9.5) { 1.0 } else { 0.0 }} />
+            {slam(&frame, b(12.0), 1380.0, 880.0, "✓ LIVE", 44.0, MOSS, "start")}
+            <g opacity={fade_in(t, b(14.0))}>
+                <text x="960" y="990" text-anchor="middle" font-family={MONO} font-size="46" fill={MUTED}>"alchemy.run"</text>
             </g>
-            <g opacity={u}>
-                <text x="960" y="760" text-anchor="middle" font-family={MONO} font-size="38" fill={MUTED}>"alchemy.run"</text>
-            </g>
+            {flash(hit(t, 0.0, 3.5), FG)}
+            {flash(end, "#000")}
         </g>)
     }
 }
