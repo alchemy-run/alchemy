@@ -149,6 +149,16 @@ export type PolicyDecision =
   // outside the closed set still narrow cleanly.
   | (string & {});
 
+export type PolicyApprovalGroup = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["approvalGroups"]
+>[number];
+export type PolicyConnectionRules = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["connectionRules"]
+>;
+export type PolicyMfaConfig = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["mfaConfig"]
+>;
+
 export type PolicyProps = {
   /**
    * Display name for the policy. Treated as a stable identifier so the
@@ -198,6 +208,35 @@ export type PolicyProps = {
    * @default false
    */
   purposeJustificationRequired?: boolean;
+  /**
+   * Custom message shown on the purpose justification screen.
+   */
+  purposeJustificationPrompt?: string;
+  /**
+   * Administrators who can approve a temporary authentication request.
+   */
+  approvalGroups?: PolicyApprovalGroup[];
+  /**
+   * Serve applications in an isolated browser for users matching this
+   * policy. Requires Clientless Web Isolation on the account.
+   *
+   * @default false
+   */
+  isolationRequired?: boolean;
+  /**
+   * How users may connect to targets secured by an infrastructure
+   * application: allowed SSH usernames, RDP clipboard formats.
+   *
+   * @example
+   * ```ts
+   * connectionRules: { ssh: { usernames: ["root", "ubuntu"] } }
+   * ```
+   */
+  connectionRules?: PolicyConnectionRules;
+  /**
+   * Multi-factor authentication settings enforced by this policy.
+   */
+  mfaConfig?: PolicyMfaConfig;
   /**
    * Adopt an existing reusable policy with the same name when the engine has
    * no prior state for this logical id.
@@ -272,6 +311,18 @@ export type Policy = Resource<
  * });
  * ```
  *
+ * ### Infrastructure access
+ * **Example:** Allow SSH as specific Unix users
+ * ```typescript
+ * const policy = yield* Cloudflare.Access.Policy("SshOps", {
+ *   decision: "allow",
+ *   include: [{ emailDomain: "example.com" }],
+ *   connectionRules: {
+ *     ssh: { usernames: ["root", "ubuntu"], allowEmailAlias: true },
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -335,17 +386,7 @@ export const PolicyProvider = () =>
       let ensured: ObservedPolicy;
       if (!observed || !observed.id) {
         ensured = yield* zeroTrust
-          .createAccessPolicy({
-            accountId: acct,
-            name,
-            decision: news.decision,
-            include: normalizePolicyRules(news.include),
-            exclude: normalizePolicyRules(news.exclude),
-            require: normalizePolicyRules(news.require),
-            sessionDuration: news.sessionDuration,
-            approvalRequired: news.approvalRequired,
-            purposeJustificationRequired: news.purposeJustificationRequired,
-          })
+          .createAccessPolicy({ accountId: acct, ...policyBody(name, news) })
           .pipe(
             Effect.map(toObserved),
             Effect.catch((err) =>
@@ -365,14 +406,7 @@ export const PolicyProvider = () =>
         const updated = yield* zeroTrust.updateAccessPolicy({
           accountId: acct,
           policyId: prior.id!,
-          name,
-          decision: news.decision,
-          include: normalizePolicyRules(news.include),
-          exclude: normalizePolicyRules(news.exclude),
-          require: normalizePolicyRules(news.require),
-          sessionDuration: news.sessionDuration,
-          approvalRequired: news.approvalRequired,
-          purposeJustificationRequired: news.purposeJustificationRequired,
+          ...policyBody(name, news),
         });
         ensured = {
           id: updated.id ?? prior.id,
@@ -471,6 +505,22 @@ export const PolicyProvider = () =>
       };
     }),
   });
+
+const policyBody = (name: string, news: PolicyProps) => ({
+  name,
+  decision: news.decision,
+  include: normalizePolicyRules(news.include),
+  exclude: normalizePolicyRules(news.exclude),
+  require: normalizePolicyRules(news.require),
+  sessionDuration: news.sessionDuration,
+  approvalRequired: news.approvalRequired,
+  approvalGroups: news.approvalGroups,
+  isolationRequired: news.isolationRequired,
+  purposeJustificationRequired: news.purposeJustificationRequired,
+  purposeJustificationPrompt: news.purposeJustificationPrompt,
+  connectionRules: news.connectionRules,
+  mfaConfig: news.mfaConfig,
+});
 
 const createPolicyName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

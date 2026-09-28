@@ -7,7 +7,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { arrayEquals } from "../../Util/equal.ts";
+import { arrayEquals, subsetDiffers } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -100,6 +100,12 @@ export interface OAuthConfiguration {
   };
 }
 
+/** SAML or OIDC configuration of a `saas` application. */
+export type SaasApp = zeroTrust.AccessApplicationsCreateRequestSaasApp;
+
+/** CORS settings Access applies to requests to a self-hosted application. */
+export type CorsHeaders = zeroTrust.AccessApplicationsCreateRequestCorsHeaders;
+
 /**
  * An Access policy defined inline on (and owned by) an application: created
  * with the application, updated in place, and deleted with it. Uses the same
@@ -137,6 +143,13 @@ export interface InlineApplicationPolicy {
 }
 
 export interface ApplicationProps {
+  /**
+   * Cloudflare id of an existing application to manage. The first deploy
+   * takes that application over — keeping its `aud` — instead of creating a
+   * new one. The application must exist; changing the id replaces the
+   * resource.
+   */
+  applicationId?: string;
   /**
    * The Access application type.
    *
@@ -183,6 +196,40 @@ export interface ApplicationProps {
    * through OAuth and may register redirect URIs dynamically.
    */
   oauthConfiguration?: OAuthConfiguration;
+  /**
+   * SAML or OIDC settings of a `saas` application. Merged over the live
+   * configuration, so values Cloudflare generates (`clientId`, `publicKey`,
+   * `ssoEndpoint`, `idpEntityId`) are kept.
+   */
+  saasApp?: SaasApp;
+  /**
+   * CORS settings for requests to the application. Cannot be combined with
+   * `optionsPreflightBypass`.
+   */
+  corsHeaders?: CorsHeaders;
+  /**
+   * Let `OPTIONS` preflight requests bypass Access and reach the origin.
+   * Cannot be combined with `corsHeaders`.
+   */
+  optionsPreflightBypass?: boolean;
+  /**
+   * `SameSite` attribute of the Access session cookie.
+   */
+  sameSiteCookieAttribute?: "strict" | "lax" | "none";
+  /**
+   * Set `HttpOnly` on the Access session cookie.
+   */
+  httpOnlyCookieAttribute?: boolean;
+  /**
+   * Enable the binding cookie, which protects against stolen authorization
+   * tokens and CSRF.
+   */
+  enableBindingCookie?: boolean;
+  /**
+   * Scope the Access JWT cookie to the application path instead of the
+   * hostname.
+   */
+  pathCookieAttribute?: boolean;
   /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
@@ -280,6 +327,12 @@ export interface ApplicationAttributes {
   destinations: ReadonlyArray<ApplicationDestination> | undefined;
   /** Resolved managed OAuth configuration. */
   oauthConfiguration: OAuthConfiguration | undefined;
+  /**
+   * Resolved SaaS configuration, including the values Cloudflare generates
+   * (`clientId`, `publicKey`, `ssoEndpoint`, `idpEntityId`). The OIDC client
+   * secret is not stored.
+   */
+  saasApp: SaasApp | undefined;
   /** Application type. */
   type: ApplicationType;
   /** Display name (resolved). */
@@ -322,8 +375,7 @@ export type Application = Resource<
  * type including `warp`, which Cloudflare requires for device enrolment via
  * the WARP client.
  *
- * Access policies are authored as standalone {@link Policy} resources
- * and referenced here by id — there is no inline-policy support.
+ * Settings left unset are not managed: updates keep their live values.
  * ### Creating an Application
  * **Example:** Self-hosted application gated by a reusable Access policy
  * ```typescript
@@ -358,6 +410,56 @@ export type Application = Resource<
  *       allowAnyOnLoopback: true,
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Adopting an existing application
+ * **Example:** Take over an application by its Cloudflare id
+ * ```typescript
+ * // Keeps the application's id and `aud`, so JWT validation keeps working.
+ * const app = yield* Cloudflare.Access.Application("Grafana", {
+ *   applicationId: "4f8e3c1a-5b2d-4e6f-9a7b-1c2d3e4f5a6b",
+ *   type: "self_hosted",
+ *   domain: "grafana.example.com",
+ *   sameSiteCookieAttribute: "lax",
+ *   httpOnlyCookieAttribute: true,
+ *   corsHeaders: {
+ *     allowedOrigins: ["https://app.example.com"],
+ *     allowedMethods: ["GET", "POST"],
+ *     allowCredentials: true,
+ *   },
+ * });
+ * ```
+ *
+ * ### SaaS applications
+ * **Example:** SAML application
+ * ```typescript
+ * const looker = yield* Cloudflare.Access.Application("Looker", {
+ *   type: "saas",
+ *   name: "Looker",
+ *   saasApp: {
+ *     authType: "saml",
+ *     spEntityId: "https://example.looker.com",
+ *     consumerServiceUrl: "https://example.looker.com/saml/acs",
+ *     nameIdFormat: "email",
+ *   },
+ *   policies: [allowTeam],
+ * });
+ * // Configure the SaaS side with looker.saasApp.ssoEndpoint / publicKey.
+ * ```
+ *
+ * **Example:** OIDC application
+ * ```typescript
+ * const coder = yield* Cloudflare.Access.Application("Coder", {
+ *   type: "saas",
+ *   name: "Coder",
+ *   saasApp: {
+ *     authType: "oidc",
+ *     redirectUris: ["https://coder.example.com/api/v2/users/oidc/callback"],
+ *     grantTypes: ["authorization_code"],
+ *     scopes: ["openid", "email", "profile"],
+ *   },
+ *   policies: [allowTeam],
  * });
  * ```
  *
@@ -487,13 +589,21 @@ export const ApplicationProvider = () =>
   Provider.succeed(Application, {
     stables: ["applicationId", "aud", "type", "accountId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
       if ((olds as ApplicationProps).type !== undefined) {
         if (
           (olds as ApplicationProps).type !== (news as ApplicationProps).type
         ) {
           return { action: "replace" } as const;
         }
+      }
+      const declaredId = (news as ApplicationProps).applicationId;
+      if (
+        typeof declaredId === "string" &&
+        output !== undefined &&
+        declaredId !== output.applicationId
+      ) {
+        return { action: "replace" } as const;
       }
     }),
 
@@ -507,46 +617,26 @@ export const ApplicationProvider = () =>
       // domain with a fresh `aud`, silently breaking existing JWT
       // validation. Warp apps are excluded from the fallback: they are a
       // per-account singleton that `reconcile` already recovers.
+      const knownId = output?.applicationId ?? olds?.applicationId;
       let observed: ObservedApp | undefined;
-      if (output?.applicationId) {
-        observed = yield* observeById(accountId, output.applicationId);
+      if (knownId) {
+        observed = yield* observeById(accountId, knownId);
       } else if (olds?.type !== "warp" && typeof olds?.domain === "string") {
         observed = yield* findByDomain(accountId, olds.domain);
       } else {
         return undefined;
       }
-      if (!observed?.id || !observed.aud || !observed.type) {
+      if (!isComplete(observed)) {
         return undefined;
       }
-      const domain =
-        observed.domain ??
-        output?.domain ??
-        olds?.domain ??
-        // Worker-destination apps (`worker`/`all_workers`/...) have no
-        // hostname; Cloudflare omits `domain` for them entirely.
-        (observed.destinations !== undefined ? "" : undefined);
-      const name = observed.name ?? output?.name;
-      if (domain === undefined || name === undefined) {
-        return undefined;
-      }
-      const attrs = {
-        applicationId: observed.id,
-        aud: observed.aud,
-        domain,
-        destinations: observed.destinations ?? output?.destinations,
-        // Live cloud state is authoritative. In particular, do not resurrect
-        // a persisted configuration when Cloudflare explicitly returns null.
-        oauthConfiguration: observed.oauthConfiguration,
-        type: observed.type,
-        name,
-        accountId: output?.accountId ?? accountId,
-        createdAt: observed.createdAt ?? output?.createdAt,
-        updatedAt: observed.updatedAt ?? output?.updatedAt,
-      } satisfies ApplicationAttributes;
+      const attrs = toAttributes(observed, output?.accountId ?? accountId, {
+        ...output,
+        domain: output?.domain ?? olds?.domain,
+      });
       // Recovered by id → positively ours. Recovered by domain scan →
       // existence is certain but ownership is not (Access applications
       // carry no alchemy marker), so gate takeover behind `--adopt`.
-      return output?.applicationId ? attrs : Unowned(attrs);
+      return knownId ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
@@ -593,9 +683,17 @@ export const ApplicationProvider = () =>
       }
 
       // 1. Observe
+      const knownId = output?.applicationId ?? news.applicationId;
       let observed: ObservedApp | undefined;
-      if (output?.applicationId) {
-        observed = yield* observeById(accountId, output.applicationId);
+      if (knownId) {
+        observed = yield* observeById(accountId, knownId);
+      }
+      if (!observed && news.applicationId !== undefined) {
+        return yield* Effect.fail(
+          new Error(
+            `Cloudflare Access application ${news.applicationId} does not exist`,
+          ),
+        );
       }
       if (!observed && news.type === "warp") {
         // Warp is a singleton per account — reuse any existing app.
@@ -626,6 +724,7 @@ export const ApplicationProvider = () =>
             oauthConfiguration: toRequestOAuthConfiguration(
               body.oauthConfiguration,
             ),
+            ...settingsOf(body),
           })
           .pipe(
             // A referenced policy may be propagating, or the call may be
@@ -646,8 +745,9 @@ export const ApplicationProvider = () =>
         observed = narrowApp(created as Parameters<typeof narrowApp>[0]);
       }
 
-      // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
-      // full desired body whenever any mutable field differs.
+      // 3. Sync — Cloudflare's update endpoint is PUT-style: anything missing
+      // from the body is reset. Start from the live application so settings
+      // this resource does not manage survive, then apply the desired body.
       if (!observed.id) {
         return yield* Effect.fail(
           new Error(
@@ -656,37 +756,43 @@ export const ApplicationProvider = () =>
         );
       }
       if (!bodyEqualsObserved(body, observed)) {
+        // Without a desired domain or destinations, keep every live hostname.
+        const destinations =
+          body.destinations ??
+          (body.domain === undefined ? observed.destinations : undefined);
         const updated = yield* zeroTrust
           .updateAccessApplicationForAccount({
+            ...preservedSettings(observed),
             accountId,
             appId: observed.id,
             domain: body.domain ?? observed.domain,
             type: news.type,
             name: resolvedName,
-            sessionDuration: body.sessionDuration,
-            allowedIdps:
-              body.allowedIdps === undefined
-                ? undefined
-                : Array.from(body.allowedIdps),
-            autoRedirectToIdentity: body.autoRedirectToIdentity,
-            appLauncherVisible: body.appLauncherVisible,
-            tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            policies: toRequestPolicies(
-              attachObservedPolicyIds(body.policies, observed.policies),
-            ),
-            destinations:
-              body.destinations === undefined
-                ? undefined
-                : Array.from(body.destinations),
-            // Preserve a live managed OAuth configuration when the caller
-            // does not manage it but another mutable field triggers this
-            // PUT-style update.
-            oauthConfiguration: toRequestOAuthConfiguration(
-              mergeOAuthConfiguration(
-                observed.oauthConfiguration,
-                body.oauthConfiguration,
+            ...definedOnly({
+              sessionDuration: body.sessionDuration,
+              allowedIdps:
+                body.allowedIdps === undefined
+                  ? undefined
+                  : Array.from(body.allowedIdps),
+              autoRedirectToIdentity: body.autoRedirectToIdentity,
+              appLauncherVisible: body.appLauncherVisible,
+              tags: body.tags === undefined ? undefined : Array.from(body.tags),
+              policies: toRequestPolicies(
+                attachObservedPolicyIds(body.policies, observed.policies),
               ),
-            ),
+              destinations:
+                destinations === undefined
+                  ? undefined
+                  : Array.from(destinations),
+              // Merge a partial managed OAuth configuration over the live one.
+              oauthConfiguration: toRequestOAuthConfiguration(
+                mergeOAuthConfiguration(
+                  observed.oauthConfiguration,
+                  body.oauthConfiguration,
+                ),
+              ),
+            }),
+            ...mergeSettings(observed, settingsOf(body)),
           })
           // A just-added policy reference may still be propagating, or the
           // call may be throttled (403) — ride out both.
@@ -695,28 +801,20 @@ export const ApplicationProvider = () =>
       }
 
       // 4. Return
-      if (!observed.id || !observed.aud || !observed.type) {
+      if (!isComplete(observed)) {
         return yield* Effect.fail(
           new Error(
             "Cloudflare returned an Access application without id/aud/type",
           ),
         );
       }
-      return {
-        applicationId: observed.id,
-        aud: observed.aud,
-        domain: observed.domain ?? body.domain ?? "",
-        destinations: observed.destinations ?? body.destinations,
-        // Keep the provider output cloud-authoritative. If Cloudflare rejects
-        // or clears the desired configuration, do not mask that drift with
-        // the request body.
-        oauthConfiguration: observed.oauthConfiguration,
-        type: observed.type,
-        name: observed.name ?? resolvedName,
-        accountId,
-        createdAt: observed.createdAt,
-        updatedAt: observed.updatedAt,
-      } satisfies ApplicationAttributes;
+      // Keep the provider output cloud-authoritative: if Cloudflare rejects
+      // or clears a desired setting, do not mask that drift with the body.
+      return toAttributes(observed, accountId, {
+        domain: body.domain,
+        destinations: body.destinations,
+        name: resolvedName,
+      });
     }),
 
     // Account-scoped collection (pattern (b)): enumerate every Access
@@ -739,21 +837,7 @@ export const ApplicationProvider = () =>
             Array.from(chunk).flatMap((page) =>
               (page.result ?? []).flatMap((raw) => {
                 const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
-                if (!app.id || !app.aud || !app.type) return [];
-                return [
-                  {
-                    applicationId: app.id,
-                    aud: app.aud,
-                    domain: app.domain ?? "",
-                    destinations: app.destinations,
-                    oauthConfiguration: app.oauthConfiguration,
-                    type: app.type,
-                    name: app.name ?? "",
-                    accountId,
-                    createdAt: app.createdAt,
-                    updatedAt: app.updatedAt,
-                  } satisfies ApplicationAttributes,
-                ];
+                return isComplete(app) ? [toAttributes(app, accountId)] : [];
               }),
             ),
           ),
@@ -874,6 +958,8 @@ interface ObservedPolicy {
 }
 
 interface ObservedApp {
+  /** The decoded response, for carrying unmanaged settings through updates. */
+  readonly raw: Readonly<Record<string, unknown>>;
   readonly id?: string;
   readonly aud?: string;
   readonly name?: string;
@@ -881,6 +967,7 @@ interface ObservedApp {
   readonly domain?: string;
   readonly destinations?: ReadonlyArray<ApplicationDestination>;
   readonly oauthConfiguration?: OAuthConfiguration;
+  readonly saasApp?: SaasApp;
   readonly allowedIdps?: ReadonlyArray<string>;
   readonly autoRedirectToIdentity?: boolean;
   readonly appLauncherVisible?: boolean;
@@ -890,6 +977,33 @@ interface ObservedApp {
   readonly createdAt?: string;
   readonly updatedAt?: string;
 }
+
+const isComplete = (
+  app: ObservedApp | undefined,
+): app is ObservedApp & { id: string; aud: string; type: ApplicationType } =>
+  !!app?.id && !!app.aud && !!app.type;
+
+const toAttributes = (
+  app: ObservedApp & { id: string; aud: string; type: ApplicationType },
+  accountId: string,
+  fallback?: Partial<ApplicationAttributes>,
+): ApplicationAttributes => ({
+  applicationId: app.id,
+  aud: app.aud,
+  // SaaS and Worker-destination apps have no hostname; Cloudflare omits
+  // `domain` for them entirely.
+  domain: app.domain ?? fallback?.domain ?? "",
+  destinations: app.destinations ?? fallback?.destinations,
+  // Live cloud state is authoritative. In particular, do not resurrect
+  // a persisted configuration when Cloudflare explicitly returns null.
+  oauthConfiguration: app.oauthConfiguration,
+  saasApp: app.saasApp,
+  type: app.type,
+  name: app.name ?? fallback?.name ?? "",
+  accountId,
+  createdAt: app.createdAt ?? fallback?.createdAt,
+  updatedAt: app.updatedAt ?? fallback?.updatedAt,
+});
 
 const undef = <T>(v: T | null | undefined): T | undefined =>
   v == null ? undefined : v;
@@ -952,6 +1066,7 @@ const narrowApp = (raw: {
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   oauthConfiguration?: RawOAuthConfiguration | null;
+  saasApp?: object | null;
   allowedIdps?: ReadonlyArray<string> | null;
   autoRedirectToIdentity?: boolean | null;
   appLauncherVisible?: boolean | null;
@@ -961,6 +1076,7 @@ const narrowApp = (raw: {
   createdAt?: string | null;
   updatedAt?: string | null;
 }): ObservedApp => ({
+  raw,
   id: undef(raw.id),
   aud: undef(raw.aud),
   name: undef(raw.name),
@@ -971,6 +1087,12 @@ const narrowApp = (raw: {
       ? undefined
       : (raw.destinations as ReadonlyArray<ApplicationDestination>),
   oauthConfiguration: narrowOAuthConfiguration(raw.oauthConfiguration),
+  saasApp:
+    raw.saasApp == null
+      ? undefined
+      : (withoutNulls(
+          omit(raw.saasApp, ["clientSecret", "createdAt", "updatedAt"]),
+        ) as SaasApp),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
   appLauncherVisible: undef(raw.appLauncherVisible),
@@ -1032,7 +1154,92 @@ type ResolvedPolicy =
 type RequestPolicy =
   zeroTrust.AccessApplicationsCreateForAccountRequestPoliciesSelfHostedApplicationItem;
 
-interface AppMutableBody {
+// Settings sent verbatim when set and diffed against the live application.
+const SETTINGS = [
+  "saasApp",
+  "corsHeaders",
+  "optionsPreflightBypass",
+  "sameSiteCookieAttribute",
+  "httpOnlyCookieAttribute",
+  "enableBindingCookie",
+  "pathCookieAttribute",
+] as const satisfies ReadonlyArray<keyof ApplicationProps>;
+
+type Settings = Pick<ApplicationProps, (typeof SETTINGS)[number]>;
+
+const settingsOf = (props: Settings): Settings =>
+  Object.fromEntries(
+    SETTINGS.flatMap((key) =>
+      props[key] === undefined ? [] : [[key, props[key]]],
+    ),
+  );
+
+// Object settings merge over the live value: Cloudflare-generated SaaS
+// values (`clientId`, `publicKey`, ...) must be sent back to be kept.
+const mergeSettings = (observed: ObservedApp, desired: Settings): Settings =>
+  Object.fromEntries(
+    Object.entries(desired).map(([key, value]) => {
+      const live =
+        key === "saasApp" ? observed.saasApp : withoutNulls(observed.raw[key]);
+      return [
+        key,
+        isRecord(value) && isRecord(live) ? { ...live, ...value } : value,
+      ];
+    }),
+  );
+
+// Everything a PUT would otherwise reset, taken from the live application.
+// Identity, policies, destinations and OAuth are reconciled explicitly; SCIM
+// config is left out because Cloudflare does not echo its credentials.
+const preservedSettings = (observed: ObservedApp) => ({
+  ...(withoutNulls(
+    omit(observed.raw, [
+      "id",
+      "aud",
+      "type",
+      "name",
+      "domain",
+      "createdAt",
+      "updatedAt",
+      "policies",
+      "destinations",
+      "selfHostedDomains",
+      "oauthConfiguration",
+      "scimConfig",
+      "saasApp",
+    ]),
+  ) as Omit<
+    zeroTrust.UpdateAccessApplicationForAccountRequest,
+    "accountId" | "appId"
+  >),
+  ...(observed.saasApp === undefined ? {} : { saasApp: observed.saasApp }),
+});
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const omit = (value: object, keys: ReadonlyArray<string>) =>
+  Object.fromEntries(
+    Object.entries(value).filter(([key]) => !keys.includes(key)),
+  );
+
+const definedOnly = <T extends object>(value: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(value).filter(([, v]) => v !== undefined),
+  ) as Partial<T>;
+
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.filter((v) => v != null).map(withoutNulls)
+    : isRecord(value)
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, v]) => v != null)
+            .map(([k, v]) => [k, withoutNulls(v)]),
+        )
+      : value;
+
+interface AppMutableBody extends Settings {
   domain?: string;
   destinations?: ReadonlyArray<ApplicationDestination>;
   oauthConfiguration?: OAuthConfiguration;
@@ -1206,6 +1413,7 @@ const buildMutableBody = (
   resolvedPolicies: ReadonlyArray<ResolvedPolicy> | undefined,
 ): AppMutableBody => {
   const body: AppMutableBody = {
+    ...settingsOf(news),
     type: news.type,
     name: resolvedName,
   };
@@ -1490,5 +1698,11 @@ const bodyEqualsObserved = (
   if (!policiesEq(desired.policies, observed.policies)) {
     return false;
   }
-  return true;
+  return SETTINGS.every(
+    (key) =>
+      !subsetDiffers(
+        desired[key],
+        key === "saasApp" ? observed.saasApp : observed.raw[key],
+      ),
+  );
 };
