@@ -260,3 +260,56 @@ it.live.skipIf(process.platform === "win32")(
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   { tags: ["local"], timeout: 40_000 },
 );
+
+it.live.skipIf(process.platform === "win32")(
+  "sidecar shutdown stops Command processes while its event loop is busy",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({
+        directory: "/tmp",
+        prefix: "rpc-command-busy-",
+      });
+      const fixture = yield* lifecycleFixture("cooperative");
+      const ready = path.join(home, "ready");
+      const entry = yield* path.fromFileUrl(
+        new URL("./fixtures/rpc-spawner-commands.ts", import.meta.url),
+      );
+      const parent = yield* ChildProcess.make("bun", ["run", entry], {
+        env: {
+          ALCHEMY_HOME: home,
+          COMMAND_FIXTURES: JSON.stringify({
+            home,
+            ready,
+            commands: [fixture.props],
+            busy: true,
+          }),
+        },
+        extendEnv: true,
+        stdout: "ignore",
+        stderr: "inherit",
+        forceKillAfter: "15 seconds",
+      });
+      expect(
+        yield* fs.exists(ready).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("50 millis"),
+            until: Boolean,
+            times: 400,
+          }),
+        ),
+      ).toBe(true);
+      const pids = yield* fixture.ready;
+      // The sidecar handles SIGTERM only after the busy group's 4 seconds,
+      // so its Command processes stop only if the spawner waits past that.
+      yield* parent.kill({
+        killSignal: "SIGTERM",
+        forceKillAfter: "15 seconds",
+      });
+      expect(yield* fixture.has("wrapper.term")).toBe(true);
+      yield* assertDead(pids.wrapper);
+      yield* assertDead(pids.leaf);
+    }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+  { tags: ["local"], timeout: 40_000 },
+);

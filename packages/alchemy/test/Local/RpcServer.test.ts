@@ -4,7 +4,10 @@ import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { assert, describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
@@ -14,6 +17,10 @@ import { runtimes } from "./fixtures/runtimes.ts";
 
 const FIXTURE_TS = fileURLToPath(
   new URL("./fixtures/rpc-server-entry.ts", import.meta.url),
+);
+
+const GROUPS_FIXTURE_TS = fileURLToPath(
+  new URL("./fixtures/rpc-server-groups.ts", import.meta.url),
 );
 
 const ADDRESS_RE = /<ALCHEMY_RPC_ADDRESS>(.+?)<\/ALCHEMY_RPC_ADDRESS>/;
@@ -104,6 +111,60 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
             // waitForExit fails if the child is still running after the
             // timeout, so reaching this point means the child exited.
             yield* waitForExit(proc, "5 seconds");
+          }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+        { timeout: 30_000 },
+      );
+
+      it.live(
+        "closes provider groups concurrently at shutdown",
+        () =>
+          Effect.gen(function* () {
+            const [groupsBin, ...groupsArgs] = runtime.argv(GROUPS_FIXTURE_TS);
+            const proc = yield* ChildProcess.make(groupsBin, groupsArgs, {
+              env: { ALCHEMY_RPC_SERVER_ENVIRONMENT: sampleEnv() },
+              extendEnv: true,
+              stdin: "ignore",
+              killSignal: "SIGKILL",
+            });
+            const stdout = yield* Ref.make("");
+            yield* proc.stdout.pipe(
+              Stream.decodeText,
+              Stream.runForEach((chunk) =>
+                Ref.update(stdout, (text) => text + chunk),
+              ),
+              Effect.forkScoped,
+            );
+            const printed = (marker: string, timeout: Duration.Input) =>
+              Ref.get(stdout).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("50 millis"),
+                  until: (text) => text.includes(marker),
+                }),
+                Effect.timeout(timeout),
+              );
+            const url = (yield* printed(
+              "</ALCHEMY_RPC_ADDRESS>",
+              "10 seconds",
+            )).match(ADDRESS_RE)?.[1];
+            assert(url, "url not found in output");
+            const parent = yield* openWebSocket(new URL("/parent", url));
+
+            // The fast group is built first, so a sequential root scope
+            // would close it only after the slow group's 30s finalizer.
+            const stub = (newWebSocketRpcSession as any)(
+              url,
+            ) as RpcStub<RpcProxyApi>;
+            const group = new URL(
+              "./fixtures/rpc-server-groups.ts",
+              import.meta.url,
+            ).href;
+            yield* Effect.promise(async () => {
+              await stub.getProvider("Test.Fast", `${group}#fast`);
+              await stub.getProvider("Test.Slow", `${group}#slow`);
+            });
+
+            yield* Effect.sync(() => parent.close());
+            yield* printed("FAST_CLOSED", "3 seconds");
           }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
         { timeout: 30_000 },
       );
