@@ -147,7 +147,7 @@ const C = {
 };
 const FN = `
 
-function api(req) {
+function fetch(req) {
   const file = bucket.get(req.key)
   queue.send(file)
 }`;
@@ -157,33 +157,18 @@ const COLORED_APP = `construct app() {
   const bucket = Bucket({ versioning: true })
   const queue = Queue()
 
-  runtime function api(req) {
+  runtime function fetch(req) {
     const file = bucket.get(req.key)
     queue.send(file)
   }
 }`;
-/** The same program, with the read passed in: nothing to see inside anymore. */
-const PASSED = (type: string) => `construct app() {
-  const bucket = Bucket({ versioning: true })
-  const queue = Queue()
-
-  runtime function api(
-    req,
-    read: ${type},
-  ) {
-    const file = read(req.key)
-    queue.send(file)
-  }
-}`;
-const UNKNOWN_READ = { from: "api", to: "bucket", tone: "bad" as const, label: "s3:???" };
-
 /** What the function needs, inferred from its body the way a type would be. */
 const INFERRED_NEEDS = COLORED_APP.replace(
-  "  runtime function api(req) {",
-  "  // needs: s3:GetObject | sqs:SendMessage\n  runtime function api(req) {",
+  "  runtime function fetch(req) {",
+  "  // needs: s3:GetObject | sqs:SendMessage\n  runtime function fetch(req) {",
 );
 /** Step one of the colors: only construction is marked. */
-const CONSTRUCT_ONLY = COLORED_APP.replace("  runtime function api(req) {", "  function api(req) {");
+const CONSTRUCT_ONLY = COLORED_APP.replace("  runtime function fetch(req) {", "  function fetch(req) {");
 /** The question: what would a bucket created inside the function even mean? */
 const SCRATCH = VERSIONED.replace(
   "  const file = bucket.get(req.key)",
@@ -238,11 +223,11 @@ const BQ = `${B2}
 const queue = Queue()`;
 const EMPTY_FN = `${BQ}
 
-function api(req) {
+function fetch(req) {
 }`;
 const GET_FN = `${BQ}
 
-function api(req) {
+function fetch(req) {
   const file = bucket.get(req.key)
 }`;
 
@@ -922,44 +907,28 @@ const EVERYTHING: BundlePanel = {
   note: "{extra} clients the code never calls",
 };
 
-/** The build-up to Effect, inside the same imaginary program. */
-const passedIn: StepSpec[] = [
+/** The build-up to Effect: write what fetch needs into its type. */
+const TYPED = (type: string) =>
+  COLORED_APP.replace("  runtime function fetch(req) {", `  runtime function fetch(req): ${type} {`);
+const typedFetch: StepSpec[] = [
   lang({
-    title: "But real code passes functions around",
-    src: { code: PASSED("(key) => File") },
-    emphasize: ["read: (key)"],
-    marks: [{ kind: "circle", find: "read(req.key)", label: "which bucket? could be anything", side: "right", tone: "bad" }],
-    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: [UNKNOWN_READ, SEND] },
+    title: "So write what it needs into its type",
+    src: { code: TYPED("Response needs s3:GetObject | sqs:SendMessage") },
+    emphasize: ["runtime function fetch"],
     notes:
-      "But real code doesn't call everything directly. Here api is handed a read function. Which bucket does it read? It depends on the caller, so reading api's body tells you nothing.",
-  }),
-  lang({
-    title: "…so the only thing left to read is its type",
-    src: { code: PASSED("(key) => File needs s3:GetObject") },
-    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
-    notes:
-      "So the function's type has to carry it. read says what it returns, and what it needs from the outside world: s3:GetObject.",
-  }),
-  lang({
-    title: "Then the policy falls out of the types",
-    src: { code: PASSED("(key) => File needs s3:GetObject") },
-    marks: [
-      { kind: "circle", find: "needs s3:GetObject", tone: "construct" },
-      { kind: "underline", find: "runtime function api(", label: "so api needs it too", side: "right", tone: "construct" },
-    ],
-    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
-    notes:
-      "Now nobody reads function bodies. api calls read, so api needs s3:GetObject too, exactly like a type checker propagates a return type. The policy is just type checking.",
+      "So write it down. fetch returns a Response, and it needs s3:GetObject and sqs:SendMessage. Once it's in the type, nothing has to read the body: anything that calls fetch inherits those needs, like any other type.",
   }),
   lang({
     title: "It could say how it fails too, that seems like a good idea 😏",
-    src: { code: PASSED("(key) => File throws NotFound needs s3:GetObject") },
+    src: { code: TYPED("Response throws NotFound needs s3:GetObject | sqs:SendMessage") },
+    emphasize: ["runtime function fetch"],
     notes: "And while we're at it, the type could say how it fails, too.",
   }),
   lang({
     title: "Wait… this looks familiar",
-    src: { code: PASSED("(key) => Effect<File, NotFound, s3:GetObject>") },
-    notes: "Wait. A value, how it fails, and what it needs. We've seen this before.",
+    src: { code: TYPED("Effect<Response, NotFound, s3:GetObject | sqs:SendMessage>") },
+    emphasize: ["runtime function fetch"],
+    notes: "Wait. What it returns, how it fails, and what it needs. We've seen this before.",
   }),
 ];
 
@@ -2218,7 +2187,7 @@ export const steps: StepSpec[] = [
   pick("…just as a compiler infers a type from a function's body"),
 
   // 3. Effect already models this
-  ...passedIn,
+  ...typedFetch,
   pick("That's exactly the type of an Effect"),
 
   // 4. How bindings work in Alchemy
