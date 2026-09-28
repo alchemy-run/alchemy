@@ -2,6 +2,7 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
@@ -106,10 +107,11 @@ export type Records = Resource<
  * site attached to an `AWS.Website.Router`) register hostnames on a
  * distribution's DNS without a circular input prop.
  *
- * Ownership: an existing record at a managed `(name, type)` is overwritten
- * (like a Route 53 `UPSERT`) — unlike `Cloudflare.DNS.Record`, which
- * refuses to take over an existing record without `--adopt` — and removed
- * again when the name leaves the set or the set is destroyed. Cloudflare
+ * Ownership: when the set is first created, records that already exist at
+ * its names are reported as not owned, so the deploy refuses to overwrite
+ * them unless `--adopt` (or `adopt(true)`) is set. Names added later are
+ * overwritten like a Route 53 `UPSERT`, and removed again when the name
+ * leaves the set or the set is destroyed. Cloudflare
  * rejects a `CNAME` at a name that already has `A`/`AAAA` records; remove
  * those first.
  * ### Managing Record Sets
@@ -180,9 +182,8 @@ const sameContent = (a: string | null | undefined, b: string) =>
  * it when missing, overwrite a record that differs (Route 53 `UPSERT`
  * semantics), and remove extra records sharing the name. A concurrent
  * create (`DnsRecordAlreadyExists`) is a race — re-observe and converge.
- * @internal shared with the ACM DNS validator
  */
-export const upsertRecordAt = (
+const upsertRecordAt = (
   zoneId: string,
   body: {
     type: RecordsType;
@@ -250,11 +251,38 @@ export const RecordsProvider = () =>
       }
     }),
 
-    read: Effect.fn(function* ({ output }) {
+    read: Effect.fn(function* ({ output, olds }) {
       if (output === undefined) {
-        // Without the previously-managed name set there is no identity to
-        // look up — report "not found" so the engine re-drives reconcile.
-        return undefined;
+        // No state of our own: records already at the declared names were
+        // not created by this set (DNS records carry no ownership markers),
+        // so brand them `Unowned` — the engine refuses to overwrite them
+        // unless `adopt` is set.
+        const names = resolveDesiredNames(olds?.names, []);
+        if (olds === undefined || names.length === 0) return undefined;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const zoneId = yield* resolveZoneId({
+          accountId,
+          zone: olds.zone,
+          hostname: names[0],
+        }).pipe(Effect.orElseSucceed(() => undefined));
+        if (zoneId === undefined) return undefined;
+        const found = (yield* Effect.forEach(names, (name) =>
+          listAtName(zoneId, name, olds.type).pipe(
+            Effect.map((records) =>
+              records[0] === undefined ? [] : [{ name, record: records[0] }],
+            ),
+          ),
+        )).flat();
+        const sample = found[0]?.record;
+        if (sample === undefined) return undefined;
+        return Unowned({
+          zoneId,
+          type: olds.type,
+          content: sample.content ?? olds.content,
+          proxied: sample.proxied ?? false,
+          ttl: sample.ttl ?? 1,
+          names: found.map(({ name }) => name),
+        });
       }
       if (output.zoneId === undefined) return output;
       const zoneId = output.zoneId;

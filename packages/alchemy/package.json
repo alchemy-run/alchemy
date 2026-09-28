@@ -75,6 +75,7 @@
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./ACME": "./src/ACME/index.ts",
+    "./DNS": "./src/DNS/index.ts",
     "./Railway": "./src/Railway/index.ts",
     "./Prisma": "./src/Prisma/index.ts",
     "./Prisma/ORM": "./src/Prisma/ORM/index.ts",
@@ -279,6 +280,11 @@
         "types": "./lib/ACME/index.d.ts",
         "bun": "./src/ACME/index.ts",
         "default": "./lib/ACME/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
       },
       "./Railway": {
         "types": "./lib/Railway/index.d.ts",

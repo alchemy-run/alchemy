@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { Certificate } from "../ACM/Certificate.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import {
@@ -19,9 +19,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import {
-  certificateDnsPropsOf,
   normalizeWebsiteDomain,
-  websiteDnsOf,
   type SsrSiteRouteTargets,
   type WebsiteInvalidationProps,
   type WebsiteStandaloneDomainProps,
@@ -322,20 +320,27 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       );
     }
 
+    const managed =
+      domain && !domain.cert
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [
+                ...(domain.aliases ?? []),
+                ...(domain.redirects ?? []),
+              ],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
+        : undefined;
     const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            ...certificateDnsPropsOf(domain),
-            tags: props.tags,
-          });
+      managed?.certificate ??
+      (domain?.cert ? { certificateArn: domain.cert } : undefined);
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const distribution = yield* Distribution("Distribution", {
       aliases: domain ? [domain.name, ...(domain.aliases ?? [])] : undefined,
@@ -392,9 +397,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               },
             ]
           : undefined,
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: (certificate as any).certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -422,7 +427,10 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       });
     }
 
-    const dns = websiteDnsOf(domain);
+    const dns =
+      domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
     const records =
       domain && dns
         ? yield* Effect.forEach(
@@ -432,14 +440,13 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               ...(domain.redirects ?? []),
             ],
             (name, index) =>
-              // Route 53 infers the most specific public zone containing
-              // `name` when no `hostedZoneId` is set; Cloudflare infers the
-              // zone.
+              // The DNS host infers the zone containing `name` unless one
+              // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
                 target: {
-                  hostedZoneId: distribution.hostedZoneId,
-                  dnsName: distribution.domainName,
+                  hostname: distribution.domainName,
+                  route53Alias: { hostedZoneId: distribution.hostedZoneId },
                 },
               }),
             { concurrency: "unbounded" },

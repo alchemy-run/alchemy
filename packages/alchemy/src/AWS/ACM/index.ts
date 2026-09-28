@@ -6,17 +6,14 @@ export {
   Certificate,
   CertificateCaaError,
   CertificateProvider,
+  validationRecordsOf,
+  type CertificateProps,
 } from "./Certificate.ts";
 export {
-  DnsValidatorError,
-  DnsValidatorNotRegistered,
-  dnsValidatorLayer,
-  resolveDnsValidator,
-  type DnsValidationRecord,
-  type DnsValidator,
-  type DnsValidatorDescriptor,
-  type DnsValidatorFactory,
-} from "./DnsValidator.ts";
+  CertificateValidation,
+  CertificateValidationProvider,
+  type CertificateValidationProps,
+} from "./CertificateValidation.ts";
 export * from "./DescribeCertificate.ts";
 export * from "./DescribeCertificateHttp.ts";
 export * from "./ExpiryEventSource.ts";

@@ -1,4 +1,9 @@
-export { Adapter } from "./Adapter.ts";
+export {
+  Adapter,
+  AdapterLive,
+  ROUTE53_DNS,
+  type AdapterOptions,
+} from "./Adapter.ts";
 export {
   ChangeResourceRecordSets,
   type ChangeResourceRecordSetsRequest,
@@ -30,6 +35,12 @@ export {
   QueryLoggingConfigProvider,
 } from "./QueryLoggingConfig.ts";
 export { Record, RecordProvider } from "./Record.ts";
+export {
+  RecordList,
+  RecordListProvider,
+  type RecordListEntry,
+  type RecordListProps,
+} from "./RecordList.ts";
 export { Records, RecordsProvider, type RecordsBinding } from "./Records.ts";
 export { TestDNSAnswer, type TestDNSAnswerRequest } from "./TestDNSAnswer.ts";
 export { TestDNSAnswerHttp } from "./TestDNSAnswerHttp.ts";

@@ -22,6 +22,11 @@ import { PrimaryIp, PrimaryIpProvider } from "./PrimaryIp.ts";
 import { ReadDnsHttp } from "./ReadDnsHttp.ts";
 import { ReadWriteDnsHttp } from "./ReadWriteDnsHttp.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
+import {
+  AdapterLive as DnsAdapterLive,
+  RecordList as DnsRecordList,
+  RecordListProvider as DnsRecordListProvider,
+} from "./DNS/index.ts";
 import { RecordSet, RecordSetProvider } from "./RecordSet.ts";
 import { Server, ServerProvider } from "./Server.ts";
 import { Service, ServiceProvider } from "./Service.ts";
@@ -84,6 +89,7 @@ export const providers = () =>
       Network,
       PlacementGroup,
       PrimaryIp,
+      DnsRecordList,
       RecordSet,
       Server,
       Service,
@@ -105,6 +111,7 @@ export const providers = () =>
         NetworkProvider(),
         PlacementGroupProvider(),
         PrimaryIpProvider(),
+        DnsRecordListProvider(),
         RecordSetProvider(),
         ServerProvider(),
         ServiceProvider(),
@@ -115,6 +122,8 @@ export const providers = () =>
         ZoneProvider(),
       ),
     ),
+    // `domain.dns: Hetzner.DNS.Adapter()` on any platform's custom domain.
+    Layer.provideMerge(DnsAdapterLive),
     Layer.provideMerge(ReadDnsHttp),
     Layer.provideMerge(WriteDnsHttp),
     Layer.provideMerge(ReadWriteDnsHttp),

@@ -17,11 +17,7 @@ import {
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
-import {
-  resolveDnsValidator,
-  type DnsValidationRecord,
-  type DnsValidatorDescriptor,
-} from "./DnsValidator.ts";
+import type { DnsRecord } from "../../DNS/Adapter.ts";
 
 export interface CertificateProps {
   /**
@@ -49,19 +45,22 @@ export interface CertificateProps {
    */
   hostedZoneId?: string;
   /**
-   * Publish the DNS validation records through a non-Route 53 DNS provider
-   * instead — e.g. `Cloudflare.DNS.AcmValidator()` for a domain whose DNS
-   * lives in a Cloudflare zone. The provider upserts the validation CNAMEs
-   * (DNS-only) and waits for issuance, exactly like the Route 53 path.
-   * Takes precedence over {@link hostedZoneId}.
+   * Who publishes the DNS validation records (with `validationMethod:
+   * "DNS"`).
    *
-   * The implementation is registered by the DNS provider's `providers()`
-   * layer (e.g. `Cloudflare.providers()`), which must be part of the stack.
-   * Validation records are left in place when the certificate is deleted —
-   * ACM reuses the same CNAME for every certificate on a domain, so
-   * removing it could break a sibling certificate's renewal.
+   * - `"route53"` — the provider upserts them into Route 53
+   *   ({@link hostedZoneId}, or the inferred public zone) and waits for
+   *   issuance.
+   * - `"external"` — the provider only waits until ACM has computed the
+   *   records and returns the certificate `PENDING_VALIDATION` with
+   *   `domainValidationOptions` filled in. Publish them yourself — e.g.
+   *   through a DNS adapter with {@link validationRecordsOf} — and wait for
+   *   issuance with `AWS.ACM.CertificateValidation`. This is what AWS
+   *   composites do for a `domain.dns` outside Route 53.
+   *
+   * @default "route53"
    */
-  dnsValidation?: DnsValidatorDescriptor;
+  dnsValidation?: "route53" | "external";
   /**
    * Requested key algorithm.
    */
@@ -227,10 +226,11 @@ export class CertificateCaaError extends Data.TaggedError(
  *
  * `Certificate` requests an ACM certificate in `us-east-1`, which is the
  * region required for CloudFront viewer certificates. With DNS validation,
- * the provider creates or updates the validation records — in Route 53
- * (`hostedZoneId`, or the inferred public zone), or through a pluggable
- * `dnsValidation` validator such as `Cloudflare.DNS.AcmValidator()` — and
- * waits for the certificate to be issued.
+ * the provider creates or updates the Route 53 validation records
+ * (`hostedZoneId`, or the inferred public zone) and waits for the
+ * certificate to be issued. With `dnsValidation: "external"` the records
+ * are published elsewhere — e.g. through a DNS adapter — and
+ * `AWS.ACM.CertificateValidation` waits for issuance.
  * ### Requesting Certificates
  * **Example:** DNS-Validated Certificate
  * ```typescript
@@ -260,14 +260,24 @@ export class CertificateCaaError extends Data.TaggedError(
  * });
  * ```
  *
- * **Example:** Certificate Validated Through Cloudflare DNS
+ * **Example:** Certificate Validated Through Another DNS Host
  * ```typescript
- * // For a domain whose DNS lives in Cloudflare: the validation CNAMEs are
- * // upserted (DNS-only) in the Cloudflare zone and the provider waits for
- * // issuance. Requires `Cloudflare.providers()` in the stack.
+ * // DNS lives in Cloudflare: publish ACM's validation CNAMEs through the
+ * // Cloudflare DNS adapter, then wait for issuance. AWS composites do this
+ * // for you when `domain.dns` is set.
  * const cert = yield* Certificate("WebsiteCertificate", {
  *   domainName: "www.example.com",
- *   dnsValidation: Cloudflare.DNS.AcmValidator(),
+ *   dnsValidation: "external",
+ * });
+ * const dns = yield* DNS.resolve(Cloudflare.DNS.Adapter());
+ * yield* dns.records("WebsiteCertificateValidation", {
+ *   records: cert.domainValidationOptions.pipe(
+ *     Output.map(validationRecordsOf),
+ *   ),
+ *   retain: true,
+ * });
+ * const issued = yield* CertificateValidation("WebsiteCertificateIssued", {
+ *   certificateArn: cert.certificateArn,
  * });
  * ```
  *
@@ -410,43 +420,8 @@ export const CertificateProvider = () =>
         );
       });
 
-      const waitForIssued = Effect.fn(function* (certificateArn: string) {
-        return yield* describeCertificate(certificateArn).pipe(
-          Effect.flatMap((detail) => {
-            if (!detail?.CertificateArn) {
-              return Effect.fail(new Error("CertificateNotFound"));
-            }
-            if (detail.Status === "ISSUED") {
-              return Effect.succeed(detail);
-            }
-            if (isTerminalFailure(detail.Status)) {
-              if (detail.FailureReason === "CAA_ERROR") {
-                return Effect.fail(
-                  new CertificateCaaError({
-                    certificateArn,
-                    domainName: detail.DomainName ?? "",
-                  }),
-                );
-              }
-              return Effect.fail(
-                new Error(
-                  `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
-                ),
-              );
-            }
-            return Effect.fail(new Error("CertificatePendingValidation"));
-          }),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "CertificatePendingValidation",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
-          }),
-        );
-      });
+      const waitForIssued = (certificateArn: string) =>
+        waitForCertificateIssued(certificateArn);
 
       const upsertValidationRecords = Effect.fn(function* (
         hostedZoneId: string,
@@ -690,8 +665,8 @@ export const CertificateProvider = () =>
           yield* session.note(certificateArn);
 
           // Sync DNS validation: ensure validation records are upserted and
-          // the cert reaches `ISSUED`. A `dnsValidation` validator (e.g.
-          // Cloudflare) publishes the records itself. Otherwise the zone is
+          // the cert reaches `ISSUED`. With `dnsValidation: "external"` the
+          // caller publishes them (a DNS adapter). Otherwise the zone is
           // the explicit `hostedZoneId` when given, or the most specific
           // public zone containing `domainName`; when neither yields a zone,
           // validation is left to the caller (external DNS) and the
@@ -702,12 +677,10 @@ export const CertificateProvider = () =>
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
             certificate.Status !== "ISSUED"
           ) {
-            if (news.dnsValidation !== undefined) {
-              const validator = yield* resolveDnsValidator(news.dnsValidation);
-              const withRecords =
-                yield* waitForValidationRecords(certificateArn);
-              yield* validator.upsert(validationRecordsOf(withRecords));
-              certificate = yield* waitForIssued(certificateArn);
+            if (news.dnsValidation === "external") {
+              // The caller publishes the records: surface them on the
+              // attributes and return pending.
+              certificate = yield* waitForValidationRecords(certificateArn);
             } else {
               const validationZoneId =
                 news.hostedZoneId ??
@@ -896,22 +869,36 @@ const toAttrs = (
 });
 
 /**
- * The distinct validation records of a certificate. A wildcard and its apex
- * (`*.example.com` + `example.com`) share one CNAME, so dedupe by type+name.
- * @internal exported for tests
+ * The DNS validation records of a certificate's `domainValidationOptions`,
+ * shaped for a DNS adapter's `records(...)` (or any `RecordList`). A
+ * wildcard and its apex (`*.example.com` + `example.com`) share one CNAME,
+ * so records are deduped by type + name.
+ *
+ * **Example:**
+ * ```typescript
+ * const cert = yield* AWS.ACM.Certificate("Cert", {
+ *   domainName: "app.example.com",
+ *   dnsValidation: "external",
+ * });
+ * yield* Cloudflare.DNS.RecordList("CertValidation", {
+ *   records: cert.domainValidationOptions.pipe(
+ *     Output.map(AWS.ACM.validationRecordsOf),
+ *   ),
+ * });
+ * ```
  */
 export const validationRecordsOf = (
-  certificate: acm.CertificateDetail,
-): DnsValidationRecord[] => [
+  domainValidationOptions: acm.DomainValidation[] | undefined,
+): DnsRecord[] => [
   ...new Map(
-    (certificate.DomainValidationOptions ?? []).flatMap((option) =>
+    (domainValidationOptions ?? []).flatMap((option) =>
       option.ResourceRecord
         ? [
             [
               `${option.ResourceRecord.Type}:${option.ResourceRecord.Name.toLowerCase()}`,
               {
                 name: option.ResourceRecord.Name,
-                type: option.ResourceRecord.Type,
+                type: option.ResourceRecord.Type as DnsRecord["type"],
                 value: option.ResourceRecord.Value,
               },
             ] as const,
@@ -920,6 +907,62 @@ export const validationRecordsOf = (
     ),
   ).values(),
 ];
+
+/**
+ * Describe a certificate in its own region; `undefined` when it is gone.
+ * @internal shared with `CertificateValidation`
+ */
+export const describeCertificateDetail = (certificateArn: string) =>
+  acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+    Effect.map((response) => response.Certificate),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+    withCertRegion(regionOfCertificateArn(certificateArn)),
+  );
+
+/**
+ * Poll a certificate until ACM issues it (bounded: 10s × 60). Fails with
+ * {@link CertificateCaaError} on `CAA_ERROR`, and with an error naming the
+ * status on any other terminal failure.
+ * @internal shared with `CertificateValidation`
+ */
+export const waitForCertificateIssued = (certificateArn: string) =>
+  describeCertificateDetail(certificateArn).pipe(
+    Effect.flatMap((detail) => {
+      if (!detail?.CertificateArn) {
+        return Effect.fail(new Error("CertificateNotFound"));
+      }
+      if (detail.Status === "ISSUED") {
+        return Effect.succeed(detail);
+      }
+      if (isTerminalFailure(detail.Status)) {
+        if (detail.FailureReason === "CAA_ERROR") {
+          return Effect.fail(
+            new CertificateCaaError({
+              certificateArn,
+              domainName: detail.DomainName ?? "",
+            }),
+          );
+        }
+        return Effect.fail(
+          new Error(
+            `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
+          ),
+        );
+      }
+      return Effect.fail(new Error("CertificatePendingValidation"));
+    }),
+    Effect.retry({
+      while: (error) =>
+        error instanceof Error &&
+        error.message === "CertificatePendingValidation",
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(60),
+      ]),
+    }),
+  );
 
 const isTerminalFailure = (status: acm.CertificateStatus | undefined) =>
   status === "FAILED" || status === "VALIDATION_TIMED_OUT";

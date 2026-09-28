@@ -23,13 +23,16 @@ import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toMillis, toSeconds, toWireSeconds } from "../../Util/Duration.ts";
-import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
-import type { DnsAdapter } from "../DnsAdapter.ts";
-import { Adapter as Route53Adapter } from "../Route53/Adapter.ts";
+import type { DnsConfig } from "../../DNS/Adapter.ts";
+import {
+  domainCertificate,
+  isRoute53Dns,
+  resolveDomainDns,
+} from "../CustomDomain.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 import {
   SecurityGroup,
@@ -183,13 +186,14 @@ export interface ServiceDomainConfig {
    */
   cert?: string;
   /**
-   * DNS provider for the certificate validation and alias records.
-   * Omitted: Route 53 (a matching public hosted zone must exist; alias
-   * `A` + `AAAA` records). Pass `Cloudflare.DNS.Adapter()` for a domain
-   * whose DNS lives in Cloudflare — each name gets a `CNAME` to the load
-   * balancer and the certificate is validated through the zone.
+   * DNS host for the certificate validation and alias records (see
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
+   * 53 (a matching public hosted zone must exist; alias `A` + `AAAA`
+   * records). Pass `Cloudflare.DNS.Adapter()` or `Hetzner.DNS.Adapter()`
+   * for a domain whose DNS lives there — each name gets a `CNAME` to the
+   * load balancer and the certificate is validated through that host.
    */
-  dns?: DnsAdapter;
+  dns?: DnsConfig;
 }
 
 /**
@@ -1830,12 +1834,10 @@ const composeManagedIngress = (
     const domainNames =
       domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
     const domainZones = new Map<string, string>();
-    // Route 53 (the default, or any adapter without its own certificate
-    // validator) needs a matching hosted zone up front; other DNS adapters
-    // (e.g. Cloudflare) infer their zone at reconcile time.
-    const usesRoute53 =
-      domain !== undefined && domain.dns?.validation === undefined;
-    const pinnedZoneId = domain?.dns?.hostedZoneId;
+    // Route 53 (the default) needs a matching hosted zone up front; other
+    // DNS hosts (e.g. Cloudflare) infer their zone at reconcile time.
+    const usesRoute53 = domain !== undefined && isRoute53Dns(domain.dns);
+    const pinnedZoneId = domain?.dns?.zone as string | undefined;
     if (domain !== undefined) {
       for (const name of usesRoute53 ? domainNames : []) {
         const zoneId = pinnedZoneId ?? (yield* findPublicHostedZoneId(name));
@@ -1856,15 +1858,20 @@ const composeManagedIngress = (
         // DNS-validated certificate in the service's own region (an ALB/NLB
         // listener requires an in-region certificate).
         const { region } = yield* AWSEnvironment.current;
-        const certificate = yield* Certificate("Certificate", {
-          domainName: domain.name,
-          subjectAlternativeNames: domain.aliases,
-          ...(usesRoute53
-            ? { hostedZoneId: domainZones.get(domain.name)! }
-            : { dnsValidation: domain.dns!.validation }),
-          region,
-          tags: props.tags,
-        });
+        const certificate = yield* domainCertificate(
+          "Certificate",
+          {
+            domainName: domain.name,
+            subjectAlternativeNames: domain.aliases,
+            ...(usesRoute53
+              ? { hostedZoneId: domainZones.get(domain.name)! }
+              : {}),
+            region,
+            tags: props.tags,
+          },
+          domain.dns,
+        );
+        // Resolves once the certificate is issued.
         certificateArn = certificate.certificateArn as unknown as string;
       }
     }
@@ -2237,18 +2244,21 @@ const composeManagedIngress = (
     if (domain !== undefined && alb !== undefined) {
       for (const name of domainNames) {
         const sanitizedName = name.replaceAll(/[^a-zA-Z0-9-]/g, "-");
-        const dns = usesRoute53
-          ? Route53Adapter({ hostedZoneId: domainZones.get(name)! })
-          : domain.dns!;
+        const dns = yield* resolveDomainDns(
+          usesRoute53 ? undefined : domain.dns,
+          domainZones.get(name),
+        );
         // Route 53: alias `A` + `AAAA` (`Domain-{name}-A` / `-AAAA`);
-        // Cloudflare: a single CNAME to the load balancer.
+        // other hosts: a single CNAME to the load balancer.
         yield* dns.alias(`Domain-${sanitizedName}`, {
           name,
           ipv6: true,
           target: {
-            hostedZoneId: alb.canonicalHostedZoneId,
-            dnsName: alb.dnsName,
-            evaluateTargetHealth: false,
+            hostname: alb.dnsName,
+            route53Alias: {
+              hostedZoneId: alb.canonicalHostedZoneId,
+              evaluateTargetHealth: false,
+            },
           },
         });
       }

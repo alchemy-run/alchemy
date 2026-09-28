@@ -1,0 +1,273 @@
+/**
+ * Pluggable DNS for custom domains.
+ *
+ * A custom domain has two independent halves: the platform that SERVES the
+ * hostname (CloudFront, an ALB, API Gateway, a Worker, a Fly App, …) and the
+ * DNS host that PUBLISHES its records (Route 53, Cloudflare, Hetzner DNS, …).
+ * `domain.dns` names the DNS host.
+ *
+ * The prop value is a {@link DnsConfig}: plain, serializable data
+ * (`{ type: "Cloudflare.DNS", zone?, options? }`) that is safe in any
+ * Resource or Platform prop, in state, and across the `alchemy dev` sidecar.
+ * Each DNS host contributes:
+ *
+ * - a data constructor (`Cloudflare.DNS.Adapter()`,
+ *   `AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`), and
+ * - a {@link DnsAdapter} implementation registered with
+ *   {@link dnsAdapterLayer} from its own `providers()` layer.
+ *
+ * A composite (or a Platform's `transformProps` hook) resolves the adapter
+ * with {@link resolve} while the stack program is being built, and the
+ * adapter DECLARES ordinary record resources of its own cloud. No
+ * reconciler ever calls an adapter, so destroy and orphan cleanup work from
+ * state alone, and the platform packages never import each other.
+ */
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type { Input } from "../Input.ts";
+import * as Output from "../Output.ts";
+import type { Resource, ResourceLike } from "../Resource.ts";
+
+/**
+ * Which DNS host publishes a custom domain's records. Returned by a DNS
+ * host's adapter constructor, e.g. `Cloudflare.DNS.Adapter()`.
+ */
+export interface DnsConfig<Type extends string = string> {
+  /**
+   * The adapter implementation to resolve (e.g. `"Cloudflare.DNS"`,
+   * `"AWS.Route53"`, `"Hetzner.DNS"`). Registered by the DNS host's
+   * `providers()` layer.
+   */
+  readonly type: Type;
+  /**
+   * The zone that owns the records, interpreted by the DNS host: a
+   * Cloudflare zone id or name, a Route 53 hosted zone id, a Hetzner zone
+   * id or name. Inferred from each hostname when omitted.
+   */
+  readonly zone?: Input<string> | undefined;
+  /**
+   * Host-specific options, e.g. `{ proxied: true }` for Cloudflare.
+   */
+  readonly options?: { readonly [key: string]: unknown } | undefined;
+}
+
+/** Record types a DNS adapter publishes. */
+export type DnsRecordType = "A" | "AAAA" | "CNAME" | "TXT";
+
+/**
+ * One record to publish — typically computed from another resource's
+ * outputs (ACM validation CNAMEs, a platform's ownership TXT, …).
+ */
+export interface DnsRecord {
+  /** Fully qualified record name (a trailing dot is ignored). */
+  name: string;
+  /** Record type. */
+  type: DnsRecordType;
+  /** Record value (a trailing dot on hostnames is ignored). */
+  value: string;
+  /**
+   * TTL in seconds. Hosts with an "automatic" setting use it when omitted.
+   */
+  ttl?: number;
+}
+
+/**
+ * A hostname target: a CNAME to `hostname`, or — on Route 53 — an alias
+ * record when `route53Alias` is set.
+ */
+export interface DnsHostnameTarget {
+  /** Hostname to point at, e.g. `d123.cloudfront.net`. */
+  hostname: Input<string>;
+  /**
+   * Route 53 alias details of an AWS target (CloudFront, ELB, API
+   * Gateway). Used by the Route 53 adapter to write an `A` (+ `AAAA`)
+   * alias record; other hosts write a `CNAME` to {@link hostname}.
+   */
+  route53Alias?: {
+    /** Route 53 hosted zone id of the AWS target. */
+    hostedZoneId: Input<string>;
+    /** Route 53 alias `EvaluateTargetHealth`. */
+    evaluateTargetHealth?: boolean;
+  };
+}
+
+/** An address target: `A` / `AAAA` records. */
+export interface DnsAddressTarget {
+  /** IPv4 addresses (`A` records). */
+  ipv4?: Input<string[]>;
+  /** IPv6 addresses (`AAAA` records). */
+  ipv6?: Input<string[]>;
+}
+
+/**
+ * Where an alias hostname points. The target's KIND (hostname vs.
+ * addresses) must be known while the program is built; its values may be
+ * Outputs.
+ */
+export type DnsAliasTarget = DnsHostnameTarget | DnsAddressTarget;
+
+/** Whether a target is a hostname (CNAME / Route 53 alias) target. */
+export const isHostnameTarget = (
+  target: DnsAliasTarget,
+): target is DnsHostnameTarget =>
+  "hostname" in target && target.hostname !== undefined;
+
+/** Binding contract of an {@link DnsAdapter.aliasSet} record set. */
+export type DnsAliasSetBinding = {
+  /** Additional hostnames pointed at the set's target. */
+  names?: string[];
+};
+
+/**
+ * A record set other composites bind hostnames onto via `{ names }` (see
+ * `AWS.Website.Router`'s `bindTargets.records`).
+ */
+export type DnsAliasSet = ResourceLike<
+  string,
+  any,
+  any,
+  DnsAliasSetBinding,
+  any
+> &
+  Pick<Resource<string, any, any, DnsAliasSetBinding, any>, "bind">;
+
+/**
+ * A DNS host cannot publish the requested records, e.g. a `CNAME` at a zone
+ * apex on a host without CNAME flattening. Raised (as a defect, like any
+ * other invalid configuration) while the stack program is being built,
+ * before anything is deployed.
+ */
+export class DnsAdapterError extends Data.TaggedError("DnsAdapterError")<{
+  readonly message: string;
+}> {}
+
+/**
+ * `domain.dns` names a DNS host whose adapter is not registered: the host's
+ * `providers()` layer is missing from the stack. Raised as a defect while
+ * the stack program is being built, like a missing resource provider.
+ */
+export class DnsAdapterNotRegistered extends Data.TaggedError(
+  "DnsAdapterNotRegistered",
+)<{
+  readonly type: string;
+}> {
+  override get message() {
+    const provider = this.type.split(".")[0];
+    return (
+      `No DNS adapter is registered for "${this.type}". ` +
+      `Add ${provider}.providers() to the stack's providers layer.`
+    );
+  }
+}
+
+/**
+ * A DNS host's implementation, bound to one {@link DnsConfig}. Every method
+ * only DECLARES resources of the host's own cloud — it performs no I/O — so
+ * it behaves the same under `alchemy deploy`, `alchemy dev`, and tests.
+ */
+export interface DnsAdapter {
+  /** The {@link DnsConfig.type} this adapter implements. */
+  readonly type: string;
+  /**
+   * Point one hostname at `target`. `ipv6` also publishes IPv6 for a
+   * hostname target where the host needs a separate record (Route 53
+   * `AAAA` alias); a CNAME already covers both.
+   */
+  alias(
+    id: string,
+    args: { name: string; target: DnsAliasTarget; ipv6?: boolean },
+  ): Effect.Effect<unknown>;
+  /**
+   * A (possibly empty) set of hostnames pointed at a hostname target that
+   * other composites extend by binding `{ names }` onto it.
+   */
+  aliasSet(
+    id: string,
+    args: { names?: string[]; target: DnsHostnameTarget },
+  ): Effect.Effect<DnsAliasSet>;
+  /**
+   * Publish explicit records whose values come from another resource
+   * (certificate validation, ownership verification). Records are always
+   * DNS-only (never proxied). `retain` keeps them when the set is
+   * destroyed — used for ACM validation CNAMEs, which ACM reuses across
+   * every certificate for a name.
+   */
+  records(
+    id: string,
+    args: { records: Input<DnsRecord[]>; retain?: boolean },
+  ): Effect.Effect<unknown>;
+}
+
+/** Builds an adapter bound to one {@link DnsConfig}. */
+export type DnsAdapterFactory = (config: DnsConfig) => DnsAdapter;
+
+const adapterService = (type: string) =>
+  Context.Service<DnsAdapterFactory>(`alchemy/DNS/Adapter/${type}`);
+
+/**
+ * Register a DNS adapter implementation. Include the returned layer in the
+ * DNS host's `providers()` layer; composites then resolve it by `type`.
+ *
+ * The adapter's methods declare resources of the host's own cloud, whose
+ * providers that same `providers()` layer registers — so a resolved adapter
+ * always has its providers available.
+ */
+export const dnsAdapterLayer = (
+  type: string,
+  make: DnsAdapterFactory,
+): Layer.Layer<DnsAdapterFactory> => Layer.succeed(adapterService(type), make);
+
+/**
+ * Resolve the adapter for a {@link DnsConfig}. Dies with
+ * {@link DnsAdapterNotRegistered} when the DNS host's `providers()` layer
+ * is not part of the stack.
+ */
+export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
+  Effect.serviceOption(adapterService(config.type)).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () =>
+          Effect.die(new DnsAdapterNotRegistered({ type: config.type })),
+        onSome: (make) => Effect.succeed(make(config)),
+      }),
+    ),
+  );
+
+/** Normalize a DNS name: lowercase, no trailing dot. */
+export const normalizeDnsName = (name: string) =>
+  name.replace(/\.$/, "").toLowerCase();
+
+/**
+ * Erase the DNS host's provider requirement from an adapter method's
+ * Effect. Sound because a resolved adapter implies its `providers()` layer
+ * — and therefore its resource providers — is part of the stack.
+ * @internal for adapter implementations
+ */
+export const declare = <T extends Effect.Effect<any, any, any>>(
+  effect: T,
+): Effect.Effect<Effect.Success<T>, Effect.Error<T>> =>
+  effect as unknown as Effect.Effect<Effect.Success<T>, Effect.Error<T>>;
+
+/** `A` / `AAAA` records for an address target (values may be Outputs). */
+export const addressRecords = (
+  name: string,
+  ipv4: Input<string[]> | undefined,
+  ipv6: Input<string[]> | undefined,
+): Input<DnsRecord[]> => {
+  const toRecords = (v4: string[], v6: string[]): DnsRecord[] => [
+    ...v4.map((value) => ({ name, type: "A" as const, value })),
+    ...v6.map((value) => ({ name, type: "AAAA" as const, value })),
+  ];
+  if (!Output.isOutput(ipv4) && !Output.isOutput(ipv6)) {
+    return toRecords((ipv4 ?? []) as string[], (ipv6 ?? []) as string[]);
+  }
+  const lift = (value: Input<string[]> | undefined): any =>
+    Output.isOutput(value) ? value : Output.literal((value ?? []) as string[]);
+  return Output.map(
+    Output.all(lift(ipv4) as any, lift(ipv6) as any),
+    ([v4, v6]: any) => toRecords(v4 as string[], v6 as string[]),
+  ) as unknown as Input<DnsRecord[]>;
+};

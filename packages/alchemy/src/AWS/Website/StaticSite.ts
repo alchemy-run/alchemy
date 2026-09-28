@@ -11,7 +11,7 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { isResource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { Certificate } from "../ACM/Certificate.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -30,9 +30,7 @@ import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
-  certificateDnsPropsOf,
   normalizeWebsiteDomain,
-  websiteDnsOf,
   type StaticSiteBuildProps,
   type WebsiteAssetsConfig,
   type WebsiteDomainProps,
@@ -581,20 +579,24 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       );
     }
 
-    const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            ...certificateDnsPropsOf(domain),
-            tags: props.tags,
-          });
+    const managed =
+      domain && !domain.cert
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [
+                ...(domain.aliases ?? []),
+                ...(domain.redirects ?? []),
+              ],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
+        : undefined;
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const kvStore = yield* KeyValueStore("KvStore", {});
     kvStoreArn = kvStore.keyValueStoreArn;
@@ -740,9 +742,9 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
         functionAssociations,
       },
       customErrorResponses,
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: certificate.certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -753,18 +755,21 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    const dns = websiteDnsOf(domain);
+    const dns =
+      domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
     if (domain && dns) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
-          // Route 53 infers the most specific public zone containing `name`
-          // when no `hostedZoneId` is set; Cloudflare infers the zone.
+          // The DNS host infers the zone containing `name` unless one is
+          // pinned.
           dns.alias(`AliasRecord${index + 1}`, {
             name,
             target: {
-              hostedZoneId: dist.hostedZoneId,
-              dnsName: dist.domainName,
+              hostname: dist.domainName,
+              route53Alias: { hostedZoneId: dist.hostedZoneId },
             },
           }),
         { concurrency: "unbounded" },

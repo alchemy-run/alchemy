@@ -6,7 +6,6 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { Certificate } from "../ACM/Certificate.ts";
 import {
   Distribution,
   type DistributionBehavior,
@@ -20,13 +19,9 @@ import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Bucket } from "../S3/Bucket.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
-import {
-  certificateDnsPropsOf,
-  normalizeWebsiteDomain,
-  websiteDnsOf,
-  type RouterProps,
-} from "./shared.ts";
+import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
 
 /**
  * Shared CloudFront front door with KV-based dynamic routing.
@@ -112,21 +107,28 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // The managed certificate (when the Router owns one) doubles as a bind
     // target for attached-site hostnames — keep the resource handle distinct
     // from the viewer-certificate value, which may be a user-provided ARN.
-    const managedCertificate =
+    const managed =
       domain && !domain.cert
-        ? yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            ...certificateDnsPropsOf(domain),
-            tags: props.tags,
-          })
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [
+                ...(domain.aliases ?? []),
+                ...(domain.redirects ?? []),
+              ],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
         : undefined;
+    const managedCertificate = managed?.certificate;
     const certificate =
       managedCertificate ??
       (domain?.cert ? { certificateArn: domain.cert } : undefined);
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const stack = yield* Stack;
     const stage = yield* Stage;
@@ -305,9 +307,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
         originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
         functionAssociations,
       },
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: (certificate as any).certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -337,10 +339,13 @@ export const Router = Effect.fn("AWS.Website.Router")(
       });
     });
 
-    const dns = websiteDnsOf(domain);
+    const dns =
+      domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
     const aliasTarget = {
-      hostedZoneId: distribution.hostedZoneId,
-      dnsName: distribution.domainName,
+      hostname: distribution.domainName,
+      route53Alias: { hostedZoneId: distribution.hostedZoneId },
     };
     const records =
       domain && dns
@@ -351,9 +356,8 @@ export const Router = Effect.fn("AWS.Website.Router")(
               ...(domain.redirects ?? []),
             ],
             (name, index) =>
-              // Route 53 infers the most specific public zone containing
-              // `name` when no `hostedZoneId` is set; Cloudflare infers the
-              // zone.
+              // The DNS host infers the zone containing `name` unless one
+              // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
                 target: aliasTarget,

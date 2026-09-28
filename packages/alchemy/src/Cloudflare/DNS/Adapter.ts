@@ -1,86 +1,134 @@
-import type { DnsAdapter } from "../../AWS/DnsAdapter.ts";
+import {
+  addressRecords,
+  declare,
+  dnsAdapterLayer,
+  isHostnameTarget,
+  type DnsAdapter,
+  type DnsConfig,
+  type DnsRecord,
+} from "../../DNS/Adapter.ts";
 import type { Input } from "../../Input.ts";
-import type { Reference as ZoneReference } from "../Zone/lookup.ts";
-import { AcmValidator } from "./AcmDnsValidator.ts";
+import * as Output from "../../Output.ts";
+import * as RemovalPolicy from "../../RemovalPolicy.ts";
+import { RecordList } from "./RecordList.ts";
 import { Records } from "./Records.ts";
 
+/** The {@link DnsConfig.type} of the Cloudflare DNS adapter. */
+export const CLOUDFLARE_DNS = "Cloudflare.DNS";
+
+export interface AdapterOptions {
+  /**
+   * Zone that owns the records: a zone id, a zone name, or a `Zone`
+   * resource. Inferred from each hostname when omitted.
+   */
+  readonly zone?: Input<string> | { readonly zoneId: Input<string> };
+  /**
+   * Send alias records through Cloudflare's proxy (orange cloud).
+   * Validation and verification records are always DNS-only.
+   * @default false
+   */
+  readonly proxied?: boolean;
+}
+
 /**
- * Cloudflare DNS for AWS custom domains — point a hostname whose DNS lives
- * in a Cloudflare zone (e.g. a domain registered with Cloudflare Registrar)
- * at an AWS CloudFront distribution or load balancer.
+ * Publish a custom domain's DNS records in a Cloudflare zone — e.g. a
+ * domain registered with Cloudflare Registrar that is served by AWS, Fly,
+ * Railway, Neon, Prisma, or Hetzner.
  *
- * Pass it as `domain.dns` on `AWS.Website.*` sites, `AWS.Website.Router`,
- * or an `AWS.ECS.Service` load balancer domain. The composite then:
+ * Pass it as `domain.dns`. The serving platform then publishes its
+ * certificate-validation / verification records (always DNS-only) and
+ * points each hostname at itself with a `CNAME` (flattened at the zone
+ * apex) or `A`/`AAAA` records. Requires `Cloudflare.providers()` in the
+ * stack. See [DNS Adapters](/infrastructure-as-code/dns-adapters).
  *
- * - validates its ACM certificate through the zone (DNS-only CNAMEs, see
- *   {@link AcmValidator}), and
- * - points each hostname at the AWS target with a `CNAME` record
- *   (Cloudflare flattens a CNAME at the zone apex).
- *
- * The stack must include both `AWS.providers()` and `Cloudflare.providers()`.
- *
- * **Example:**
+ * **Example:** AWS site on a Cloudflare domain
  * ```typescript
  * yield* AWS.Website.StaticSite("Site", {
  *   path: "./dist",
- *   domain: {
- *     name: "www.example.com",
- *     dns: Cloudflare.DNS.Adapter(),
- *   },
+ *   domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter() },
  * });
  * ```
  *
- * **Example:**
+ * **Example:** Pinned zone, proxied aliases
  * ```typescript
- * // `proxied: true` puts Cloudflare's CDN in front of CloudFront — set the
- * // zone's SSL/TLS mode to Full (strict).
- * yield* AWS.Website.StaticSite("Site", {
- *   path: "./dist",
- *   domain: {
- *     name: "example.com",
- *     dns: Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true }),
- *   },
- * });
+ * // Proxying CloudFront through Cloudflare: set the zone's SSL/TLS mode
+ * // to Full (strict).
+ * dns: Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true })
  * ```
  */
 export const Adapter = (
-  options: {
-    /**
-     * Zone id, zone name, or `Zone` resource. Inferred from each hostname
-     * when omitted.
-     */
-    readonly zone?: Input<ZoneReference>;
-    /**
-     * Send the alias records through Cloudflare's proxy (orange cloud).
-     * Validation records are always DNS-only.
-     * @default false
-     */
-    readonly proxied?: boolean;
-  } = {},
-): DnsAdapter => {
-  const common = {
-    type: "CNAME" as const,
-    ...(options.zone === undefined ? {} : { zone: options.zone }),
-    ...(options.proxied === undefined ? {} : { proxied: options.proxied }),
-  };
+  options: AdapterOptions = {},
+): DnsConfig<typeof CLOUDFLARE_DNS> => {
+  const zone =
+    options.zone === undefined ||
+    typeof options.zone === "string" ||
+    Output.isOutput(options.zone)
+      ? (options.zone as Input<string> | undefined)
+      : (options.zone as { zoneId: Input<string> }).zoneId;
   return {
-    validation: AcmValidator({ zone: options.zone }),
-    // Every alias is a one-name record set: the zone is inferred at
-    // reconcile time (no plan-time lookup) and the record is overwritten
-    // like a Route 53 UPSERT. The `-CNAME` suffix keeps the logical id
-    // distinct from the Route 53 records it replaces when a domain moves
-    // between DNS providers.
-    alias: (id, { name, target }) =>
-      Records(`${id}-CNAME`, {
-        ...common,
-        content: target.dnsName,
-        names: [name],
-      }),
-    aliasSet: (id, { target, names }) =>
-      Records(`${id}-CNAME`, {
-        ...common,
-        content: target.dnsName,
-        ...(names === undefined ? {} : { names }),
-      }),
+    type: CLOUDFLARE_DNS,
+    ...(zone === undefined ? {} : { zone }),
+    ...(options.proxied === undefined
+      ? {}
+      : { options: { proxied: options.proxied } }),
   };
 };
+
+/**
+ * The Cloudflare implementation of {@link DnsAdapter}, registered by
+ * `Cloudflare.providers()`.
+ *
+ * - `alias` / `aliasSet` — a `Cloudflare.DNS.Records` CNAME set for a
+ *   hostname target (logical id `{id}-CNAME`), or a
+ *   `Cloudflare.DNS.RecordList` of `A`/`AAAA` records for an address target
+ *   (`{id}-Addresses`).
+ * - `records` — a `Cloudflare.DNS.RecordList`.
+ */
+export const AdapterLive = dnsAdapterLayer(
+  CLOUDFLARE_DNS,
+  (config): DnsAdapter => {
+    const zone = config.zone as string | undefined;
+    const proxied = config.options?.proxied === true;
+    const common = {
+      ...(zone === undefined ? {} : { zone }),
+      ...(proxied ? { proxied } : {}),
+    };
+    return {
+      type: CLOUDFLARE_DNS,
+      alias: (id, { name, target }) =>
+        declare(
+          isHostnameTarget(target)
+            ? Records(`${id}-CNAME`, {
+                ...common,
+                type: "CNAME",
+                content: target.hostname as string,
+                names: [name],
+              })
+            : RecordList(`${id}-Addresses`, {
+                ...(zone === undefined ? {} : { zone }),
+                records: addressRecords(
+                  name,
+                  target.ipv4,
+                  target.ipv6,
+                ) as DnsRecord[],
+              }),
+        ),
+      aliasSet: (id, { names, target }) =>
+        declare(
+          Records(`${id}-CNAME`, {
+            ...common,
+            type: "CNAME",
+            content: target.hostname as string,
+            ...(names === undefined ? {} : { names }),
+          }),
+        ),
+      records: (id, { records, retain }) =>
+        declare(
+          RecordList(id, {
+            ...(zone === undefined ? {} : { zone }),
+            records: records as DnsRecord[],
+          }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
+        ),
+    };
+  },
+);
