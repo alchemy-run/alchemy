@@ -259,10 +259,10 @@ test(
     const { urlA, urlB } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    yield* client.post(`${urlA}/`);
-    yield* client.post(`${urlA}/`);
+    yield* client.post(`${urlA}/foo`);
+    yield* client.post(`${urlA}/foo`);
 
-    const res = yield* client.get(`${urlB}/`);
+    const res = yield* client.get(`${urlB}/foo`);
     expect((yield* res.json) as { value: number }).toEqual({ value: 2 });
   }),
 );

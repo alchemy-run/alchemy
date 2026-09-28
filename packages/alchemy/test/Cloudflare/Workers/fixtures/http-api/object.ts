@@ -9,7 +9,7 @@ import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
-import { createTask, decodeTask, encodeTask, getTask, Task } from "./api.ts";
+import { createTask, decodeTask, encodeTask, getTask, Task, TaskNotFound } from "./api.ts";
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   platform: "web",
@@ -45,9 +45,13 @@ export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()
         (handlers) =>
           handlers
             .handle("getTask", ({ params }) =>
-              state.storage
-                .get<Task>(params.id)
-                .pipe(Effect.flatMap(decodeTask), Effect.orDie),
+              state.storage.get<Task>(params.id).pipe(
+                Effect.flatMap((task) =>
+                  task
+                    ? decodeTask(task).pipe(Effect.orDie)
+                    : Effect.fail(new TaskNotFound({ id: params.id })),
+                ),
+              ),
             )
             .handle("createTask", ({ payload }) => {
               const id = crypto.randomUUID();

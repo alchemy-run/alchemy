@@ -132,6 +132,7 @@ Effect.gen(function* () {
 
   return {
     fetch: Effect.gen(function* () {
+      const id = 1;
       const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
       return yield* HttpServerResponse.json({ users });
     }),

@@ -410,19 +410,29 @@ type (`Api`, not `typeof Api`):
 
 ```typescript
 // alchemy.run.ts
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 import type { Api } from "./src/target.ts";
 
-const target = yield* Cloudflare.Worker("Target", {
-  main: "./src/target.ts",
-});
+export default Alchemy.Stack(
+  "App",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.Worker("Target", {
+      main: "./src/target.ts",
+    });
 
-const caller = yield* Cloudflare.Worker("Caller", {
-  main: "./src/caller.ts",
-  env: {
-    API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
-  },
-});
+    const caller = yield* Cloudflare.Worker("Caller", {
+      main: "./src/caller.ts",
+      env: {
+        API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
+      },
+    });
+
+    return { url: caller.url };
+  }),
+);
 ```
 
 `InferEnv` maps the binding to Cloudflare's native `Service<Api>` type,
