@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import {
   addressRecords,
   DnsAdapterError,
-  dnsAdapterLayer,
+  adapterLayer,
   isHostnameTarget,
   normalizeDnsName,
   type DnsAdapter,
@@ -68,64 +68,57 @@ export const Adapter = (
   };
 };
 
+/** A Hetzner zone can't hold a CNAME at its apex. */
+const rejectApexCname = (zone: string | undefined, name: string) =>
+  zone !== undefined && normalizeDnsName(name) === normalizeDnsName(zone)
+    ? Effect.die(
+        new DnsAdapterError({
+          message:
+            `Hetzner DNS cannot publish a CNAME at the zone apex "${name}". ` +
+            "Point the apex at an address target, or use a DNS host that flattens CNAMEs (Cloudflare).",
+        }),
+      )
+    : Effect.void;
+
 /**
- * The Hetzner implementation of {@link DnsAdapter}, registered by
- * `Hetzner.providers()`. Every method declares a `Hetzner.DNS.RecordList`:
- * `alias` → `{id}-CNAME` or `{id}-Addresses`, `aliasSet` → `{id}-CNAME`,
- * `records` → `id`.
+ * The Hetzner DNS adapter, registered by `Hetzner.providers()`. Every
+ * method declares a `Hetzner.DNS.RecordList`: `alias` → `{id}-CNAME` or
+ * `{id}-Addresses`, `aliasSet` → `{id}-CNAME`, `records` → `id`.
  */
-export const AdapterLive = dnsAdapterLayer(
-  HETZNER_DNS,
-  (config): DnsAdapter<Providers> => {
-    const zone = config.zone as string | undefined;
-    const pinned = zone === undefined ? {} : { zone };
-    const rejectApexCname = (name: string) =>
-      typeof zone === "string" &&
-      normalizeDnsName(name) === normalizeDnsName(zone)
-        ? Effect.die(
-            new DnsAdapterError({
-              message:
-                `Hetzner DNS cannot publish a CNAME at the zone apex "${name}". ` +
-                "Point the apex at an address target, or use a DNS host that flattens CNAMEs (Cloudflare).",
-            }),
-          )
-        : Effect.void;
-    return {
-      type: HETZNER_DNS,
-      alias: (id, { name, target }) =>
-        isHostnameTarget(target)
-          ? rejectApexCname(name).pipe(
-              Effect.andThen(
-                RecordList(`${id}-CNAME`, {
-                  ...pinned,
-                  names: [name],
-                  target: target.hostname as string,
-                }),
-              ),
-            )
-          : RecordList(`${id}-Addresses`, {
-              ...pinned,
-              records: addressRecords(
-                name,
-                target.ipv4,
-                target.ipv6,
-              ) as DnsRecord[],
-            }),
-      aliasSet: (id, { names, target }) =>
-        Effect.forEach(names ?? [], rejectApexCname).pipe(
+export const adapter = {
+  alias: (id, { zone, name, target }) =>
+    isHostnameTarget(target)
+      ? rejectApexCname(zone, name).pipe(
           Effect.andThen(
             RecordList(`${id}-CNAME`, {
-              ...pinned,
-              ...(names === undefined ? {} : { names }),
+              zone,
+              names: [name],
               target: target.hostname as string,
             }),
           ),
-        ),
-      records: (id, { records, retain }) =>
-        RecordList(id, {
-          ...pinned,
-          records: records as DnsRecord[],
-        }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-    };
-  },
-);
+        )
+      : RecordList(`${id}-Addresses`, {
+          zone,
+          records: addressRecords(
+            name,
+            target.ipv4,
+            target.ipv6,
+          ) as DnsRecord[],
+        }),
+  aliasSet: (id, { zone, names, target }) =>
+    Effect.forEach(names ?? [], (name) => rejectApexCname(zone, name)).pipe(
+      Effect.andThen(
+        RecordList(`${id}-CNAME`, {
+          zone,
+          names,
+          target: target.hostname as string,
+        }),
+      ),
+    ),
+  records: (id, { zone, records, retain }) =>
+    RecordList(id, { zone, records: records as DnsRecord[] }).pipe(
+      retain === true ? RemovalPolicy.retain() : (effect) => effect,
+    ),
+} satisfies DnsAdapter<Providers>;
+
+export const AdapterLive = adapterLayer(HETZNER_DNS, adapter);

@@ -24,7 +24,7 @@ import {
 } from "./ACM/Certificate.ts";
 import { CertificateValidation } from "./ACM/CertificateValidation.ts";
 import type { Providers } from "./Providers.ts";
-import { makeRoute53Adapter, ROUTE53_DNS } from "./Route53/Adapter.ts";
+import { adapter as route53Adapter, ROUTE53_DNS } from "./Route53/Adapter.ts";
 
 /** Whether `dns` is Route 53 (explicit, or the default when omitted). */
 export const isRoute53Dns = (dns: DNS.DnsConfig | undefined) =>
@@ -42,7 +42,8 @@ export const resolveDomainDns = (
 ): Effect.Effect<DNS.DnsAdapter<Providers>> =>
   isRoute53Dns(dns)
     ? Effect.succeed(
-        makeRoute53Adapter(
+        DNS.bind(
+          route53Adapter,
           dns ?? {
             type: ROUTE53_DNS,
             ...(hostedZoneId === undefined ? {} : { zone: hostedZoneId }),

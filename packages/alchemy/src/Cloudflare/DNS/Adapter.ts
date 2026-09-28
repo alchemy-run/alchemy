@@ -1,6 +1,6 @@
 import {
   addressRecords,
-  dnsAdapterLayer,
+  adapterLayer,
   isHostnameTarget,
   type DnsAdapter,
   type DnsConfig,
@@ -75,8 +75,7 @@ export const Adapter = (
 };
 
 /**
- * The Cloudflare implementation of {@link DnsAdapter}, registered by
- * `Cloudflare.providers()`.
+ * The Cloudflare DNS adapter, registered by `Cloudflare.providers()`:
  *
  * - `alias` / `aliasSet` — a `Cloudflare.DNS.Records` CNAME set for a
  *   hostname target (logical id `{id}-CNAME`), or a
@@ -84,45 +83,36 @@ export const Adapter = (
  *   (`{id}-Addresses`).
  * - `records` — a `Cloudflare.DNS.RecordList`.
  */
-export const AdapterLive = dnsAdapterLayer(
-  CLOUDFLARE_DNS,
-  (config): DnsAdapter<Providers> => {
-    const zone = config.zone as string | undefined;
-    const proxied = config.options?.proxied === true;
-    const common = {
-      ...(zone === undefined ? {} : { zone }),
-      ...(proxied ? { proxied } : {}),
-    };
-    return {
-      type: CLOUDFLARE_DNS,
-      alias: (id, { name, target }) =>
-        isHostnameTarget(target)
-          ? Records(`${id}-CNAME`, {
-              ...common,
-              type: "CNAME",
-              content: target.hostname as string,
-              names: [name],
-            })
-          : RecordList(`${id}-Addresses`, {
-              ...(zone === undefined ? {} : { zone }),
-              records: addressRecords(
-                name,
-                target.ipv4,
-                target.ipv6,
-              ) as DnsRecord[],
-            }),
-      aliasSet: (id, { names, target }) =>
-        Records(`${id}-CNAME`, {
-          ...common,
+export const adapter = {
+  alias: (id, { zone, options, name, target }) =>
+    isHostnameTarget(target)
+      ? Records(`${id}-CNAME`, {
+          zone,
+          ...(options?.proxied === true ? { proxied: true } : {}),
           type: "CNAME",
           content: target.hostname as string,
-          ...(names === undefined ? {} : { names }),
+          names: [name],
+        })
+      : RecordList(`${id}-Addresses`, {
+          zone,
+          records: addressRecords(
+            name,
+            target.ipv4,
+            target.ipv6,
+          ) as DnsRecord[],
         }),
-      records: (id, { records, retain }) =>
-        RecordList(id, {
-          ...(zone === undefined ? {} : { zone }),
-          records: records as DnsRecord[],
-        }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-    };
-  },
-);
+  aliasSet: (id, { zone, options, names, target }) =>
+    Records(`${id}-CNAME`, {
+      zone,
+      ...(options?.proxied === true ? { proxied: true } : {}),
+      type: "CNAME",
+      content: target.hostname as string,
+      names,
+    }),
+  records: (id, { zone, records, retain }) =>
+    RecordList(id, { zone, records: records as DnsRecord[] }).pipe(
+      retain === true ? RemovalPolicy.retain() : (effect) => effect,
+    ),
+} satisfies DnsAdapter<Providers>;
+
+export const AdapterLive = adapterLayer(CLOUDFLARE_DNS, adapter);

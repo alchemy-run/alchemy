@@ -148,15 +148,17 @@ describe("DNS.resolve", { tags }, () => {
   test(
     "resolves each built-in adapter by type",
     Effect.gen(function* () {
-      const types = yield* Effect.all([
+      const resolved = yield* Effect.all([
         DNS.resolve(Cloudflare.DNS.Adapter()),
         DNS.resolve(AWS.Route53.Adapter()),
         DNS.resolve(Hetzner.DNS.Adapter()),
-      ]).pipe(
-        Effect.map((resolved) => resolved.map((adapter) => adapter.type)),
-        Effect.provide(adapters),
-      );
-      expect(types).toEqual(["Cloudflare.DNS", "AWS.Route53", "Hetzner.DNS"]);
+      ]).pipe(Effect.provide(adapters));
+      expect(resolved).toHaveLength(3);
+      for (const adapter of resolved) {
+        expect(typeof adapter.alias).toBe("function");
+        expect(typeof adapter.aliasSet).toBe("function");
+        expect(typeof adapter.records).toBe("function");
+      }
     }),
   );
 });

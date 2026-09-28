@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import {
   addressRecords,
-  dnsAdapterLayer,
+  adapterLayer,
   isHostnameTarget,
   type DnsAdapter,
   type DnsConfig,
@@ -66,72 +66,63 @@ const aliasTargetOf = (target: DnsHostnameTarget) => ({
 });
 
 /**
- * The Route 53 implementation of {@link DnsAdapter}, registered by
- * `AWS.providers()`. Logical ids match the records AWS composites declared
- * before DNS adapters existed, so upgrading plans no changes:
+ * The Route 53 DNS adapter, registered by `AWS.providers()`. Logical ids and
+ * props match the records AWS composites declared before DNS adapters
+ * existed, so upgrading plans no changes:
  *
  * - `alias` — `AWS.Route53.Record` `id` (a lone `A` alias or `CNAME`), or
  *   `id-A` / `id-AAAA` for a dual-stack alias; `id-Addresses`
  *   (`AWS.Route53.RecordList`) for an address target.
  * - `aliasSet` — `AWS.Route53.Records` `id`.
  * - `records` — `AWS.Route53.RecordList` `id`.
+ *
+ * `hostedZoneId` is always passed (even `undefined`), exactly as before.
  */
-export const makeRoute53Adapter = (
-  config: DnsConfig,
-): DnsAdapter<Providers> => {
-  const hostedZoneId = config.zone as string | undefined;
-  // Always pass the key (even `undefined`) — the same props the AWS
-  // composites declared before adapters existed.
-  const zone = { hostedZoneId };
-  return {
-    type: ROUTE53_DNS,
-    alias: (id, { name, target, ipv6 }) =>
-      !isHostnameTarget(target)
-        ? RecordList(`${id}-Addresses`, {
-            ...zone,
-            records: addressRecords(
-              name,
-              target.ipv4,
-              target.ipv6,
-            ) as DnsRecord[],
+export const adapter = {
+  alias: (id, { zone: hostedZoneId, name, target, ipv6 }) =>
+    !isHostnameTarget(target)
+      ? RecordList(`${id}-Addresses`, {
+          hostedZoneId,
+          records: addressRecords(
+            name,
+            target.ipv4,
+            target.ipv6,
+          ) as DnsRecord[],
+        })
+      : target.route53Alias === undefined
+        ? Record(id, {
+            hostedZoneId,
+            name,
+            type: "CNAME",
+            ttl: CNAME_TTL,
+            records: [target.hostname as string],
           })
-        : target.route53Alias === undefined
-          ? Record(id, {
-              ...zone,
-              name,
-              type: "CNAME",
-              ttl: CNAME_TTL,
-              records: [target.hostname as string],
-            })
-          : Effect.forEach(
-              ipv6 ? (["A", "AAAA"] as const) : (["A"] as const),
-              (type) =>
-                Record(ipv6 ? `${id}-${type}` : id, {
-                  ...zone,
-                  name,
-                  type,
-                  aliasTarget: aliasTargetOf(target),
-                }),
-            ),
-    aliasSet: (id, { names, target }) =>
-      Records(id, {
-        ...zone,
-        ...(names === undefined ? {} : { names }),
-        ...(target.route53Alias === undefined
-          ? {
-              type: "CNAME" as const,
-              ttl: CNAME_TTL,
-              records: [target.hostname as string],
-            }
-          : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
-      }),
-    records: (id, { records, retain }) =>
-      RecordList(id, {
-        ...zone,
-        records: records as DnsRecord[],
-      }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-  };
-};
+        : Effect.forEach(
+            ipv6 ? (["A", "AAAA"] as const) : (["A"] as const),
+            (type) =>
+              Record(ipv6 ? `${id}-${type}` : id, {
+                hostedZoneId,
+                name,
+                type,
+                aliasTarget: aliasTargetOf(target),
+              }),
+          ),
+  aliasSet: (id, { zone: hostedZoneId, names, target }) =>
+    Records(id, {
+      hostedZoneId,
+      ...(names === undefined ? {} : { names }),
+      ...(target.route53Alias === undefined
+        ? {
+            type: "CNAME" as const,
+            ttl: CNAME_TTL,
+            records: [target.hostname as string],
+          }
+        : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
+    }),
+  records: (id, { zone: hostedZoneId, records, retain }) =>
+    RecordList(id, { hostedZoneId, records: records as DnsRecord[] }).pipe(
+      retain === true ? RemovalPolicy.retain() : (effect) => effect,
+    ),
+} satisfies DnsAdapter<Providers>;
 
-/** Registers {@link makeRoute53Adapter} for `AWS.Route53.Adapter()`. */
-export const AdapterLive = dnsAdapterLayer(ROUTE53_DNS, makeRoute53Adapter);
+export const AdapterLive = adapterLayer(ROUTE53_DNS, adapter);

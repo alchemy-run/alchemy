@@ -13,8 +13,8 @@
  *
  * - a data constructor (`Cloudflare.DNS.Adapter()`,
  *   `AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`), and
- * - a {@link DnsAdapter} implementation registered with
- *   {@link dnsAdapterLayer} from its own `providers()` layer.
+ * - a {@link DnsAdapter} — functions that declare its record resources —
+ *   registered with {@link adapterLayer} from its own `providers()` layer.
  *
  * A composite (or a Platform's `transformProps` hook) resolves the adapter
  * with {@link resolve} while the stack program is being built, and the
@@ -164,17 +164,26 @@ export class DnsAdapterNotRegistered extends Data.TaggedError(
 }
 
 /**
- * A DNS host's implementation, bound to one {@link DnsConfig}. Every method
- * only DECLARES resources of the host's own cloud — it performs no I/O — so
- * it behaves the same under `alchemy deploy`, `alchemy dev`, and tests.
+ * Where an adapter method writes: the zone and host-specific options from
+ * the user's {@link DnsConfig}. {@link resolve} fills these in, so callers
+ * never pass them.
+ */
+export interface DnsZone {
+  /** Zone id or name (Route 53: hosted zone id). Inferred per hostname when omitted. */
+  zone?: string;
+  /** Host-specific options from the adapter constructor, e.g. `{ proxied: true }`. */
+  options?: { readonly [key: string]: unknown };
+}
+
+/**
+ * A DNS adapter: functions that declare a DNS host's record resources. They
+ * perform no I/O — composites call them while the stack program is built —
+ * so they behave the same under `alchemy deploy`, `alchemy dev`, and tests.
  *
- * `R` is the host's provider requirement: the `Providers` type its record
- * resources carry (e.g. `Cloudflare.Providers`). Implementations return the
- * resource constructors' Effects as they are.
+ * `R` is the host's provider requirement (e.g. `Cloudflare.Providers`):
+ * return the resource constructors' Effects as they are.
  */
 export interface DnsAdapter<R = never> {
-  /** The {@link DnsConfig.type} this adapter implements. */
-  readonly type: string;
   /**
    * Point one hostname at `target`. `ipv6` also publishes IPv6 for a
    * hostname target where the host needs a separate record (Route 53
@@ -182,53 +191,65 @@ export interface DnsAdapter<R = never> {
    */
   alias(
     id: string,
-    args: { name: string; target: DnsAliasTarget; ipv6?: boolean },
+    args: DnsZone & { name: string; target: DnsAliasTarget; ipv6?: boolean },
   ): Effect.Effect<unknown, never, R>;
   /**
    * A (possibly empty) set of hostnames pointed at a hostname target that
-   * other composites extend by binding `{ names }` onto it.
+   * other composites extend by binding `{ names }` onto it (used by
+   * `AWS.Website.Router`, whose attached sites add their hostnames).
    */
   aliasSet(
     id: string,
-    args: { names?: string[]; target: DnsHostnameTarget },
+    args: DnsZone & { names?: string[]; target: DnsHostnameTarget },
   ): Effect.Effect<DnsAliasSet, never, R>;
   /**
    * Publish explicit records whose values come from another resource
    * (certificate validation, ownership verification). Records are always
-   * DNS-only (never proxied). `retain` keeps them when the set is
+   * DNS-only (never proxied). `retain` keeps them when the resource is
    * destroyed — used for ACM validation CNAMEs, which ACM reuses across
    * every certificate for a name.
    */
   records(
     id: string,
-    args: { records: Input<DnsRecord[]>; retain?: boolean },
+    args: DnsZone & { records: Input<DnsRecord[]>; retain?: boolean },
   ): Effect.Effect<unknown, never, R>;
 }
 
-/** Builds an adapter bound to one {@link DnsConfig}. */
-export type DnsAdapterFactory<R = never> = (config: DnsConfig) => DnsAdapter<R>;
-
 const adapterService = (type: string) =>
-  Context.Service<DnsAdapterFactory<any>>(`alchemy/DNS/Adapter/${type}`);
+  Context.Service<DnsAdapter<any>>(`alchemy/DNS/Adapter/${type}`);
 
 /**
- * Register a DNS adapter implementation. Include the returned layer in the
- * DNS host's `providers()` layer; composites then resolve it by `type`.
- *
- * The adapter's methods declare resources of the host's own cloud, whose
- * providers that same `providers()` layer registers — so a resolved adapter
- * always has its providers available.
+ * Register a DNS adapter under the {@link DnsConfig.type} its constructor
+ * returns. Merge the layer into the DNS host's `providers()` layer, which
+ * also registers the providers of the resources the adapter declares.
  */
-export const dnsAdapterLayer = <R>(
+export const adapterLayer = <R>(
   type: string,
-  make: DnsAdapterFactory<R>,
-): Layer.Layer<DnsAdapterFactory<any>> =>
-  Layer.succeed(adapterService(type), make);
+  adapter: DnsAdapter<R>,
+): Layer.Layer<DnsAdapter<any>> => Layer.succeed(adapterService(type), adapter);
 
 /**
- * Resolve the adapter for a {@link DnsConfig}. Dies with
- * {@link DnsAdapterNotRegistered} when the DNS host's `providers()` layer
- * is not part of the stack.
+ * Fill in `zone` / `options` from a {@link DnsConfig} on every call.
+ */
+export const bind = <R>(
+  adapter: DnsAdapter<R>,
+  config: DnsConfig,
+): DnsAdapter<R> => {
+  const zone: DnsZone = {
+    ...(config.zone === undefined ? {} : { zone: config.zone as string }),
+    ...(config.options === undefined ? {} : { options: config.options }),
+  };
+  return {
+    alias: (id, args) => adapter.alias(id, { ...zone, ...args }),
+    aliasSet: (id, args) => adapter.aliasSet(id, { ...zone, ...args }),
+    records: (id, args) => adapter.records(id, { ...zone, ...args }),
+  };
+};
+
+/**
+ * The adapter registered for `config.type`, with `config`'s zone and
+ * options filled in. Dies with {@link DnsAdapterNotRegistered} when the DNS
+ * host's `providers()` layer is not part of the stack.
  *
  * `domain.dns` picks the host by a runtime string, so the host's provider
  * requirement can't be named statically here and the returned adapter is
@@ -243,7 +264,8 @@ export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
       Option.match({
         onNone: () =>
           Effect.die(new DnsAdapterNotRegistered({ type: config.type })),
-        onSome: (make) => Effect.succeed(make(config) as DnsAdapter),
+        onSome: (adapter) =>
+          Effect.succeed(bind(adapter as DnsAdapter, config)),
       }),
     ),
   );

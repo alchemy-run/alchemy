@@ -222,13 +222,15 @@ The adapter's methods only declare resources. No provider calls an adapter
 while it deploys, so destroying a stack or cleaning up an orphan needs
 nothing but state and the record resources' own providers.
 
-Every adapter implements the `DnsAdapter` interface from `alchemy/DNS`:
+An adapter is three functions that declare record resources. Each receives
+the zone and options from the user's `domain.dns` alongside its own
+arguments:
 
-| Method | Declares |
+| Function | Declares |
 | --- | --- |
-| `alias(id, { name, target, ipv6? })` | Records pointing one hostname at a hostname target (`CNAME`, or a Route 53 alias when `target.route53Alias` is set) or an address target (`A`/`AAAA`) |
-| `aliasSet(id, { names?, target })` | A record set that other composites add hostnames to by binding `{ names }` |
-| `records(id, { records, retain? })` | Explicit records whose values usually come from another resource's outputs |
+| `alias(id, { zone, name, target, ipv6? })` | Records pointing one hostname at a hostname target (`CNAME`, or a Route 53 alias when `target.route53Alias` is set) or an address target (`A`/`AAAA`) |
+| `aliasSet(id, { zone, names?, target })` | A record set that other composites add hostnames to by binding `{ names }`, used by `AWS.Website.Router` |
+| `records(id, { zone, records, retain? })` | Explicit records whose values usually come from another resource's outputs |
 
 ## Build your own adapter
 
@@ -286,8 +288,8 @@ export const Adapter = (
 
 ### Implement the adapter
 
-The implementation receives the user's `DnsConfig` and returns the three
-methods. Each method declares resources and nothing else:
+The adapter is an object with three functions, each returning the resource
+it declares:
 
 ```typescript
 // src/acme-dns/Adapter.ts
@@ -296,54 +298,47 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { Providers } from "./Providers.ts";
 import { RecordList } from "./RecordList.ts";
 
-const makeAdapter = (config: DNS.DnsConfig): DNS.DnsAdapter<Providers> => {
-  const zone = config.zone as string | undefined;
-  // Record values may be Outputs; resource props resolve them at deploy time.
-  const cnames = (names: string[], target: DNS.DnsHostnameTarget) =>
-    names.map((name) => ({
-      name,
-      type: "CNAME" as const,
-      value: target.hostname as string,
-    }));
-  return {
-    type: "AcmeDns",
-    alias: (id, { name, target }) =>
-      RecordList(`${id}-Alias`, {
-        zone,
-        records: DNS.isHostnameTarget(target)
-          ? cnames([name], target)
-          : (DNS.addressRecords(name, target.ipv4, target.ipv6) as DNS.DnsRecord[]),
-      }),
-    aliasSet: (id, { names, target }) =>
-      // Give the list a `{ names }` binding contract so a Router can add hostnames.
-      RecordList(`${id}-Alias`, { zone, records: cnames(names ?? [], target) }),
-    records: (id, { records, retain }) =>
-      RecordList(id, { zone, records: records as DNS.DnsRecord[] }).pipe(
-        retain ? RemovalPolicy.retain() : (effect) => effect,
-      ),
-  };
-};
+// Record values may be Outputs; resource props resolve them at deploy time.
+const cnames = (names: string[], target: DNS.DnsHostnameTarget) =>
+  names.map((name) => ({ name, type: "CNAME" as const, value: target.hostname as string }));
+
+export const adapter = {
+  alias: (id, { zone, name, target }) =>
+    RecordList(`${id}-Alias`, {
+      zone,
+      records: DNS.isHostnameTarget(target)
+        ? cnames([name], target)
+        : (DNS.addressRecords(name, target.ipv4, target.ipv6) as DNS.DnsRecord[]),
+    }),
+  // Give the list a `{ names }` binding contract so a Router can add hostnames.
+  aliasSet: (id, { zone, names, target }) =>
+    RecordList(`${id}-Alias`, { zone, records: cnames(names ?? [], target) }),
+  records: (id, { zone, records, retain }) =>
+    RecordList(id, { zone, records: records as DNS.DnsRecord[] }).pipe(
+      retain ? RemovalPolicy.retain() : (effect) => effect,
+    ),
+} satisfies DNS.DnsAdapter<Providers>;
 ```
 
-`DnsAdapter<Providers>` records that the methods declare resources of your
-cloud. Honor `retain`: platforms set it for records that must outlive the
-resource, such as ACM validation `CNAME`s.
+`satisfies DNS.DnsAdapter<Providers>` types the arguments and checks that
+each function declares resources of your cloud. Honor `retain`: platforms
+set it for records that must outlive the resource, such as ACM validation
+`CNAME`s.
 
 ### Register it in your providers layer
 
-`dnsAdapterLayer` registers the implementation under its `type`. Merge it
-into the same `providers()` layer that registers your record providers:
+`DNS.adapterLayer` registers the adapter under the `type` your constructor
+returns. Merge it into the same `providers()` layer that registers your
+record providers:
 
 ```typescript
 // src/acme-dns/Providers.ts
 import * as DNS from "alchemy/DNS";
 import * as Layer from "effect/Layer";
+import { adapter } from "./Adapter.ts";
 
 export const providers = () =>
-  Layer.mergeAll(
-    RecordListProvider(),
-    DNS.dnsAdapterLayer("AcmeDns", makeAdapter),
-  );
+  Layer.mergeAll(RecordListProvider(), DNS.adapterLayer("AcmeDns", adapter));
 ```
 
 ### Use it from a stack
