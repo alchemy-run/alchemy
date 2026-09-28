@@ -61,7 +61,10 @@ Omit `fetch` for a [background service](#background-services).
 ## Pin a region
 
 Fly Machines live in a [region](/fly/compute/regions). The default
-is `iad`. Changing `region` replaces the Service.
+is `iad`. Pass a list, such as `region: ["iad", "lhr"]`, to run
+`count` Machines in each region behind one hostname; see
+[Several regions, one hostname](/fly/compute/regions#several-regions-one-hostname).
+Changing `region` updates the Service in place.
 
 ```diff lang="typescript"
 export default class Api extends Fly.Service<Api>()(

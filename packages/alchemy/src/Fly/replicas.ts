@@ -26,6 +26,7 @@ import {
   validProtocol2Generation,
 } from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
+import { regionOfReplica } from "./Region.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
   MachineGuest,
@@ -99,7 +100,10 @@ export interface ReplicaSet {
   machineIds: string[];
   name: string;
   baseName?: string;
+  /** Region of replica 0. */
   region: string;
+  /** Regions the replicas run in, in replica order. */
+  regions: string[];
   state: string;
   instanceId: string | undefined;
   privateIp: string | undefined;
@@ -1016,6 +1020,13 @@ export const toReplicaSet = (
     name: primary?.name ?? baseName,
     baseName,
     region: primary?.region ?? "",
+    regions: [
+      ...new Set(
+        replicas
+          .map((replica) => replica.region)
+          .filter((region) => region.length > 0),
+      ),
+    ],
     state: primary?.state ?? "",
     instanceId: primary?.instanceId,
     privateIp: primary?.privateIp,
@@ -1145,7 +1156,11 @@ export interface ReconcileReplicasInput {
   type: FlyAlchemyType;
   appName: string;
   baseName: string;
-  region: string;
+  /**
+   * Regions to run in. `count` is the total replica count; replica `i`
+   * runs in `regions[i % regions.length]`.
+   */
+  regions: readonly string[];
   count: number;
   disks: DiskSpec[];
   skipLaunch?: boolean;
@@ -1262,32 +1277,47 @@ const reconcileLeasedReplicas = Effect.fn(function* (
   );
   for (const [index] of scaleDown) byIndex.delete(index);
 
+  // Volumes are regional: one group per disk and region, sized to the
+  // replicas that run there.
+  const replicasIn = (region: string) =>
+    Array.from({ length: input.count }, (_, index) => index).filter(
+      (index) => regionOfReplica(input.regions, index) === region,
+    ).length;
   const groups: Array<{
     disk: DiskSpec;
     name: string;
-    volumes: FlyVolume[];
-    extras: FlyVolume[];
+    byRegion: Map<string, { volumes: FlyVolume[]; extras: FlyVolume[] }>;
   }> = [];
   for (const [diskIndex, disk] of input.disks.entries()) {
     const name = yield* volumeGroupName(input.id, disk);
     const preferIds = (input.preferVolumeIds ?? [])
       .map((replica) => replica[diskIndex])
       .filter((id): id is string => id !== undefined && id.length > 0);
-    const ensured = yield* ensureVolumeGroup({
-      appName: input.appName,
-      name,
-      region: input.region,
-      count: input.count,
-      disk,
-      preferIds,
-    });
-    groups.push({ disk, name, ...ensured });
+    const byRegion = new Map<
+      string,
+      { volumes: FlyVolume[]; extras: FlyVolume[] }
+    >();
+    for (const region of input.regions) {
+      byRegion.set(
+        region,
+        yield* ensureVolumeGroup({
+          appName: input.appName,
+          name,
+          region,
+          count: replicasIn(region),
+          disk,
+          preferIds,
+        }),
+      );
+    }
+    groups.push({ disk, name, byRegion });
   }
 
   const usedVolumeIds = new Set<string>();
   const live: FlyMachine[] = [];
   for (let index = 0; index < input.count; index++) {
     const name = replicaMachineName(input.baseName, index, input.count);
+    const region = regionOfReplica(input.regions, index);
     const metadata = {
       ...alchemy,
       [alchemyMetadataKeys.replica]: String(index),
@@ -1303,7 +1333,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     const mounts: FlyMachineMount[] = [];
     for (const [diskIndex, group] of groups.entries()) {
       const volume = pickVolume(
-        group.volumes,
+        group.byRegion.get(region)?.volumes ?? [],
         usedVolumeIds,
         prefer[diskIndex],
       );
@@ -1319,12 +1349,19 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     }
     const config = buildConfig({ index, mounts, metadata });
     let current = byIndex.get(index);
+    // Fly cannot move a Machine between regions. Machine names are unique
+    // per App, so retire the old replica before creating it in its region.
+    if (current !== undefined && current.region !== region) {
+      yield* retireMachines(input.appName, [current], false, leases);
+      byIndex.delete(index);
+      current = undefined;
+    }
     if (current === undefined) {
       const created = yield* machines
         .createMachine({
           app_name: input.appName,
           name,
-          region: input.region,
+          region,
           config,
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
@@ -1453,7 +1490,9 @@ const reconcileLeasedReplicas = Effect.fn(function* (
   );
 
   for (const group of groups) {
-    for (const extra of group.extras) {
+    for (const extra of [...group.byRegion.values()].flatMap(
+      (placed) => placed.extras,
+    )) {
       const volumeId = extra.id;
       if (volumeId === undefined || usedVolumeIds.has(volumeId)) continue;
       yield* deleteVolume(input.appName, volumeId);
@@ -1462,7 +1501,9 @@ const reconcileLeasedReplicas = Effect.fn(function* (
 
   const volumesById = new Map<string, FlyVolume>();
   for (const group of groups) {
-    for (const volume of group.volumes) {
+    for (const volume of [...group.byRegion.values()].flatMap(
+      (placed) => placed.volumes,
+    )) {
       if (volume.id !== undefined) volumesById.set(volume.id, volume);
     }
   }
@@ -1655,6 +1696,13 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     return {
       ...toReplicaSet([], input.appName, input.baseName ?? ""),
       region: owned[0]?.region ?? "",
+      regions: [
+        ...new Set(
+          owned
+            .map((machine) => machine.region ?? "")
+            .filter((region) => region.length > 0),
+        ),
+      ],
       rolloutPending: true,
     };
   return undefined;

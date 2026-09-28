@@ -39,7 +39,7 @@ const input: ReconcileReplicasInput = {
   resourceInstanceId: metadata[keys.instance],
   fqn: metadata[keys.fqn],
   baseName: metadata[keys.baseName],
-  region: "ord",
+  regions: ["ord"],
   count: 1,
   disks: [],
   policy: {

@@ -18,6 +18,7 @@ import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
 import { Ping, Pong } from "./fixtures/rpc-cycle.ts";
 import PingLive from "./fixtures/rpc-ping.ts";
 import PongLive from "./fixtures/rpc-pong.ts";
+import RegionalApi from "./fixtures/regional-api.ts";
 import RpcGateway from "./fixtures/rpc-gateway.ts";
 import RpcOrders, { ORDERS } from "./fixtures/rpc-orders.ts";
 import RpcStranger from "./fixtures/rpc-stranger.ts";
@@ -841,4 +842,152 @@ test.provider(
       expect(yield* appGone(fixed.site.appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 600_000 },
+);
+
+/** Region of every running Machine in an App, sorted. */
+const machineRegions = (appName: string) =>
+  machines.listMachines({ app_name: appName }).pipe(
+    Effect.map((listed) =>
+      listed
+        .filter((machine) => machine.state !== "destroyed")
+        .map((machine) => machine.region ?? "")
+        .sort(),
+    ),
+  );
+
+const machineIdsIn = (appName: string, region: string) =>
+  machines.listMachines({ app_name: appName }).pipe(
+    Effect.map((listed) =>
+      listed
+        .filter(
+          (machine) =>
+            machine.state !== "destroyed" && machine.region === region,
+        )
+        .map((machine) => machine.id ?? "")
+        .sort(),
+    ),
+  );
+
+test.provider(
+  "a Service runs in several regions and adds, scales, and drops regions in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (options: Parameters<typeof Echo>[0]) =>
+        stack.deploy(Echo(options, "Regional"));
+
+      const two = yield* deploy({ region: ["iad", "lhr"] });
+      expect(two.region).toEqual("iad");
+      expect(two.regions).toEqual(["iad", "lhr"]);
+      expect(two.count).toEqual(1);
+      expect(yield* machineRegions(two.appName)).toEqual(["iad", "lhr"]);
+      expect(yield* getText(two.url!)).toEqual(ECHO_BODY);
+      const iad = yield* machineIdsIn(two.appName, "iad");
+      const lhr = yield* machineIdsIn(two.appName, "lhr");
+
+      // Adding a region keeps the App and the existing Machines.
+      const three = yield* deploy({ region: ["iad", "lhr", "sin"] });
+      expect(three.appName).toEqual(two.appName);
+      expect(three.regions).toEqual(["iad", "lhr", "sin"]);
+      expect(yield* machineRegions(three.appName)).toEqual([
+        "iad",
+        "lhr",
+        "sin",
+      ]);
+      expect(yield* machineIdsIn(three.appName, "iad")).toEqual(iad);
+      expect(yield* machineIdsIn(three.appName, "lhr")).toEqual(lhr);
+
+      // `count` is per region.
+      const scaled = yield* deploy({ region: ["iad", "lhr", "sin"], count: 2 });
+      expect(scaled.count).toEqual(2);
+      expect(scaled.machineIds).toHaveLength(6);
+      expect(yield* machineRegions(scaled.appName)).toEqual([
+        "iad",
+        "iad",
+        "lhr",
+        "lhr",
+        "sin",
+        "sin",
+      ]);
+
+      // Dropping a region deletes its Machines and keeps the hostname.
+      const dropped = yield* deploy({ region: ["iad", "sin"], count: 2 });
+      expect(dropped.appName).toEqual(two.appName);
+      expect(dropped.url).toEqual(two.url);
+      expect(yield* machineRegions(dropped.appName)).toEqual([
+        "iad",
+        "iad",
+        "sin",
+        "sin",
+      ]);
+      expect(yield* getText(dropped.url!)).toEqual(ECHO_BODY);
+
+      // A single region string still works.
+      const single = yield* deploy({ region: "sin" });
+      expect(single.regions).toEqual(["sin"]);
+      expect(yield* machineRegions(single.appName)).toEqual(["sin"]);
+
+      yield* stack.destroy();
+      expect(yield* appGone(two.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 600_000 },
+);
+
+test.provider(
+  "a multi-region Service mounts a Volume in each Machine's region",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const api = yield* stack.deploy(RegionalApi);
+      expect(api.regions).toEqual(["iad", "lhr"]);
+      expect(["iad", "lhr"]).toContain(yield* getText(api.url!));
+      const volumes = yield* machines.listVolumes({ app_name: api.appName });
+      const live = (yield* machines.listMachines({
+        app_name: api.appName,
+      })).filter((machine) => machine.state !== "destroyed");
+      expect(volumes.map((volume) => volume.region).sort()).toEqual([
+        "iad",
+        "lhr",
+      ]);
+      for (const volume of volumes) {
+        const attached = live.find(
+          (machine) => machine.id === volume.attached_machine_id,
+        );
+        expect(attached?.region).toEqual(volume.region);
+      }
+      yield* stack.destroy();
+      expect(yield* appGone(api.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 400_000 },
+);
+
+test.provider(
+  "a blue/green Service replaces its generation in every region",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (body: string) =>
+        stack.deploy(
+          Echo(
+            {
+              region: ["iad", "lhr"],
+              env: { ECHO_BODY: body },
+              deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
+            },
+            "RegionalBlueGreen",
+          ),
+        );
+      const first = yield* deploy("one");
+      expect(yield* machineRegions(first.appName)).toEqual(["iad", "lhr"]);
+      const second = yield* deploy("two");
+      expect(second.appName).toEqual(first.appName);
+      expect(
+        second.machineIds.some((id) => first.machineIds.includes(id)),
+      ).toBe(false);
+      expect(yield* machineRegions(second.appName)).toEqual(["iad", "lhr"]);
+      expect(yield* getText(second.url!)).toEqual("two");
+      yield* stack.destroy();
+      expect(yield* appGone(first.appName)).toBe(true);
+    }).pipe(logLevel),
+  { tags: ownedTags, timeout: 500_000 },
 );

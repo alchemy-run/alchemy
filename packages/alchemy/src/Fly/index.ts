@@ -49,6 +49,7 @@ export * from "./ReadRedisHttp.ts";
 export * from "./ReadWriteRedis.ts";
 export * from "./ReadWriteRedisHttp.ts";
 export * from "./Redis.ts";
+export type { Region } from "./Region.ts";
 export * from "./WriteRedis.ts";
 export * from "./WriteRedisHttp.ts";
 export * from "./Secret.ts";

@@ -26,11 +26,12 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-`count` extra Machines stay in that same region.
+`count` Machines run in that region.
 
-:::caution[Changing `region` replaces the Service]
-The replica set is created in the new region. The old Machines are
-deleted. A Volume does not move with them.
+:::caution[Changing `region` moves the Machines]
+The Service keeps its App and hostname. Machines are created in the
+new region and the old ones are deleted. A Volume does not move with
+them.
 :::
 
 ## Pin a Machine
@@ -59,38 +60,31 @@ Restore into a new region from a
 [`VolumeSnapshot`](/providers/fly/volumesnapshot) with `snapshotId`
 on the mount.
 
-## Several regions, one App
+## Several regions, one hostname
 
-A Service runs in one region. Two Services in one App cannot publish
-the same port: the App fails with `Fly.ServicePortConflict` before any
-Machine is created (see
-[Ports in a shared App](/fly/compute/services#ports-in-a-shared-app)).
-So one hostname cannot be spread across regions with several Services.
-
-To serve one image from several regions behind one hostname, declare
-a [Machine](/fly/compute/machines) per region in the same App, with a
-[`shared_v4` address](/fly/networking#addresses-for-a-shared-app).
-Fly's Anycast proxy sends each request to a nearby Machine that
-published the service.
+Pass a list to `region` to run the same Service in several regions
+behind one hostname. `count` Machines run in each region, and Fly's
+Anycast proxy sends each request to the nearest healthy Machine.
 
 ```typescript
-const site = yield* Fly.App("Site");
-yield* Fly.IpAssignment("Shared", { app: site, type: "shared_v4" });
-
-const services = [
-  {
-    protocol: "tcp",
-    internalPort: 80,
-    ports: [
-      { port: 80, handlers: ["http"], forceHttps: true },
-      { port: 443, handlers: ["tls", "http"] },
-    ],
-  },
-];
-
-yield* Fly.Machine("WebIad", { app: site, region: "iad", image: "nginx:alpine", services });
-yield* Fly.Machine("WebLhr", { app: site, region: "lhr", image: "nginx:alpine", services });
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { main: import.meta.url, region: ["iad", "lhr"], count: 2 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
 ```
+
+This runs four Machines: two in `iad` and two in `lhr`. `api.regions`
+is `["iad", "lhr"]`, and `api.url` serves from both.
+
+Adding or removing a region updates the Service in place. Its App and
+hostname stay the same, Machines in regions you keep are left alone,
+and a removed region's Machines are deleted. A Volume from
+`MountVolume` is created in each Machine's own region.
 
 ## Which region is this?
 

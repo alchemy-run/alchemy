@@ -55,6 +55,7 @@ import {
   RPC_ORG_ENV,
   RPC_TOKEN_ENV,
 } from "./rpc.ts";
+import { type Region, regionList } from "./Region.ts";
 import {
   alchemyMetadataKeys,
   createFlyAppName,
@@ -173,15 +174,19 @@ export interface ServiceProps extends PlatformProps {
    */
   main: string;
   /**
-   * Region to start the Machine in (`iad`, `ewr`, `ord`, …). Changing
-   * it replaces the Service.
+   * Region or regions to run in (`"iad"`, `["iad", "lhr"]`). The
+   * Service runs `count` Machines in each region behind one hostname;
+   * Fly's proxy sends each request to the nearest healthy Machine.
+   * Adding or removing a region updates the Service in place: Machines
+   * in a removed region are deleted, new regions get new Machines.
    *
    * @default "iad"
    */
-  region?: string;
+  region?: Region | Region[];
   /**
-   * Number of Machines to provision, including stopped/suspended idle capacity.
-   * Fly's proxy load-balances `{app}.fly.dev` across available replicas.
+   * Number of Machines to provision in each region, including
+   * stopped/suspended idle capacity. Fly's proxy load-balances
+   * `{app}.fly.dev` across available replicas.
    * Blue/green checks a representative and the required running floor while
    * preserving idle nonrepresentatives. Each replica gets its own Volume
    * from every `MountVolume` binding; attached volumes require rolling updates.
@@ -316,8 +321,10 @@ export type Service = Resource<
     baseName?: string;
     /** Machine name of replica 0 (unique per App). Changes during blue/green deployment. */
     name: string;
-    /** Region the Machines are running in. */
+    /** Region of the first Machine. */
     region: string;
+    /** Every region the Service's Machines run in. */
+    regions: string[];
     /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
     state: string;
     /**
@@ -346,7 +353,7 @@ export type Service = Resource<
     privateUrl: string | undefined;
     /** Parsed image reference from Fly. */
     imageRef: MachineImageRef | undefined;
-    /** Number of Machines in the replica set. */
+    /** Number of Machines in each region. */
     count: number;
     /** Disks mounted on replica 0. */
     mounts: MountedDisk[];
@@ -445,10 +452,29 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * :::caution[Changing `region` replaces the Service]
- * The replica set is created in the new region. The old Machines are
- * deleted.
- * :::
+ * ### Run in several regions
+ * Pass a list to run the same program in several regions behind one
+ * hostname. `count` Machines run in each region, and Fly's proxy sends
+ * each request to the nearest healthy one. `regions` on the Service
+ * lists where it runs.
+ *
+ * **Example:** Two regions, two Machines each
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, region: ["iad", "lhr"], count: 2 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Adding or removing a region updates the Service in place and keeps
+ * its App and hostname. Machines already in a kept region stay; a
+ * removed region's Machines are deleted. Each Machine's Volume from
+ * `MountVolume` is created in that Machine's region.
  *
  * ### Set the port
  * `port` is the port the process listens on inside the Machine.
@@ -1588,9 +1614,10 @@ const toAttrs = (
   name: set.name,
   baseName: set.baseName,
   region: set.region,
+  regions: set.regions,
   state: set.state,
   imageRef: set.imageRef,
-  count: set.count,
+  count: Math.round(set.count / Math.max(1, set.regions.length)),
   mounts: set.mounts,
   replicas: set.replicas,
   code: { hash: codeHash },
@@ -1667,7 +1694,7 @@ export const ServiceProvider = () =>
       });
 
       return Service.Provider.of({
-        stables: ["region", "appName"],
+        stables: ["appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
         diff: Effect.fn(function* ({ id, news, output }) {
@@ -1743,13 +1770,11 @@ export const ServiceProvider = () =>
                 ? sanitizeFlyAppName(news.name)
                 : output.appName;
             const nameChanged = desiredAppName !== output.appName;
-            const regionChanged =
-              (news.region ?? DEFAULT_REGION) !== output.region;
             // Fly cannot move an App to another network.
             const networkChanged =
               normalizeNetwork(news.network) !==
               normalizeNetwork(output.network);
-            if (nameChanged || regionChanged || networkChanged) {
+            if (nameChanged || networkChanged) {
               return {
                 action: "replace" as const,
                 // A pinned App name cannot exist twice.
@@ -1767,9 +1792,7 @@ export const ServiceProvider = () =>
                 : (output.baseName ?? output.name);
             const nameChanged =
               desiredName !== (output.baseName ?? output.name);
-            const desiredRegion = news.region ?? DEFAULT_REGION;
-            const regionChanged = desiredRegion !== output.region;
-            if (appChanged || nameChanged || regionChanged) {
+            if (appChanged || nameChanged) {
               return {
                 action: "replace" as const,
                 deleteFirst: nameChanged === false && appChanged === false,
@@ -1883,7 +1906,7 @@ export const ServiceProvider = () =>
             ownsApp ? undefined : props.name,
             output?.baseName ?? output?.name,
           );
-          const region = props.region ?? output?.region ?? DEFAULT_REGION;
+          const regions = regionList(props.region, DEFAULT_REGION);
           const count = resolveCount(props.count);
           const port = props.port ?? DEFAULT_PORT;
           const bindingPort = props.bindingPort ?? DEFAULT_BINDING_PORT;
@@ -1957,8 +1980,9 @@ export const ServiceProvider = () =>
             checks: props.checks,
             appName,
             baseName: name,
-            region,
-            count,
+            regions,
+            // `count` is per region.
+            count: count * regions.length,
             disks: bound.mounts,
             minSecretsVersion,
             outputMachineIds: machineIdsOf(output),
@@ -2043,7 +2067,8 @@ export const ServiceProvider = () =>
             machineIds: [],
             name,
             baseName: name,
-            region: props.region ?? DEFAULT_REGION,
+            region: regionList(props.region, DEFAULT_REGION)[0]!,
+            regions: regionList(props.region, DEFAULT_REGION),
             state: "created",
             instanceId: undefined,
             privateIp: undefined,

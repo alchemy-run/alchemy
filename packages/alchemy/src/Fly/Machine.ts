@@ -1282,7 +1282,7 @@ export const MachineProvider = () =>
         checks: props.checks,
         appName,
         baseName: name,
-        region,
+        regions: [region],
         count,
         disks,
         skipLaunch,
