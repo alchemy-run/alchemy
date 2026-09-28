@@ -293,9 +293,10 @@ methods. Each method declares resources and nothing else:
 // src/acme-dns/Adapter.ts
 import * as DNS from "alchemy/DNS";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import type { Providers } from "./Providers.ts";
 import { RecordList } from "./RecordList.ts";
 
-const makeAdapter = (config: DNS.DnsConfig): DNS.DnsAdapter => {
+const makeAdapter = (config: DNS.DnsConfig): DNS.DnsAdapter<Providers> => {
   const zone = config.zone as string | undefined;
   // Record values may be Outputs; resource props resolve them at deploy time.
   const cnames = (names: string[], target: DNS.DnsHostnameTarget) =>
@@ -307,33 +308,25 @@ const makeAdapter = (config: DNS.DnsConfig): DNS.DnsAdapter => {
   return {
     type: "AcmeDns",
     alias: (id, { name, target }) =>
-      DNS.declare(
-        RecordList(`${id}-Alias`, {
-          zone,
-          records: DNS.isHostnameTarget(target)
-            ? cnames([name], target)
-            : (DNS.addressRecords(name, target.ipv4, target.ipv6) as DNS.DnsRecord[]),
-        }),
-      ),
+      RecordList(`${id}-Alias`, {
+        zone,
+        records: DNS.isHostnameTarget(target)
+          ? cnames([name], target)
+          : (DNS.addressRecords(name, target.ipv4, target.ipv6) as DNS.DnsRecord[]),
+      }),
     aliasSet: (id, { names, target }) =>
       // Give the list a `{ names }` binding contract so a Router can add hostnames.
-      DNS.declare(
-        RecordList(`${id}-Alias`, { zone, records: cnames(names ?? [], target) }),
-      ),
+      RecordList(`${id}-Alias`, { zone, records: cnames(names ?? [], target) }),
     records: (id, { records, retain }) =>
-      DNS.declare(
-        RecordList(id, { zone, records: records as DNS.DnsRecord[] }).pipe(
-          retain ? RemovalPolicy.retain() : (effect) => effect,
-        ),
+      RecordList(id, { zone, records: records as DNS.DnsRecord[] }).pipe(
+        retain ? RemovalPolicy.retain() : (effect) => effect,
       ),
   };
 };
 ```
 
-`DNS.declare` removes your cloud's provider requirement from the effect's
-type. That's sound because the adapter only resolves when your
-`providers()` layer, and therefore your record providers, are in the stack.
-Honor `retain`: platforms set it for records that must outlive the
+`DnsAdapter<Providers>` records that the methods declare resources of your
+cloud. Honor `retain`: platforms set it for records that must outlive the
 resource, such as ACM validation `CNAME`s.
 
 ### Register it in your providers layer

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import {
   addressRecords,
-  declare,
   dnsAdapterLayer,
   isHostnameTarget,
   type DnsAdapter,
@@ -11,6 +10,7 @@ import {
 } from "../../DNS/Adapter.ts";
 import type { Input } from "../../Input.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
+import type { Providers } from "../Providers.ts";
 import { Record } from "./Record.ts";
 import { RecordList } from "./RecordList.ts";
 import { Records } from "./Records.ts";
@@ -76,7 +76,9 @@ const aliasTargetOf = (target: DnsHostnameTarget) => ({
  * - `aliasSet` — `AWS.Route53.Records` `id`.
  * - `records` — `AWS.Route53.RecordList` `id`.
  */
-export const makeRoute53Adapter = (config: DnsConfig): DnsAdapter => {
+export const makeRoute53Adapter = (
+  config: DnsConfig,
+): DnsAdapter<Providers> => {
   const hostedZoneId = config.zone as string | undefined;
   // Always pass the key (even `undefined`) — the same props the AWS
   // composites declared before adapters existed.
@@ -84,56 +86,50 @@ export const makeRoute53Adapter = (config: DnsConfig): DnsAdapter => {
   return {
     type: ROUTE53_DNS,
     alias: (id, { name, target, ipv6 }) =>
-      declare(
-        !isHostnameTarget(target)
-          ? RecordList(`${id}-Addresses`, {
+      !isHostnameTarget(target)
+        ? RecordList(`${id}-Addresses`, {
+            ...zone,
+            records: addressRecords(
+              name,
+              target.ipv4,
+              target.ipv6,
+            ) as DnsRecord[],
+          })
+        : target.route53Alias === undefined
+          ? Record(id, {
               ...zone,
-              records: addressRecords(
-                name,
-                target.ipv4,
-                target.ipv6,
-              ) as DnsRecord[],
+              name,
+              type: "CNAME",
+              ttl: CNAME_TTL,
+              records: [target.hostname as string],
             })
-          : target.route53Alias === undefined
-            ? Record(id, {
-                ...zone,
-                name,
-                type: "CNAME",
-                ttl: CNAME_TTL,
-                records: [target.hostname as string],
-              })
-            : Effect.forEach(
-                ipv6 ? (["A", "AAAA"] as const) : (["A"] as const),
-                (type) =>
-                  Record(ipv6 ? `${id}-${type}` : id, {
-                    ...zone,
-                    name,
-                    type,
-                    aliasTarget: aliasTargetOf(target),
-                  }),
-              ),
-      ),
+          : Effect.forEach(
+              ipv6 ? (["A", "AAAA"] as const) : (["A"] as const),
+              (type) =>
+                Record(ipv6 ? `${id}-${type}` : id, {
+                  ...zone,
+                  name,
+                  type,
+                  aliasTarget: aliasTargetOf(target),
+                }),
+            ),
     aliasSet: (id, { names, target }) =>
-      declare(
-        Records(id, {
-          ...zone,
-          ...(names === undefined ? {} : { names }),
-          ...(target.route53Alias === undefined
-            ? {
-                type: "CNAME" as const,
-                ttl: CNAME_TTL,
-                records: [target.hostname as string],
-              }
-            : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
-        }),
-      ),
+      Records(id, {
+        ...zone,
+        ...(names === undefined ? {} : { names }),
+        ...(target.route53Alias === undefined
+          ? {
+              type: "CNAME" as const,
+              ttl: CNAME_TTL,
+              records: [target.hostname as string],
+            }
+          : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
+      }),
     records: (id, { records, retain }) =>
-      declare(
-        RecordList(id, {
-          ...zone,
-          records: records as DnsRecord[],
-        }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-      ),
+      RecordList(id, {
+        ...zone,
+        records: records as DnsRecord[],
+      }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
   };
 };
 

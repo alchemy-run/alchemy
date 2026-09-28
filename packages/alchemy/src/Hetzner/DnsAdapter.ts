@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import {
   addressRecords,
-  declare,
   DnsAdapterError,
   dnsAdapterLayer,
   isHostnameTarget,
@@ -14,6 +13,7 @@ import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
 import * as RemovalPolicy from "../RemovalPolicy.ts";
 import { RecordList } from "./DnsRecordList.ts";
+import type { Providers } from "./Providers.ts";
 
 /** The {@link DnsConfig.type} of the Hetzner DNS adapter. */
 export const HETZNER_DNS = "Hetzner.DNS";
@@ -76,7 +76,7 @@ export const Adapter = (
  */
 export const AdapterLive = dnsAdapterLayer(
   HETZNER_DNS,
-  (config): DnsAdapter => {
+  (config): DnsAdapter<Providers> => {
     const zone = config.zone as string | undefined;
     const pinned = zone === undefined ? {} : { zone };
     const rejectApexCname = (name: string) =>
@@ -96,44 +96,36 @@ export const AdapterLive = dnsAdapterLayer(
         isHostnameTarget(target)
           ? rejectApexCname(name).pipe(
               Effect.andThen(
-                declare(
-                  RecordList(`${id}-CNAME`, {
-                    ...pinned,
-                    names: [name],
-                    target: target.hostname as string,
-                  }),
-                ),
+                RecordList(`${id}-CNAME`, {
+                  ...pinned,
+                  names: [name],
+                  target: target.hostname as string,
+                }),
               ),
             )
-          : declare(
-              RecordList(`${id}-Addresses`, {
-                ...pinned,
-                records: addressRecords(
-                  name,
-                  target.ipv4,
-                  target.ipv6,
-                ) as DnsRecord[],
-              }),
-            ),
+          : RecordList(`${id}-Addresses`, {
+              ...pinned,
+              records: addressRecords(
+                name,
+                target.ipv4,
+                target.ipv6,
+              ) as DnsRecord[],
+            }),
       aliasSet: (id, { names, target }) =>
         Effect.forEach(names ?? [], rejectApexCname).pipe(
           Effect.andThen(
-            declare(
-              RecordList(`${id}-CNAME`, {
-                ...pinned,
-                ...(names === undefined ? {} : { names }),
-                target: target.hostname as string,
-              }),
-            ),
+            RecordList(`${id}-CNAME`, {
+              ...pinned,
+              ...(names === undefined ? {} : { names }),
+              target: target.hostname as string,
+            }),
           ),
         ),
       records: (id, { records, retain }) =>
-        declare(
-          RecordList(id, {
-            ...pinned,
-            records: records as DnsRecord[],
-          }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-        ),
+        RecordList(id, {
+          ...pinned,
+          records: records as DnsRecord[],
+        }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
     };
   },
 );

@@ -1,6 +1,5 @@
 import {
   addressRecords,
-  declare,
   dnsAdapterLayer,
   isHostnameTarget,
   type DnsAdapter,
@@ -10,6 +9,7 @@ import {
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
+import type { Providers } from "../Providers.ts";
 import { RecordList } from "./RecordList.ts";
 import { Records } from "./Records.ts";
 
@@ -86,7 +86,7 @@ export const Adapter = (
  */
 export const AdapterLive = dnsAdapterLayer(
   CLOUDFLARE_DNS,
-  (config): DnsAdapter => {
+  (config): DnsAdapter<Providers> => {
     const zone = config.zone as string | undefined;
     const proxied = config.options?.proxied === true;
     const common = {
@@ -96,39 +96,33 @@ export const AdapterLive = dnsAdapterLayer(
     return {
       type: CLOUDFLARE_DNS,
       alias: (id, { name, target }) =>
-        declare(
-          isHostnameTarget(target)
-            ? Records(`${id}-CNAME`, {
-                ...common,
-                type: "CNAME",
-                content: target.hostname as string,
-                names: [name],
-              })
-            : RecordList(`${id}-Addresses`, {
-                ...(zone === undefined ? {} : { zone }),
-                records: addressRecords(
-                  name,
-                  target.ipv4,
-                  target.ipv6,
-                ) as DnsRecord[],
-              }),
-        ),
+        isHostnameTarget(target)
+          ? Records(`${id}-CNAME`, {
+              ...common,
+              type: "CNAME",
+              content: target.hostname as string,
+              names: [name],
+            })
+          : RecordList(`${id}-Addresses`, {
+              ...(zone === undefined ? {} : { zone }),
+              records: addressRecords(
+                name,
+                target.ipv4,
+                target.ipv6,
+              ) as DnsRecord[],
+            }),
       aliasSet: (id, { names, target }) =>
-        declare(
-          Records(`${id}-CNAME`, {
-            ...common,
-            type: "CNAME",
-            content: target.hostname as string,
-            ...(names === undefined ? {} : { names }),
-          }),
-        ),
+        Records(`${id}-CNAME`, {
+          ...common,
+          type: "CNAME",
+          content: target.hostname as string,
+          ...(names === undefined ? {} : { names }),
+        }),
       records: (id, { records, retain }) =>
-        declare(
-          RecordList(id, {
-            ...(zone === undefined ? {} : { zone }),
-            records: records as DnsRecord[],
-          }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
-        ),
+        RecordList(id, {
+          ...(zone === undefined ? {} : { zone }),
+          records: records as DnsRecord[],
+        }).pipe(retain === true ? RemovalPolicy.retain() : (e) => e),
     };
   },
 );

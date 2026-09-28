@@ -167,8 +167,12 @@ export class DnsAdapterNotRegistered extends Data.TaggedError(
  * A DNS host's implementation, bound to one {@link DnsConfig}. Every method
  * only DECLARES resources of the host's own cloud — it performs no I/O — so
  * it behaves the same under `alchemy deploy`, `alchemy dev`, and tests.
+ *
+ * `R` is the host's provider requirement: the `Providers` type its record
+ * resources carry (e.g. `Cloudflare.Providers`). Implementations return the
+ * resource constructors' Effects as they are.
  */
-export interface DnsAdapter {
+export interface DnsAdapter<R = never> {
   /** The {@link DnsConfig.type} this adapter implements. */
   readonly type: string;
   /**
@@ -179,7 +183,7 @@ export interface DnsAdapter {
   alias(
     id: string,
     args: { name: string; target: DnsAliasTarget; ipv6?: boolean },
-  ): Effect.Effect<unknown>;
+  ): Effect.Effect<unknown, never, R>;
   /**
    * A (possibly empty) set of hostnames pointed at a hostname target that
    * other composites extend by binding `{ names }` onto it.
@@ -187,7 +191,7 @@ export interface DnsAdapter {
   aliasSet(
     id: string,
     args: { names?: string[]; target: DnsHostnameTarget },
-  ): Effect.Effect<DnsAliasSet>;
+  ): Effect.Effect<DnsAliasSet, never, R>;
   /**
    * Publish explicit records whose values come from another resource
    * (certificate validation, ownership verification). Records are always
@@ -198,14 +202,14 @@ export interface DnsAdapter {
   records(
     id: string,
     args: { records: Input<DnsRecord[]>; retain?: boolean },
-  ): Effect.Effect<unknown>;
+  ): Effect.Effect<unknown, never, R>;
 }
 
 /** Builds an adapter bound to one {@link DnsConfig}. */
-export type DnsAdapterFactory = (config: DnsConfig) => DnsAdapter;
+export type DnsAdapterFactory<R = never> = (config: DnsConfig) => DnsAdapter<R>;
 
 const adapterService = (type: string) =>
-  Context.Service<DnsAdapterFactory>(`alchemy/DNS/Adapter/${type}`);
+  Context.Service<DnsAdapterFactory<any>>(`alchemy/DNS/Adapter/${type}`);
 
 /**
  * Register a DNS adapter implementation. Include the returned layer in the
@@ -215,15 +219,23 @@ const adapterService = (type: string) =>
  * providers that same `providers()` layer registers — so a resolved adapter
  * always has its providers available.
  */
-export const dnsAdapterLayer = (
+export const dnsAdapterLayer = <R>(
   type: string,
-  make: DnsAdapterFactory,
-): Layer.Layer<DnsAdapterFactory> => Layer.succeed(adapterService(type), make);
+  make: DnsAdapterFactory<R>,
+): Layer.Layer<DnsAdapterFactory<any>> =>
+  Layer.succeed(adapterService(type), make);
 
 /**
  * Resolve the adapter for a {@link DnsConfig}. Dies with
  * {@link DnsAdapterNotRegistered} when the DNS host's `providers()` layer
  * is not part of the stack.
+ *
+ * `domain.dns` picks the host by a runtime string, so the host's provider
+ * requirement can't be named statically here and the returned adapter is
+ * typed without it. That is safe: the requirement is type-level only
+ * (declaring a resource never reads its provider), and the adapter is only
+ * registered by the host's `providers()` layer, which also registers the
+ * providers of the resources it declares.
  */
 export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
   Effect.serviceOption(adapterService(config.type)).pipe(
@@ -231,7 +243,7 @@ export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
       Option.match({
         onNone: () =>
           Effect.die(new DnsAdapterNotRegistered({ type: config.type })),
-        onSome: (make) => Effect.succeed(make(config)),
+        onSome: (make) => Effect.succeed(make(config) as DnsAdapter),
       }),
     ),
   );
@@ -239,17 +251,6 @@ export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
 /** Normalize a DNS name: lowercase, no trailing dot. */
 export const normalizeDnsName = (name: string) =>
   name.replace(/\.$/, "").toLowerCase();
-
-/**
- * Erase the DNS host's provider requirement from an adapter method's
- * Effect. Sound because a resolved adapter implies its `providers()` layer
- * — and therefore its resource providers — is part of the stack.
- * @internal for adapter implementations
- */
-export const declare = <T extends Effect.Effect<any, any, any>>(
-  effect: T,
-): Effect.Effect<Effect.Success<T>, Effect.Error<T>> =>
-  effect as unknown as Effect.Effect<Effect.Success<T>, Effect.Error<T>>;
 
 /** `A` / `AAAA` records for an address target (values may be Outputs). */
 export const addressRecords = (
