@@ -104,7 +104,19 @@ export const state = () =>
             const { matches, expected, observed } =
               yield* checkStateStoreVersion(url);
 
+            if (observed !== undefined && observed > expected) {
+              return yield* Effect.die(stateStoreNewerError(observed));
+            }
+
             if (observed === undefined) {
+              // Only the Cloudflare API can say the store is missing. A
+              // worker that exists but doesn't answer `/version` (Cloudflare
+              // Access, a network failure) must never trigger a fresh
+              // bootstrap: that path generates new secrets and would
+              // overwrite the key that encrypts the existing state.
+              if (yield* isStateStoreAvailable(scriptName)) {
+                return yield* Effect.die(stateStoreUnreachableError(url));
+              }
               const shouldDeploy =
                 autoUpdateStateStore ||
                 (yield* Interaction.accessors.prompt.confirm({
@@ -181,11 +193,19 @@ export const state = () =>
 
         const ensureAccess = (credentials: HttpStateStoreCredentials) =>
           Effect.gen(function* () {
-            const isAuth = yield* checkHttpStateStoreAuth(credentials);
+            const accessHeaders = yield* stateStoreAccessHeaders(
+              credentials.url,
+            );
+            const checkAuth = (credentials: HttpStateStoreCredentials) =>
+              checkHttpStateStoreAuth({
+                ...credentials,
+                transformClient: HttpClientRequest.setHeaders(accessHeaders),
+              });
+            const isAuth = yield* checkAuth(credentials);
             if (!isAuth) {
               // our token is wrong, force a refresh
               const credentials = yield* loginWithCloudflare(profileName, true);
-              if (!(yield* checkHttpStateStoreAuth(credentials))) {
+              if (!(yield* checkAuth(credentials))) {
                 return yield* Effect.die(
                   new AuthError({
                     message: `Cloudflare State store authentication failed, after refreshing credentials.`,
@@ -224,7 +244,7 @@ export const state = () =>
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId)) {
+        if (yield* isStateStoreAvailable(scriptName)) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
@@ -327,9 +347,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           }),
         );
       }
-      const { accountId } =
-        yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-      if (yield* isStateStoreServing(accountId)) {
+      if (yield* isStateStoreAvailable(scriptName)) {
         // this is a regular update, let's check if it needs an update and refresh credentials
         if (!force) {
           yield* Interaction.accessors.output.info(
@@ -355,6 +373,12 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         }
         const { matches, expected, observed } =
           yield* checkStateStoreVersion(url);
+        if (observed === undefined) {
+          return yield* Effect.die(stateStoreUnreachableError(url));
+        }
+        if (observed > expected) {
+          return yield* Effect.die(stateStoreNewerError(observed));
+        }
         const httpState = yield* makeCloudflareStateStore({ url, authToken });
         if (!matches || force) {
           return yield* interaction.task(
@@ -877,7 +901,9 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     }),
   );
 
-const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
+export const isStateStoreAvailable = (
+  scriptName: string = "alchemy-state-store",
+) =>
   Effect.gen(function* () {
     // otherwise, the remote one might exist
     const { accountId } =
@@ -894,34 +920,95 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
   });
 
 /**
- * Does this account have a *functioning* state-store worker,
- * verified by checking the /version endpoint
- *
+ * The state-store worker exists but did not answer `/version`. Surfaced as an
+ * error instead of a redeploy: a fresh bootstrap generates new secrets and
+ * would overwrite the key that encrypts the existing state.
  */
-const isStateStoreServing = (accountId: string) =>
-  Effect.gen(function* () {
-    const url = yield* workers.getSubdomain({ accountId }).pipe(
-      Effect.map(({ subdomain }) =>
-        subdomain
-          ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`
-          : undefined,
-      ),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
-    if (url === undefined) return false;
-    const { observed } = yield* checkStateStoreVersion(url);
-    return observed !== undefined;
+const stateStoreUnreachableError = (url: string) =>
+  new AuthError({
+    message:
+      `Cloudflare State Store at ${url} exists but did not respond to a version check. ` +
+      `If it is protected by Cloudflare Access, run 'alchemy state login' (or set ` +
+      `CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET in CI) and retry.`,
   });
 
-const makeCloudflareStateStore = Effect.fn(function* ({
+/**
+ * The deployed store is newer than this CLI. Redeploying would downgrade it
+ * (and drop anything the newer version manages), so refuse.
+ */
+const stateStoreNewerError = (observed: number) =>
+  new AuthError({
+    message:
+      `Cloudflare State Store is v${observed}, which is newer than this version of alchemy ` +
+      `supports (v${STATE_STORE_VERSION}). Upgrade alchemy to use it.`,
+  });
+
+/**
+ * Connect to the account's existing, up-to-date state store without deploying
+ * or upgrading anything. Used by commands that manage the store itself
+ * (`alchemy state protect`, `alchemy state token ...`).
+ */
+export const connectStateStore = (profileName: string) =>
+  Effect.gen(function* () {
+    if (!(yield* isStateStoreAvailable(STATE_STORE_SCRIPT_NAME))) {
+      return yield* new AuthError({
+        message:
+          "No Cloudflare State Store found on this account. " +
+          "Deploy one first with 'alchemy provider cloudflare bootstrap'.",
+      });
+    }
+    let credentials = yield* loginWithCloudflare(profileName, false);
+    const { matches, expected, observed } = yield* checkStateStoreVersion(
+      credentials.url,
+    );
+    if (observed === undefined) {
+      return yield* stateStoreUnreachableError(credentials.url);
+    }
+    if (observed > expected) {
+      return yield* stateStoreNewerError(observed);
+    }
+    if (!matches) {
+      return yield* new AuthError({
+        message:
+          `Cloudflare State Store is out of date (expected v${expected}, observed v${observed}). ` +
+          `Upgrade it first with 'alchemy provider cloudflare bootstrap'.`,
+      });
+    }
+    const accessHeaders = yield* stateStoreAccessHeaders(credentials.url);
+    const checkAuth = (c: HttpStateStoreCredentials) =>
+      checkHttpStateStoreAuth({
+        ...c,
+        transformClient: HttpClientRequest.setHeaders(accessHeaders),
+      });
+    if (!(yield* checkAuth(credentials))) {
+      credentials = yield* loginWithCloudflare(profileName, true);
+      if (!(yield* checkAuth(credentials))) {
+        return yield* new AuthError({
+          message: `Cloudflare State store authentication failed, after refreshing credentials.`,
+        });
+      }
+    }
+    return {
+      credentials,
+      state: yield* makeCloudflareStateStore(credentials),
+    };
+  });
+
+/** Access headers for requests to the state store at `url` (`{}` when the
+ * store is not behind Cloudflare Access). */
+export const stateStoreAccessHeaders = Effect.fn(function* (url: string) {
+  const access = yield* Access.Access;
+  return yield* access.getAccessHeaders(new URL(url).host);
+});
+
+export const makeCloudflareStateStore = Effect.fn(function* ({
   url,
   authToken,
 }: {
   url: string;
   authToken: string;
 }) {
-  const access = yield* Access.Access;
-  const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
+  const accessHeaders = yield* stateStoreAccessHeaders(url);
   return yield* makeHttpStateStore({
     url,
     authToken,
@@ -970,9 +1057,17 @@ const waitForStateStoreVersion = (url: string) =>
     }),
   );
 
-const checkStateStoreVersion = (url: string) =>
+export const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
-    const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+    // Resolved outside the probe's catch-all below: failing to authenticate
+    // to Access is an error to surface, not an unknown version.
+    const accessHeaders = yield* stateStoreAccessHeaders(url);
+    const client = yield* HttpApiClient.make(StateApi, {
+      baseUrl: url,
+      transformClient: HttpClient.mapRequest(
+        HttpClientRequest.setHeaders(accessHeaders),
+      ),
+    });
     const isAvailable = yield* Effect.cached(
       isStateStoreAvailable(STATE_STORE_SCRIPT_NAME),
     );

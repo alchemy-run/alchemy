@@ -100,6 +100,50 @@ and [Adopting Resources](/cli/adopting-resources) for when `--adopt`
 is needed.
 :::
 
+## `state protect`
+
+```sh
+alchemy state protect [--profile <name>] [--yes]
+```
+
+Put the account's Cloudflare state store behind
+[Cloudflare Access](/state-store#protect-the-store-with-cloudflare-access).
+Members of the Cloudflare account sign in with their Cloudflare account;
+CI/CD uses tokens from `state token create`. The policy is fixed and
+applies to every stack and stage in the store. Rerunning the command
+re-applies it. Requires Cloudflare Zero Trust on the account.
+
+## `state unprotect`
+
+```sh
+alchemy state unprotect [--profile <name>] [--yes]
+```
+
+Remove Cloudflare Access from the state store and delete its tokens. The
+store stays protected by its bearer token.
+
+## `state login`
+
+```sh
+alchemy state login [--profile <name>]
+```
+
+Log in to Cloudflare Access for the state store with `cloudflared`.
+Optional: `deploy`, `plan`, and the other commands log in on demand.
+
+## `state token`
+
+```sh
+alchemy state token create <name>    # prints CLOUDFLARE_ACCESS_CLIENT_ID / _SECRET
+alchemy state token list             # alias: ls
+alchemy state token revoke <name> [--yes]
+```
+
+Service tokens let CI/CD reach the protected state store. Set the two
+printed values as `CLOUDFLARE_ACCESS_CLIENT_ID` and
+`CLOUDFLARE_ACCESS_CLIENT_SECRET` in the pipeline. Revoking a token
+deletes it and removes it from the Access policy.
+
 ## Where next
 
 - [Inspecting State](/cli/inspecting-state) — debugging and recovery workflows

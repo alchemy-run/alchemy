@@ -45,15 +45,16 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
 export const checkHttpStateStoreAuth = ({
   url,
   authToken,
-}: {
-  url: string;
-  authToken: string;
-}) =>
+  transformClient,
+}: HttpStateStoreCredentials & Pick<HttpStateStoreProps, "transformClient">) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
       transformClient: HttpClient.mapRequest((req) =>
-        req.pipe(HttpClientRequest.bearerToken(authToken)),
+        req.pipe(
+          HttpClientRequest.bearerToken(authToken),
+          transformClient ?? identity,
+        ),
       ),
     });
     return yield* apiClient.state.listStacks().pipe(

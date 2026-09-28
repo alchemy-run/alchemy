@@ -853,7 +853,7 @@ export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
  * first match. The listing is eventually consistent, so a missing entry is
  * retried briefly before failing.
  */
-const findWorkerId = (accountId: string, scriptName: string) =>
+export const findWorkerId = (accountId: string, scriptName: string) =>
   workers.listScripts.items({ accountId }).pipe(
     Stream.filter((script) => script.id === scriptName),
     Stream.runHead,

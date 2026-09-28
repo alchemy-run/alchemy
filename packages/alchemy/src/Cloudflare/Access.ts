@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { cachedFunction } from "../Util/cached-function.ts";
+import { UserFacingError } from "../UserFacingError.ts";
 
 export class AccessError extends Schema.TaggedError<AccessError>()(
   "AccessError",
@@ -14,73 +14,150 @@ export class AccessError extends Schema.TaggedError<AccessError>()(
     message: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   },
-) {}
+) {
+  readonly [UserFacingError] = true;
+}
 
 export class Access extends Context.Service<
   Access,
   {
+    /**
+     * Whether requests to `domain` are intercepted by Cloudflare Access.
+     * The answer is cached per domain; pass `refresh` to probe again (e.g.
+     * right after an Access application was created).
+     */
+    readonly usesAccess: (
+      domain: string,
+      options?: { readonly refresh?: boolean },
+    ) => Effect.Effect<boolean>;
+    /**
+     * Headers that authenticate a request to `domain` through Cloudflare
+     * Access, or `{}` when the domain is not behind Access. Uses the
+     * `CLOUDFLARE_ACCESS_CLIENT_ID` / `CLOUDFLARE_ACCESS_CLIENT_SECRET`
+     * service token when set, otherwise a user token from `cloudflared`.
+     */
     readonly getAccessHeaders: (
       domain: string,
     ) => Effect.Effect<Record<string, string>, AccessError>;
   }
 >()("alchemy/Cloudflare/Access") {}
 
+/**
+ * `true` when a response to an unauthenticated request is Cloudflare Access
+ * redirecting to its login page.
+ *
+ * @internal exported for unit testing.
+ */
+export const isAccessChallenge = (response: {
+  readonly status: number;
+  readonly location: string | null;
+}): boolean =>
+  response.status >= 300 &&
+  response.status < 400 &&
+  (response.location?.includes(".cloudflareaccess.com/") ?? false);
+
+/**
+ * Extract the application token `cloudflared` prints. The token is a JWT, so
+ * match the first three-segment base64url string rather than depending on the
+ * surrounding wording, which differs between `access token` and
+ * `access login` and across cloudflared versions.
+ *
+ * @internal exported for unit testing.
+ */
+export const parseCloudflaredToken = (stdout: string): string | undefined =>
+  stdout.match(/\b(eyJ[\w-]*\.[\w-]+\.[\w-]+)\b/)?.[1];
+
+const INSTALL_CLOUDFLARED =
+  "Install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/, " +
+  "or set CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET to use a service token.";
+
 export const AccessLive = Layer.effect(
   Access,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const domainUsesAccess = yield* cachedFunction((domain: string) =>
+    const detected = new Map<string, boolean>();
+    const userTokens = new Map<string, string>();
+
+    const probe = (domain: string) =>
       Effect.promise((signal) =>
         fetch(`https://${domain}`, { redirect: "manual", signal }),
       ).pipe(
-        Effect.map(
-          (response) =>
-            response.status === 302 &&
-            (response.headers
-              .get("location")
-              ?.includes("cloudflareaccess.com") ??
-              false),
+        Effect.map((response) =>
+          isAccessChallenge({
+            status: response.status,
+            location: response.headers.get("location"),
+          }),
         ),
-        Effect.timeout(1000),
+        Effect.timeout("5 seconds"),
         Effect.catch(() => Effect.succeed(false)),
-      ),
-    );
-    const login = (domain: string) =>
-      ChildProcess.make("cloudflared", ["access", "login", domain]).pipe(
+      );
+
+    const usesAccess = (
+      domain: string,
+      options?: { readonly refresh?: boolean },
+    ) =>
+      Effect.gen(function* () {
+        const cached = detected.get(domain);
+        if (cached !== undefined && !options?.refresh) return cached;
+        const result = yield* probe(domain);
+        detected.set(domain, result);
+        return result;
+      });
+
+    /** Run `cloudflared` and return its stdout; stderr goes to the terminal
+     * so the user sees the login URL if the browser does not open. */
+    const cloudflared = (args: ReadonlyArray<string>) =>
+      ChildProcess.make("cloudflared", [...args], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "inherit",
+      }).pipe(
         spawner.spawn,
-        Effect.flatMap((process) => Stream.runCollect(process.stdout)),
+        Effect.flatMap((child) =>
+          child.stdout.pipe(Stream.decodeText, Stream.mkString),
+        ),
+        Effect.scoped,
         Effect.mapError(
           (error) =>
             new AccessError({
-              message:
-                `The domain "${domain}" uses Cloudflare Access, but \`cloudflared\` is not installed. ` +
-                `Please install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation.`,
+              message: `Failed to run \`cloudflared\`. ${INSTALL_CLOUDFLARED}`,
               cause: error,
             }),
         ),
-        Effect.flatMap((stdout) => {
-          const matches = stdout
-            .toString()
-            .match(/fetched your token:\n\n(.*)/m);
-          return matches && matches.length >= 2
-            ? Effect.succeed({ Cookie: `CF_Authorization=${matches[1]}` })
-            : Effect.fail(
-                new AccessError({
-                  message: "Failed to authenticate with Cloudflare Access",
-                }),
-              );
-        }),
-        Effect.scoped,
       );
 
-    const getEnv = (name: string) =>
-      Config.String(name)
+    const userToken = (domain: string) =>
+      Effect.gen(function* () {
+        const cached = userTokens.get(domain);
+        if (cached) return cached;
+        const app = `https://${domain}`;
+        // A still-valid token is printed without opening a browser.
+        const existing = parseCloudflaredToken(
+          yield* cloudflared(["access", "token", `-app=${app}`]).pipe(
+            Effect.catch(() => Effect.succeed("")),
+          ),
+        );
+        const token =
+          existing ??
+          parseCloudflaredToken(yield* cloudflared(["access", "login", app]));
+        if (!token) {
+          return yield* new AccessError({
+            message: `Failed to log in to Cloudflare Access for ${domain}.`,
+          });
+        }
+        userTokens.set(domain, token);
+        return token;
+      });
 
-        .pipe(Effect.catchTag("ConfigError", () => Effect.succeed(undefined)));
+    const getEnv = (name: string) =>
+      Config.String(name).pipe(
+        Effect.catchTag("ConfigError", () => Effect.succeed(undefined)),
+      );
 
     return Access.of({
+      usesAccess,
       getAccessHeaders: Effect.fn(function* (domain) {
-        if (!(yield* domainUsesAccess(domain))) {
+        if (!(yield* usesAccess(domain))) {
           return {};
         }
         const clientId = yield* getEnv("CLOUDFLARE_ACCESS_CLIENT_ID");
@@ -103,7 +180,8 @@ export const AccessLive = Layer.effect(
           );
         }
 
-        return yield* login(domain);
+        const token = yield* userToken(domain);
+        return { "cf-access-token": token } as Record<string, string>;
       }),
     });
   }),
