@@ -889,7 +889,8 @@ const EVERYTHING: BundlePanel = {
   note: "{extra} clients the code never calls",
 };
 
-export const steps: StepSpec[] = [
+/** Every step ever written, in the original long order. `steps` below picks from it. */
+const allSteps: StepSpec[] = [
   // Act 1: a programming language for the cloud
   {
     kind: "slide",
@@ -2001,4 +2002,178 @@ export const steps: StepSpec[] = [
       "Approve it, and the providers do the work: the bucket, the queue, then the Worker with its bindings attached. One program, deployed. Now let's build something real.",
   },
   ...demo,
+];
+
+// ─── The talk: condensed ─────────────────────────────────────────────────────
+// The problem fast, the idea (a language for the cloud) as a hypothetical, why
+// Alchemy is shaped the way it is, then demos. Steps are picked from `allSteps`
+// by title, optionally retitled, with a few new ones in between.
+
+/** A step from `allSteps`, by its current title; `as` renames it for the new flow. */
+const pick = (title: string, as?: string, patch?: Partial<CodeSpec>): StepSpec => {
+  const found = allSteps.find((step) => step.title === title);
+  if (!found) throw new Error(`no step titled ${JSON.stringify(title)}`);
+  return { ...found, ...(as ? { title: as } : {}), ...(patch ?? {}) } as StepSpec;
+};
+
+const LIVE = { file: "src/Api.ts", snippet: "ApiLive.ts", group: "demo-live", regions: ["top", "rooms", "fetchTop", "live", "click", "fetchEnd"] };
+const ROOM = { file: "src/LinkRoom.ts", snippet: "LinkRoom.ts", group: "demo-room" };
+
+/** A code step from the Shorty app in `snippets/shorty/`. */
+const shorty = (s: {
+  title: string;
+  notes: string;
+  file: string;
+  snippet: string;
+  group: string;
+  regions?: string[];
+  omit?: string[];
+  marks?: CodeSpec["marks"];
+}): StepSpec => ({
+  kind: "code",
+  group: s.group,
+  file: s.file,
+  title: s.title,
+  src: { snippet: `shorty/${s.snippet}`, regions: s.regions ?? ["show"], omit: s.omit },
+  marks: s.marks,
+  notes: s.notes,
+});
+
+const liveClicks: StepSpec[] = [
+  {
+    kind: "slide",
+    layout: "section",
+    title: "Now let's make it live",
+    eyebrow: "Durable Objects + WebSockets",
+    heading: "Now let's make it live",
+    subtitle: "Every click, pushed to every dashboard, as it happens",
+    notes:
+      "Shorty works. Now let's make it feel alive: count every click, and push the count to every open dashboard in real time. That's a job for a Durable Object with WebSockets.",
+  },
+  shorty({
+    ...ROOM,
+    title: "A Durable Object is a tiny stateful server per link",
+    omit: ["count", "record", "socket"],
+    notes:
+      "A Durable Object is a class with its own storage, one instance per name. We'll have one per short link: a room that owns that link's clicks.",
+  }),
+  shorty({
+    ...ROOM,
+    title: "It keeps the click count in its own storage",
+    omit: ["record", "socket"],
+    notes: "When it wakes up, it reads its count from transactional storage.",
+  }),
+  shorty({
+    ...ROOM,
+    title: "Each click bumps the count and saves it",
+    regions: ["body"],
+    omit: ["push", "socket"],
+    notes: "record adds one and saves it. Storage and compute live together, so there's no round trip to a database.",
+  }),
+  shorty({
+    ...ROOM,
+    title: "fetch upgrades to a WebSocket",
+    regions: ["body"],
+    omit: ["push"],
+    notes: "fetch upgrades the request to a WebSocket and sends the current count straight away.",
+  }),
+  shorty({
+    ...ROOM,
+    title: "…and every click is pushed to every socket",
+    regions: ["body"],
+    notes:
+      "And on every click, the new count goes to every connected socket. These are hibernatable: the object can sleep while the sockets stay open, so idle rooms cost nothing.",
+  }),
+  shorty({
+    ...LIVE,
+    title: "The Worker asks for the rooms, like any other binding",
+    omit: ["live", "click"],
+    notes: "In the Worker, yield LinkRoom. Same shape as every binding so far: declared in construction, used at runtime.",
+  }),
+  shorty({
+    ...LIVE,
+    title: "A click records itself in the link's room…",
+    omit: ["live"],
+    notes: "When someone follows a short link, look it up, record the click in that link's room, and redirect.",
+  }),
+  shorty({
+    ...LIVE,
+    title: "…and /live hands the socket to the room",
+    notes: "And GET /:code/live hands the WebSocket straight to the room. That's the whole backend.",
+  }),
+  shorty({
+    title: "The dashboard just opens a socket",
+    notes: "On the website, each row opens a socket to its link's room and renders whatever arrives.",
+    file: "web/src/useClicks.ts",
+    snippet: "useClicks.ts",
+    group: "demo-hook",
+  }),
+  {
+    kind: "browser",
+    title: "Click a link, and every dashboard updates",
+    url: "http://localhost:5173",
+    image: "04-durable-objects-browser-1.png",
+    notes: "Click the link from your phone and the count ticks up here, instantly. No polling, no pub/sub service to set up.",
+  },
+];
+
+export const steps: StepSpec[] = [
+  pick("A programming language for the cloud"),
+
+  // 1. The problem, fast
+  pick("Infrastructure as code declares what should be, not what is", "Infrastructure as code: declare what the cloud should be"),
+  pick("An engine compares it to the cloud, and creates what's missing"),
+  pick("Then the AWS CDK came out", "The CDK made it real code"),
+  pick("It also bothered me that the runtime code lived elsewhere", "But the code that runs is a second program"),
+  pick("Rename one side, and nothing tells you the other broke"),
+
+  // 2. The idea: a language for the cloud
+  pick("I wanted one language where a variable could be a cloud resource", "Imagine a language where a variable is a cloud resource"),
+  pick("You'd declare a queue the same way"),
+  pick("Functions would be resources too"),
+  pick("When the function reads the bucket, they'd become connected"),
+  pick("That connection would need permission to read the bucket"),
+  pick("Sending to the queue would connect them the same way"),
+  pick("The language would work all of this out from code", "Least-privilege IAM, inferred from the code"),
+  pick("But what if the function created a bucket?"),
+  pick("Uh-oh. Resources need to be known ahead of time"),
+  pick("So a cloud program is actually a language with two phases"),
+  pick("Now creating a bucket at runtime is a compile error"),
+  pick("And inferring permissions becomes a kind of type checking"),
+  pick("…just as a compiler infers a type from a function's body"),
+
+  // 3. Effect already models this
+  pick("But it can't see inside a function that's passed in", "But reading the code breaks down when a function is passed in", { file: "app.ts" }),
+  pick("Unless its type says what it needs", "…unless its type says what it needs", { file: "app.ts" }),
+  pick("Then inferring permissions is just type checking", "Then the policy falls out of the types", { file: "app.ts" }),
+  pick("It could say how it fails too, that seems like a good idea 😏", undefined, { file: "app.ts" }),
+  pick("Wait… this looks familiar", undefined, { file: "app.ts" }),
+  pick("That's exactly the type of an Effect"),
+
+  // 4. How bindings work in Alchemy
+  pick("Let's write the program again with Effect", "So let's write it with Effect"),
+  pick("Resources are declared in construction, with yield*"),
+  pick("A binding is just another dependency to yield", "Using a resource is a binding, declared the same way"),
+  pick("A queue works the same way"),
+  pick("Then we hand it a Layer for each binding it needs"),
+  pick("Each one is a binding layer, and it has two faces"),
+  pick("Its first face runs at construction and wires up the binding"),
+  pick("Its second face runs at runtime and implements the interface"),
+  pick("Conditional infrastructure is just an if statement"),
+  pick("And \"peeking inside\" is solved by just running the code", "Running the code decides what's granted"),
+  pick("Now let's actually deploy it, starting with a Worker", "Wrap it in a Worker, and it deploys", { group: "api-host" }),
+  pick("On Lambda, our Cloudflare binding layers won't compile", "Point it at Lambda, and the types catch the wrong bindings", { group: "api-host" }),
+  pick("Swap the native bindings for HTTP, and it runs anywhere", undefined, { group: "api-host" }),
+  pick("Now AWS can call Cloudflare, with only the access it needs", undefined, { group: "api-host" }),
+  pick("This is where Stacks come in", "A Stack deploys it"),
+  pick("Yielding Api brings its provider requirements with it"),
+  pick("…and Cloudflare.providers() satisfies all of them"),
+  pick("alchemy deploy runs the Stack and shows you a plan"),
+  pick("Approve it, and everything is created and wired together"),
+
+  // 5. Demo: build Shorty with an agent
+  ...allSteps.slice(allSteps.findIndex((s) => s.title === "Let's build something")),
+
+  // 6. Demo: live clicks with Durable Objects and WebSockets
+  ...liveClicks,
 ];
