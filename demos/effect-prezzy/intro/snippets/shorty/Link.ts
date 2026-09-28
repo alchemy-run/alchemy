@@ -1,20 +1,25 @@
 import * as Schema from "effect/Schema";
 
-// #region link
+// #region show
 export const Link = Schema.Struct({
   code: Schema.String,
   url: Schema.String,
+  // #region createdAt
   createdAt: Schema.String,
+  // #endregion createdAt
 });
 export type Link = typeof Link.Type;
+// #region notFound
 
-/** A missing link: a typed error in code and a typed 404 over HTTP. */
 export class LinkNotFound extends Schema.TaggedError<LinkNotFound>()(
   "LinkNotFound",
   { code: Schema.String },
+  // #region status
   { httpApiStatus: 404 },
+  // #endregion status
 ) {}
-// #endregion link
+// #endregion notFound
+// #endregion show
 
 /** Short, URL-safe codes. */
 export const newCode = () =>

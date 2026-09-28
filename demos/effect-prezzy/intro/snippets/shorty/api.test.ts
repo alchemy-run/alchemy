@@ -11,22 +11,32 @@ import { ShortyApi } from "./ShortyApi.ts";
 // #region show
 const { test, beforeAll, deploy } = Test.make({
   providers: Cloudflare.providers(),
+  // #region dev
   dev: true,
+  // #endregion dev
 });
+// #region deploy
 
 const stack = beforeAll(deploy(Stack));
+// #endregion deploy
+// #region test
 
 test(
   "creates and reads back a link",
   Effect.gen(function* () {
     const { api } = yield* stack;
     const shorty = yield* HttpApiClient.make(ShortyApi, { baseUrl: api });
+    // #region create
 
     const link = yield* shorty.links.create({ payload: { url: "https://effect.website" } });
+    // #endregion create
+    // #region check
     const found = yield* shorty.links.get({ params: { code: link.code } });
     expect(found.url).toBe("https://effect.website");
+    // #endregion check
   }),
 );
+// #endregion test
 // #endregion show
 
 test(

@@ -106,7 +106,7 @@ interface Cut {
   origin: number[];
   regions: Map<string, [number, number]>;
 }
-const cut = (text: string, keep?: string[]): Cut => {
+const cut = (text: string, keep?: string[], omit: string[] = []): Cut => {
   const lines = text.split("\n");
   const open: string[] = [];
   const kept: string[] = [];
@@ -127,6 +127,8 @@ const cut = (text: string, keep?: string[]): Cut => {
       return;
     }
     if (REGION.test(line)) return;
+    // Not written yet: gone without a trace.
+    if (omit.some((name) => open.includes(name))) return;
     if (keep && !keep.some((name) => open.includes(name))) {
       // Skipped code shows as one "…" line, indented like the code it stands for.
       // Only inside `show` (the whole excerpt): code outside it is never on screen.
@@ -183,7 +185,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   if ("snippet" in spec.src) {
     const file = path.join(snippetsDir, spec.src.snippet);
     const text = await readFile(file, "utf8");
-    const c = cut(text, spec.src.regions);
+    const c = cut(text, spec.src.regions, spec.src.omit);
     code = c.code;
     regions = c.regions;
     const list = diagnostics.get(spec.src.snippet) ?? [];

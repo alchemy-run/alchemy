@@ -6,16 +6,21 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { LinkNotFound, newCode, type Link } from "./Link.ts";
 
+// #region service
+// #region storeError
 export class LinkStoreError extends Data.TaggedError("LinkStoreError")<{ cause: unknown }> {}
 
-// #region service
-/** Where links live. The Worker depends on this contract, never on a database. */
+// #endregion storeError
 export class Links extends Context.Service<
   Links,
   {
     create(url: string): Effect.Effect<Link, LinkStoreError, Alchemy.RuntimeContext>;
+    // #region get
     get(code: string): Effect.Effect<Link, LinkNotFound | LinkStoreError, Alchemy.RuntimeContext>;
+    // #endregion get
+    // #region list
     list(): Effect.Effect<readonly Link[], LinkStoreError, Alchemy.RuntimeContext>;
+    // #endregion list
   }
 >()("Links") {}
 // #endregion service

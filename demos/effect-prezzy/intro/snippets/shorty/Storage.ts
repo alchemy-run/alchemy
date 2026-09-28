@@ -14,17 +14,29 @@ export const D1Storage = Layer.unwrap(
 ).pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding));
 
 // #region neon
-/** Postgres on Neon, pooled at the edge by Hyperdrive. Same migrations. */
 export const NeonStorage = Layer.unwrap(
   Effect.gen(function* () {
     const db = yield* Neon.Project("Postgres", { migrations: "./migrations" });
+    // #region pool
     const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", {
-      origin: db.origin, // deployed: Hyperdrive pools Neon's direct endpoint
-      dev: db.pooledOrigin, // alchemy dev: straight to Neon's own pooler
-      caching: { disabled: true }, // links must be read-after-write
+      origin: db.origin,
+      // #region dev
+      dev: db.pooledOrigin,
+      // #endregion dev
+      // #region caching
+      caching: { disabled: true },
+      // #endregion caching
     });
+    // #endregion pool
+    // #region connect
     const connection = yield* Cloudflare.Hyperdrive.Connect(pool);
+    // #endregion connect
+    // #region sql
     return Postgres.PostgresLayer({ url: connection.connectionString });
+    // #endregion sql
   }),
-).pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));
+)
+  // #region bind
+  .pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));
+  // #endregion bind
 // #endregion neon
