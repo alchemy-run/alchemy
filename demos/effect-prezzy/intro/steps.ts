@@ -915,20 +915,20 @@ const TYPED = (type: string) =>
 const typedFetch: StepSpec[] = [
   lang({
     title: "So write what it needs into its type",
-    src: { code: TYPED("Response needs s3:GetObject | sqs:SendMessage") },
+    src: { code: TYPED("Promise<Response, never, s3:GetObject>") },
     emphasize: ["runtime function fetch"],
     notes:
-      "So write it down. fetch returns a Response, and it needs s3:GetObject and sqs:SendMessage. Once it's in the type, nothing has to read the body: anything that calls fetch inherits those needs, like any other type.",
+      "So write it down, as a third type parameter: fetch returns a Response and needs s3:GetObject. Once it's in the type, nothing has to read the body: anything that calls fetch inherits that need, like any other type.",
   }),
   lang({
     title: "It could say how it fails too, that seems like a good idea 😏",
-    src: { code: TYPED("Response throws NotFound needs s3:GetObject | sqs:SendMessage") },
+    src: { code: TYPED("Promise<Response, NotFound, s3:GetObject>") },
     emphasize: ["runtime function fetch"],
-    notes: "And while we're at it, the type could say how it fails, too.",
+    notes: "And while we're at it, the middle parameter could say how it fails: NotFound.",
   }),
   lang({
     title: "Wait… this looks familiar",
-    src: { code: TYPED("Effect<Response, NotFound, s3:GetObject | sqs:SendMessage>") },
+    src: { code: TYPED("Effect<Response, NotFound, s3:GetObject>") },
     emphasize: ["runtime function fetch"],
     notes: "Wait. What it returns, how it fails, and what it needs. We've seen this before.",
   }),
