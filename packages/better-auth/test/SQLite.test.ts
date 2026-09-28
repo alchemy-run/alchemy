@@ -29,7 +29,7 @@ const tempSqlitePath = Effect.gen(function* () {
   return `${dir}/auth.sqlite`;
 });
 
-describe("BetterAuth (bun:sqlite)", () => {
+describe("BetterAuth (bun:sqlite)", { tags: ["unit", "local"] }, () => {
   it.live(
     "uses the configured runtime directory unless a filename is supplied",
     () =>

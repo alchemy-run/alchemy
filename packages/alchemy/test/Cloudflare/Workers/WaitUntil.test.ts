@@ -46,6 +46,7 @@ const getText = Effect.fn(function* (url: string) {
 
 describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
   () => {
     test(
       "concurrent background journal writes retain every entry",

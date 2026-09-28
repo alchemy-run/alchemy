@@ -56,5 +56,8 @@ test.provider(
       yield* stack.destroy();
       expect(yield* fs.exists(updated.directory)).toBe(false);
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["unit", "provider:neon", "provider:neon:website", "local"],
+    timeout: 120_000,
+  },
 );

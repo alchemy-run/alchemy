@@ -37,7 +37,11 @@ test.provider(
       yield* bodyContaining(`${restarted.url}/src/App.tsx`, "second");
       yield* stack.destroy();
     }).pipe(Effect.scoped),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:neon", "provider:neon:website", "local"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -88,5 +92,9 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:neon", "provider:neon:website", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

@@ -50,7 +50,7 @@ const provideTestEnv = <A, E, R>(
     Exclude<R, RuntimeContext>
   >;
 
-describe("BetterAuth (memory)", () => {
+describe("BetterAuth (memory)", { tags: ["unit", "local"] }, () => {
   it.live("signs up, signs in over HTTP, reads the session", () =>
     Effect.gen(function* () {
       const auth = yield* BetterAuth({

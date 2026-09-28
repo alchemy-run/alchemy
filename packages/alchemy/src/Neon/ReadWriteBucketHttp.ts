@@ -9,6 +9,7 @@ import { makeStorageBinding, storageHttpLayer } from "./StorageBinding.ts";
  * One injected or managed credential for both interfaces.
  *
  * @layer
+ * @product Bucket
  * @provides ReadWriteBucket
  */
 export const ReadWriteBucketHttp = Layer.effect(

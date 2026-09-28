@@ -63,7 +63,7 @@ export const validateBucketName = (name: string) =>
  * ```
  *
  * @resource
- * @product Celld
+ * @product R2
  */
 export const Bucket = withFleet(Resource<Bucket>("Celld.R2.Bucket"));
 

@@ -119,7 +119,7 @@ export interface Account extends Resource<
  * ```
  *
  * @resource
- * @product ACME
+ * @product Account
  * @category Certificates
  */
 export const Account = Resource<Account>("ACME.Account");

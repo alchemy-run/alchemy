@@ -79,7 +79,7 @@ export const validateConsumerSettings = (settings: ConsumerSettings = {}) =>
  * ```
  *
  * @binding
- * @product Celld
+ * @product Queues
  */
 export const Consumer = Effect.fn(function* (id: string, props: ConsumerProps) {
   const host = yield* Worker;

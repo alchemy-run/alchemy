@@ -78,7 +78,7 @@ test.provider(
 
       yield* assertVpcDeleted(vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 15 * 60_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 15 * 60_000 },
 );
 
 test.provider(
@@ -104,7 +104,7 @@ test.provider(
 
       yield* assertVpcDeleted(deployed.vpcId);
     }).pipe(logLevel),
-  { timeout: 15 * 60_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 15 * 60_000 },
 );
 
 const expectVpcAttribute = Effect.fn(function* (props: {

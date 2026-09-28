@@ -21,6 +21,7 @@ import { Verify, type VerifyRequest } from "./Verify.ts";
  * ```
  *
  * @layer
+ * @product Secret Key
  * @provides Fly.Verify
  */
 export const VerifyHttp = Layer.effect(

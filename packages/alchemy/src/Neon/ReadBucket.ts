@@ -29,6 +29,7 @@ export interface ReadBucketClient extends RuntimeStorageMethods<
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface ReadBucket extends Binding.Service<
   ReadBucket,

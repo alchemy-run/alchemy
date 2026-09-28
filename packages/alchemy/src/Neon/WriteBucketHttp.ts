@@ -24,6 +24,7 @@ export const makeWriteBucketClient = (
  * Use injected same-branch credentials, otherwise manage explicit read/write scopes.
  *
  * @layer
+ * @product Bucket
  * @provides WriteBucket
  */
 export const WriteBucketHttp = Layer.effect(

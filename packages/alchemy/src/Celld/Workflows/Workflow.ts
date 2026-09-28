@@ -155,6 +155,6 @@ function makeWorkflow(
  * ```
  *
  * @binding
- * @product Celld
+ * @product Workflows
  */
 export const Workflow = makeWorkflow;

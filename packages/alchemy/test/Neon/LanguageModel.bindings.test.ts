@@ -101,7 +101,18 @@ for (const mode of ["injected", "managed", "managed-with-injection"] as const) {
           ),
         ),
       ),
-    { exclusive: true },
+    {
+      tags: [
+        "unit",
+        "provider:neon",
+        "provider:neon:aigateway",
+        "provider:neon:backendconnection",
+        "provider:neon:function",
+        "provider:neon:languagemodel",
+        "local",
+      ],
+      exclusive: true,
+    },
   );
 }
 
@@ -140,6 +151,17 @@ for (const [name, environment, message] of [
           }
         }).pipe(Effect.provide(services(true, environment))),
       ),
-    { exclusive: true },
+    {
+      tags: [
+        "unit",
+        "provider:neon",
+        "provider:neon:aigateway",
+        "provider:neon:backendconnection",
+        "provider:neon:function",
+        "provider:neon:languagemodel",
+        "local",
+      ],
+      exclusive: true,
+    },
   );
 }

@@ -97,7 +97,10 @@ test(
 
     yield* destroy(RpcMigrationStack);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "local"],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -126,7 +129,10 @@ inProcessTest.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "local"],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -170,7 +176,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -262,7 +276,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -316,7 +338,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -381,7 +411,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -448,5 +486,13 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

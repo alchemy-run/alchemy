@@ -89,7 +89,17 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:neon",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Neon's docs state storage:write includes all read operations, but the data
@@ -184,5 +194,16 @@ test.provider(
         DeleteObject: "ok",
       });
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -110,7 +110,17 @@ test.provider(
       expect(yield* listLive(base.box.environmentId)).toEqual([]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:sandbox",
+      "provider:railway:sandboxcheckpoint",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -144,7 +154,17 @@ test.provider(
       expect(yield* listLive(after.box.environmentId)).toEqual([]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:sandbox",
+      "provider:railway:sandboxcheckpoint",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -251,7 +271,17 @@ test.provider(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:sandbox",
+      "provider:railway:sandboxcheckpoint",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -359,5 +389,15 @@ test.provider(
       expect(yield* listLive(base.box.environmentId)).toEqual([]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:sandbox",
+      "provider:railway:sandboxcheckpoint",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

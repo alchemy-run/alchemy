@@ -78,7 +78,7 @@ export const isDatabase = (value: unknown): value is Database =>
  * ```
  *
  * @resource
- * @product Celld
+ * @product D1
  */
 export const Database = withFleet(Resource<Database>("Celld.D1.Database"));
 

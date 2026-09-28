@@ -4,7 +4,9 @@ import * as Output from "@/Output";
 import { ref } from "@/Ref";
 import { inMemoryState } from "@/State/InMemoryState";
 import { describe, expect, test } from "alchemy-test";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -113,21 +115,21 @@ describe("Celld environment lowering", () => {
             namespaceId: "id",
           }),
         };
-        const values = Object.fromEntries([
-          ["TEXT", "text"],
-          ["NUMBER", 0],
-          ["FALSE", false],
-          ["NULL", null],
-          ["UNDEFINED", undefined],
-          ["JSON", data],
-          ["ARRAY", [1, null]],
-          ["SECRET", secret],
-          ["OUTPUT", deferred],
-          ["FUNCTION", callable],
-          ["NESTED", nested],
-          ["__proto__", { safe: true }],
-          ["constructor", "constructor-data"],
-        ]);
+        const values = {
+          TEXT: "text",
+          NUMBER: 0,
+          FALSE: false,
+          NULL: null,
+          UNDEFINED: undefined,
+          JSON: data,
+          ARRAY: [1, null],
+          SECRET: secret,
+          OUTPUT: deferred,
+          FUNCTION: callable,
+          NESTED: nested,
+          ["__proto__"]: { safe: true },
+          constructor: "constructor-data",
+        };
         const lowered = yield* lowerEnvironment(values);
         for (const [name, value] of Object.entries(values))
           expect(lowered.env[name]).toBe(value);
@@ -174,6 +176,64 @@ describe("Celld environment lowering", () => {
           "constructor failed",
         );
       }).pipe(Effect.provide(inMemoryState())),
+  );
+
+  test.effect(
+    "retains constructor errors and services while leaving deferred inputs unevaluated",
+    () =>
+      Effect.gen(function* () {
+        class Value extends Context.Service<Value, string>()(
+          "Celld.Environment.Test.Value",
+        ) {}
+        type Equal<A, B> =
+          (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+            ? true
+            : false;
+        let calls = 0;
+        const constructor = Effect.gen(function* () {
+          const value = yield* Value;
+          calls++;
+          if (value === "fail")
+            return yield* Effect.fail("constructor failed" as const);
+          return value;
+        });
+        const deferred = Output.fromEffect(constructor.pipe(Effect.orDie));
+        const reference = ref("Cache", {}, "Celld.KV.Namespace");
+        const pure = lowerEnvironment({
+          TEXT: "literal",
+          OUTPUT: deferred,
+          CACHE: reference,
+          NESTED: { constructor },
+        });
+        const lowering = lowerEnvironment({ VALUE: constructor });
+        const opaque: Record<string, unknown> = {};
+        const unknownInputs = lowerEnvironment(opaque);
+        const assertions: [
+          Equal<Effect.Error<typeof pure>, never>,
+          Equal<Effect.Services<typeof pure>, never>,
+          Equal<Effect.Error<typeof lowering>, "constructor failed">,
+          Equal<Effect.Services<typeof lowering>, Value>,
+          Equal<Effect.Error<typeof unknownInputs>, unknown>,
+          Equal<Effect.Services<typeof unknownInputs>, unknown>,
+        ] = [true, true, true, true, true, true];
+        expect(assertions.every(Boolean)).toBe(true);
+        const preserved = yield* pure;
+        expect(preserved.env.OUTPUT).toBe(deferred);
+        expect(calls).toBe(0);
+        const lowered = yield* lowering.pipe(
+          Effect.provide(Layer.succeed(Value, "ready")),
+        );
+        expect(lowered.env.VALUE).toBe("ready");
+        expect(calls).toBe(1);
+        const failure = yield* lowering.pipe(
+          Effect.provide(Layer.succeed(Value, "fail")),
+          Effect.result,
+        );
+        expect(Result.isFailure(failure) && failure.failure).toBe(
+          "constructor failed",
+        );
+        expect(calls).toBe(2);
+      }),
   );
 
   test.effect(

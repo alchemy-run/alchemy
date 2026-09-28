@@ -160,6 +160,8 @@ export type SourceDevHandle =
   | {
       readonly mode: "server";
       readonly url: URL;
+      /** Register an HTTP forwarding Worker when the server does not run in workerd. */
+      readonly serviceBinding?: "http";
     };
 
 /**

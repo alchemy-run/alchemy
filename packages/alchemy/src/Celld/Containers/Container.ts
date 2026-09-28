@@ -183,7 +183,7 @@ export interface ContainerClass<
  * itself; only platform services are installed by the process bootstrap.
  *
  * @resource
- * @product Celld
+ * @product Containers
  */
 export const Container = <Self, Shape extends object = {}>() => {
   function declare(

@@ -54,7 +54,7 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * ```
  *
  * @resource
- * @product Celld
+ * @product KV
  */
 export const Namespace = withFleet(Resource<Namespace>("Celld.KV.Namespace"));
 

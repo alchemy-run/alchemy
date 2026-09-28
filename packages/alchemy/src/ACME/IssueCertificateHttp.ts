@@ -30,6 +30,7 @@ import {
  * ```
  *
  * @layer
+ * @product Certificate
  * @provides ACME.IssueCertificate
  */
 export const IssueCertificateHttp = Layer.succeed(

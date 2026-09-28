@@ -60,10 +60,11 @@ import {
   isContainerDecl,
   resolveObservability,
 } from "./WorkerAsyncBindings.ts";
-import type {
-  WireWorkerBinding,
-  WorkerBinding,
-  WorkerSettingsBinding,
+import {
+  type WireWorkerBinding,
+  type WorkerBinding,
+  type WorkerSettingsBinding,
+  withoutDevOnlyBindings,
 } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
@@ -887,8 +888,7 @@ const putWorkerScript = (params: {
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
-          metadata:
-            params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
+          metadata: params.metadata,
           files: params.files,
         })
         .pipe(
@@ -2378,6 +2378,11 @@ export const LiveWorkerProvider = () =>
           return yield* readAssets(config);
         }
 
+        // Framework sources supply the directory; routing-only config has no files to read.
+        if (typeof assets === "object" && assets.directory === undefined) {
+          return undefined;
+        }
+
         // Handle string path or AssetsProps
         return yield* readAssets(
           typeof assets === "string" ? { directory: assets } : assets,
@@ -2908,7 +2913,7 @@ export const LiveWorkerProvider = () =>
         const subdomain = yield* workers
           .getScriptSubdomain({ accountId, scriptName })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),
@@ -3073,7 +3078,7 @@ export const LiveWorkerProvider = () =>
         // service binding on the parent script (versions have no name of
         // their own).
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item) =>
+          withoutDevOnlyBindings(b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
               : item.type === "self_service"
@@ -3454,7 +3459,7 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
 
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item) =>
+          withoutDevOnlyBindings(b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
               : item.type === "self_service"
@@ -3691,36 +3696,38 @@ export const LiveWorkerProvider = () =>
         // `transferred_classes` migration below and must be stripped from the
         // wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item): WireWorkerBinding => {
-            // Lower the `Worker.URL` sentinel into the resolved URL —
-            // Cloudflare has no native binding for it.
-            if (item.type === "self_url") {
-              return { type: "plain_text", name: item.name, text: selfUrl! };
-            }
-            // Lower the `Worker.Self` sentinel into a service
-            // binding targeting this Worker's own physical name.
-            if (item.type === "self_service") {
-              return { type: "service", name: item.name, service: name };
-            }
-            if (
-              item.type === "durable_object_namespace" &&
-              item.transferredFrom !== undefined
-            ) {
-              const { transferredFrom: _, ...rest } = item;
-              return rest;
-            }
-            // `queueId` (mode discrimination) and `shim` (dev-mode remote
-            // producer) are alchemy-only metadata on queue bindings — strip
-            // them from the wire shape.
-            if (
-              item.type === "queue" &&
-              (item.queueId !== undefined || item.shim !== undefined)
-            ) {
-              const { queueId: _, shim: __, ...rest } = item;
-              return rest;
-            }
-            return item;
-          }),
+          withoutDevOnlyBindings(b.data.bindings ?? []).map(
+            (item): WireWorkerBinding => {
+              // Lower the `Worker.URL` sentinel into the resolved URL —
+              // Cloudflare has no native binding for it.
+              if (item.type === "self_url") {
+                return { type: "plain_text", name: item.name, text: selfUrl! };
+              }
+              // Lower the `Worker.Self` sentinel into a service
+              // binding targeting this Worker's own physical name.
+              if (item.type === "self_service") {
+                return { type: "service", name: item.name, service: name };
+              }
+              if (
+                item.type === "durable_object_namespace" &&
+                item.transferredFrom !== undefined
+              ) {
+                const { transferredFrom: _, ...rest } = item;
+                return rest;
+              }
+              // `queueId` (mode discrimination) and `shim` (dev-mode remote
+              // producer) are alchemy-only metadata on queue bindings — strip
+              // them from the wire shape.
+              if (
+                item.type === "queue" &&
+                (item.queueId !== undefined || item.shim !== undefined)
+              ) {
+                const { queueId: _, shim: __, ...rest } = item;
+                return rest;
+              }
+              return item;
+            },
+          ),
         );
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings, name);
@@ -4158,6 +4165,12 @@ export const LiveWorkerProvider = () =>
           news.streamingTailConsumers,
         );
         const metadata: workers.PutScriptRequest["metadata"] = {
+          annotations: news.version
+            ? {
+                workersMessage: news.version.message,
+                workersTag: news.version.tag,
+              }
+            : undefined,
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
@@ -4384,7 +4397,7 @@ export const LiveWorkerProvider = () =>
             scriptName: name,
           })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),

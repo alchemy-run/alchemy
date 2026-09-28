@@ -61,7 +61,7 @@ test.provider(
           gone.failure._tag,
         );
     }),
-  { timeout: 90_000 },
+  { tags: ["provider:acme", "provider:acme:account", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -89,5 +89,5 @@ test.provider(
       yield* stack.destroy();
       expect(Result.isFailure(yield* lookup(replaced.privateKey))).toBe(true);
     }),
-  { timeout: 90_000 },
+  { tags: ["provider:acme", "provider:acme:account", "live"], timeout: 90_000 },
 );

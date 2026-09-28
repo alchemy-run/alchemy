@@ -147,7 +147,10 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Default (read-only) path: an RDS instance takes many minutes to create and
@@ -157,21 +160,24 @@ test.provider(
 // asserting it returns a well-typed `DBInstance["Attributes"][]`. On a fresh
 // account this is typically empty; either way every element must conform to
 // the exact `read` shape.
-test.provider("list returns well-typed DB instance attributes", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DBInstance);
-    const all = yield* provider.list();
+test.provider(
+  "list returns well-typed DB instance attributes",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(DBInstance);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    // Every element must match the exact `Attributes` shape `read` produces.
-    for (const instance of all) {
-      expect(typeof instance.dbInstanceIdentifier).toBe("string");
-      expect(typeof instance.dbInstanceArn).toBe("string");
-      expect(Array.isArray(instance.dbParameterGroupNames)).toBe(true);
-      expect(typeof instance.tags).toBe("object");
-    }
-  }),
+      // Every element must match the exact `Attributes` shape `read` produces.
+      for (const instance of all) {
+        expect(typeof instance.dbInstanceIdentifier).toBe("string");
+        expect(typeof instance.dbInstanceArn).toBe("string");
+        expect(Array.isArray(instance.dbParameterGroupNames)).toBe(true);
+        expect(typeof instance.tags).toBe("object");
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
 // Full lifecycle is gated: provisioning an Aurora cluster + instance and then
@@ -277,6 +283,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 // RDS provisioning and storage optimization exceed the default test budget.
@@ -444,6 +451,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       );
       expect(gone).toBe(true);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 type StorageProps = Pick<
@@ -637,6 +645,7 @@ for (const scenario of storageCases) {
         yield* stack.destroy();
         yield* assertInstanceGone(created.dbInstanceIdentifier);
       }),
+    { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
   );
 }
 
@@ -698,6 +707,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 const observeInstanceRequests = Effect.gen(function* () {
@@ -891,6 +901,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -950,6 +961,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -986,6 +998,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 type SecurityProps = Pick<
@@ -1236,7 +1249,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { timeout: 1_800_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -1392,7 +1408,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { timeout: 1_800_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
 );
 
 test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
@@ -1511,7 +1530,10 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { timeout: 1_800_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
 );
 
 const associationProgram = (
@@ -1743,6 +1765,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.instance.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -1830,6 +1853,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -2099,6 +2123,16 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         ),
       ).toBe(true);
     }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:rds",
+      "provider:aws:secretsmanager",
+      "live",
+    ],
+  },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -2178,6 +2212,16 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:rds",
+      "provider:aws:secretsmanager",
+      "live",
+    ],
+  },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -2315,6 +2359,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 // Fingerprint-guarded master password lifecycle (#876), gated behind
@@ -2431,4 +2476,5 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );

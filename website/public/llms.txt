@@ -2,7 +2,7 @@
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at https://alchemy.run. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The per-resource API reference is indexed separately in [llms-full.txt](https://alchemy.run/llms-full.txt).
+This file is a navigation index for the documentation site at https://alchemy.run. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The service-level API reference is indexed separately in [llms-full.txt](https://alchemy.run/llms-full.txt).
 
 ## Start here
 
@@ -172,6 +172,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+- [R2 presigned URLs](https://alchemy.run/cloudflare/data/r2-presigned-urls) — Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 - [SQL migrations](https://alchemy.run/cloudflare/data/sql-migrations) — Capture SQL files in the bundle and apply them once per Cloudflare durable instance.
 
@@ -585,6 +586,6 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 ## API reference
 
-Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
+Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~1002 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~133 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -53,7 +53,10 @@ test(
     expect(body.mode).toBe("async");
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -68,7 +71,10 @@ test(
     expect(body.title).toBe("Example Domain");
     expect(body.contentLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -81,7 +87,10 @@ test(
 
     expect(body.markdownLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -94,7 +103,10 @@ test(
 
     expect(body.linkCount).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -107,7 +119,10 @@ test(
 
     expect(body.heading).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -122,7 +137,10 @@ test(
     expect(body.title).toBe("Example Domain");
     expect(body.screenshotLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -135,7 +153,10 @@ test(
 
     expect(body.bytes).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -148,7 +169,10 @@ test(
 
     expect(body.bytes).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -161,7 +185,10 @@ test(
 
     expect(body.success).toBe(true);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -174,7 +201,10 @@ test(
 
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -187,5 +217,8 @@ test(
 
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

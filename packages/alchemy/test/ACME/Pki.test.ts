@@ -33,7 +33,7 @@ const inspectCsr = (der: Uint8Array) =>
     return [...stdout, ...stderr].join("");
   });
 
-describe("ACME PKI", () => {
+describe("ACME PKI", { tags: ["provider:acme", "local"] }, () => {
   for (const algorithm of ["ES256", "RS256"] as const) {
     test(
       `${algorithm} CSR verifies and carries every identifier as a SAN`,
@@ -71,6 +71,7 @@ describe("ACME PKI", () => {
       expect(parsed.notAfter.getUTCFullYear()).toBe(2125);
       expect(parsed.dnsNames).toEqual([]);
     }),
+    { tags: ["unit"] },
   );
 
   test(
@@ -86,5 +87,6 @@ describe("ACME PKI", () => {
       expect(jwk.crv).toBe("P-256");
       expect(jwk.d).toBeDefined();
     }),
+    { tags: ["unit"] },
   );
 });

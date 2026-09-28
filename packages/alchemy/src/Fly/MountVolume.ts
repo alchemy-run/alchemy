@@ -264,6 +264,7 @@ export interface ServiceBinding {
  * ```
  *
  * @binding
+ * @product Volume
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

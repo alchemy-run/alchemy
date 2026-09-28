@@ -218,9 +218,19 @@ export const Octane: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<OctaneProps<Bindings>>
+    | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | InputProps<OctaneProps<Bindings>>
+          | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+      ) => effectClass(Octane(id, propsEff))
     : Worker(
         id,
         Effect.map(

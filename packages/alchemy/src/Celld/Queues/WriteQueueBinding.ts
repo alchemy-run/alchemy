@@ -51,7 +51,7 @@ export const makeWriteQueueClient = (
  *
  * @layer
  * @provides Celld.Queues.WriteQueue
- * @product Celld
+ * @product Queues
  */
 export const WriteQueueBinding = Layer.effect(
   WriteQueue,

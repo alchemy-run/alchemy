@@ -166,6 +166,7 @@ export interface HelmChart extends Resource<
  * ```
  *
  * @resource
+ * @product Helm
  */
 export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
   aliases: ["AWS.EKS.HelmChart"],

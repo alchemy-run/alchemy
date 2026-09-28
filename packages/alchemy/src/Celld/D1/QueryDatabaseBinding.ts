@@ -12,7 +12,7 @@ import { makeQueryDatabaseClient, QueryDatabase } from "./QueryDatabase.ts";
  *
  * @layer
  * @provides Celld.D1.QueryDatabase
- * @product Celld
+ * @product D1
  */
 export const QueryDatabaseBinding = Layer.effect(
   QueryDatabase,

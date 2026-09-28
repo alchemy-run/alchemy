@@ -55,7 +55,7 @@ type Process<Body, R> = (
  * ```
  *
  * @binding
- * @product Celld
+ * @product Queues
  */
 export function consumeQueueMessages<
   Body = unknown,
@@ -145,7 +145,7 @@ export const processQueueBatch = <Body, R>(
  *
  * @layer
  * @provides Celld.Queues.EventSource
- * @product Celld
+ * @product Queues
  */
 export const EventSourceLive = Layer.effect(
   EventSource,

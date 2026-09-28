@@ -317,22 +317,28 @@ const canary = (manager: Manager) =>
     }).toEqual({ code: 0, output: "" });
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe.sequential("packed CLI outside the checkout", () => {
-  if (
-    enabled &&
-    selectedManager !== undefined &&
-    !managers.some((manager) => manager === selectedManager)
-  ) {
-    throw new Error(`Unknown ALCHEMY_CLI_PACKAGE_MANAGER: ${selectedManager}`);
-  }
-  for (const manager of managers) {
-    it.live.skipIf(
-      !enabled ||
-        (selectedManager !== undefined && selectedManager !== manager),
-    )(
-      `installs with ${manager} and runs production CLI across runtimes and entrypoints`,
-      () => canary(manager),
-      { timeout: 120_000 },
-    );
-  }
-});
+describe.sequential(
+  "packed CLI outside the checkout",
+  { tags: ["live"] },
+  () => {
+    if (
+      enabled &&
+      selectedManager !== undefined &&
+      !managers.some((manager) => manager === selectedManager)
+    ) {
+      throw new Error(
+        `Unknown ALCHEMY_CLI_PACKAGE_MANAGER: ${selectedManager}`,
+      );
+    }
+    for (const manager of managers) {
+      it.live.skipIf(
+        !enabled ||
+          (selectedManager !== undefined && selectedManager !== manager),
+      )(
+        `installs with ${manager} and runs production CLI across runtimes and entrypoints`,
+        () => canary(manager),
+        { timeout: 120_000 },
+      );
+    }
+  },
+);

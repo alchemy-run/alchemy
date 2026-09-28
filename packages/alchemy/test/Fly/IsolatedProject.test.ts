@@ -68,7 +68,16 @@ test.provider(
         yield* removeIsolatedProject(serviceProject);
       }
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -93,5 +102,13 @@ test.provider(
         yield* removeIsolatedProject(spriteProject);
       }
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:service",
+      "provider:fly:sprite",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -65,7 +65,16 @@ test(
     expect(body.ns).toBe("object");
     expect(body.nsGet).toBe("function");
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 // The Effect worker attaches the same two binding flavors via
@@ -120,5 +129,14 @@ test(
     expect(["object", "function"]).toContain(body.nsRaw);
     expect(body.nsChatCompletions).toBe("function");
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

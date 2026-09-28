@@ -152,7 +152,18 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:volume",
+      "provider:railway:volumebackup",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!backupEntitled)(
@@ -227,5 +238,16 @@ test.provider.skipIf(!backupEntitled)(
       );
       expect(backupGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:volume",
+      "provider:railway:volumebackup",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

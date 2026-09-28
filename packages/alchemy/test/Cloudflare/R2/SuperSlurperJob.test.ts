@@ -164,7 +164,11 @@ test.provider(
       }
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -321,7 +325,18 @@ test.provider(
       });
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:account",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -351,7 +366,17 @@ test.provider(
       yield* stack.destroy();
       expect(terminal((yield* getJob(replaced.job!)).status)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -450,7 +475,17 @@ test.provider(
       yield* stack.destroy();
       expect(terminal((yield* getJob(job)).status)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 // A one-object migration remained running after the bounded 24-second probe.
@@ -494,5 +529,15 @@ test.provider.skipIf(
       yield* stack.destroy();
       expect((yield* getJob(job)).status).toBe("completed");
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

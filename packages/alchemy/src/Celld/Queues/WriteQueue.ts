@@ -55,7 +55,7 @@ export interface WriteQueueClient {
  * ```
  *
  * @binding
- * @product Celld
+ * @product Queues
  */
 export interface WriteQueue extends Binding.Service<
   WriteQueue,

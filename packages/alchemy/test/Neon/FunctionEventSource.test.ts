@@ -44,7 +44,16 @@ test.provider(
       ).toEqual(["schedule", "storage_object_created"]);
       expect(triggers.every((trigger) => trigger.enabled)).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -72,7 +81,16 @@ test(
     );
     expect(JSON.stringify(events)).not.toContain("outside.txt");
   }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -92,5 +110,14 @@ test(
       expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
     );
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

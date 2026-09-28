@@ -152,17 +152,27 @@ const stagePublishedPackage = Effect.gen(function* () {
 });
 
 layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
-  it.effect("maps the public source and published browser entry points", () =>
-    Effect.gen(function* () {
-      const { manifest } = yield* packageInfo;
-      expect(manifest.exports[subpath]).toBe(`./${sourceEntry}`);
-      expect(manifest.publishConfig.exports[subpath]).toEqual({
-        types: `./${declarationEntry}`,
-        bun: `./${sourceEntry}`,
-        default: `./${compiledEntry}`,
-      });
-      expect(manifest.files).toEqual(expect.arrayContaining(["src", "lib"]));
-    }),
+  it.effect(
+    "maps the public source and published browser entry points",
+    () =>
+      Effect.gen(function* () {
+        const { manifest } = yield* packageInfo;
+        expect(manifest.exports[subpath]).toBe(`./${sourceEntry}`);
+        expect(manifest.publishConfig.exports[subpath]).toEqual({
+          types: `./${declarationEntry}`,
+          bun: `./${sourceEntry}`,
+          default: `./${compiledEntry}`,
+        });
+        expect(manifest.files).toEqual(expect.arrayContaining(["src", "lib"]));
+      }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -177,6 +187,14 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         );
         yield* assertBrowserGraph(root, modules, sourceEntry);
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -192,6 +210,14 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         ]);
         yield* assertBrowserGraph(root, modules, sourceEntry);
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   // Compiled packaging checks require a prior workspace build.
@@ -212,5 +238,13 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         const modules = yield* bundleBrowser(directory, entry);
         yield* assertBrowserGraph(root, modules, compiledEntry);
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 });

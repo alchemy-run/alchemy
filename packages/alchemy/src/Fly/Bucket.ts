@@ -246,6 +246,7 @@ export type Bucket = Resource<
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Bucket = Resource<Bucket>("Fly.Bucket");
 

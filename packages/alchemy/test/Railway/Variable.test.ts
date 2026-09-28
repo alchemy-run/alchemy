@@ -162,5 +162,14 @@ test.provider(
       );
       expect(variableGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:variable",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

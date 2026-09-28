@@ -57,5 +57,13 @@ test(
     const body = (yield* res.json) as { ok: boolean };
     expect(body.ok).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:analyticsengine",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -33,27 +33,35 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider("AWS creates the default group with its initial rules", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
-    const vpc = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Vpc("DefaultSecurityGroupInitialVpc", {
-          cidrBlock: "10.43.0.0/16",
-        });
-      }),
-    );
+test.provider(
+  "AWS creates the default group with its initial rules",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const vpc = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Vpc("DefaultSecurityGroupInitialVpc", {
+            cidrBlock: "10.43.0.0/16",
+          });
+        }),
+      );
 
-    const group = yield* findDefaultGroup(vpc.vpcId);
-    yield* expectRules(
-      group.GroupId!,
-      [{ IpProtocol: "-1", ReferencedGroupInfo: { GroupId: group.GroupId! } }],
-      [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
-    );
+      const group = yield* findDefaultGroup(vpc.vpcId);
+      yield* expectRules(
+        group.GroupId!,
+        [
+          {
+            IpProtocol: "-1",
+            ReferencedGroupInfo: { GroupId: group.GroupId! },
+          },
+        ],
+        [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
+      );
 
-    yield* stack.destroy();
-    yield* assertVpcGone(vpc.vpcId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* assertVpcGone(vpc.vpcId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"] },
 );
 
 // This changes the AWS-created default security group only inside the VPC this
@@ -164,6 +172,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(initial.vpc.vpcId);
     }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"] },
 );
 
 for (const direction of ["ingress", "egress"] as const) {
@@ -397,7 +406,7 @@ for (const direction of ["ingress", "egress"] as const) {
         yield* stack.destroy();
         yield* assertVpcGone(created.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
   );
 }
 
@@ -571,7 +580,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -660,7 +669,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -710,7 +719,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -775,7 +784,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.second.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 for (const scenario of [
@@ -864,7 +873,7 @@ for (const scenario of [
         yield* assertVpcGone(created.original.vpcId);
         yield* assertVpcGone(moved.destination.vpcId);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
   );
 }
 
@@ -1049,7 +1058,7 @@ test.provider(
       );
       expect(prefixGone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -1120,7 +1129,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -1214,7 +1223,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 for (const mode of ["omitted", "empty", "inline"] as const) {
@@ -1492,7 +1501,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
         yield* stack.destroy();
         yield* assertVpcGone(created.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
   );
 }
 
@@ -1736,7 +1745,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertVpcGone(vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -1919,7 +1928,7 @@ test.provider(
         yield* assertVpcGone(created.vpc.vpcId);
       }).pipe(Effect.ensuring(foreign.destroy().pipe(Effect.ignore)));
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 for (const kind of ["default", "custom"] as const) {
@@ -2145,7 +2154,7 @@ for (const kind of ["default", "custom"] as const) {
         yield* stack.destroy();
         yield* assertVpcGone(created.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
   );
 }
 
@@ -2254,7 +2263,7 @@ for (const scenario of [
         yield* assertVpcGone(created.original.vpcId);
         yield* assertVpcGone(moved.destination.vpcId);
       }).pipe(logLevel),
-    { timeout: 120_000 },
+    { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
   );
 }
 

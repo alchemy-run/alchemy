@@ -145,5 +145,13 @@ test.provider(
     }),
   // Deploy (~60-120s) + readiness poll (bounded ~150s) + metric visibility
   // poll (bounded ~180s) + destroy. All waits are bounded.
-  { timeout: 420_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudwatch",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 420_000,
+  },
 );

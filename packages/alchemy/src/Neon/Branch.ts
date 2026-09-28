@@ -226,6 +226,7 @@ export type Branch = Resource<
  * @see https://neon.tech/docs/manage/branches/
  *
  * @resource
+ * @product Branch
  */
 export const Branch = Resource<Branch>("Neon.Branch");
 

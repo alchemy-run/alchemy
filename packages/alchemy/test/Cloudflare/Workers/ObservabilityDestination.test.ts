@@ -126,7 +126,10 @@ test.provider(
 
       yield* expectGone(accountId, dest.name);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider(
@@ -241,7 +244,10 @@ test.provider(
 
       yield* expectGone(accountId, NAME_UPDATE);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider(
@@ -297,7 +303,10 @@ test.provider(
 
       yield* expectGone(accountId, NAME_REPLACE_V2);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider(
@@ -344,5 +353,8 @@ test.provider(
 
       yield* expectGone(accountId, NAME_LIST);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );

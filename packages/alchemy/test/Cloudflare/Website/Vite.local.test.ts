@@ -138,7 +138,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:website",
+      "local",
+    ],
+    timeout: 240_000,
+  },
 );
 
 /** Regression test for cron configuration dropped by the Vite child path. */
@@ -188,5 +196,8 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:website", "local"],
+    timeout: 240_000,
+  },
 );

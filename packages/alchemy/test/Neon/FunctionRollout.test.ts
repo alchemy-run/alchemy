@@ -150,5 +150,13 @@ test.provider.skipIf(!!process.env.FAST)(
         ),
       ).toBe(true);
     }).pipe(Effect.scoped),
-  { timeout: functionRolloutTimeout },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: functionRolloutTimeout,
+  },
 );

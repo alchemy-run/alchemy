@@ -208,5 +208,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     }),
   // create (~3-5 min) + pause (~1-2 min) + resume (~1-2 min) + delete
   // (~2-3 min), one sequential test.
-  { timeout: 1_200_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:apprunner",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 1_200_000,
+  },
 );

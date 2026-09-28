@@ -62,6 +62,17 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
+import {
+  InvalidResourceSelection,
+  UnsafeSelectionBoundary,
+  selectResources,
+  type ResourceSelection,
+  type SelectionOutput,
+} from "./ResourceSelection.ts";
+export {
+  InvalidResourceSelection,
+  UnsafeSelectionBoundary,
+} from "./ResourceSelection.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
   isActionState,
@@ -253,6 +264,8 @@ export interface ActionDelete<
 }
 
 export type Plan<Output = any> = {
+  /** Closed selection for partial apply and GC; absent for a full plan. */
+  selectedFqns?: ReadonlySet<string>;
   resources: {
     [id in string]: Apply<any>;
   };
@@ -355,12 +368,54 @@ export const describePlan = (
 
 export interface MakePlanOptions {
   force?: boolean;
+  include?: never;
+  exclude?: never;
 }
 
-export const make = <A>(
+export interface FilteredPlanOptions
+  extends Omit<MakePlanOptions, keyof ResourceSelection>, ResourceSelection {
+  /**
+   * Exact FQNs, unique logical IDs, or FQN globs, plus transitive input, capture,
+   * and binding dependencies. An empty selection is an error. Other rows
+   * and persisted stack outputs are untouched; filtered apply returns void.
+   * The entire stack declaration still evaluates before selection. Renames
+   * with persisted former rows require a full deployment. Replacement/GC
+   * fails when prior or declared dependents are outside the selection.
+   * Detaching a selected intermediate also requires selecting all consumers
+   * reachable through its declared or historical downstream paths.
+   * Historical bindings require selecting every persisted resource and Action
+   * for replacement/GC. Clearing the last binding evidence also requires that
+   * complete selection, since stored payloads cannot recover binding-cycle edges.
+   * Only already-persisted, continuously retained bindings count as evidence.
+   * Reconciling a row with incomplete downstream history requires that selection.
+   * Exclusions are hard barriers, even for unchanged dependencies. Quote globs
+   * in the CLI: `--include 'App/**' --exclude 'App/Legacy'`. Each occurrence
+   * supplies one pattern; commas are literal. Dependencies hidden inside
+   * callbacks must be declared explicitly.
+   */
+  include?: ReadonlyArray<string>;
+}
+
+type FullPlanCall = [options?: MakePlanOptions];
+
+export function make<
+  A,
+  Call extends [options?: FilteredPlanOptions] = FullPlanCall,
+>(
   stack: StackSpec<A>,
-  options: MakePlanOptions = {},
-): Effect.Effect<Plan<A>, never, State> =>
+  ...call: Call
+): Effect.Effect<Plan<SelectionOutput<A, Call[0]>>, never, State>;
+export function make<A>(
+  stack: StackSpec<A>,
+  options: FilteredPlanOptions = {},
+) {
+  return makePlan(stack, options);
+}
+
+const makePlan = <A>(
+  stack: StackSpec<A>,
+  options: FilteredPlanOptions = {},
+): Effect.Effect<Plan<A | undefined>, never, State> =>
   // @ts-expect-error
   Effect.gen(function* () {
     // Per-resource plan progress and phase markers are reported through
@@ -368,13 +423,28 @@ export const make = <A>(
     // plan computation while it runs. The default reporter is a no-op.
     const reportPlanned = yield* Progress;
 
-    // Resolving the state service may bootstrap a remote store, and the
-    // persisted-row snapshot below reads from it — both are "loading state".
+    const declaredResources = Object.values(stack.resources);
+    const declaredActions = Object.values(stack.actions ?? {});
+    const declared = [...declaredResources, ...declaredActions];
+    const upstream = (node: ResourceLike | ActionLike) =>
+      Object.keys(
+        Output.upstreamAny(
+          isAction(node)
+            ? [node.Input, node.Captures]
+            : [node.Props, stack.bindings[node.FQN] ?? []],
+        ),
+      );
+    const selected = yield* selectResources(declared, upstream, options);
+    const resources = declaredResources.filter(
+      (node) => !selected || selected.has(node.FQN),
+    );
+    const actions = declaredActions.filter(
+      (node) => !selected || selected.has(node.FQN),
+    );
+
+    // Resolving the state service may bootstrap a remote store.
     yield* reportPlanned({ _tag: "plan.phase", phase: "loading-state" });
     const state = yield* yield* State;
-
-    const resources = Object.values(stack.resources);
-    const actions = Object.values(stack.actions ?? {});
 
     // A bare platform tag yields a forward reference registered with
     // `undefined` props (and `RequiresImplementation`); its `.make(props,
@@ -446,20 +516,6 @@ export const make = <A>(
       return { provider, mode };
     });
 
-    // Credential-free dev: the adoption probe below runs each new row's
-    // `read` — for `Alchemy.remote()` rows that is a real cloud call, and
-    // it happens before apply's demand gate. Demand those credentials up
-    // front so a dev plan with nothing configured fails with the typed
-    // CredentialsRequired rather than the first read's raw auth error.
-    if (runDefaultMode === "local") {
-      const remote: Array<{ Type: string; FQN: string }> = [];
-      for (const resource of resources) {
-        const { mode } = yield* resolveProviderAndMode(resource);
-        if (mode === "live") remote.push(resource);
-      }
-      if (remote.length > 0) yield* demandRemoteCredentials(remote);
-    }
-
     /**
      * Has this resource switched provider modes since it was last
      * reconciled? Rows without a persisted mode were written by a
@@ -497,6 +553,61 @@ export const make = <A>(
     const persistedRows = new Map(
       resourceFqns.map((fqn, i) => [fqn, oldResources[i]]),
     );
+
+    // Updating snapshots also retain prior bindings and downstream metadata.
+    type DependencySnapshot = {
+      downstream?: ReadonlyArray<string>;
+      bindings?: ReadonlyArray<unknown>;
+      old?: DependencySnapshot;
+    };
+    function* historicalRows(row: DependencySnapshot | undefined) {
+      while (row) {
+        yield row;
+        row = row.old;
+      }
+    }
+
+    if (selected) {
+      for (const action of actions) {
+        const row = persistedRows.get(action.FQN);
+        if (row && !isActionState(row)) {
+          return yield* Effect.die(
+            new UnsafeSelectionBoundary({
+              message: `Filtered Action '${action.FQN}' cannot overwrite persisted resource state. Finish resource cleanup before reusing its FQN for an Action.`,
+            }),
+          );
+        }
+      }
+      for (const resource of declaredResources) {
+        for (const former of resource.FormerFqns ?? []) {
+          if (former === resource.FQN) continue;
+          if (
+            (selected.has(resource.FQN) && persistedRows.has(former)) ||
+            (!selected.has(resource.FQN) && selected.has(former))
+          ) {
+            return yield* Effect.die(
+              new UnsafeSelectionBoundary({
+                message: `Filtered reconciliation cannot migrate '${former}' to '${resource.FQN}'. Run a full deployment for renames.`,
+              }),
+            );
+          }
+        }
+      }
+    }
+
+    // Credential-free dev: the adoption probe below runs each new row's
+    // `read` — for `Alchemy.remote()` rows that is a real cloud call, and
+    // it happens before apply's demand gate. Demand those credentials up
+    // front so a dev plan with nothing configured fails with the typed
+    // CredentialsRequired rather than the first read's raw auth error.
+    if (runDefaultMode === "local") {
+      const remote: Array<{ Type: string; FQN: string }> = [];
+      for (const resource of resources) {
+        const { mode } = yield* resolveProviderAndMode(resource);
+        if (mode === "live") remote.push(resource);
+      }
+      if (remote.length > 0) yield* demandRemoteCredentials(remote);
+    }
 
     yield* reportPlanned({ _tag: "plan.phase", phase: "computing-plan" });
 
@@ -705,6 +816,13 @@ export const make = <A>(
       resourceExpr: Output.ResourceExpr<any, any>,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
+        if (selected && !selected.has(resourceExpr.src.FQN)) {
+          return yield* Effect.die(
+            new UnsafeSelectionBoundary({
+              message: `Output evaluation discovered unselected dependency '${resourceExpr.src.FQN}'. Declare the dependency explicitly or run a full deployment.`,
+            }),
+          );
+        }
         if (isAction(resourceExpr.src)) {
           const node = yield* diffAction(resourceExpr.src);
           return node.action === "noop" ? node.state.output : resourceExpr;
@@ -1172,6 +1290,14 @@ export const make = <A>(
         }
         downstream.push(downFqn);
       }
+      if (selected) {
+        for (const row of historicalRows(persistedRows.get(upFqn))) {
+          for (const dep of row.downstream ?? []) {
+            if (!selected.has(dep) && !downstream.includes(dep))
+              downstream.push(dep);
+          }
+        }
+      }
       return downstream;
     };
 
@@ -1457,6 +1583,13 @@ export const make = <A>(
       // with the provider of the mode that created it (see
       // `deleteOldGenerations` / `collectGarbage`).
       const modeSwitched = hasModeSwitched(mode, oldState);
+      if (selected && modeSwitched && oldState?.status === "deleting") {
+        return yield* Effect.die(
+          new UnsafeSelectionBoundary({
+            message: `Cannot switch provider mode for '${fqn}' during filtered recovery from deleting. Finish interrupted destruction in its recorded '${stampedMode(oldState)}' mode before deploying in '${mode}' mode; a full mode-switch deployment is not a safe recovery.`,
+          }),
+        );
+      }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
       const Node = <T extends Apply>(
@@ -1820,6 +1953,144 @@ export const make = <A>(
         .map((exit) => [exit.value.resource.FQN, exit.value]),
     ) as Plan["resources"];
 
+    if (selected) {
+      const downstream = new Map<string, Set<string>>();
+      const addEdge = (source: string, consumer: string) => {
+        let edges = downstream.get(source);
+        if (!edges) downstream.set(source, (edges = new Set()));
+        edges.add(consumer);
+      };
+      for (const node of declared) {
+        for (const source of upstream(node)) addEdge(source, node.FQN);
+      }
+      let bindingEvidence: string | undefined;
+      let incompleteHistory: string | undefined;
+      for (const [fqn, row] of persistedRows) {
+        for (const snapshot of historicalRows(row)) {
+          for (const consumer of snapshot.downstream ?? []) {
+            addEdge(fqn, consumer);
+          }
+          if (snapshot.bindings?.length) bindingEvidence ??= fqn;
+          if (snapshot.downstream === undefined) incompleteHistory ??= fqn;
+        }
+      }
+      const unselectedConsumers = (fqn: string) => {
+        const reachable = new Set([fqn]);
+        const outside = new Set<string>();
+        for (const source of reachable) {
+          for (const consumer of downstream.get(source) ?? []) {
+            reachable.add(consumer);
+            if (!selected.has(consumer)) outside.add(consumer);
+          }
+        }
+        return outside;
+      };
+      for (const source of selected) {
+        for (const row of historicalRows(persistedRows.get(source))) {
+          for (const consumer of row.downstream ?? []) {
+            // SCC filtering alone does not detach an edge in the desired graph.
+            if (
+              !selected.has(consumer) ||
+              rawUpstreamDependencies[consumer]?.includes(source)
+            )
+              continue;
+            const outside = unselectedConsumers(consumer);
+            if (outside.size > 0) {
+              return yield* Effect.die(
+                new UnsafeSelectionBoundary({
+                  message: `Cannot detach '${source}' from '${consumer}' while downstream consumers are unselected: ${[...outside].sort().join(", ")}. Select them or run a full deployment.`,
+                }),
+              );
+            }
+          }
+        }
+      }
+      const excludedRows = [...persistedRows].filter(
+        ([fqn, row]) => row && !selected.has(fqn),
+      );
+      const excluded = excludedRows[0];
+      for (const [fqn, node] of Object.entries(resourceGraph)) {
+        const pending =
+          node.state?.status === "replacing" ||
+          node.state?.status === "replaced";
+        if (node.action !== "replace" && !pending) continue;
+        // Resolved payloads do not identify binding sources, including cycles
+        // omitted from downstream. Evidence anywhere can involve this resource.
+        if (excluded && (bindingEvidence || incompleteHistory)) {
+          return yield* Effect.die(
+            new UnsafeSelectionBoundary({
+              message: `Cannot replace or collect old generations of '${fqn}' while '${excluded[0]}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
+            }),
+          );
+        }
+        const outside = unselectedConsumers(fqn);
+        if (outside.size > 0) {
+          return yield* Effect.die(
+            new UnsafeSelectionBoundary({
+              message: `Cannot replace or collect old generations of '${fqn}' while dependents are unselected: ${[...outside].sort().join(", ")}. Select them or run a full deployment.`,
+            }),
+          );
+        }
+      }
+      if (excludedRows.length > 0) {
+        for (const fqn of selected) {
+          if (
+            [...historicalRows(persistedRows.get(fqn))].some(
+              (snapshot) => snapshot.downstream === undefined,
+            )
+          ) {
+            return yield* Effect.die(
+              new UnsafeSelectionBoundary({
+                message: `Cannot reconcile '${fqn}' with incomplete historical downstream metadata while persisted nodes are unselected: ${excludedRows
+                  .map(([id]) => id)
+                  .sort()
+                  .join(", ")}. Select them or run a full deployment.`,
+              }),
+            );
+          }
+        }
+      }
+      if (bindingEvidence && excludedRows.length > 0) {
+        const hasHistoricalBindings = (row: DependencySnapshot | undefined) =>
+          [...historicalRows(row)].some(
+            (snapshot) => snapshot.bindings?.length,
+          );
+        // Independent writes can fail before planned replacement evidence is durable.
+        const survivingBindings =
+          excludedRows.some(([, row]) => hasHistoricalBindings(row)) ||
+          Object.entries(resourceGraph).some(([fqn, node]) => {
+            const persisted = persistedRows.get(fqn);
+            if (
+              !persisted ||
+              isActionState(persisted) ||
+              !hasHistoricalBindings(persisted)
+            )
+              return false;
+            if (node.action === "noop") return true;
+            return (
+              (node.action === "update" ||
+                node.action === "adopted" ||
+                (node.action === "create" &&
+                  persisted.status === "creating")) &&
+              persisted.status !== "deleting" &&
+              persisted.status !== "replacing" &&
+              persisted.status !== "replaced" &&
+              node.bindings.some((binding) => binding.action !== "delete")
+            );
+          });
+        if (!survivingBindings) {
+          return yield* Effect.die(
+            new UnsafeSelectionBoundary({
+              message: `Cannot discard the last historical binding evidence while persisted nodes are unselected: ${excludedRows
+                .map(([fqn]) => fqn)
+                .sort()
+                .join(", ")}. Select them or run a full deployment.`,
+            }),
+          );
+        }
+      }
+    }
+
     // ── Action plan nodes ────────────────────────────────────────────────
     // Per-action plan progress, mirroring the resource pass.
     const actionCount = yield* Ref.make(0);
@@ -1915,7 +2186,9 @@ export const make = <A>(
 
     // Both orphan passes (task rows below, resource rows further down)
     // examine every persisted row of this stack instance.
-    const persistedFqns = yield* state.list({ stack: stackName, stage });
+    const persistedFqns = selected
+      ? []
+      : yield* state.list({ stack: stackName, stage });
 
     // Orphan progress mirrors the diff passes: every persisted row is
     // examined, but only rows that actually become deletion nodes are
@@ -2133,10 +2406,11 @@ export const make = <A>(
       actions: actionGraph,
       deletions,
       actionDeletions,
-      output: stack.output,
+      output: selected ? undefined : stack.output,
+      selectedFqns: selected,
       cycleMembers,
       defaultMode: runDefaultMode,
-    } satisfies Plan<A> as Plan<A>;
+    } satisfies Plan<A | undefined> as Plan<A | undefined>;
   }).pipe(
     // Owns the memoized resolutions' fibers for the plan's duration.
     Effect.scoped,
@@ -2166,15 +2440,23 @@ export const make = <A>(
 export const destroy = (stack: {
   name: string;
   stage: string;
+  include?: never;
+  exclude?: never;
 }): Effect.Effect<Plan<undefined>, never, State> =>
-  make({
-    name: stack.name,
-    stage: stack.stage,
-    resources: {},
-    bindings: {},
-    actions: {},
-    output: undefined,
-  }).pipe(Effect.map((plan) => ({ ...plan, destroy: true })));
+  stack.include !== undefined || stack.exclude !== undefined
+    ? Effect.die(
+        new InvalidResourceSelection({
+          message: "Filtered destroy is not supported.",
+        }),
+      )
+    : make({
+        name: stack.name,
+        stage: stack.stage,
+        resources: {},
+        bindings: {},
+        actions: {},
+        output: undefined,
+      }).pipe(Effect.map((plan) => ({ ...plan, destroy: true })));
 
 const providePlanScope =
   (fqn: string, instanceId: string) =>

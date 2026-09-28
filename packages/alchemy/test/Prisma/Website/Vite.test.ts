@@ -75,5 +75,8 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         ),
       ).toBe(true);
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "live"],
+    timeout: 120_000,
+  },
 );

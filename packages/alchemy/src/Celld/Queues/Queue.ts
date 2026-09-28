@@ -79,7 +79,7 @@ export const validateQueueName = (name: string) =>
  * ```
  *
  * @resource
- * @product Celld
+ * @product Queues
  */
 export const Queue = withFleet(Resource<Queue>("Celld.Queues.Queue"));
 

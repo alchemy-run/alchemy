@@ -110,5 +110,14 @@ for (const slug of ["nextjs", "vocs"] as const)
           ),
         ).toBe(true);
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "provider:neon",
+        "provider:neon:function",
+        "provider:neon:project",
+        "provider:neon:website",
+        "live",
+      ],
+      timeout: 120_000,
+    },
   );

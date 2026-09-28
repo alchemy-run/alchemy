@@ -94,6 +94,7 @@ export interface ProjectMemberRole extends Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
 export const ProjectMemberRole = Resource<ProjectMemberRole>(
   "Neon.ProjectMemberRole",

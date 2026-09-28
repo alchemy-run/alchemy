@@ -53,4 +53,16 @@ test.effect(
     Effect.sync(() => {
       expect(typeof typeCases).toBe("function");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:aigateway",
+      "provider:neon:branch",
+      "provider:neon:credential",
+      "provider:neon:languagemodel",
+      "provider:neon:project",
+      "local",
+    ],
+  },
 );

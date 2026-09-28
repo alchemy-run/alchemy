@@ -101,7 +101,15 @@ test.provider.skip(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:bind",
+      "provider:railway:function",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skip(
@@ -163,5 +171,14 @@ test.provider.skip(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:bind",
+      "provider:railway:function",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

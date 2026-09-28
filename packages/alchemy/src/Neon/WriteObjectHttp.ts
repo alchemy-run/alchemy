@@ -7,6 +7,7 @@ import { makeWriteObjectHttp } from "./StorageObjectBinding.ts";
  * Typed object writes using injected or automatically scoped credentials.
  *
  * @layer
+ * @product Bucket
  * @provides WriteObject
  */
 export const WriteObjectHttp = Layer.effect(

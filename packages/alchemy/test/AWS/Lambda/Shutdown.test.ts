@@ -101,7 +101,7 @@ test.provider(
         }),
       );
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 600_000 },
 );
 
 /**
@@ -150,5 +150,5 @@ test.provider.skipIf(!process.env.AWS_LAMBDA_TEST_SHUTDOWN)(
 
       yield* stack.destroy();
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 600_000 },
 );

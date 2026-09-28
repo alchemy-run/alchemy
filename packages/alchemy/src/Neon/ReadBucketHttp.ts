@@ -18,6 +18,7 @@ export const makeReadBucketClient = (
  * Use injected same-branch Neon credentials, otherwise manage a scoped credential.
  *
  * @layer
+ * @product Bucket
  * @provides ReadBucket
  */
 export const ReadBucketHttp = Layer.effect(

@@ -121,7 +121,7 @@ export const startContainer = <Self, Shape extends object, Req>(
  *
  * @layer
  * @provides Tool
- * @product Celld
+ * @product Containers
  */
 export const layer = <Self, Shape extends object, Req>(
   declaration: ContainerClass<Self, Shape, Req>,

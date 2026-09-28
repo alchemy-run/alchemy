@@ -16,33 +16,39 @@ for (const key of [
   "NEON_BRANCH",
   "ALCHEMY_STAGE",
 ]) {
-  test.effect(`rejects overriding injected environment ${key}`, () =>
-    Effect.gen(function* () {
-      const rejected = yield* functionEnvironment(
-        { ...props, env: { [key]: "must-not-deploy" } },
-        [],
-      ).pipe(
-        Effect.as(false),
-        Effect.catchTag("FunctionConfigurationError", () =>
-          Effect.succeed(true),
-        ),
-      );
-      expect(rejected).toBe(true);
-    }),
+  test.effect(
+    `rejects overriding injected environment ${key}`,
+    () =>
+      Effect.gen(function* () {
+        const rejected = yield* functionEnvironment(
+          { ...props, env: { [key]: "must-not-deploy" } },
+          [],
+        ).pipe(
+          Effect.as(false),
+          Effect.catchTag("FunctionConfigurationError", () =>
+            Effect.succeed(true),
+          ),
+        );
+        expect(rejected).toBe(true);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 }
-test.effect("unwraps redacted application values only at deployment", () =>
-  Effect.gen(function* () {
-    expect(
-      yield* functionEnvironment(
-        {
-          ...props,
-          env: { APP_TOKEN: Redacted.make("test-token"), OMITTED: undefined },
-        },
-        [],
-      ),
-    ).toEqual({ APP_TOKEN: "test-token" });
-  }),
+test.effect(
+  "unwraps redacted application values only at deployment",
+  () =>
+    Effect.gen(function* () {
+      expect(
+        yield* functionEnvironment(
+          {
+            ...props,
+            env: { APP_TOKEN: Redacted.make("test-token"), OMITTED: undefined },
+          },
+          [],
+        ),
+      ).toEqual({ APP_TOKEN: "test-token" });
+    }),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
 for (const slug of [
   "contains-hyphen",
@@ -50,16 +56,19 @@ for (const slug of [
   "morethan20characterslong",
   "",
 ]) {
-  test.effect(`rejects invalid explicit slug ${JSON.stringify(slug)}`, () =>
-    Effect.gen(function* () {
-      expect(
-        yield* functionSlug("Api", slug).pipe(
-          Effect.as(false),
-          Effect.catchTag("FunctionConfigurationError", () =>
-            Effect.succeed(true),
+  test.effect(
+    `rejects invalid explicit slug ${JSON.stringify(slug)}`,
+    () =>
+      Effect.gen(function* () {
+        expect(
+          yield* functionSlug("Api", slug).pipe(
+            Effect.as(false),
+            Effect.catchTag("FunctionConfigurationError", () =>
+              Effect.succeed(true),
+            ),
           ),
-        ),
-      ).toBe(true);
-    }),
+        ).toBe(true);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 }

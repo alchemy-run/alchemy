@@ -221,6 +221,7 @@ export type Redis = Resource<
  * :::
  *
  * @resource
+ * @product Redis
  */
 export const Redis = Resource<Redis>("Fly.Redis");
 

@@ -311,7 +311,7 @@ const sampleState = {
   output: { password: Redacted.make("s3cret") },
 } as never;
 
-describe("Postgres state store", () => {
+describe("Postgres state store", { tags: ["unit", "local"] }, () => {
   it.effect("requires exactly one of client or url", () => {
     const fake = makeFakePostgres();
     return Effect.gen(function* () {

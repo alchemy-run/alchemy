@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
-import { getRefMetadata, isRef } from "../Ref.ts";
+import { getRefMetadata, isRef, type Ref } from "../Ref.ts";
 import { isResource, isResourceOfType } from "../Resource.ts";
 import type { CelldBinding } from "./DeploymentConfig.ts";
 import { isNamespace } from "./KV/Namespace.ts";
@@ -28,9 +28,28 @@ const fleetMetadata = (
       : resource.FQN,
 });
 
+type ConstructorEffect<Value> = Value extends Output.Output | Ref
+  ? never
+  : Value extends Effect.Effect<infer A, infer E, infer R>
+    ? Effect.Effect<A, E, R>
+    : unknown extends Value
+      ? Effect.Effect<unknown, unknown, unknown>
+      : never;
+
 /** Lower explicit resource-valued environment entries without resolving attribute Outputs. */
-export const lowerEnvironment = (values: Record<string, unknown>) =>
-  Effect.gen(function* () {
+export function lowerEnvironment<Values extends Record<string, unknown>>(
+  values: Values,
+): Effect.Effect<
+  {
+    env: Record<string, unknown>;
+    bindings: Input<CelldBinding>[];
+    storageBindings: Input<StorageBinding>[];
+  },
+  Effect.Error<ConstructorEffect<Values[keyof Values]>>,
+  Effect.Services<ConstructorEffect<Values[keyof Values]>>
+>;
+export function lowerEnvironment(values: Record<string, unknown>) {
+  return Effect.gen(function* () {
     const entries: [string, unknown][] = [];
     const bindings: Input<CelldBinding>[] = [];
     const storageBindings: Input<StorageBinding>[] = [];
@@ -73,3 +92,4 @@ export const lowerEnvironment = (values: Record<string, unknown>) =>
     }
     return { env: Object.fromEntries(entries), bindings, storageBindings };
   });
+}

@@ -57,5 +57,16 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

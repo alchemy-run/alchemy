@@ -250,5 +250,17 @@ test.provider(
       const gone = yield* waitUntilGone(created.cache.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:redis",
+      "provider:railway:service",
+      "provider:railway:tcpproxy",
+      "provider:railway:variable",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

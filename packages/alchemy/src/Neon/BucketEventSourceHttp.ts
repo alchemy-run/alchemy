@@ -33,6 +33,7 @@ import {
  * ```
  *
  * @layer
+ * @product Bucket
  * @provides Neon.BucketEventSource
  */
 export const BucketEventSourceHttp = Layer.effect(

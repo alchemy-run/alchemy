@@ -37,6 +37,7 @@ export interface WriteBucketClient extends RuntimeStorageMethods<
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface WriteBucket extends Binding.Service<
   WriteBucket,

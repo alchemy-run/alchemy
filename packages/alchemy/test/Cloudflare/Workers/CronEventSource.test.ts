@@ -38,6 +38,7 @@ test.provider(
       expect(schedules.map(({ cron }) => cron)).toEqual(crons);
       yield* scratch.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
 );
 
 // New schedules can take up to 15 minutes to propagate. Retain the fixture
@@ -91,5 +92,8 @@ test.skipIf(
       expect(time).toBeGreaterThanOrEqual(resetAt);
     }
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );

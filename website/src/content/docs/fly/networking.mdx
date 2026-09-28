@@ -65,9 +65,60 @@ Effect.gen(function* () {
 
 `v6` is free dedicated IPv6. `v4` is billed dedicated IPv4 and may
 400 if the org has no quota. Prefer `shared_v4` or `v6` in tests.
+`private_v6` is a free [Flycast](#keep-a-backend-private-with-flycast)
+address that is not reachable from the internet.
 
 Fly's proxy terminates TLS on 443. The Service still listens on
 `port` inside the Machine.
+
+## Keep a backend private with Flycast
+
+A `private_v6` address is a Flycast address. Fly's proxy serves it
+only inside your organization's private network, at
+`http://{appName}.flycast`. Use it for an API that another App calls
+and the internet must not reach.
+
+```typescript
+export const Backend = Fly.App("Backend");
+
+export const BackendIp = Fly.IpAssignment("Flycast", {
+  app: Backend,
+  type: "private_v6",
+});
+```
+
+Yield `BackendIp` in the Stack and allocate no `shared_v4`, `v4`, or
+`v6` on that App. The Service still publishes a port for the proxy to
+forward to. Fly issues no TLS certificate for `.flycast`, so publish
+plain HTTP on port 80 without `forceHttps`:
+
+```typescript
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    app: Backend,
+    main: import.meta.url,
+    port: 3000,
+    services: [{
+      protocol: "tcp",
+      internalPort: 3000,
+      ports: [{ port: 80, handlers: ["http"] }],
+    }],
+  },
+  /* ... */
+) {}
+```
+
+Call it from another App in the same organization at
+`http://{appName}.flycast`. Prefer this over `{appName}.internal`:
+`.internal` resolves straight to Machines and bypasses the proxy, so
+it ignores service checks, `autostart`, and the traffic switch of a
+[blue/green deployment](/fly/compute/deployments).
+
+`network` places the address on a named private network instead of the
+organization default. The network must already exist: an App created with
+the same `network` creates it, and an unknown name fails with
+`NetworkNotFound`. Changing `network` replaces the assignment.
 
 ## Use your own hostname
 

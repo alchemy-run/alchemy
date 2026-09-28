@@ -675,7 +675,7 @@ it composes Effect's RPC client, socket protocol, WebSocket, and JSON serializer
 Client middleware remains an explicit Layer dependency. Its `socket`, `protocol`,
 and `client` options pass through to Effect; `serialization` defaults to JSON
 and must match the server. See the
-[RpcDurableObject API reference](/providers/cloudflare/workers/rpcdurableobject).
+[RpcDurableObject API reference](/providers/cloudflare/workers#rpcdurableobject).
 
 The Layer owns the client and connection lifetime, so ordinary calls do not need
 an explicit `Effect.scoped`. It closes the connection when the provided program
@@ -1137,5 +1137,5 @@ store application data by overwriting reserved RPC attachment metadata.
 - [Durable Objects](/cloudflare/compute/durable-objects)
 - [Hibernatable WebSockets](/cloudflare/compute/hibernatable-websockets)
 - [Celld Effect RPC](/celld/apis/effect-rpc) · [Rivet Effect RPC](/rivet/apis/effect-rpc)
-- [Worker reference](/providers/cloudflare/workers/worker)
-- [DurableObject reference](/providers/cloudflare/workers/durableobject)
+- [Worker reference](/providers/cloudflare/workers#worker)
+- [DurableObject reference](/providers/cloudflare/workers#durableobject)

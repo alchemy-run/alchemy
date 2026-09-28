@@ -55,6 +55,9 @@ test(
       spendingLimitCents: 100,
     });
   }),
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+  },
 );
 
 test.provider(
@@ -104,6 +107,9 @@ test.provider(
         Effect.die("Unexpected Neon request in a no-I/O guard test"),
       ),
     ),
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+  },
 );
 
 test.provider(
@@ -143,6 +149,9 @@ test.provider(
         Effect.die("Unexpected Neon request in a no-I/O guard test"),
       ),
     ),
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+  },
 );
 
 test(
@@ -173,6 +182,9 @@ test(
       expect(disappeared.initialSpendingLimitCents).toBe(baseline);
     }
   }),
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+  },
 );
 
 test.provider(
@@ -214,6 +226,9 @@ test.provider(
         Effect.die("Unexpected Neon request in a no-I/O guard test"),
       ),
     ),
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+  },
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -313,5 +328,9 @@ test.provider.skipIf(!enabled)(
       ).toBe(original);
       yield* stack.destroy();
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

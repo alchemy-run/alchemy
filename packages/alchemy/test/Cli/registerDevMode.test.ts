@@ -126,5 +126,5 @@ it.live.skipIf(!nodeSupportsDevMode)(
       expect(cliExitCode).toBe(0);
       expect(cliStdout).toMatch(/alchemy v.*\(node [^,]+, src\)/);
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
-  { timeout: 60_000 },
+  { tags: ["local"], timeout: 60_000 },
 );

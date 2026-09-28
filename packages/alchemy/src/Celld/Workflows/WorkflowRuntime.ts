@@ -68,7 +68,7 @@ export const workflowCall = <A>(call: () => PromiseLike<A>) =>
  * ```
  *
  * @binding
- * @product Celld
+ * @product Workflows
  */
 export const task = <A, E, R, RetryR = never>(
   name: string,
@@ -156,7 +156,7 @@ export const task = <A, E, R, RetryR = never>(
  * ```
  *
  * @binding
- * @product Celld
+ * @product Workflows
  */
 export const sleep = (
   name: string,
@@ -174,7 +174,7 @@ export const sleep = (
  * ```
  *
  * @binding
- * @product Celld
+ * @product Workflows
  */
 export const sleepUntil = (
   name: string,
@@ -195,7 +195,7 @@ export const sleepUntil = (
  * ```
  *
  * @binding
- * @product Celld
+ * @product Workflows
  */
 export const waitForEvent = <T = unknown>(
   name: string,

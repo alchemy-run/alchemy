@@ -52,7 +52,7 @@ const trimInput = (value: Input<string>): Input<string> =>
  *
  * @layer
  * @provides Alchemy.Dns
- * @product DNS
+ * @product DNS Provider
  */
 export const Dns = (): Layer.Layer<DnsTag> =>
   Layer.effect(

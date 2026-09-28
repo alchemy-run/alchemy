@@ -137,7 +137,7 @@ const assertWorkerOrder = (output: string, name: string) => {
   expect(output).not.toContain("already closed");
 };
 
-describe.sequential("managed Fly HTTP shutdown", () => {
+describe.sequential("managed Fly HTTP shutdown", { tags: ["local"] }, () => {
   it.live(
     "R03 SIGTERM stops acceptance and drains a slow response before instance finalizers",
     () =>

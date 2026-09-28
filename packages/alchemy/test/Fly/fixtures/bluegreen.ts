@@ -20,7 +20,7 @@ export const checks = {
 export const deployWorker = (
   stack: ScratchStack,
   version: string,
-  props: Partial<Omit<MachineProps, "app">> = {},
+  props: Partial<Omit<Extract<MachineProps, { image: string }>, "app">> = {},
 ) =>
   stack.deploy(
     Effect.gen(function* () {
